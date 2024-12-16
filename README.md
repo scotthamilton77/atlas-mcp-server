@@ -49,6 +49,7 @@ Through the MCP protocol, ATLAS empowers LLMs to break down complex projects int
 - Code snippets with syntax highlighting
 - JSON data structures
 - Rich metadata
+- Task reasoning documentation
 
 ### Session Management
 - Persistent storage
@@ -113,7 +114,7 @@ ATLAS requires configuration in your MCP client settings:
 
 ## Task Structure
 
-Tasks support rich content and metadata:
+Tasks support rich content, metadata, and reasoning documentation:
 
 ```typescript
 {
@@ -131,6 +132,37 @@ Tasks support rich content and metadata:
       "content": "interface Feature {\n  name: string;\n  enabled: boolean;\n}"
     }
   ],
+  "reasoning": {
+    "approach": "Modular development with focus on reusability",
+    "assumptions": [
+      "System supports TypeScript",
+      "Features can be toggled independently"
+    ],
+    "alternatives": [
+      "Monolithic implementation",
+      "Feature flags in configuration"
+    ],
+    "risks": [
+      "Increased complexity from modularity",
+      "Performance overhead from dynamic loading"
+    ],
+    "tradeoffs": [
+      "Flexibility vs simplicity",
+      "Runtime performance vs maintainability"
+    ],
+    "constraints": [
+      "Must maintain backward compatibility",
+      "Must work in all supported browsers"
+    ],
+    "dependencies_rationale": [
+      "Depends on core module for type definitions",
+      "Requires configuration service for feature flags"
+    ],
+    "impact_analysis": [
+      "Affects system startup time",
+      "Changes how features are loaded and managed"
+    ]
+  },
   "metadata": {
     "context": "Core implementation phase",
     "tags": ["core", "implementation"]
@@ -138,7 +170,17 @@ Tasks support rich content and metadata:
 }
 ```
 
-### Example Task List
+The reasoning field provides structured documentation of decision-making:
+- **approach**: High-level implementation strategy
+- **assumptions**: Key assumptions made during planning
+- **alternatives**: Other approaches that were considered
+- **risks**: Potential issues and challenges
+- **tradeoffs**: Key decisions and their implications
+- **constraints**: Technical or business limitations
+- **dependencies_rationale**: Reasoning for task dependencies
+- **impact_analysis**: Analysis of changes on the system
+
+### Example Task List (Without reasoning)
 
 The following example demonstrates a task breakdown for a personal portfolio website project. The task list was generated from the following prompt:
 > You are a web developer for modern apps. Architect, design, and plan the required tasks for a personal portfolio website for a web dev that has a modern UI/UX.
@@ -585,6 +627,16 @@ Creates a new task with optional subtasks.
   "name": string,            // Task name (required)
   "description": string,     // Task description
   "notes": Note[],          // Rich content notes
+  "reasoning": {            // Task reasoning documentation
+    "approach": string,     // Implementation strategy
+    "assumptions": string[],// Key assumptions
+    "alternatives": string[],// Other approaches considered
+    "risks": string[],      // Potential issues
+    "tradeoffs": string[], // Key decisions and implications
+    "constraints": string[],// Technical/business limitations
+    "dependencies_rationale": string[], // Dependency reasoning
+    "impact_analysis": string[] // System impact analysis
+  },
   "type": "task" | "milestone" | "group",
   "dependencies": string[], // Task IDs this task depends on
   "metadata": {             // Additional task metadata
@@ -624,6 +676,7 @@ Filters tasks by status.
 - Use task IDs for dependencies
 - Provide clear context in metadata
 - Use appropriate task types
+- Document reasoning and assumptions
 
 ### Status Management
 - Update status appropriately
@@ -634,6 +687,16 @@ Filters tasks by status.
 - Use appropriate note types
 - Include relevant code samples
 - Maintain clear documentation
+- Document decision-making process
+
+### Reasoning Documentation
+- Clearly state implementation approach
+- List key assumptions
+- Consider alternative approaches
+- Document risks and tradeoffs
+- Identify constraints
+- Explain dependency relationships
+- Analyze system impact
 
 ## Development
 

@@ -8,6 +8,18 @@ export interface TaskNote {
     metadata?: Record<string, unknown>;
 }
 
+export interface TaskReasoning {
+    approach?: string;
+    assumptions?: string[];
+    alternatives?: string[];
+    risks?: string[];
+    tradeoffs?: string[];
+    constraints?: string[];
+    dependencies_rationale?: string[];
+    impact_analysis?: string[];
+    [key: string]: unknown;
+}
+
 export interface TaskMetadata {
     created: string;
     updated: string;
@@ -22,6 +34,7 @@ export interface Task {
     name: string;
     description?: string;
     notes?: TaskNote[];
+    reasoning?: TaskReasoning;
     type: TaskType;
     status: TaskStatus;
     dependencies: string[];
@@ -39,6 +52,7 @@ export interface CreateTaskInput {
     name: string;
     description?: string;
     notes?: TaskNote[];
+    reasoning?: TaskReasoning;
     type?: TaskType;
     dependencies?: string[];
     metadata?: {
@@ -58,6 +72,7 @@ export interface UpdateTaskInput {
     name?: string;
     description?: string;
     notes?: TaskNote[];
+    reasoning?: TaskReasoning;
     type?: TaskType;
     status?: TaskStatus;
     dependencies?: string[];
@@ -103,6 +118,51 @@ export interface TaskResponse<T> {
         sessionId: string;
         affectedTasks?: string[];
     };
+}
+
+export function validateTaskReasoning(reasoning: TaskReasoning): void {
+    if (reasoning.assumptions && !Array.isArray(reasoning.assumptions)) {
+        throw new TaskValidationError(
+            'Assumptions must be an array of strings',
+            'INVALID_ASSUMPTIONS'
+        );
+    }
+    if (reasoning.alternatives && !Array.isArray(reasoning.alternatives)) {
+        throw new TaskValidationError(
+            'Alternatives must be an array of strings',
+            'INVALID_ALTERNATIVES'
+        );
+    }
+    if (reasoning.risks && !Array.isArray(reasoning.risks)) {
+        throw new TaskValidationError(
+            'Risks must be an array of strings',
+            'INVALID_RISKS'
+        );
+    }
+    if (reasoning.tradeoffs && !Array.isArray(reasoning.tradeoffs)) {
+        throw new TaskValidationError(
+            'Tradeoffs must be an array of strings',
+            'INVALID_TRADEOFFS'
+        );
+    }
+    if (reasoning.constraints && !Array.isArray(reasoning.constraints)) {
+        throw new TaskValidationError(
+            'Constraints must be an array of strings',
+            'INVALID_CONSTRAINTS'
+        );
+    }
+    if (reasoning.dependencies_rationale && !Array.isArray(reasoning.dependencies_rationale)) {
+        throw new TaskValidationError(
+            'Dependencies rationale must be an array of strings',
+            'INVALID_DEPENDENCIES_RATIONALE'
+        );
+    }
+    if (reasoning.impact_analysis && !Array.isArray(reasoning.impact_analysis)) {
+        throw new TaskValidationError(
+            'Impact analysis must be an array of strings',
+            'INVALID_IMPACT_ANALYSIS'
+        );
+    }
 }
 
 export function validateTaskNotes(notes: TaskNote[]): void {
@@ -173,6 +233,11 @@ export function sanitizeTaskInput(input: CreateTaskInput | UpdateTaskInput): voi
     // Validate notes if present
     if (input.notes) {
         validateTaskNotes(input.notes);
+    }
+
+    // Validate reasoning if present
+    if (input.reasoning) {
+        validateTaskReasoning(input.reasoning);
     }
 
     // Validate metadata if present

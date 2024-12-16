@@ -1,4 +1,4 @@
-// Previous imports remain the same...
+#!/usr/bin/env node
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -56,6 +56,7 @@ Best Practices:
 4. Use metadata.context to provide clear task context
 5. Use metadata.tags for categorization
 6. Consider task hierarchy - group related tasks under a parent
+7. Use reasoning fields to document decision-making process - be clear and concise; 1-2 sentences max. Focus on actionable insights.
 
 Example:
 1. Create parent task first
@@ -67,7 +68,8 @@ Common Mistakes:
 - Using string identifiers instead of task IDs for dependencies
 - Creating tasks with dependencies before their dependent tasks exist
 - Not maintaining proper task hierarchy
-- Missing context in metadata`,
+- Missing context in metadata
+- Not documenting task reasoning and assumptions`,
                     inputSchema: {
                         type: 'object',
                         properties: {
@@ -109,6 +111,51 @@ Common Mistakes:
                                     required: ['type', 'content'],
                                 },
                                 description: 'Rich notes associated with the task. Supports markdown for documentation, code with syntax highlighting, and structured JSON data.',
+                            },
+                            reasoning: {
+                                type: 'object',
+                                properties: {
+                                    approach: {
+                                        type: 'string',
+                                        description: 'High-level approach and strategy for the task'
+                                    },
+                                    assumptions: {
+                                        type: 'array',
+                                        items: { type: 'string' },
+                                        description: 'Key assumptions made when planning the task'
+                                    },
+                                    alternatives: {
+                                        type: 'array',
+                                        items: { type: 'string' },
+                                        description: 'Alternative approaches that were considered'
+                                    },
+                                    risks: {
+                                        type: 'array',
+                                        items: { type: 'string' },
+                                        description: 'Potential risks and challenges'
+                                    },
+                                    tradeoffs: {
+                                        type: 'array',
+                                        items: { type: 'string' },
+                                        description: 'Key tradeoffs and decisions made'
+                                    },
+                                    constraints: {
+                                        type: 'array',
+                                        items: { type: 'string' },
+                                        description: 'Technical or business constraints'
+                                    },
+                                    dependencies_rationale: {
+                                        type: 'array',
+                                        items: { type: 'string' },
+                                        description: 'Reasoning behind task dependencies'
+                                    },
+                                    impact_analysis: {
+                                        type: 'array',
+                                        items: { type: 'string' },
+                                        description: 'Analysis of task impact on system/project'
+                                    }
+                                },
+                                description: 'Reasoning and decision-making documentation for the task'
                             },
                             type: {
                                 type: 'string',
@@ -158,6 +205,40 @@ Common Mistakes:
                                                 }
                                             }
                                         },
+                                        reasoning: {
+                                            type: 'object',
+                                            properties: {
+                                                approach: { type: 'string' },
+                                                assumptions: { 
+                                                    type: 'array',
+                                                    items: { type: 'string' }
+                                                },
+                                                alternatives: {
+                                                    type: 'array',
+                                                    items: { type: 'string' }
+                                                },
+                                                risks: {
+                                                    type: 'array',
+                                                    items: { type: 'string' }
+                                                },
+                                                tradeoffs: {
+                                                    type: 'array',
+                                                    items: { type: 'string' }
+                                                },
+                                                constraints: {
+                                                    type: 'array',
+                                                    items: { type: 'string' }
+                                                },
+                                                dependencies_rationale: {
+                                                    type: 'array',
+                                                    items: { type: 'string' }
+                                                },
+                                                impact_analysis: {
+                                                    type: 'array',
+                                                    items: { type: 'string' }
+                                                }
+                                            }
+                                        },
                                         type: {
                                             type: 'string',
                                             enum: ['task', 'milestone', 'group']
@@ -187,11 +268,13 @@ Best Practices:
 2. Consider task order and dependencies
 3. Create dependent tasks in separate calls if they need IDs from previous tasks
 4. Provide clear context and metadata for each task
+5. Document reasoning for task organization
 
 Common Mistakes:
 - Trying to create dependent tasks before their dependencies exist
 - Missing task context and metadata
-- Not considering task hierarchy`,
+- Not considering task hierarchy
+- Missing reasoning documentation`,
                     inputSchema: {
                         type: 'object',
                         properties: {
@@ -218,6 +301,40 @@ Common Mistakes:
                                                     content: { type: 'string' },
                                                     language: { type: 'string' },
                                                     metadata: { type: 'object' }
+                                                }
+                                            }
+                                        },
+                                        reasoning: {
+                                            type: 'object',
+                                            properties: {
+                                                approach: { type: 'string' },
+                                                assumptions: { 
+                                                    type: 'array',
+                                                    items: { type: 'string' }
+                                                },
+                                                alternatives: {
+                                                    type: 'array',
+                                                    items: { type: 'string' }
+                                                },
+                                                risks: {
+                                                    type: 'array',
+                                                    items: { type: 'string' }
+                                                },
+                                                tradeoffs: {
+                                                    type: 'array',
+                                                    items: { type: 'string' }
+                                                },
+                                                constraints: {
+                                                    type: 'array',
+                                                    items: { type: 'string' }
+                                                },
+                                                dependencies_rationale: {
+                                                    type: 'array',
+                                                    items: { type: 'string' }
+                                                },
+                                                impact_analysis: {
+                                                    type: 'array',
+                                                    items: { type: 'string' }
                                                 }
                                             }
                                         },
@@ -271,6 +388,7 @@ Best Practices:
 2. Consider impact on dependent tasks
 3. Update status appropriately
 4. Maintain task context in metadata
+5. Document reasoning changes
 
 Status Flow:
 - pending → in_progress → completed
@@ -309,6 +427,41 @@ Status Flow:
                                             },
                                         },
                                         description: 'Updated rich notes',
+                                    },
+                                    reasoning: {
+                                        type: 'object',
+                                        properties: {
+                                            approach: { type: 'string' },
+                                            assumptions: { 
+                                                type: 'array',
+                                                items: { type: 'string' }
+                                            },
+                                            alternatives: {
+                                                type: 'array',
+                                                items: { type: 'string' }
+                                            },
+                                            risks: {
+                                                type: 'array',
+                                                items: { type: 'string' }
+                                            },
+                                            tradeoffs: {
+                                                type: 'array',
+                                                items: { type: 'string' }
+                                            },
+                                            constraints: {
+                                                type: 'array',
+                                                items: { type: 'string' }
+                                            },
+                                            dependencies_rationale: {
+                                                type: 'array',
+                                                items: { type: 'string' }
+                                            },
+                                            impact_analysis: {
+                                                type: 'array',
+                                                items: { type: 'string' }
+                                            }
+                                        },
+                                        description: 'Updated reasoning documentation'
                                     },
                                     type: {
                                         type: 'string',
@@ -426,7 +579,6 @@ Best Practices:
             ],
         }));
 
-        // Rest of the implementation remains the same...
         this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
             try {
                 switch (request.params.name) {

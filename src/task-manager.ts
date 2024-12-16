@@ -216,6 +216,7 @@ export class TaskManager {
             name: taskData.name,
             description: taskData.description,
             notes: taskData.notes,
+            reasoning: taskData.reasoning,
             type: taskData.type || 'task',
             status: 'pending',
             dependencies,
@@ -364,6 +365,7 @@ export class TaskManager {
                 name: updates.name ?? task.name,
                 description: updates.description ?? task.description,
                 notes: updates.notes ?? task.notes,
+                reasoning: updates.reasoning ?? task.reasoning,
                 type: updates.type ?? task.type,
                 status: updates.status ?? task.status,
                 metadata: {
