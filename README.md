@@ -23,15 +23,17 @@ ATLAS (Adaptive Task & Logic Automation System) is a Model Context Protocol serv
 
 ## Overview
 
-### Model Context Protocol Integration
+### Model Context Protocol Server
 
-ATLAS implements the Model Context Protocol (MCP), a standardized communication protocol between LLMs and external systems. The architecture consists of:
+ATLAS implements the Model Context Protocol (MCP), created by Anthropic, which is a standardized communication protocol between LLMs and external systems. The architecture consists of:
 
 - **Clients** (Claude Desktop, IDEs) that maintain server connections
 - **Servers** that provide tools and resources to clients
 - **LLMs** that interact with servers through client applications
 
-This separation enables LLMs to safely access external functionality while maintaining security boundaries.
+This architecture creates a secure boundary between LLMs and external systems while enabling controlled access to functionality.
+
+ATLAS MCP Server utilizes this protocol to enable LLMs to manage tasks systematically by providing APIs for task creation, updates, and progress tracking in a hierarchical structure.
 
 ## Features
 
@@ -109,6 +111,448 @@ Tasks support rich content and metadata:
   }
 }
 ```
+
+### Example Task List
+
+The following example demonstrates a comprehensive task breakdown for a personal portfolio website project. This example showcases ATLAS's ability to manage complex hierarchical tasks with rich metadata and dependencies.
+
+This task list was generated using the prompt:
+> You're a web developer for modern apps. Architect, design, and plan the required tasks for a personal portfolio website for a web dev and has a modern UI/UX.
+
+<details>
+<summary><b>Portfolio Website Development Task List</b></summary>
+
+```json
+[
+  {
+    "id": "8b4f40b2-1941-46c6-bc9f-b68d1c1b4aa2",
+    "name": "Personal Portfolio Website Development",
+    "description": "Design and develop a modern personal portfolio website with strong UI/UX focus",
+    "type": "group",
+    "status": "pending",
+    "dependencies": [],
+    "subtasks": [
+      {
+        "id": "479251ce-6e13-446a-b650-d5a4179dcc5e",
+        "name": "Project Setup and Architecture",
+        "description": "Initialize project and set up development environment",
+        "type": "group",
+        "status": "pending",
+        "dependencies": [],
+        "subtasks": [
+          {
+            "id": "fa5751e0-6005-495a-a191-85c72eb644c5",
+            "name": "Technology Stack Selection",
+            "description": "Choose and document the tech stack:\n- Next.js for SSG/SSR\n- Tailwind CSS for styling\n- TypeScript for type safety\n- Framer Motion for animations\n- MDX for blog content\n- Vercel for deployment",
+            "type": "task",
+            "status": "pending",
+            "dependencies": [],
+            "subtasks": [],
+            "metadata": {
+              "created": "2024-12-16T10:47:53.916Z",
+              "updated": "2024-12-16T10:47:53.916Z",
+              "sessionId": "4bcc6aad-b123-416d-a71c-58b3788cca79"
+            },
+            "parentId": "479251ce-6e13-446a-b650-d5a4179dcc5e"
+          },
+          {
+            "id": "a28016aa-1eed-44e2-93a0-a7182c5ee54b",
+            "name": "Project Repository Setup",
+            "description": "Initialize Git repository with proper structure and configuration files",
+            "type": "task",
+            "status": "pending",
+            "dependencies": [],
+            "subtasks": [],
+            "metadata": {
+              "created": "2024-12-16T10:47:53.916Z",
+              "updated": "2024-12-16T10:47:53.916Z",
+              "sessionId": "4bcc6aad-b123-416d-a71c-58b3788cca79"
+            },
+            "parentId": "479251ce-6e13-446a-b650-d5a4179dcc5e"
+          },
+          {
+            "id": "4f60ae3d-d650-4e47-b66f-d3bf523bd00f",
+            "name": "Development Environment Configuration",
+            "description": "Set up ESLint, Prettier, Husky hooks, and TypeScript configuration",
+            "type": "task",
+            "status": "pending",
+            "dependencies": [],
+            "subtasks": [],
+            "metadata": {
+              "created": "2024-12-16T10:47:53.916Z",
+              "updated": "2024-12-16T10:47:53.916Z",
+              "sessionId": "4bcc6aad-b123-416d-a71c-58b3788cca79"
+            },
+            "parentId": "479251ce-6e13-446a-b650-d5a4179dcc5e"
+          }
+        ],
+        "metadata": {
+          "created": "2024-12-16T10:47:53.916Z",
+          "updated": "2024-12-16T10:47:53.916Z",
+          "sessionId": "4bcc6aad-b123-416d-a71c-58b3788cca79"
+        },
+        "parentId": "8b4f40b2-1941-46c6-bc9f-b68d1c1b4aa2"
+      },
+      {
+        "id": "6e301694-88a3-4d48-959d-9d634269250b",
+        "name": "UI/UX Design",
+        "description": "Design the user interface and experience",
+        "type": "group",
+        "status": "pending",
+        "dependencies": [],
+        "subtasks": [
+          {
+            "id": "07f398eb-f3a0-42c1-8bca-84759eae7bf2",
+            "name": "Design System Creation",
+            "description": "Create design tokens and system:\n- Color palette\n- Typography scale\n- Spacing system\n- Component library\n- Animation guidelines",
+            "type": "task",
+            "status": "pending",
+            "dependencies": [],
+            "subtasks": [],
+            "metadata": {
+              "created": "2024-12-16T10:47:53.916Z",
+              "updated": "2024-12-16T10:47:53.916Z",
+              "sessionId": "4bcc6aad-b123-416d-a71c-58b3788cca79"
+            },
+            "parentId": "6e301694-88a3-4d48-959d-9d634269250b"
+          },
+          {
+            "id": "1e0db359-05a5-4654-b60f-adab5f9c91b2",
+            "name": "Wireframing",
+            "description": "Create wireframes for all pages and responsive layouts",
+            "type": "task",
+            "status": "pending",
+            "dependencies": [],
+            "subtasks": [],
+            "metadata": {
+              "created": "2024-12-16T10:47:53.916Z",
+              "updated": "2024-12-16T10:47:53.916Z",
+              "sessionId": "4bcc6aad-b123-416d-a71c-58b3788cca79"
+            },
+            "parentId": "6e301694-88a3-4d48-959d-9d634269250b"
+          },
+          {
+            "id": "fcb873ae-611a-4cea-af2b-cde5bd933aa7",
+            "name": "High-fidelity Design",
+            "description": "Create detailed designs including dark mode variants",
+            "type": "task",
+            "status": "pending",
+            "dependencies": [],
+            "subtasks": [],
+            "metadata": {
+              "created": "2024-12-16T10:47:53.916Z",
+              "updated": "2024-12-16T10:47:53.916Z",
+              "sessionId": "4bcc6aad-b123-416d-a71c-58b3788cca79"
+            },
+            "parentId": "6e301694-88a3-4d48-959d-9d634269250b"
+          }
+        ],
+        "metadata": {
+          "created": "2024-12-16T10:47:53.916Z",
+          "updated": "2024-12-16T10:47:53.916Z",
+          "sessionId": "4bcc6aad-b123-416d-a71c-58b3788cca79"
+        },
+        "parentId": "8b4f40b2-1941-46c6-bc9f-b68d1c1b4aa2"
+      },
+      {
+        "id": "3819ed9c-cbc8-4f82-92e1-014d874bb8e1",
+        "name": "Core Features Development",
+        "description": "Develop main features and components",
+        "type": "group",
+        "status": "pending",
+        "dependencies": [],
+        "subtasks": [
+          {
+            "id": "be6de74c-6a57-470f-95aa-481e7e275566",
+            "name": "Layout Components",
+            "description": "Develop base layout components:\n- Header with navigation\n- Footer\n- Layout wrapper\n- Mobile menu",
+            "type": "task",
+            "status": "pending",
+            "dependencies": [],
+            "subtasks": [],
+            "metadata": {
+              "created": "2024-12-16T10:47:53.916Z",
+              "updated": "2024-12-16T10:47:53.916Z",
+              "sessionId": "4bcc6aad-b123-416d-a71c-58b3788cca79"
+            },
+            "parentId": "3819ed9c-cbc8-4f82-92e1-014d874bb8e1"
+          },
+          {
+            "id": "81415232-3e47-4d42-8a67-f147ab82c94c",
+            "name": "Home Page",
+            "description": "Create landing page with:\n- Hero section\n- Featured projects\n- Skills showcase\n- Quick contact",
+            "type": "task",
+            "status": "pending",
+            "dependencies": [],
+            "subtasks": [],
+            "metadata": {
+              "created": "2024-12-16T10:47:53.916Z",
+              "updated": "2024-12-16T10:47:53.916Z",
+              "sessionId": "4bcc6aad-b123-416d-a71c-58b3788cca79"
+            },
+            "parentId": "3819ed9c-cbc8-4f82-92e1-014d874bb8e1"
+          },
+          {
+            "id": "2cf6bd8d-6e5a-42ce-a163-3c9e18abc891",
+            "name": "Projects Section",
+            "description": "Build projects showcase with:\n- Project cards\n- Filtering system\n- Project detail pages\n- Live demo links",
+            "type": "task",
+            "status": "pending",
+            "dependencies": [],
+            "subtasks": [],
+            "metadata": {
+              "created": "2024-12-16T10:47:53.916Z",
+              "updated": "2024-12-16T10:47:53.916Z",
+              "sessionId": "4bcc6aad-b123-416d-a71c-58b3788cca79"
+            },
+            "parentId": "3819ed9c-cbc8-4f82-92e1-014d874bb8e1"
+          },
+          {
+            "id": "379e7fbd-ce61-4d9f-b36c-87baba126b69",
+            "name": "About Page",
+            "description": "Develop about page with:\n- Professional summary\n- Skills and technologies\n- Work experience\n- Education",
+            "type": "task",
+            "status": "pending",
+            "dependencies": [],
+            "subtasks": [],
+            "metadata": {
+              "created": "2024-12-16T10:47:53.916Z",
+              "updated": "2024-12-16T10:47:53.916Z",
+              "sessionId": "4bcc6aad-b123-416d-a71c-58b3788cca79"
+            },
+            "parentId": "3819ed9c-cbc8-4f82-92e1-014d874bb8e1"
+          },
+          {
+            "id": "1da3052c-1d09-4120-ab9d-051db6226531",
+            "name": "Contact Section",
+            "description": "Create contact form and social links:\n- Form validation\n- Email integration\n- Social media links\n- Resume download",
+            "type": "task",
+            "status": "pending",
+            "dependencies": [],
+            "subtasks": [],
+            "metadata": {
+              "created": "2024-12-16T10:47:53.916Z",
+              "updated": "2024-12-16T10:47:53.916Z",
+              "sessionId": "4bcc6aad-b123-416d-a71c-58b3788cca79"
+            },
+            "parentId": "3819ed9c-cbc8-4f82-92e1-014d874bb8e1"
+          }
+        ],
+        "metadata": {
+          "created": "2024-12-16T10:47:53.916Z",
+          "updated": "2024-12-16T10:47:53.916Z",
+          "sessionId": "4bcc6aad-b123-416d-a71c-58b3788cca79"
+        },
+        "parentId": "8b4f40b2-1941-46c6-bc9f-b68d1c1b4aa2"
+      },
+      {
+        "id": "edf1e5f7-d747-494d-8a0f-559b3670d4a4",
+        "name": "Enhancement Features",
+        "description": "Implement additional features for better UX",
+        "type": "group",
+        "status": "pending",
+        "dependencies": [],
+        "subtasks": [
+          {
+            "id": "f1d67821-95b4-4602-9c23-1cfdd6b1d090",
+            "name": "Dark Mode Implementation",
+            "description": "Add dark mode support with system preference detection",
+            "type": "task",
+            "status": "pending",
+            "dependencies": [],
+            "subtasks": [],
+            "metadata": {
+              "created": "2024-12-16T10:47:53.916Z",
+              "updated": "2024-12-16T10:47:53.916Z",
+              "sessionId": "4bcc6aad-b123-416d-a71c-58b3788cca79"
+            },
+            "parentId": "edf1e5f7-d747-494d-8a0f-559b3670d4a4"
+          },
+          {
+            "id": "9fdf1798-0f7b-4bf2-85a7-55ed49c57e10",
+            "name": "Animations and Transitions",
+            "description": "Implement smooth animations:\n- Page transitions\n- Scroll animations\n- Hover effects\n- Loading states",
+            "type": "task",
+            "status": "pending",
+            "dependencies": [],
+            "subtasks": [],
+            "metadata": {
+              "created": "2024-12-16T10:47:53.916Z",
+              "updated": "2024-12-16T10:47:53.916Z",
+              "sessionId": "4bcc6aad-b123-416d-a71c-58b3788cca79"
+            },
+            "parentId": "edf1e5f7-d747-494d-8a0f-559b3670d4a4"
+          },
+          {
+            "id": "bd466a22-5a56-434b-9f4a-d6a83c26530c",
+            "name": "Blog Section",
+            "description": "Set up blog functionality:\n- MDX integration\n- Blog list page\n- Article template\n- Code syntax highlighting",
+            "type": "task",
+            "status": "pending",
+            "dependencies": [],
+            "subtasks": [],
+            "metadata": {
+              "created": "2024-12-16T10:47:53.916Z",
+              "updated": "2024-12-16T10:47:53.916Z",
+              "sessionId": "4bcc6aad-b123-416d-a71c-58b3788cca79"
+            },
+            "parentId": "edf1e5f7-d747-494d-8a0f-559b3670d4a4"
+          }
+        ],
+        "metadata": {
+          "created": "2024-12-16T10:47:53.916Z",
+          "updated": "2024-12-16T10:47:53.916Z",
+          "sessionId": "4bcc6aad-b123-416d-a71c-58b3788cca79"
+        },
+        "parentId": "8b4f40b2-1941-46c6-bc9f-b68d1c1b4aa2"
+      },
+      {
+        "id": "eaf454d2-48e1-4b4b-94ce-9c3e60ed1ed8",
+        "name": "Performance Optimization",
+        "description": "Optimize website performance and accessibility",
+        "type": "group",
+        "status": "pending",
+        "dependencies": [],
+        "subtasks": [
+          {
+            "id": "c645be45-3cf2-4cd2-8117-60a66d90f186",
+            "name": "Image Optimization",
+            "description": "Implement image optimization:\n- Next.js Image component\n- Responsive images\n- Lazy loading\n- WebP format",
+            "type": "task",
+            "status": "pending",
+            "dependencies": [],
+            "subtasks": [],
+            "metadata": {
+              "created": "2024-12-16T10:47:53.916Z",
+              "updated": "2024-12-16T10:47:53.916Z",
+              "sessionId": "4bcc6aad-b123-416d-a71c-58b3788cca79"
+            },
+            "parentId": "eaf454d2-48e1-4b4b-94ce-9c3e60ed1ed8"
+          },
+          {
+            "id": "b1d0c9a1-be60-4776-ae77-835197c84110",
+            "name": "SEO Setup",
+            "description": "Configure SEO:\n- Meta tags\n- Open Graph\n- Sitemap\n- Robots.txt",
+            "type": "task",
+            "status": "pending",
+            "dependencies": [],
+            "subtasks": [],
+            "metadata": {
+              "created": "2024-12-16T10:47:53.916Z",
+              "updated": "2024-12-16T10:47:53.916Z",
+              "sessionId": "4bcc6aad-b123-416d-a71c-58b3788cca79"
+            },
+            "parentId": "eaf454d2-48e1-4b4b-94ce-9c3e60ed1ed8"
+          },
+          {
+            "id": "7f102e4a-8016-43ef-93e7-3123d9f774e8",
+            "name": "Accessibility Improvements",
+            "description": "Ensure WCAG compliance:\n- Semantic HTML\n- ARIA labels\n- Keyboard navigation\n- Color contrast",
+            "type": "task",
+            "status": "pending",
+            "dependencies": [],
+            "subtasks": [],
+            "metadata": {
+              "created": "2024-12-16T10:47:53.916Z",
+              "updated": "2024-12-16T10:47:53.916Z",
+              "sessionId": "4bcc6aad-b123-416d-a71c-58b3788cca79"
+            },
+            "parentId": "eaf454d2-48e1-4b4b-94ce-9c3e60ed1ed8"
+          }
+        ],
+        "metadata": {
+          "created": "2024-12-16T10:47:53.916Z",
+          "updated": "2024-12-16T10:47:53.916Z",
+          "sessionId": "4bcc6aad-b123-416d-a71c-58b3788cca79"
+        },
+        "parentId": "8b4f40b2-1941-46c6-bc9f-b68d1c1b4aa2"
+      },
+      {
+        "id": "89479531-17de-4964-b702-f3c0fb181417",
+        "name": "Testing and Deployment",
+        "description": "Test and deploy the website",
+        "type": "group",
+        "status": "pending",
+        "dependencies": [],
+        "subtasks": [
+          {
+            "id": "16f68998-a367-48d5-9440-213ceb86f6d3",
+            "name": "Testing Implementation",
+            "description": "Set up and write tests:\n- Unit tests\n- Integration tests\n- E2E tests\n- Accessibility tests",
+            "type": "task",
+            "status": "pending",
+            "dependencies": [],
+            "subtasks": [],
+            "metadata": {
+              "created": "2024-12-16T10:47:53.916Z",
+              "updated": "2024-12-16T10:47:53.916Z",
+              "sessionId": "4bcc6aad-b123-416d-a71c-58b3788cca79"
+            },
+            "parentId": "89479531-17de-4964-b702-f3c0fb181417"
+          },
+          {
+            "id": "afb28769-f67a-4fef-9bc8-2d06490cb449",
+            "name": "Deployment Setup",
+            "description": "Configure deployment:\n- Vercel setup\n- CI/CD pipeline\n- Environment variables\n- Domain configuration",
+            "type": "task",
+            "status": "pending",
+            "dependencies": [],
+            "subtasks": [],
+            "metadata": {
+              "created": "2024-12-16T10:47:53.916Z",
+              "updated": "2024-12-16T10:47:53.916Z",
+              "sessionId": "4bcc6aad-b123-416d-a71c-58b3788cca79"
+            },
+            "parentId": "89479531-17de-4964-b702-f3c0fb181417"
+          },
+          {
+            "id": "a587eca0-f28a-4ca3-8b22-751301e9243a",
+            "name": "Documentation",
+            "description": "Create documentation:\n- Setup instructions\n- Content management guide\n- Deployment process\n- Maintenance guidelines",
+            "type": "task",
+            "status": "pending",
+            "dependencies": [],
+            "subtasks": [],
+            "metadata": {
+              "created": "2024-12-16T10:47:53.916Z",
+              "updated": "2024-12-16T10:47:53.916Z",
+              "sessionId": "4bcc6aad-b123-416d-a71c-58b3788cca79"
+            },
+            "parentId": "89479531-17de-4964-b702-f3c0fb181417"
+          }
+        ],
+        "metadata": {
+          "created": "2024-12-16T10:47:53.916Z",
+          "updated": "2024-12-16T10:47:53.916Z",
+          "sessionId": "4bcc6aad-b123-416d-a71c-58b3788cca79"
+        },
+        "parentId": "8b4f40b2-1941-46c6-bc9f-b68d1c1b4aa2"
+      }
+    ],
+    "metadata": {
+      "created": "2024-12-16T10:47:53.915Z",
+      "updated": "2024-12-16T10:47:53.915Z",
+      "sessionId": "4bcc6aad-b123-416d-a71c-58b3788cca79",
+      "context": "Web development project for creating a personal portfolio",
+      "tags": [
+        "web-development",
+        "portfolio",
+        "frontend",
+        "ui-ux"
+      ]
+    },
+    "parentId": "ROOT-4bcc6aad-b123-416d-a71c-58b3788cca79"
+  }
+]
+```
+
+Key features demonstrated:
+- Hierarchical task organization
+- Detailed subtask breakdowns
+- Clear task dependencies
+- Rich metadata and context
+- Comprehensive project planning
+</details>
 
 ## Tools
 
