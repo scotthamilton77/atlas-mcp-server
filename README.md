@@ -1,7 +1,7 @@
 # ATLAS MCP Server
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.4-blue.svg)](https://www.typescriptlang.org/)
-[![Model Context Protocol](https://img.shields.io/badge/MCP-1.0.3-green.svg)](https://modelcontextprotocol.ai)
+[![Model Context Protocol](https://img.shields.io/badge/MCP-1.0.3-green.svg)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Status](https://img.shields.io/badge/Status-Beta-orange.svg)]()
 [![GitHub](https://img.shields.io/github/stars/cyanheads/atlas-mcp-server?style=social)](https://github.com/cyanheads/atlas-mcp-server)
@@ -32,14 +32,6 @@ ATLAS implements the Model Context Protocol (MCP), a standardized communication 
 - **LLMs** that interact with servers through client applications
 
 This separation enables LLMs to safely access external functionality while maintaining security boundaries.
-
-### Current Status
-
-- ✓ Hierarchical task management
-- ✓ Rich content support (markdown, code, JSON)
-- ✓ Dependency tracking and validation
-- ✓ Status propagation
-- ✓ Session persistence
 
 ## Features
 
