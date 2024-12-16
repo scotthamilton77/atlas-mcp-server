@@ -6,8 +6,9 @@ import {
     Task,
     TaskStatus,
     CreateTaskInput,
-    BatchCreateTaskInput,
+    BulkCreateTaskInput,
     UpdateTaskInput,
+    BulkUpdateTasksInput,
     TaskValidationError,
     TaskNotFoundError,
     DependencyError,
@@ -282,7 +283,7 @@ export class TaskManager {
         }
     }
 
-    async createTasks(input: BatchCreateTaskInput): Promise<TaskResponse<Task[]>> {
+    async bulkCreateTasks(input: BulkCreateTaskInput): Promise<TaskResponse<Task[]>> {
         try {
             const affectedTasks: string[] = [];
             const createdTasks: Task[] = [];
@@ -393,6 +394,83 @@ export class TaskManager {
                     requestId: uuidv4(),
                     sessionId: this.sessionId,
                     affectedTasks: [taskId, ...(isRootTask(task.parentId) ? [] : [task.parentId])]
+                }
+            };
+        } catch (error) {
+            return this.handleError(error);
+        }
+    }
+
+    async bulkUpdateTasks(input: BulkUpdateTasksInput): Promise<TaskResponse<Task[]>> {
+        try {
+            const affectedTasks = new Set<string>();
+            const updatedTasks: Task[] = [];
+            const now = new Date().toISOString();
+
+            // First validate all updates
+            for (const { taskId, updates } of input.updates) {
+                const task = this.findTask(taskId);
+                if (!task) {
+                    throw new TaskNotFoundError(taskId);
+                }
+                sanitizeTaskInput(updates);
+                if (updates.dependencies) {
+                    this.validateDependencies(taskId, updates.dependencies);
+                }
+            }
+
+            // Then apply all updates
+            for (const { taskId, updates } of input.updates) {
+                const task = this.findTask(taskId)!; // Safe because we validated above
+
+                if (updates.dependencies) {
+                    task.dependencies = updates.dependencies;
+                }
+
+                Object.assign(task, {
+                    name: updates.name ?? task.name,
+                    description: updates.description ?? task.description,
+                    notes: updates.notes ?? task.notes,
+                    reasoning: updates.reasoning ?? task.reasoning,
+                    type: updates.type ?? task.type,
+                    status: updates.status ?? task.status,
+                    metadata: {
+                        ...task.metadata,
+                        ...updates.metadata,
+                        updated: now,
+                        sessionId: this.sessionId
+                    }
+                });
+
+                if (isRootTask(task.parentId)) {
+                    this.tasks.set(taskId, task);
+                }
+
+                affectedTasks.add(taskId);
+                if (!isRootTask(task.parentId)) {
+                    affectedTasks.add(task.parentId);
+                }
+
+                updatedTasks.push(task);
+            }
+
+            await this.saveTasks();
+
+            // Update parent statuses after all tasks are updated
+            for (const { taskId, updates } of input.updates) {
+                if (updates.status && !isRootTask(this.findTask(taskId)!.parentId)) {
+                    await this.updateParentStatus(taskId);
+                }
+            }
+
+            return {
+                success: true,
+                data: updatedTasks,
+                metadata: {
+                    timestamp: now,
+                    requestId: uuidv4(),
+                    sessionId: this.sessionId,
+                    affectedTasks: Array.from(affectedTasks)
                 }
             };
         } catch (error) {

@@ -8,7 +8,7 @@ import {
     McpError,
 } from '@modelcontextprotocol/sdk/types.js';
 import { TaskManager } from './task-manager.js';
-import { CreateTaskInput, UpdateTaskInput, TaskStatus, BatchCreateTaskInput } from './types.js';
+import { CreateTaskInput, UpdateTaskInput, TaskStatus, BulkCreateTaskInput, BulkUpdateTasksInput } from './types.js';
 
 class AtlasServer {
     private server: Server;
@@ -260,7 +260,7 @@ Common Mistakes:
                     },
                 },
                 {
-                    name: 'create_tasks',
+                    name: 'bulk_create_tasks',
                     description: `Creates multiple tasks at once under the same parent.
 
 Best Practices:
@@ -500,6 +500,126 @@ Status Flow:
                     },
                 },
                 {
+                    name: 'bulk_update_tasks',
+                    description: `Updates multiple tasks at once with automatic parent status updates and dependency validation.
+
+Best Practices:
+1. Use for batch status updates or metadata changes
+2. Consider impact on task hierarchy
+3. Maintain data consistency
+4. Document changes in reasoning
+
+Common Mistakes:
+- Not using valid task IDs
+- Creating circular dependencies
+- Inconsistent status updates
+- Missing context in updates`,
+                    inputSchema: {
+                        type: 'object',
+                        properties: {
+                            updates: {
+                                type: 'array',
+                                items: {
+                                    type: 'object',
+                                    properties: {
+                                        taskId: {
+                                            type: 'string',
+                                            description: 'ID of the task to update',
+                                        },
+                                        updates: {
+                                            type: 'object',
+                                            properties: {
+                                                name: { 
+                                                    type: 'string',
+                                                    description: 'New task name (max 200 characters)',
+                                                },
+                                                description: { 
+                                                    type: 'string',
+                                                    description: 'New task description (max 2000 characters)',
+                                                },
+                                                notes: {
+                                                    type: 'array',
+                                                    items: {
+                                                        type: 'object',
+                                                        properties: {
+                                                            type: {
+                                                                type: 'string',
+                                                                enum: ['text', 'code', 'json', 'markdown'],
+                                                            },
+                                                            content: { type: 'string' },
+                                                            language: { type: 'string' },
+                                                            metadata: { type: 'object' },
+                                                        },
+                                                    },
+                                                },
+                                                reasoning: {
+                                                    type: 'object',
+                                                    properties: {
+                                                        approach: { type: 'string' },
+                                                        assumptions: { 
+                                                            type: 'array',
+                                                            items: { type: 'string' }
+                                                        },
+                                                        alternatives: {
+                                                            type: 'array',
+                                                            items: { type: 'string' }
+                                                        },
+                                                        risks: {
+                                                            type: 'array',
+                                                            items: { type: 'string' }
+                                                        },
+                                                        tradeoffs: {
+                                                            type: 'array',
+                                                            items: { type: 'string' }
+                                                        },
+                                                        constraints: {
+                                                            type: 'array',
+                                                            items: { type: 'string' }
+                                                        },
+                                                        dependencies_rationale: {
+                                                            type: 'array',
+                                                            items: { type: 'string' }
+                                                        },
+                                                        impact_analysis: {
+                                                            type: 'array',
+                                                            items: { type: 'string' }
+                                                        }
+                                                    }
+                                                },
+                                                type: {
+                                                    type: 'string',
+                                                    enum: ['task', 'milestone', 'group'],
+                                                },
+                                                status: {
+                                                    type: 'string',
+                                                    enum: ['pending', 'in_progress', 'completed', 'failed', 'blocked'],
+                                                },
+                                                dependencies: {
+                                                    type: 'array',
+                                                    items: { type: 'string' },
+                                                },
+                                                metadata: {
+                                                    type: 'object',
+                                                    properties: {
+                                                        context: { type: 'string' },
+                                                        tags: {
+                                                            type: 'array',
+                                                            items: { type: 'string' }
+                                                        }
+                                                    }
+                                                },
+                                            }
+                                        }
+                                    },
+                                    required: ['taskId', 'updates']
+                                },
+                                description: 'Array of task updates to apply'
+                            }
+                        },
+                        required: ['updates']
+                    }
+                },
+                {
                     name: 'delete_task',
                     description: `Safely deletes a task and its subtasks with dependency checking.
 
@@ -593,9 +713,9 @@ Best Practices:
                         };
                     }
 
-                    case 'create_tasks': {
-                        const args = request.params.arguments as unknown as BatchCreateTaskInput;
-                        const response = await this.taskManager.createTasks(args);
+                    case 'bulk_create_tasks': {
+                        const args = request.params.arguments as unknown as BulkCreateTaskInput;
+                        const response = await this.taskManager.bulkCreateTasks(args);
                         return {
                             content: [{ 
                                 type: 'text', 
@@ -621,6 +741,17 @@ Best Practices:
                             updates: UpdateTaskInput;
                         };
                         const response = await this.taskManager.updateTask(taskId, updates);
+                        return {
+                            content: [{ 
+                                type: 'text', 
+                                text: this.formatResponse(response)
+                            }],
+                        };
+                    }
+
+                    case 'bulk_update_tasks': {
+                        const args = request.params.arguments as unknown as BulkUpdateTasksInput;
+                        const response = await this.taskManager.bulkUpdateTasks(args);
                         return {
                             content: [{ 
                                 type: 'text', 

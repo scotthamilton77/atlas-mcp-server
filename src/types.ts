@@ -63,7 +63,7 @@ export interface CreateTaskInput {
     subtasks?: CreateTaskInput[];
 }
 
-export interface BatchCreateTaskInput {
+export interface BulkCreateTaskInput {
     parentId: string | null;
     tasks: CreateTaskInput[];
 }
@@ -81,6 +81,13 @@ export interface UpdateTaskInput {
         tags?: string[];
         [key: string]: unknown;
     };
+}
+
+export interface BulkUpdateTasksInput {
+    updates: {
+        taskId: string;
+        updates: UpdateTaskInput;
+    }[];
 }
 
 export class TaskValidationError extends Error {
