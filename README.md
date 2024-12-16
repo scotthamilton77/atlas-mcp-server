@@ -33,7 +33,7 @@ ATLAS implements the Model Context Protocol (MCP), created by Anthropic, which i
 
 This architecture creates a secure boundary between LLMs and external systems while enabling controlled access to functionality.
 
-ATLAS MCP Server utilizes this protocol to enable LLMs to manage tasks systematically by providing APIs for task creation, updates, and progress tracking in a hierarchical structure.
+Through the MCP protocol, ATLAS empowers LLMs to break down complex projects into manageable tasks, track their progress, and maintain dependencies — all within an organized hierarchical structure.
 
 ## Features
 
@@ -117,7 +117,7 @@ Tasks support rich content and metadata:
 The following example demonstrates a comprehensive task breakdown for a personal portfolio website project. This example showcases ATLAS's ability to manage complex hierarchical tasks with rich metadata and dependencies.
 
 This task list was generated using the prompt:
-> You're a web developer for modern apps. Architect, design, and plan the required tasks for a personal portfolio website for a web dev and has a modern UI/UX.
+> You're a web developer for modern apps. Architect, design, and plan the required tasks for a personal portfolio website for a web dev that has a modern UI/UX.
 
 <details>
 <summary><b>Portfolio Website Development Task List</b></summary>
