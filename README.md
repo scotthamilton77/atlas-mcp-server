@@ -18,6 +18,7 @@ ATLAS (Adaptive Task & Logic Automation System) is a Model Context Protocol serv
 - [Tools](#tools)
 - [Best Practices](#best-practices)
 - [Development](#development)
+- [Up Next](#up-next)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -57,9 +58,34 @@ Through the MCP protocol, ATLAS empowers LLMs to break down complex projects int
 
 ## Installation
 
+### Setup Steps
+
+1. Clone the repository:
 ```bash
-npm install atlas-mcp-server
+git clone https://github.com/cyanheads/atlas-mcp-server.git
 ```
+
+2. Navigate to the project directory:
+```bash
+cd atlas-mcp-server
+```
+
+3. Install dependencies:
+```bash
+npm install
+```
+
+4. Build the project:
+```bash
+npm run build
+```
+
+5. Create a storage directory for tasks:
+```bash
+mkdir -p ~/Documents/atlas-tasks
+```
+
+The server is now ready to be configured and used with your MCP client.
 
 ## Configuration
 
@@ -114,10 +140,8 @@ Tasks support rich content and metadata:
 
 ### Example Task List
 
-The following example demonstrates a comprehensive task breakdown for a personal portfolio website project. This example showcases ATLAS's ability to manage complex hierarchical tasks with rich metadata and dependencies.
-
-This task list was generated using the prompt:
-> You're a web developer for modern apps. Architect, design, and plan the required tasks for a personal portfolio website for a web dev that has a modern UI/UX.
+The following example demonstrates a task breakdown for a personal portfolio website project. The task list was generated from the following prompt:
+> You are a web developer for modern apps. Architect, design, and plan the required tasks for a personal portfolio website for a web dev that has a modern UI/UX.
 
 <details>
 <summary><b>Portfolio Website Development Task List</b></summary>
@@ -546,12 +570,6 @@ This task list was generated using the prompt:
 ]
 ```
 
-Key features demonstrated:
-- Hierarchical task organization
-- Detailed subtask breakdowns
-- Clear task dependencies
-- Rich metadata and context
-- Comprehensive project planning
 </details>
 
 ## Tools
@@ -560,9 +578,6 @@ Key features demonstrated:
 
 #### create_task
 Creates a new task with optional subtasks.
-
-<details>
-<summary><b>Parameters</b></summary>
 
 ```typescript
 {
@@ -578,7 +593,6 @@ Creates a new task with optional subtasks.
   }
 }
 ```
-</details>
 
 #### create_tasks
 Batch creates multiple tasks under the same parent.
@@ -641,6 +655,24 @@ ATLAS provides detailed error information:
 - Dependency conflicts
 - Task not found
 - Internal errors
+
+## Up Next
+
+### Scheduled Tasks
+- Task scheduling with time-based triggers
+- Integration with MCP client for real-time notifications
+- Support for recurring tasks and schedules
+- Task execution with resource delivery to client LLMs
+- Configurable notification preferences
+
+### Enhanced Automation
+- Automated task status updates based on external events
+- Webhook support for third-party service integration
+
+### Collaboration Features
+- Multi-agent task assignment and tracking
+- Team workspaces and shared task lists
+- Activity logging and audit trails
 
 ## Contributing
 
