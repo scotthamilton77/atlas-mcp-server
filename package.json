@@ -1,0 +1,38 @@
+{
+  "name": "atlas-mcp-server",
+  "version": "0.1.0",
+  "description": "A Model Context Protocol server for hierarchical task management",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "atlas-mcp-server": "./build/index.js"
+  },
+  "files": [
+    "build"
+  ],
+  "scripts": {
+    "build": "tsc && node -e \"require('fs').chmodSync('build/index.js', '755')\"",
+    "prepare": "npm run build",
+    "watch": "tsc --watch",
+    "inspector": "npx @modelcontextprotocol/inspector build/index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cyanheads/atlas-mcp-server.git"
+  },
+  "author": "cyanheads",
+  "bugs": {
+    "url": "https://github.com/cyanheads/atlas-mcp-server/issues"
+  },
+  "homepage": "https://github.com/cyanheads/atlas-mcp-server#readme",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.0.3",
+    "@types/uuid": "^10.0.0",
+    "dotenv": "^16.4.7",
+    "uuid": "^11.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.24",
+    "typescript": "^5.3.3"
+  }
+}
