@@ -1,668 +1,381 @@
+/**
+ * Task Manager Module
+ * 
+ * Main integration point for task management functionality.
+ * Coordinates between task store, dependency validation, and status management.
+ */
+
 import { v4 as uuidv4 } from 'uuid';
-import fs from 'fs';
-import path from 'path';
-import dotenv from 'dotenv';
 import {
     Task,
-    TaskStatus,
     CreateTaskInput,
-    BulkCreateTaskInput,
     UpdateTaskInput,
-    BulkUpdateTasksInput,
-    TaskValidationError,
-    TaskNotFoundError,
-    DependencyError,
     TaskResponse,
-    sanitizeTaskInput,
-    getRootId,
-    isRootTask,
-} from './types.js';
+    TaskTypes,
+    TaskStatuses,
+    TaskStatus,
+    BulkCreateTaskInput,
+    BulkUpdateTasksInput
+} from './types/task.js';
+import { StorageManager } from './storage/index.js';
+import { Logger } from './logging/index.js';
+import { validateCreateTask, validateUpdateTask } from './validation/task.js';
+import { TaskError, ErrorCodes, createError } from './errors/index.js';
+import { TaskStore, DependencyValidator, StatusManager } from './task/core/index.js';
 
-// Load environment variables
-dotenv.config();
-
+/**
+ * Task Manager class responsible for coordinating task operations
+ */
 export class TaskManager {
-    private tasks: Map<string, Task>;
-    private storageDir: string;
-    private sessionId: string;
+    private logger: Logger;
+    private taskStore: TaskStore;
+    private dependencyValidator: DependencyValidator;
+    private statusManager: StatusManager;
+    private currentSessionId: string;
 
-    constructor() {
-        this.tasks = new Map();
-        this.sessionId = uuidv4();
-        
-        const baseDir = process.env.TASK_STORAGE_DIR;
-        if (!baseDir) {
-            throw new Error('TASK_STORAGE_DIR environment variable must be set');
-        }
-
-        this.storageDir = path.join(baseDir, 'sessions');
-        fs.mkdirSync(this.storageDir, { recursive: true });
-        this.loadTasks();
+    constructor(storage: StorageManager) {
+        this.logger = Logger.getInstance().child({ component: 'TaskManager' });
+        this.taskStore = new TaskStore(storage);
+        this.dependencyValidator = new DependencyValidator();
+        this.statusManager = new StatusManager();
+        this.currentSessionId = storage.getSessionId();
     }
 
-    private getSessionFile(): string {
-        return path.join(this.storageDir, `${this.sessionId}.json`);
+    /**
+     * Initializes the task manager
+     */
+    async initialize(): Promise<void> {
+        await this.taskStore.initialize();
     }
 
-    private async loadTasks(): Promise<void> {
-        const sessionFile = this.getSessionFile();
+    /**
+     * Creates a new task
+     * 
+     * @param parentId - ID of the parent task (null for root tasks)
+     * @param input - Task creation input data
+     * @param newSession - Whether to create a new session
+     * @returns Promise resolving to the created task
+     * @throws {TaskError} If task creation fails
+     */
+    async createTask(parentId: string | null, input: CreateTaskInput, newSession: boolean = false): Promise<TaskResponse<Task>> {
         try {
-            if (fs.existsSync(sessionFile)) {
-                const data = await fs.promises.readFile(sessionFile, 'utf-8');
-                const tasksArray = JSON.parse(data);
-                // Convert any old content field to notes
-                tasksArray.forEach((task: any) => {
-                    if (task.content && !task.notes) {
-                        task.notes = task.content;
-                        delete task.content;
-                    }
-                });
-                this.tasks = new Map(tasksArray.map((task: Task) => [task.id, task]));
+            // Validate input data
+            const validatedInput = validateCreateTask(input);
+
+            // Generate new session ID if requested
+            if (newSession) {
+                this.currentSessionId = uuidv4();
             }
-        } catch (error) {
-            console.error('Error loading tasks:', error);
-            this.tasks = new Map();
-        }
-    }
 
-    private async saveTasks(): Promise<void> {
-        const sessionFile = this.getSessionFile();
-        const rootTasks = Array.from(this.tasks.values())
-            .filter(task => isRootTask(task.parentId));
-        const tempFile = `${sessionFile}.temp`;
-
-        try {
-            await fs.promises.writeFile(
-                tempFile,
-                JSON.stringify(rootTasks, null, 2)
-            );
-            await fs.promises.rename(tempFile, sessionFile);
-        } catch (error) {
-            console.error('Error saving tasks:', error);
-            if (fs.existsSync(tempFile)) {
-                try {
-                    await fs.promises.unlink(tempFile);
-                } catch (cleanupError) {
-                    console.error('Error cleaning up temp file:', cleanupError);
+            // Check parent task if provided
+            if (parentId) {
+                const parentTask = this.taskStore.getTaskById(parentId);
+                if (!parentTask) {
+                    throw createError(ErrorCodes.TASK_NOT_FOUND, { parentId });
+                }
+                if (parentTask.type !== TaskTypes.GROUP) {
+                    throw createError(ErrorCodes.TASK_INVALID_TYPE, { parentId });
                 }
             }
+
+            // Generate task ID and metadata
+            const taskId = uuidv4();
+            const now = new Date().toISOString();
+            const metadata = {
+                created: now,
+                updated: now,
+                sessionId: this.currentSessionId,
+                ...input.metadata
+            };
+
+            // Create task object
+            const task: Task = {
+                id: taskId,
+                name: input.name,
+                description: input.description,
+                notes: input.notes || [],
+                reasoning: input.reasoning,
+                type: input.type || TaskTypes.TASK,
+                status: TaskStatuses.PENDING,
+                dependencies: input.dependencies || [],
+                subtasks: [],
+                metadata,
+                parentId: parentId || `ROOT-${this.currentSessionId}`
+            };
+
+            // Validate dependencies if any
+            if (task.dependencies.length > 0) {
+                await this.dependencyValidator.validateDependencies(
+                    task,
+                    id => this.taskStore.getTaskById(id)
+                );
+            }
+
+            // Add task to store
+            await this.taskStore.addTask(task);
+
+            // Create subtasks if provided
+            if (input.subtasks && input.subtasks.length > 0) {
+                for (const subtaskInput of input.subtasks) {
+                    await this.createTask(taskId, subtaskInput);
+                }
+            }
+
+            this.logger.info('Task created successfully', { taskId, parentId });
+
+            return {
+                success: true,
+                data: task,
+                metadata: {
+                    timestamp: new Date().toISOString(),
+                    requestId: uuidv4(),
+                    sessionId: this.currentSessionId
+                }
+            };
+        } catch (error) {
+            this.logger.error('Failed to create task', error);
             throw error;
         }
     }
 
-    private findTask(taskId: string): Task | undefined {
-        const task = this.tasks.get(taskId);
-        if (task) return task;
-
-        for (const rootTask of this.tasks.values()) {
-            const found = this.findTaskInSubtasks(rootTask.subtasks, taskId);
-            if (found) return found;
-        }
-        return undefined;
-    }
-
-    private findTaskInSubtasks(subtasks: Task[], taskId: string): Task | undefined {
-        for (const task of subtasks) {
-            if (task.id === taskId) return task;
-            const found = this.findTaskInSubtasks(task.subtasks, taskId);
-            if (found) return found;
-        }
-        return undefined;
-    }
-
-    private validateDependencies(taskId: string, dependencies: string[]): void {
-        // Check for self-dependency
-        if (dependencies.includes(taskId)) {
-            throw new DependencyError(
-                'Task cannot depend on itself',
-                dependencies
-            );
-        }
-
-        // Check for existence of all dependencies
-        const missingDeps = dependencies.filter(depId => !this.findTask(depId));
-        if (missingDeps.length > 0) {
-            throw new DependencyError(
-                `Dependencies not found: ${missingDeps.join(', ')}`,
-                missingDeps
-            );
-        }
-
-        // Check for circular dependencies
-        const visited = new Set<string>();
-        const recursionStack = new Set<string>();
-
-        const detectCircular = (currentId: string): void => {
-            visited.add(currentId);
-            recursionStack.add(currentId);
-
-            const task = this.findTask(currentId);
-            if (task) {
-                for (const depId of task.dependencies) {
-                    if (!visited.has(depId)) {
-                        detectCircular(depId);
-                    } else if (recursionStack.has(depId)) {
-                        throw new DependencyError(
-                            `Circular dependency detected: ${depId}`,
-                            [depId]
-                        );
-                    }
-                }
-            }
-
-            recursionStack.delete(currentId);
-        };
-
-        for (const depId of dependencies) {
-            if (!visited.has(depId)) {
-                detectCircular(depId);
-            }
-        }
-    }
-
-    private async updateParentStatus(taskId: string): Promise<void> {
-        const task = this.findTask(taskId);
-        if (!task || isRootTask(task.parentId)) return;
-
-        const parent = this.findTask(task.parentId);
-        if (!parent) return;
-
-        const siblings = parent.subtasks;
-        const allCompleted = siblings.every(t => t.status === 'completed');
-        const anyFailed = siblings.some(t => t.status === 'failed');
-        const anyBlocked = siblings.some(t => t.status === 'blocked');
-        const anyInProgress = siblings.some(t => t.status === 'in_progress');
-
-        const oldStatus = parent.status;
-        let newStatus: TaskStatus = 'pending';
-
-        if (allCompleted) {
-            newStatus = 'completed';
-        } else if (anyFailed) {
-            newStatus = 'failed';
-        } else if (anyBlocked) {
-            newStatus = 'blocked';
-        } else if (anyInProgress) {
-            newStatus = 'in_progress';
-        }
-
-        if (oldStatus !== newStatus) {
-            parent.status = newStatus;
-            parent.metadata.updated = new Date().toISOString();
-            if (isRootTask(parent.parentId)) {
-                this.tasks.set(parent.id, parent);
-            }
-            await this.saveTasks();
-
-            if (!isRootTask(parent.parentId)) {
-                await this.updateParentStatus(parent.id);
-            }
-        }
-    }
-
-    private async createTaskWithSubtasks(
-        parentId: string,
-        taskData: CreateTaskInput,
-        affectedTasks: string[] = []
-    ): Promise<Task> {
-        sanitizeTaskInput(taskData);
-
-        const id = uuidv4();
-        const dependencies = taskData.dependencies || [];
-        this.validateDependencies(id, dependencies);
-
-        const now = new Date().toISOString();
-        const newTask: Task = {
-            id,
-            name: taskData.name,
-            description: taskData.description,
-            notes: taskData.notes,
-            reasoning: taskData.reasoning,
-            type: taskData.type || 'task',
-            status: 'pending',
-            dependencies,
-            subtasks: [],
-            metadata: {
-                created: now,
-                updated: now,
-                sessionId: this.sessionId,
-                ...taskData.metadata,
-            },
-            parentId
-        };
-
-        affectedTasks.push(id);
-
-        // Recursively create subtasks if any
-        if (taskData.subtasks && taskData.subtasks.length > 0) {
-            for (const subtaskData of taskData.subtasks) {
-                const subtask = await this.createTaskWithSubtasks(id, subtaskData, affectedTasks);
-                newTask.subtasks.push(subtask);
-            }
-        }
-
-        return newTask;
-    }
-
-    async createTask(parentId: string | null, taskData: CreateTaskInput): Promise<TaskResponse<Task>> {
-        try {
-            const affectedTasks: string[] = [];
-            const effectiveParentId = parentId ? parentId : getRootId(this.sessionId);
-
-            const newTask = await this.createTaskWithSubtasks(effectiveParentId, taskData, affectedTasks);
-
-            if (parentId) {
-                const parentTask = this.findTask(parentId);
-                if (!parentTask) {
-                    throw new TaskNotFoundError(parentId);
-                }
-                parentTask.subtasks.push(newTask);
-                parentTask.metadata.updated = newTask.metadata.created;
-                if (isRootTask(parentTask.parentId)) {
-                    this.tasks.set(parentId, parentTask);
-                }
-                affectedTasks.push(parentId);
-            } else {
-                this.tasks.set(newTask.id, newTask);
-            }
-
-            await this.saveTasks();
-
-            return {
-                success: true,
-                data: newTask,
-                metadata: {
-                    timestamp: newTask.metadata.created,
-                    requestId: uuidv4(),
-                    sessionId: this.sessionId,
-                    affectedTasks
-                }
-            };
-        } catch (error) {
-            return this.handleError(error);
-        }
-    }
-
-    async bulkCreateTasks(input: BulkCreateTaskInput): Promise<TaskResponse<Task[]>> {
-        try {
-            const affectedTasks: string[] = [];
-            const createdTasks: Task[] = [];
-            const effectiveParentId = input.parentId ? input.parentId : getRootId(this.sessionId);
-
-            for (const taskData of input.tasks) {
-                const newTask = await this.createTaskWithSubtasks(effectiveParentId, taskData, affectedTasks);
-                createdTasks.push(newTask);
-
-                if (input.parentId) {
-                    const parentTask = this.findTask(input.parentId);
-                    if (!parentTask) {
-                        throw new TaskNotFoundError(input.parentId);
-                    }
-                    parentTask.subtasks.push(newTask);
-                    parentTask.metadata.updated = newTask.metadata.created;
-                    if (isRootTask(parentTask.parentId)) {
-                        this.tasks.set(input.parentId, parentTask);
-                    }
-                    affectedTasks.push(input.parentId);
-                } else {
-                    this.tasks.set(newTask.id, newTask);
-                }
-            }
-
-            await this.saveTasks();
-
-            return {
-                success: true,
-                data: createdTasks,
-                metadata: {
-                    timestamp: new Date().toISOString(),
-                    requestId: uuidv4(),
-                    sessionId: this.sessionId,
-                    affectedTasks
-                }
-            };
-        } catch (error) {
-            return this.handleError(error);
-        }
-    }
-
-    async getTask(taskId: string): Promise<TaskResponse<Task>> {
-        try {
-            const task = this.findTask(taskId);
-            if (!task) {
-                throw new TaskNotFoundError(taskId);
-            }
-
-            return {
-                success: true,
-                data: task,
-                metadata: {
-                    timestamp: new Date().toISOString(),
-                    requestId: uuidv4(),
-                    sessionId: this.sessionId
-                }
-            };
-        } catch (error) {
-            return this.handleError(error);
-        }
-    }
-
+    /**
+     * Updates an existing task
+     */
     async updateTask(taskId: string, updates: UpdateTaskInput): Promise<TaskResponse<Task>> {
         try {
-            const task = this.findTask(taskId);
+            // Validate update data
+            const validatedUpdates = validateUpdateTask(updates);
+
+            // Get existing task
+            const task = this.taskStore.getTaskById(taskId);
             if (!task) {
-                throw new TaskNotFoundError(taskId);
+                throw createError(ErrorCodes.TASK_NOT_FOUND, { taskId });
             }
 
-            sanitizeTaskInput(updates);
-
-            if (updates.dependencies) {
-                this.validateDependencies(taskId, updates.dependencies);
-                task.dependencies = updates.dependencies;
-            }
-
-            const now = new Date().toISOString();
-            Object.assign(task, {
-                name: updates.name ?? task.name,
-                description: updates.description ?? task.description,
-                notes: updates.notes ?? task.notes,
-                reasoning: updates.reasoning ?? task.reasoning,
-                type: updates.type ?? task.type,
-                status: updates.status ?? task.status,
-                metadata: {
-                    ...task.metadata,
-                    ...updates.metadata,
-                    updated: now,
-                    sessionId: this.sessionId
-                }
-            });
-
-            if (isRootTask(task.parentId)) {
-                this.tasks.set(taskId, task);
-            }
-            await this.saveTasks();
-
-            if (updates.status && !isRootTask(task.parentId)) {
-                await this.updateParentStatus(taskId);
-            }
-
-            return {
-                success: true,
-                data: task,
-                metadata: {
-                    timestamp: now,
-                    requestId: uuidv4(),
-                    sessionId: this.sessionId,
-                    affectedTasks: [taskId, ...(isRootTask(task.parentId) ? [] : [task.parentId])]
-                }
-            };
-        } catch (error) {
-            return this.handleError(error);
-        }
-    }
-
-    async bulkUpdateTasks(input: BulkUpdateTasksInput): Promise<TaskResponse<Task[]>> {
-        try {
-            const affectedTasks = new Set<string>();
-            const updatedTasks: Task[] = [];
-            const now = new Date().toISOString();
-
-            // First validate all updates
-            for (const { taskId, updates } of input.updates) {
-                const task = this.findTask(taskId);
-                if (!task) {
-                    throw new TaskNotFoundError(taskId);
-                }
-                sanitizeTaskInput(updates);
-                if (updates.dependencies) {
-                    this.validateDependencies(taskId, updates.dependencies);
-                }
-            }
-
-            // Then apply all updates
-            for (const { taskId, updates } of input.updates) {
-                const task = this.findTask(taskId)!; // Safe because we validated above
-
-                if (updates.dependencies) {
-                    task.dependencies = updates.dependencies;
-                }
-
-                Object.assign(task, {
-                    name: updates.name ?? task.name,
-                    description: updates.description ?? task.description,
-                    notes: updates.notes ?? task.notes,
-                    reasoning: updates.reasoning ?? task.reasoning,
-                    type: updates.type ?? task.type,
-                    status: updates.status ?? task.status,
-                    metadata: {
-                        ...task.metadata,
-                        ...updates.metadata,
-                        updated: now,
-                        sessionId: this.sessionId
+            // Check status transition if status is being updated
+            if (updates.status) {
+                await this.statusManager.validateAndProcessStatusChange(
+                    task,
+                    updates.status,
+                    id => this.taskStore.getTaskById(id),
+                    async (id, statusUpdate) => {
+                        const taskToUpdate = this.taskStore.getTaskById(id);
+                        if (taskToUpdate) {
+                            await this.taskStore.updateTask(id, statusUpdate);
+                        }
                     }
-                });
-
-                if (isRootTask(task.parentId)) {
-                    this.tasks.set(taskId, task);
-                }
-
-                affectedTasks.add(taskId);
-                if (!isRootTask(task.parentId)) {
-                    affectedTasks.add(task.parentId);
-                }
-
-                updatedTasks.push(task);
-            }
-
-            await this.saveTasks();
-
-            // Update parent statuses after all tasks are updated
-            for (const { taskId, updates } of input.updates) {
-                if (updates.status && !isRootTask(this.findTask(taskId)!.parentId)) {
-                    await this.updateParentStatus(taskId);
-                }
-            }
-
-            return {
-                success: true,
-                data: updatedTasks,
-                metadata: {
-                    timestamp: now,
-                    requestId: uuidv4(),
-                    sessionId: this.sessionId,
-                    affectedTasks: Array.from(affectedTasks)
-                }
-            };
-        } catch (error) {
-            return this.handleError(error);
-        }
-    }
-
-    async deleteTask(taskId: string): Promise<TaskResponse<void>> {
-        try {
-            const task = this.findTask(taskId);
-            if (!task) {
-                throw new TaskNotFoundError(taskId);
-            }
-
-            const affectedTasks = [taskId];
-
-            if (!isRootTask(task.parentId)) {
-                const parent = this.findTask(task.parentId);
-                if (parent) {
-                    parent.subtasks = parent.subtasks.filter(t => t.id !== taskId);
-                    parent.metadata.updated = new Date().toISOString();
-                    if (isRootTask(parent.parentId)) {
-                        this.tasks.set(parent.id, parent);
-                    }
-                    affectedTasks.push(parent.id);
-                }
-            }
-
-            const hasDependent = (tasks: Task[]): boolean => {
-                for (const t of tasks) {
-                    if (t.dependencies.includes(taskId)) return true;
-                    if (hasDependent(t.subtasks)) return true;
-                }
-                return false;
-            };
-
-            if (hasDependent(Array.from(this.tasks.values()))) {
-                throw new DependencyError(
-                    `Cannot delete task: other tasks depend on it`,
-                    [taskId]
                 );
             }
 
-            const deleteSubtasks = (subtasks: Task[]): void => {
-                for (const subtask of subtasks) {
-                    affectedTasks.push(subtask.id);
-                    deleteSubtasks(subtask.subtasks);
-                }
-            };
-
-            deleteSubtasks(task.subtasks);
-
-            if (isRootTask(task.parentId)) {
-                this.tasks.delete(taskId);
+            // Check dependencies if being updated
+            if (updates.dependencies) {
+                await this.dependencyValidator.validateDependencies(
+                    { ...task, dependencies: updates.dependencies },
+                    id => this.taskStore.getTaskById(id)
+                );
             }
-            await this.saveTasks();
+
+            // Apply updates
+            await this.taskStore.updateTask(taskId, {
+                ...validatedUpdates,
+                metadata: {
+                    ...task.metadata,
+                    ...updates.metadata,
+                    updated: new Date().toISOString()
+                }
+            });
+
+            const updatedTask = this.taskStore.getTaskById(taskId)!;
 
             return {
                 success: true,
+                data: updatedTask,
                 metadata: {
                     timestamp: new Date().toISOString(),
                     requestId: uuidv4(),
-                    sessionId: this.sessionId,
-                    affectedTasks
+                    sessionId: updatedTask.metadata.sessionId
                 }
             };
         } catch (error) {
-            return this.handleError(error);
+            this.logger.error('Failed to update task', error);
+            throw error;
         }
     }
 
-    async getSubtasks(taskId: string): Promise<TaskResponse<Task[]>> {
+    /**
+     * Gets a task by ID
+     */
+    async getTask(taskId: string): Promise<TaskResponse<Task>> {
         try {
-            const task = this.findTask(taskId);
+            const task = this.taskStore.getTaskById(taskId);
             if (!task) {
-                throw new TaskNotFoundError(taskId);
+                throw createError(ErrorCodes.TASK_NOT_FOUND, { taskId });
             }
 
             return {
                 success: true,
-                data: task.subtasks,
+                data: task,
                 metadata: {
                     timestamp: new Date().toISOString(),
                     requestId: uuidv4(),
-                    sessionId: this.sessionId
+                    sessionId: task.metadata.sessionId
                 }
             };
         } catch (error) {
-            return this.handleError(error);
+            this.logger.error('Failed to get task', error);
+            throw error;
         }
     }
 
+    /**
+     * Gets tasks by status
+     */
     async getTasksByStatus(status: TaskStatus): Promise<TaskResponse<Task[]>> {
         try {
-            const getTasksWithStatus = (tasks: Task[]): Task[] => {
-                const result: Task[] = [];
-                for (const task of tasks) {
-                    if (task.status === status) {
-                        result.push(task);
-                    }
-                    result.push(...getTasksWithStatus(task.subtasks));
-                }
-                return result;
-            };
-
-            const tasks = getTasksWithStatus(Array.from(this.tasks.values()));
-
+            const tasks = this.taskStore.getTasksByStatus(status);
             return {
                 success: true,
                 data: tasks,
                 metadata: {
                     timestamp: new Date().toISOString(),
                     requestId: uuidv4(),
-                    sessionId: this.sessionId
+                    sessionId: this.currentSessionId
                 }
             };
         } catch (error) {
-            return this.handleError(error);
+            this.logger.error('Failed to get tasks by status', error);
+            throw error;
         }
     }
 
+    /**
+     * Gets subtasks of a task
+     */
+    async getSubtasks(taskId: string): Promise<TaskResponse<Task[]>> {
+        try {
+            const task = this.taskStore.getTaskById(taskId);
+            if (!task) {
+                throw createError(ErrorCodes.TASK_NOT_FOUND, { taskId });
+            }
+
+            const subtasks = task.subtasks
+                .map(id => this.taskStore.getTaskById(id))
+                .filter((t): t is Task => t !== null);
+
+            return {
+                success: true,
+                data: subtasks,
+                metadata: {
+                    timestamp: new Date().toISOString(),
+                    requestId: uuidv4(),
+                    sessionId: task.metadata.sessionId
+                }
+            };
+        } catch (error) {
+            this.logger.error('Failed to get subtasks', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Gets the complete task tree
+     */
     async getTaskTree(): Promise<TaskResponse<Task[]>> {
         try {
-            const rootTasks = Array.from(this.tasks.values())
-                .filter(task => isRootTask(task.parentId));
-
+            const rootTasks = this.taskStore.getRootTasks();
             return {
                 success: true,
                 data: rootTasks,
                 metadata: {
                     timestamp: new Date().toISOString(),
                     requestId: uuidv4(),
-                    sessionId: this.sessionId
+                    sessionId: this.currentSessionId
                 }
             };
         } catch (error) {
-            return this.handleError(error);
+            this.logger.error('Failed to get task tree', error);
+            throw error;
         }
     }
 
-    private handleError(error: unknown): TaskResponse<never> {
-        const now = new Date().toISOString();
-        const metadata = {
-            timestamp: now,
-            requestId: uuidv4(),
-            sessionId: this.sessionId
-        };
+    /**
+     * Deletes a task and its subtasks
+     */
+    async deleteTask(taskId: string): Promise<TaskResponse<void>> {
+        try {
+            const task = this.taskStore.getTaskById(taskId);
+            if (!task) {
+                throw createError(ErrorCodes.TASK_NOT_FOUND, { taskId });
+            }
 
-        if (error instanceof TaskValidationError) {
+            // Delete subtasks recursively
+            for (const subtaskId of task.subtasks) {
+                await this.deleteTask(subtaskId);
+            }
+
+            await this.taskStore.removeTask(taskId);
+
             return {
-                success: false,
-                error: {
-                    code: error.code,
-                    message: error.message,
-                    details: error.details
-                },
-                metadata
+                success: true,
+                metadata: {
+                    timestamp: new Date().toISOString(),
+                    requestId: uuidv4(),
+                    sessionId: task.metadata.sessionId
+                }
             };
+        } catch (error) {
+            this.logger.error('Failed to delete task', error);
+            throw error;
         }
+    }
 
-        if (error instanceof TaskNotFoundError) {
+    /**
+     * Creates multiple tasks in bulk
+     */
+    async bulkCreateTasks(input: BulkCreateTaskInput): Promise<TaskResponse<Task[]>> {
+        try {
+            const createdTasks = await Promise.all(
+                input.tasks.map(taskInput => this.createTask(input.parentId, taskInput))
+            );
+
             return {
-                success: false,
-                error: {
-                    code: 'TASK_NOT_FOUND',
-                    message: error.message
-                },
-                metadata
+                success: true,
+                data: createdTasks.map(response => response.data!),
+                metadata: {
+                    timestamp: new Date().toISOString(),
+                    requestId: uuidv4(),
+                    sessionId: this.currentSessionId,
+                    affectedTasks: createdTasks.map(response => response.data!.id)
+                }
             };
+        } catch (error) {
+            this.logger.error('Failed to create tasks in bulk', error);
+            throw error;
         }
+    }
 
-        if (error instanceof DependencyError) {
+    /**
+     * Updates multiple tasks in bulk
+     */
+    async bulkUpdateTasks(input: BulkUpdateTasksInput): Promise<TaskResponse<Task[]>> {
+        try {
+            const updatedTasks = await Promise.all(
+                input.updates.map(({ taskId, updates }) => this.updateTask(taskId, updates))
+            );
+
             return {
-                success: false,
-                error: {
-                    code: 'DEPENDENCY_ERROR',
-                    message: error.message,
-                    details: { dependencies: error.dependencies }
-                },
-                metadata
+                success: true,
+                data: updatedTasks.map(response => response.data!),
+                metadata: {
+                    timestamp: new Date().toISOString(),
+                    requestId: uuidv4(),
+                    sessionId: this.currentSessionId,
+                    affectedTasks: updatedTasks.map(response => response.data!.id)
+                }
             };
+        } catch (error) {
+            this.logger.error('Failed to update tasks in bulk', error);
+            throw error;
         }
-
-        console.error('Unexpected error:', error);
-        return {
-            success: false,
-            error: {
-                code: 'INTERNAL_ERROR',
-                message: error instanceof Error ? error.message : 'An unexpected error occurred',
-                details: error instanceof Error ? error.stack : undefined
-            },
-            metadata
-        };
     }
 }
