@@ -16,6 +16,7 @@ export const ErrorCodes = {
     TASK_INVALID_TYPE: 'TASK_INVALID_TYPE',
     TASK_INVALID_STATUS: 'TASK_INVALID_STATUS',
     TASK_INVALID_PARENT: 'TASK_INVALID_PARENT',
+    TASK_OPERATION_FAILED: 'TASK_OPERATION_FAILED',
     
     // Storage-related errors
     STORAGE_READ: 'STORAGE_READ',
@@ -24,6 +25,9 @@ export const ErrorCodes = {
     STORAGE_DELETE: 'STORAGE_DELETE',
     STORAGE_PERMISSION: 'STORAGE_PERMISSION',
     STORAGE_NOT_FOUND: 'STORAGE_NOT_FOUND',
+    STORAGE_TRANSACTION: 'STORAGE_TRANSACTION',
+    STORAGE_ROLLBACK: 'STORAGE_ROLLBACK',
+    STORAGE_COMMIT: 'STORAGE_COMMIT',
     
     // Configuration errors
     CONFIG_MISSING: 'CONFIG_MISSING',
@@ -165,7 +169,8 @@ export const ErrorCategories = {
         ErrorCodes.TASK_DUPLICATE,
         ErrorCodes.TASK_INVALID_TYPE,
         ErrorCodes.TASK_INVALID_STATUS,
-        ErrorCodes.TASK_INVALID_PARENT
+        ErrorCodes.TASK_INVALID_PARENT,
+        ErrorCodes.TASK_OPERATION_FAILED
     ],
     STORAGE: [
         ErrorCodes.STORAGE_READ,
@@ -173,7 +178,10 @@ export const ErrorCategories = {
         ErrorCodes.STORAGE_INIT,
         ErrorCodes.STORAGE_DELETE,
         ErrorCodes.STORAGE_PERMISSION,
-        ErrorCodes.STORAGE_NOT_FOUND
+        ErrorCodes.STORAGE_NOT_FOUND,
+        ErrorCodes.STORAGE_TRANSACTION,
+        ErrorCodes.STORAGE_ROLLBACK,
+        ErrorCodes.STORAGE_COMMIT
     ],
     CONFIG: [
         ErrorCodes.CONFIG_MISSING,

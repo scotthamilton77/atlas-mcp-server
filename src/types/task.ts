@@ -142,6 +142,8 @@ export interface Task {
 export interface CreateTaskInput {
     /** Task name */
     name: string;
+    /** Parent task ID */
+    parentId?: string | null;
     /** Detailed description */
     description?: string;
     /** Associated notes */

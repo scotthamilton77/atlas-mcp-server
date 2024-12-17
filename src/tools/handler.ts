@@ -20,6 +20,18 @@ import { formatResponse } from '../tools/utils.js';
  * Handles all tool-related operations for the Atlas MCP Server
  */
 export class ToolHandler {
+    // Tools that require input parameters
+    private readonly TOOLS_REQUIRING_INPUT = new Set([
+        'create_task',
+        'bulk_create_tasks',
+        'get_task',
+        'update_task',
+        'bulk_update_tasks',
+        'delete_task',
+        'get_subtasks',
+        'get_tasks_by_status'
+    ]);
+
     constructor(private taskManager: TaskManager) {}
 
     /**
@@ -41,7 +53,7 @@ export class ToolHandler {
                 },
                 {
                     name: 'get_task',
-                    description: 'Retrieves a task by ID with all its content and metadata.',
+                    description: 'Retrieves a task by ID with all its content and metadata. Use task ID to retrieve. Review tasks often to track progress and update status.',
                     inputSchema: {
                         type: 'object',
                         properties: {
@@ -89,11 +101,15 @@ export class ToolHandler {
 
     /**
      * Handles tool execution requests
-     * @param request The tool execution request
-     * @returns Promise resolving to the tool execution response
      */
     async handleToolCall(request: any) {
         try {
+            // Only check for empty input on tools that require parameters
+            if (this.TOOLS_REQUIRING_INPUT.has(request.params.name) && 
+                (!request.params.arguments || Object.keys(request.params.arguments).length === 0)) {
+                return this.handleEmptyInputError(request.params.name);
+            }
+
             const response = await this.executeToolRequest(request);
             return {
                 content: [{ 
@@ -102,38 +118,104 @@ export class ToolHandler {
                 }],
             };
         } catch (error) {
-            if (error instanceof McpError) {
-                throw error;
-            }
-            throw new McpError(
-                ErrorCode.InternalError,
-                error instanceof Error ? error.message : 'Unknown error occurred'
-            );
+            return this.handleToolError(error, request.params.name);
         }
     }
 
     /**
-     * Executes the specific tool request based on the tool name
-     * @param request The tool execution request
-     * @returns Promise resolving to the tool execution result
+     * Handles empty input errors with tool-specific guidance
      */
+    private handleEmptyInputError(toolName: string): { content: { type: string, text: string }[] } {
+        let message: string;
+        let help: string;
+
+        switch (toolName) {
+            case 'create_task':
+                message = 'Task creation requires at least a name. Required fields:\n- name: Task name (string, required)\n\nOptional fields:\n- description: Task description\n- type: Task type (task/milestone/group)\n- notes: Array of task notes\n- dependencies: Array of task IDs';
+                help = 'Example:\n{\n  "name": "My Task",\n  "description": "Optional description"\n}';
+                break;
+            case 'get_task':
+            case 'get_subtasks':
+                message = 'Task ID is required';
+                help = 'Example:\n{\n  "taskId": "task-uuid-here"\n}';
+                break;
+            case 'update_task':
+                message = 'Task ID and updates are required';
+                help = 'Example:\n{\n  "taskId": "task-uuid-here",\n  "updates": {\n    "name": "Updated Task Name"\n  }\n}';
+                break;
+            case 'get_tasks_by_status':
+                message = 'Status is required. Must be one of: pending, in_progress, completed, failed, blocked';
+                help = 'Example:\n{\n  "status": "pending"\n}';
+                break;
+            default:
+                message = 'Required parameters are missing';
+                help = 'Check the tool schema for required parameters';
+        }
+
+        return {
+            content: [{
+                type: 'text',
+                text: JSON.stringify({
+                    error: {
+                        code: 'INVALID_INPUT',
+                        message,
+                        help
+                    }
+                }, null, 2)
+            }]
+        };
+    }
+
+    /**
+     * Handles tool errors with improved messaging
+     */
+    private handleToolError(error: unknown, toolName: string) {
+        let help: string;
+
+        switch (toolName) {
+            case 'create_task':
+                help = 'Task creation requires at least a name. Example:\n{\n  "name": "My Task",\n  "description": "Optional description"\n}';
+                break;
+            case 'get_task_tree':
+                help = 'No parameters required. Just call get_task_tree to retrieve the complete task hierarchy.';
+                break;
+            case 'get_tasks_by_status':
+                help = 'Provide a valid status. Example:\n{\n  "status": "pending"\n}';
+                break;
+            default:
+                help = 'Check the tool schema for required parameters and format';
+        }
+
+        const errorResponse = {
+            error: {
+                code: error instanceof McpError ? error.code : ErrorCode.InternalError,
+                message: error instanceof Error ? error.message : 'An unexpected error occurred',
+                help
+            }
+        };
+        
+        return {
+            content: [{
+                type: 'text',
+                text: JSON.stringify(errorResponse, null, 2)
+            }]
+        };
+    }
+
     private async executeToolRequest(request: any) {
         switch (request.params.name) {
             case 'create_task': {
                 const args = request.params.arguments as any;
                 return await this.taskManager.createTask(args.parentId, args);
             }
-
             case 'bulk_create_tasks': {
                 const args = request.params.arguments as any;
                 return await this.taskManager.bulkCreateTasks(args);
             }
-
             case 'get_task': {
                 const { taskId } = request.params.arguments as { taskId: string };
                 return await this.taskManager.getTask(taskId);
             }
-
             case 'update_task': {
                 const { taskId, updates } = request.params.arguments as {
                     taskId: string;
@@ -141,31 +223,25 @@ export class ToolHandler {
                 };
                 return await this.taskManager.updateTask(taskId, updates);
             }
-
             case 'bulk_update_tasks': {
                 const args = request.params.arguments as any;
                 return await this.taskManager.bulkUpdateTasks(args);
             }
-
             case 'delete_task': {
                 const { taskId } = request.params.arguments as { taskId: string };
                 return await this.taskManager.deleteTask(taskId);
             }
-
             case 'get_subtasks': {
                 const { taskId } = request.params.arguments as { taskId: string };
                 return await this.taskManager.getSubtasks(taskId);
             }
-
             case 'get_task_tree': {
                 return await this.taskManager.getTaskTree();
             }
-
             case 'get_tasks_by_status': {
                 const { status } = request.params.arguments as { status: any };
                 return await this.taskManager.getTasksByStatus(status);
             }
-
             default:
                 throw new McpError(
                     ErrorCode.MethodNotFound,
@@ -174,9 +250,6 @@ export class ToolHandler {
         }
     }
 
-    /**
-     * Returns the description for the create_task tool
-     */
     private getCreateTaskDescription(): string {
         return `Creates a new task with rich content support and automatic status tracking. Supports nested subtask creation.
 
@@ -185,101 +258,171 @@ Task Types:
 - milestone: Key achievement or deliverable
 - group: Container for related tasks
 
-Best Practices:
-1. Dependencies:
-   - Always use actual task IDs returned from create_task
-   - Create dependent tasks in sequence to get their IDs
-   - Update dependencies after task creation if needed
-   - Document dependency rationale
+Status Flow:
+1. Initial Status:
+   - Tasks start as 'pending'
+   - Parent tasks inherit status from children
+   - Group tasks aggregate child statuses
 
-2. Task Structure:
+2. Valid Transitions:
+   pending → in_progress: Start work
+   in_progress → completed: Finish work
+   in_progress → failed: Issues found
+   in_progress → blocked: Dependencies not met
+   blocked → in_progress: Dependencies resolved
+   failed → in_progress: Retry attempt
+
+Best Practices:
+1. Task Structure:
    - Use clear, action-oriented names
-   - Group related tasks under a parent
+   - Keep descriptions focused and specific
    - Break complex tasks into subtasks
-   - Keep task descriptions focused and specific
+   - Group related tasks under a parent
+   - Limit hierarchy depth for clarity
+
+2. Dependencies:
+   - Create dependent tasks first
+   - Use actual task IDs (not placeholders)
+   - Document dependency rationale
+   - Avoid circular dependencies
+   - Consider task order carefully
 
 3. Documentation:
-   - Use markdown notes for detailed documentation
-   - Add code notes with proper language tags
-   - Include JSON notes for structured data
-   - Document assumptions and constraints
+   - Use markdown for detailed docs
+   - Add code examples with language tags
+   - Include JSON for structured data
+   - Document assumptions clearly
+   - Keep notes updated
 
 4. Metadata:
-   - Add clear context about task purpose
+   - Add clear task context
    - Use consistent tag naming
-   - Tag for easy filtering (e.g., priority, domain)
-   - Include relevant links or references
+   - Tag for easy filtering
+   - Include priority levels
+   - Reference related resources
 
-5. Status Management:
-   - Tasks start as 'pending'
-   - Update to 'in_progress' when work begins
-   - Mark 'blocked' if dependencies aren't met
-   - Set 'completed' only when verified
-   - Use 'failed' for documented failures
+Error Prevention:
+1. Dependencies:
+   - Verify task IDs exist
+   - Check for circular refs
+   - Document relationships
+   - Consider task order
+
+2. Status Updates:
+   - Follow valid transitions
+   - Check dependencies first
+   - Update parent status
+   - Handle blocked states
+
+3. Content Management:
+   - Validate task names
+   - Check description length
+   - Verify note formats
+   - Update metadata
 
 Common Mistakes:
-- Creating dependent tasks without parent IDs
+- Creating circular dependencies
 - Missing dependency documentation
 - Unclear task hierarchies
 - Incomplete metadata
-- Poor status tracking
-- Missing reasoning documentation`;
+- Empty task names/description
+- Do not include the task ID field in the first task
+- Invalid status transitions
+- Poor error handling`;
     }
 
-    /**
-     * Returns the description for the bulk_create_tasks tool
-     */
     private getBulkCreateTasksDescription(): string {
-        return `Creates multiple tasks at once under the same parent.
+        return `Creates multiple tasks at once with automatic relationship management and validation.
 
-Workflow Patterns:
-1. Related Features:
+Operation Patterns:
+1. Project Setup:
    - Create parent group task
-   - Add feature tasks as children
-   - Set appropriate dependencies
+   - Add milestone tasks
+   - Create feature tasks
+   - Set dependencies
 
-2. Project Milestones:
-   - Create milestone sequence
-   - Add dependent task groups
-   - Link with dependencies
-
-3. Task Breakdown:
-   - Create epic/story parent
-   - Add implementation tasks
+2. Feature Planning:
+   - Create feature group
+   - Add component tasks
    - Set task relationships
+   - Define milestones
+
+3. Sprint Planning:
+   - Create sprint group
+   - Add user stories
+   - Break down into tasks
+   - Set priorities
 
 Best Practices:
 1. Task Organization:
-   - Group related tasks together
+   - Group related tasks
    - Maintain clear hierarchy
    - Use consistent naming
    - Set proper task types
+   - Define clear boundaries
 
-2. Dependencies:
+2. Dependency Management:
    - Create independent tasks first
-   - Add dependencies in later batch
+   - Add dependencies later
    - Document relationships
    - Verify task order
+   - Check for cycles
 
-3. Documentation:
-   - Add detailed descriptions
-   - Include acceptance criteria
-   - Document assumptions
-   - Set clear context
+3. Status Handling:
+   - Start tasks as pending
+   - Update parent status
+   - Track blocked tasks
+   - Monitor progress
+   - Handle failures
 
-Common Mistakes:
-- Circular dependencies
-- Missing parent context
-- Inconsistent metadata
-- Poor task organization
-- Unclear relationships`;
+4. Error Prevention:
+   - Validate task IDs
+   - Check relationships
+   - Verify status flow
+   - Handle failures
+   - Maintain consistency
+
+Common Errors:
+1. Dependency Issues:
+   - Circular references
+   - Missing tasks
+   - Invalid order
+   - Unclear rationale
+
+2. Status Problems:
+   - Invalid transitions
+   - Blocked tasks
+   - Parent updates
+   - Progress tracking
+
+3. Structure Issues:
+   - Deep hierarchies
+   - Unclear grouping
+   - Poor organization
+   - Missing context
+
+Recovery Steps:
+1. Dependency Errors:
+   - Review task order
+   - Fix circular refs
+   - Update documentation
+   - Verify relationships
+
+2. Status Errors:
+   - Check transitions
+   - Update dependencies
+   - Fix blocked tasks
+   - Sync parent status
+
+3. Structure Errors:
+   - Simplify hierarchy
+   - Improve organization
+   - Add clear context
+   - Update metadata`;
     }
 
-    /**
-     * Returns the description for the update_task tool
-     */
     private getUpdateTaskDescription(): string {
-        return `Updates an existing task with automatic parent status updates and dependency validation.
+        return `Updates an existing task with automatic status propagation and dependency validation.
 
 Status Workflow:
 1. New Task Flow:
@@ -293,250 +436,406 @@ Status Workflow:
    in_progress → failed (issues encountered)
    failed → in_progress (retry attempt)
 
+Status Rules:
+1. Parent Tasks:
+   - Inherit status from children
+   - Block on any blocked child
+   - Fail on any failed child
+   - Complete when all complete
+
+2. Child Tasks:
+   - Cannot complete before parent
+   - Block when parent blocks
+   - Independent progress
+   - Sync with siblings
+
+3. Dependencies:
+   - Block on incomplete deps
+   - Validate before completion
+   - Check circular refs
+   - Maintain consistency
+
 Best Practices:
 1. Status Updates:
-   - Verify task exists before update
-   - Check dependency status
-   - Update parent status
-   - Document status changes
+   - Check current status
+   - Verify dependencies
+   - Update documentation
+   - Handle failures
+   - Monitor progress
 
-2. Dependency Management:
-   - Validate new dependencies
-   - Update dependent tasks
-   - Check for circular deps
-   - Document relationship changes
-
-3. Content Updates:
-   - Maintain task context
-   - Update progress notes
-   - Document blockers
-   - Track time estimates
-
-4. Metadata Management:
-   - Keep tags consistent
-   - Update priority if needed
-   - Maintain clear context
+2. Content Updates:
+   - Keep context clear
    - Document changes
+   - Update progress
+   - Track blockers
+   - Note time spent
 
-Common Mistakes:
-- Invalid status transitions
-- Breaking dependency chain
-- Missing status rationale
-- Incomplete updates
-- Poor change tracking`;
+3. Dependency Updates:
+   - Verify task exists
+   - Check for cycles
+   - Document reasons
+   - Update status
+   - Handle blocking
+
+4. Error Handling:
+   - Validate changes
+   - Handle conflicts
+   - Retry operations
+   - Log failures
+   - Maintain state
+
+Common Errors:
+1. Status:
+   - Invalid transitions
+   - Dependency conflicts
+   - Parent-child sync
+   - Progress tracking
+
+2. Content:
+   - Missing context
+   - Poor documentation
+   - Unclear changes
+   - Lost history
+
+3. Dependencies:
+   - Circular refs
+   - Missing tasks
+   - Unclear reasons
+   - Status conflicts
+
+Recovery Steps:
+1. Status Issues:
+   - Check transitions
+   - Verify dependencies
+   - Update parents
+   - Fix conflicts
+
+2. Content Problems:
+   - Add context
+   - Update docs
+   - Track changes
+   - Maintain history
+
+3. Dependency Errors:
+   - Fix cycles
+   - Verify tasks
+   - Document reasons
+   - Update status`;
     }
 
-    /**
-     * Returns the description for the bulk_update_tasks tool
-     */
     private getBulkUpdateTasksDescription(): string {
-        return `Updates multiple tasks at once with automatic parent status updates and dependency validation.
+        return `Updates multiple tasks at once with automatic status propagation and validation.
 
 Update Patterns:
-1. Status Updates:
-   - Mark sprint tasks complete
+1. Sprint Updates:
+   - Mark completed tasks
    - Update blocked tasks
-   - Progress task group
+   - Progress task groups
+   - Update estimates
 
-2. Dependency Updates:
-   - Reorder task sequence
-   - Update blocked tasks
-   - Modify task relationships
+2. Status Changes:
+   - Update task flow
+   - Handle blockers
+   - Track progress
+   - Manage failures
 
 3. Content Updates:
    - Add sprint notes
-   - Update estimates
-   - Modify descriptions
+   - Update progress
+   - Modify plans
+   - Track changes
 
 Best Practices:
-1. Batch Planning:
-   - Group related updates
-   - Consider dependencies
-   - Verify task states
+1. Planning:
+   - Group updates
+   - Check dependencies
+   - Verify states
    - Document changes
+   - Handle errors
 
-2. Status Management:
-   - Update in proper order
-   - Check dependency impact
+2. Execution:
+   - Update in order
+   - Check impacts
    - Maintain consistency
    - Track progress
+   - Handle failures
 
 3. Documentation:
-   - Note batch changes
-   - Update timestamps
-   - Record decisions
+   - Note changes
+   - Update times
+   - Track decisions
+   - Monitor impact
+   - Keep history
+
+Error Prevention:
+1. Status:
+   - Check transitions
+   - Verify dependencies
+   - Update parents
+   - Handle conflicts
    - Track progress
 
-Common Mistakes:
-- Inconsistent states
-- Breaking dependencies
-- Missing documentation
-- Poor change tracking
-- Invalid task IDs`;
+2. Content:
+   - Validate changes
+   - Update context
+   - Track history
+   - Maintain docs
+   - Check formats
+
+3. Dependencies:
+   - Verify tasks
+   - Check cycles
+   - Update status
+   - Document reasons
+   - Handle blocking
+
+Recovery Steps:
+1. Status Issues:
+   - Review transitions
+   - Fix dependencies
+   - Update hierarchy
+   - Handle blocks
+
+2. Content Problems:
+   - Add context
+   - Fix formats
+   - Update docs
+   - Track changes
+
+3. Dependency Errors:
+   - Fix cycles
+   - Verify tasks
+   - Update status
+   - Document fixes`;
     }
 
-    /**
-     * Returns the description for the delete_task tool
-     */
     private getDeleteTaskDescription(): string {
-        return `Safely deletes a task and its subtasks with dependency checking.
+        return `Safely deletes a task and its subtasks with dependency validation and cleanup.
 
-Deletion Patterns:
-1. Single Task:
-   - Check dependencies
+Deletion Rules:
+1. Task State:
+   - Cannot delete in_progress
+   - Verify no dependents
+   - Clean up references
    - Update parent status
-   - Remove task data
 
-2. Task Group:
-   - Verify subtasks
-   - Check dependencies
-   - Clean up hierarchy
+2. Subtasks:
+   - Delete recursively
+   - Update references
+   - Clean dependencies
+   - Maintain history
 
-3. Failed Tasks:
-   - Document reason
-   - Update dependencies
-   - Clean up resources
+3. Dependencies:
+   - Update dependent tasks
+   - Remove references
+   - Handle blocking
+   - Clean up links
 
 Best Practices:
-1. Pre-Deletion:
-   - Check dependent tasks
-   - Verify completion
+1. Pre-Delete:
+   - Check status
+   - Verify deps
    - Document reason
-   - Update references
+   - Update refs
+   - Plan cleanup
 
-2. Cleanup:
-   - Remove dependencies
-   - Update parent tasks
-   - Clean metadata
-   - Archive if needed
+2. Execution:
+   - Handle subtasks
+   - Update parents
+   - Clean refs
+   - Track changes
+   - Maintain logs
 
-3. Documentation:
-   - Record deletion reason
-   - Update related tasks
-   - Maintain history
-   - Track impact
+3. Post-Delete:
+   - Verify cleanup
+   - Update docs
+   - Check impacts
+   - Monitor state
+   - Handle errors
 
-Common Mistakes:
-- Deleting active tasks
-- Breaking dependencies
-- Missing documentation
-- Incomplete cleanup`;
+Common Errors:
+1. Status:
+   - Active tasks
+   - Blocked tasks
+   - Parent updates
+   - Progress tracking
+
+2. Dependencies:
+   - Missing cleanup
+   - Broken refs
+   - Status conflicts
+   - Update failures
+
+3. Structure:
+   - Incomplete cleanup
+   - Lost history
+   - Missing docs
+   - Ref problems
+
+Recovery Steps:
+1. Status Issues:
+   - Check states
+   - Update deps
+   - Fix parents
+   - Handle blocks
+
+2. Dependency Problems:
+   - Clean refs
+   - Update tasks
+   - Fix status
+   - Document changes
+
+3. Structure Errors:
+   - Complete cleanup
+   - Update docs
+   - Fix refs
+   - Verify state`;
     }
 
-    /**
-     * Returns the description for the get_subtasks tool
-     */
     private getSubtasksDescription(): string {
-        return `Retrieves all subtasks of a task for hierarchy navigation.
+        return `Retrieves all subtasks of a task with hierarchy information and status.
 
 Usage Patterns:
-1. Progress Tracking:
-   - Check subtask status
-   - Monitor blockers
-   - Track completion
-
-2. Dependency Review:
-   - Verify relationships
-   - Check blockers
-   - Monitor progress
-
-3. Task Planning:
-   - Review workload
-   - Check estimates
-   - Plan resources
-
-Best Practices:
-1. Regular Review:
-   - Check status daily
-   - Monitor blockers
-   - Track progress
-   - Update estimates
-
-2. Documentation:
-   - Note relationships
-   - Track changes
-   - Document decisions
-   - Monitor impact
-
-3. Organization:
-   - Group related tasks
-   - Maintain hierarchy
-   - Track dependencies
-   - Monitor progress`;
-    }
-
-    /**
-     * Returns the description for the get_task_tree tool
-     */
-    private getTaskTreeDescription(): string {
-        return `Retrieves the entire task hierarchy starting from root tasks.
-
-Analysis Patterns:
-1. Project Overview:
-   - Review structure
+1. Progress Check:
+   - Monitor status
+   - Track blockers
    - Check progress
-   - Monitor blockers
+   - Verify deps
 
-2. Status Review:
-   - Track completion
-   - Find blockers
+2. Planning:
+   - Review work
+   - Check capacity
+   - Plan sprints
+   - Set priorities
+
+3. Updates:
+   - Track changes
    - Monitor progress
-
-3. Planning:
-   - Analyze workload
-   - Check dependencies
-   - Plan resources
+   - Handle blocks
+   - Update status
 
 Best Practices:
-1. Regular Review:
-   - Monitor daily
+1. Monitoring:
+   - Check daily
    - Track changes
    - Update status
-   - Check blockers
+   - Handle blocks
+   - Note progress
 
 2. Organization:
-   - Maintain hierarchy
    - Group tasks
-   - Track progress
-   - Monitor impact
+   - Track deps
+   - Monitor progress
+   - Update hierarchy
+   - Maintain order
 
 3. Documentation:
    - Note changes
    - Track decisions
-   - Monitor progress
-   - Update status`;
+   - Update status
+   - Monitor impact
+   - Keep history`;
     }
 
-    /**
-     * Returns the description for the get_tasks_by_status tool
-     */
+    private getTaskTreeDescription(): string {
+        return `Retrieves the complete task hierarchy with status and relationship information.
+
+Analysis Patterns:
+1. Project Review:
+   - Check structure
+   - Monitor progress
+   - Track blockers
+   - Verify deps
+
+2. Status Check:
+   - Track completion
+   - Find blocks
+   - Monitor progress
+   - Update status
+
+3. Planning:
+   - Review work
+   - Check deps
+   - Plan resources
+   - Set priorities
+
+Best Practices:
+1. Regular Review:
+   - Check daily
+   - Track changes
+   - Update status
+   - Handle blocks
+   - Note progress
+
+2. Organization:
+   - Group tasks
+   - Track deps
+   - Monitor progress
+   - Update hierarchy
+   - Maintain order
+
+3. Documentation:
+   - Note changes
+   - Track decisions
+   - Update status
+   - Monitor impact
+   - Keep history`;
+    }
+
     private getTasksByStatusDescription(): string {
-        return `Retrieves all tasks with a specific status for progress tracking.
+        return `Retrieves tasks filtered by status with full context and relationships.
 
 Status Types:
 1. pending: Not started
+   - Initial state
+   - Ready for work
+   - No blockers
+   - Dependencies met
+
 2. in_progress: Active work
+   - Being worked on
+   - No blockers
+   - Dependencies met
+   - Progress tracked
+
 3. completed: Done & verified
+   - Work finished
+   - Tests passed
+   - Docs updated
+   - Verified working
+
 4. failed: Issues found
+   - Problems found
+   - Tests failed
+   - Needs fixes
+   - Blocked progress
+
 5. blocked: Dependencies pending
+   - Deps not met
+   - External blocks
+   - Resource issues
+   - Needs unblocking
 
 Best Practices:
 1. Status Review:
    - Check daily
-   - Monitor changes
-   - Track progress
+   - Track changes
    - Update blocked
+   - Monitor progress
+   - Handle failures
 
 2. Progress Tracking:
    - Monitor completion
    - Check blockers
    - Update status
    - Track changes
+   - Note issues
 
 3. Documentation:
-   - Note status changes
-   - Track decisions
+   - Note changes
+   - Track reasons
+   - Update status
    - Monitor impact
-   - Update estimates`;
+   - Keep history`;
     }
 }

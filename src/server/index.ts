@@ -10,10 +10,25 @@ import {
     ListToolsRequestSchema,
     McpError,
 } from '@modelcontextprotocol/sdk/types.js';
+import { Logger } from '../logging/index.js';
+import { ConfigManager } from '../config/index.js';
+import { RateLimiter } from './rate-limiter.js';
+import { HealthMonitor } from './health-monitor.js';
+import { MetricsCollector } from './metrics-collector.js';
+import { RequestTracer } from './request-tracer.js';
 
 export interface ServerConfig {
     name: string;
     version: string;
+    maxRequestsPerMinute?: number;
+    requestTimeout?: number;
+    shutdownTimeout?: number;
+}
+
+interface ServerMetrics {
+    requestCount: number;
+    errorCount: number;
+    avgResponseTime: number;
 }
 
 /**
@@ -22,11 +37,16 @@ export interface ServerConfig {
  */
 export class AtlasServer {
     private server: Server;
+    private logger: Logger;
+    private rateLimiter: RateLimiter;
+    private healthMonitor: HealthMonitor;
+    private metricsCollector: MetricsCollector;
+    private requestTracer: RequestTracer;
+    private isShuttingDown: boolean = false;
+    private activeRequests: Set<string> = new Set();
 
     /**
      * Creates a new AtlasServer instance
-     * @param config Server configuration
-     * @param toolHandler Handler for tool-related operations
      */
     constructor(
         private readonly config: ServerConfig,
@@ -35,6 +55,15 @@ export class AtlasServer {
             handleToolCall: (request: any) => Promise<any>;
         }
     ) {
+        this.logger = Logger.getInstance().child({ component: 'AtlasServer' });
+        
+        // Initialize components
+        this.rateLimiter = new RateLimiter(config.maxRequestsPerMinute || 600);
+        this.healthMonitor = new HealthMonitor();
+        this.metricsCollector = new MetricsCollector();
+        this.requestTracer = new RequestTracer();
+
+        // Initialize MCP server
         this.server = new Server(
             {
                 name: config.name,
@@ -49,72 +78,158 @@ export class AtlasServer {
 
         this.setupErrorHandling();
         this.setupToolHandlers();
+        this.setupHealthCheck();
     }
 
     /**
      * Sets up error handling for the server
-     * Includes graceful shutdown on SIGINT
      */
     private setupErrorHandling(): void {
         this.server.onerror = (error) => {
-            console.error('[MCP Error]', {
+            this.metricsCollector.incrementErrorCount();
+            
+            const errorContext = {
                 timestamp: new Date().toISOString(),
                 error: error instanceof Error ? {
                     name: error.name,
                     message: error.message,
                     stack: error.stack
-                } : error
-            });
+                } : error,
+                metrics: this.getMetrics()
+            };
+
+            this.logger.error('[MCP Error]', errorContext);
         };
 
         process.on('SIGINT', async () => {
-            try {
-                await this.close();
-                process.exit(0);
-            } catch (error) {
-                console.error('Error during shutdown:', error);
-                process.exit(1);
-            }
+            await this.shutdown();
+        });
+
+        process.on('SIGTERM', async () => {
+            await this.shutdown();
+        });
+
+        process.on('unhandledRejection', (reason, promise) => {
+            this.logger.error('Unhandled Rejection:', {
+                reason,
+                promise,
+                metrics: this.getMetrics()
+            });
+        });
+
+        process.on('uncaughtException', (error) => {
+            this.logger.error('Uncaught Exception:', {
+                error,
+                metrics: this.getMetrics()
+            });
+            this.shutdown().finally(() => process.exit(1));
         });
     }
 
     /**
-     * Sets up tool request handlers
-     * Delegates actual tool handling to the toolHandler
+     * Sets up tool request handlers with middleware
      */
     private setupToolHandlers(): void {
         // Handler for listing available tools
-        this.server.setRequestHandler(ListToolsRequestSchema, async () => {
+        this.server.setRequestHandler(ListToolsRequestSchema, async (request) => {
+            const requestId = this.requestTracer.startRequest();
+            
             try {
-                return await this.toolHandler.listTools();
+                await this.rateLimiter.checkLimit();
+                this.activeRequests.add(requestId);
+                
+                const startTime = Date.now();
+                const response = await this.toolHandler.listTools();
+                
+                this.metricsCollector.recordResponseTime(Date.now() - startTime);
+                return response;
             } catch (error) {
-                throw this.handleToolError(error);
+                this.handleToolError(error);
+            } finally {
+                this.activeRequests.delete(requestId);
+                this.requestTracer.endRequest(requestId);
             }
         });
 
         // Handler for tool execution requests
         this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
+            const requestId = this.requestTracer.startRequest();
+            
             try {
-                return await this.toolHandler.handleToolCall(request);
+                if (this.isShuttingDown) {
+                    throw new McpError(
+                        ErrorCode.InternalError,
+                        'Server is shutting down'
+                    );
+                }
+
+                await this.rateLimiter.checkLimit();
+                this.activeRequests.add(requestId);
+                
+                const startTime = Date.now();
+                const response = await Promise.race([
+                    this.toolHandler.handleToolCall(request),
+                    this.createTimeout(this.config.requestTimeout || 30000)
+                ]);
+                
+                this.metricsCollector.recordResponseTime(Date.now() - startTime);
+                return response;
             } catch (error) {
-                throw this.handleToolError(error);
+                this.handleToolError(error);
+            } finally {
+                this.activeRequests.delete(requestId);
+                this.requestTracer.endRequest(requestId);
             }
         });
     }
 
     /**
-     * Transforms errors into McpErrors with appropriate error codes
-     * @param error The error to handle
-     * @returns McpError with appropriate error code and message
+     * Sets up health check endpoint
      */
-    private handleToolError(error: unknown): McpError {
+    private setupHealthCheck(): void {
+        setInterval(() => {
+            const health = this.healthMonitor.check({
+                activeRequests: this.activeRequests.size,
+                metrics: this.getMetrics(),
+                rateLimiter: this.rateLimiter.getStatus()
+            });
+
+            if (!health.healthy) {
+                this.logger.warn('Health check failed:', health);
+            }
+        }, 30000);
+    }
+
+    /**
+     * Creates a timeout promise
+     */
+    private createTimeout(ms: number): Promise<never> {
+        return new Promise((_, reject) => {
+            setTimeout(() => {
+                reject(new McpError(
+                    ErrorCode.InternalError,
+                    `Request timed out after ${ms}ms`
+                ));
+            }, ms);
+        });
+    }
+
+    /**
+     * Transforms errors into McpErrors
+     */
+    private handleToolError(error: unknown): never {
+        this.metricsCollector.incrementErrorCount();
+
         if (error instanceof McpError) {
-            return error;
+            throw error;
         }
 
-        console.error('Unexpected error in tool handler:', error);
+        this.logger.error('Unexpected error in tool handler:', {
+            error,
+            metrics: this.getMetrics()
+        });
         
-        return new McpError(
+        throw new McpError(
             ErrorCode.InternalError,
             error instanceof Error ? error.message : 'An unexpected error occurred',
             error instanceof Error ? error.stack : undefined
@@ -122,31 +237,74 @@ export class AtlasServer {
     }
 
     /**
-     * Starts the server with the specified transport
-     * @returns Promise that resolves when server is running
+     * Gets current server metrics
+     */
+    private getMetrics(): ServerMetrics {
+        return {
+            requestCount: this.metricsCollector.getRequestCount(),
+            errorCount: this.metricsCollector.getErrorCount(),
+            avgResponseTime: this.metricsCollector.getAverageResponseTime()
+        };
+    }
+
+    /**
+     * Starts the server
      */
     async run(): Promise<void> {
         try {
             const transport = new StdioServerTransport();
             await this.server.connect(transport);
-            console.error(`${this.config.name} v${this.config.version} running on stdio`);
+            
+            this.logger.info(`${this.config.name} v${this.config.version} running on stdio`, {
+                metrics: this.getMetrics()
+            });
         } catch (error) {
-            console.error('Failed to start server:', error);
+            this.logger.error('Failed to start server:', {
+                error,
+                metrics: this.getMetrics()
+            });
             throw error;
         }
     }
 
     /**
-     * Gracefully closes the server
-     * @returns Promise that resolves when server is closed
+     * Gracefully shuts down the server
      */
-    async close(): Promise<void> {
+    async shutdown(): Promise<void> {
+        if (this.isShuttingDown) {
+            return;
+        }
+
+        this.isShuttingDown = true;
+        this.logger.info('Starting graceful shutdown...');
+
         try {
+            // Wait for active requests to complete
+            const timeout = this.config.shutdownTimeout || 30000;
+            const shutdownStart = Date.now();
+
+            while (this.activeRequests.size > 0) {
+                if (Date.now() - shutdownStart > timeout) {
+                    this.logger.warn('Shutdown timeout reached, forcing shutdown', {
+                        activeRequests: this.activeRequests.size
+                    });
+                    break;
+                }
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+
             await this.server.close();
-            console.error('Server closed successfully');
+            this.logger.info('Server closed successfully', {
+                metrics: this.getMetrics()
+            });
         } catch (error) {
-            console.error('Error closing server:', error);
+            this.logger.error('Error during shutdown:', {
+                error,
+                metrics: this.getMetrics()
+            });
             throw error;
         }
     }
 }
+
+
