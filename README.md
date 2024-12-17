@@ -43,41 +43,45 @@ ATLAS is built on several robust core components:
 - **DependencyValidator**: Ensures valid task relationships and dependencies
 - **StatusManager**: Manages task state transitions and propagation
 - **StorageManager**: Provides durable data persistence
-- **VisualizationHandler**: Generates task visualizations and reports
+- **RateLimiter**: Controls request rates (600 req/min)
+- **HealthMonitor**: Tracks system health
+- **MetricsCollector**: Gathers performance metrics
+- **RequestTracer**: Traces request flow
 
 Through the MCP protocol, ATLAS empowers LLMs to break down complex projects into manageable tasks, track their progress, and maintain dependencies — all within an organized hierarchical structure.
 
 ## Features
 
 ### Task Organization
-- Hierarchical task structures
-- Parent-child relationships
-- Dependency management
-- Status tracking and propagation
-- Bulk operations support
+- Hierarchical task structures with parent-child relationships
+- Dependency management and validation
+- Status tracking and automatic propagation
+- Bulk operations for efficient task management
+- Session-based task isolation
 
 ### Content Support
 - Markdown documentation
 - Code snippets with syntax highlighting
 - JSON data structures
-- Rich metadata
+- Rich metadata and tagging
 - Task reasoning documentation
 - Decision-making history
 
-### Visualization
-- Terminal tree view with status indicators
-- Interactive HTML visualization using Mermaid.js
-- Status-based color coding
-- Dependency relationship graphs
-- Task hierarchy visualization
-- Progress tracking dashboards
-
-### Session Management
-- Persistent storage
-- Session isolation
-- Backup support
-- State recovery
+### System Features
+- Rate limiting (600 requests/minute)
+- Health monitoring and metrics
+- Request tracing
+- Error handling with detailed context
+- Graceful shutdown handling
+- Session management
 - Audit logging
+
+### Performance
+- Efficient task storage and retrieval
+- Bulk operation support
+- Request timeout handling
+- Concurrent request management
+- Resource cleanup
 
 ## Installation
 
@@ -668,96 +672,171 @@ Creates a new task with optional subtasks.
 }
 ```
 
-#### create_tasks
-Batch creates multiple tasks under the same parent.
+#### bulk_create_tasks
+Creates multiple tasks efficiently in a single operation. Supports:
+- Batch creation under a common parent
+- Automatic dependency validation
+- Status propagation
+- Transaction handling for consistency
+
+```typescript
+{
+  "parentId": string | null,  // Parent task ID or null for root tasks
+  "tasks": Array<{
+    name: string,            // Task name (required)
+    description?: string,    // Task description
+    notes?: Note[],         // Rich content notes
+    reasoning?: TaskReasoning, // Decision documentation
+    type?: TaskType,        // task, milestone, or group
+    dependencies?: string[], // Task dependencies
+    metadata?: {            // Additional context
+      context?: string,
+      tags?: string[]
+    },
+    subtasks?: CreateTaskInput[] // Nested tasks
+  }>
+}
+```
 
 #### update_task
-Updates task attributes and status.
+Updates an existing task with automatic status propagation and validation:
+- Validates status transitions
+- Updates dependent tasks
+- Maintains task hierarchy
+- Preserves task history
+
+```typescript
+{
+  "taskId": string,         // Task ID to update
+  "updates": {
+    "name"?: string,        // New task name
+    "description"?: string, // New description
+    "notes"?: Note[],      // Updated notes
+    "reasoning"?: TaskReasoning, // Updated reasoning
+    "type"?: TaskType,     // New task type
+    "status"?: TaskStatus, // New status
+    "dependencies"?: string[], // Updated dependencies
+    "metadata"?: {         // Updated metadata
+      "context"?: string,
+      "tags"?: string[]
+    }
+  }
+}
+```
 
 #### delete_task
-Removes a task and its subtasks.
+Safely removes a task and its subtasks:
+- Recursive deletion of subtasks
+- Dependency cleanup
+- Status propagation
+- Reference removal
+- Transaction handling
 
 ### Task Retrieval
 
 #### get_task
-Gets task by ID.
+Retrieves a task by ID with full context:
+- Complete task details
+- Status information
+- Dependency data
+- Metadata and history
+- Error context if applicable
 
 #### get_subtasks
-Lists subtasks of a task.
+Lists all subtasks of a specified task:
+- Direct child tasks
+- Status information
+- Dependency relationships
+- Metadata and context
+- Hierarchical structure
 
 #### get_task_tree
-Gets full task hierarchy.
+Retrieves the complete task hierarchy:
+- Full task tree structure
+- Status aggregation
+- Dependency mapping
+- Metadata inheritance
+- Performance optimized
 
 #### get_tasks_by_status
-Filters tasks by status.
+Filters tasks by their current status:
+- Status-based filtering
+- Optional parent filtering
+- Dependency context
+- Metadata inclusion
+- Performance optimized
 
-### Visualization
+### System Features
 
-#### visualize_tasks
-Generates visual representations of tasks.
+#### Rate Limiting
+- 600 requests per minute limit
+- Automatic request throttling
+- Queue management
+- Error handling
+- Client feedback
 
-```typescript
-{
-  "format": "terminal" | "html" | "both", // Visualization format
-  "outputDir": string                     // Directory to save visualizations (optional)
-}
-```
+#### Health Monitoring
+- System health checks
+- Resource monitoring
+- Error tracking
+- Performance metrics
+- Status reporting
 
-##### Terminal Tree View
-- Hierarchical display with status indicators:
-  - ○ pending
-  - ◔ in progress
-  - ● completed
-  - ✕ failed
-  - ⊘ blocked
-- Task type symbols:
-  - 📋 task
-  - 🏁 milestone
-  - 📁 group
-- Dependency information
-- Compact and readable format
-- Indentation-based hierarchy
-- Detailed task information inline
+#### Request Tracing
+- Request lifecycle tracking
+- Performance monitoring
+- Error context capture
+- Debug information
+- Audit logging
 
-##### HTML Visualization
-- Interactive Mermaid.js diagram
-- Status-based color coding
-- Collapsible task details
-- Dependency arrows
-- Task metadata display
-- Hover tooltips with details
-- Zoomable interface
-- Search and filter capabilities
-- Export options (PNG, SVG)
+#### Error Handling
+ATLAS provides comprehensive error handling:
+- Validation errors with context
+- Dependency conflict detection
+- Task state inconsistencies
+- System resource issues
+- Transaction failures
+- Rate limit violations
+- Request timeout handling
 
 ## Best Practices
 
-### Task Creation
+### Task Management
 - Create parent tasks before subtasks
 - Use task IDs for dependencies
 - Provide clear context in metadata
 - Use appropriate task types
 - Document reasoning and assumptions
-
-### Status Management
-- Update status appropriately
-- Consider impact on dependent tasks
-- Monitor parent task status
+- Handle status transitions carefully
+- Monitor dependency relationships
+- Maintain task hierarchy
 
 ### Content Organization
 - Use appropriate note types
 - Include relevant code samples
 - Maintain clear documentation
 - Document decision-making process
+- Keep metadata current
+- Tag tasks appropriately
+- Structure hierarchies logically
 
-### Reasoning Documentation
-- Clearly state implementation approach
-- List key assumptions
-- Consider alternative approaches
-- Document risks and tradeoffs
-- Identify constraints
-- Explain dependency relationships
-- Analyze system impact
+### Performance Optimization
+- Use bulk operations for multiple tasks
+- Monitor rate limits
+- Handle long-running operations
+- Implement proper error handling
+- Optimize task retrieval
+- Cache frequently accessed data
+- Clean up completed tasks
+
+### Error Recovery
+- Handle validation errors gracefully
+- Resolve dependency conflicts
+- Manage status inconsistencies
+- Recover from system issues
+- Maintain data integrity
+- Document error contexts
+- Implement retry strategies
 
 ## Development
 
@@ -770,37 +849,43 @@ npm run watch
 
 # Run MCP inspector
 npm run inspector
+
+# Run tests
+npm test
+
+# Check types
+npm run type-check
 ```
-
-### Error Handling
-
-ATLAS provides detailed error information:
-- Validation errors
-- Dependency conflicts
-- Task not found
-- Internal errors
 
 ## Up Next
 
-### Scheduled Tasks
+### Enhanced Task Management
 - Task scheduling with time-based triggers
-- Integration with MCP client for real-time notifications
-- Support for recurring tasks and schedules
-- Task execution with resource delivery to client LLMs
-- Configurable notification preferences
+- Recurring task support
+- Task templates and presets
+- Advanced filtering and search
+- Custom task types
+- Task archiving
 
-### Enhanced Automation
-- Automated task status updates based on external events
-- Webhook support for third-party service integration
+### System Improvements
+- Enhanced performance monitoring
+- Advanced caching strategies
+- Improved error recovery
+- Better dependency management
+- Transaction optimizations
+- Resource usage tracking
 
-### Collaboration Features
-- Multi-agent task assignment and tracking
-- Team workspaces and shared task lists
-- Activity logging and audit trails
+### Integration Features
+- Webhook support
+- External system integration
+- Event streaming
+- Custom tool support
+- Plugin architecture
+- API versioning
 
 ## Contributing
 
-I welcome contributions! Please follow these steps:
+Contributions are welcome! Please follow these steps:
 
 1. Fork the repository
 2. Create a feature branch
