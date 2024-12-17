@@ -318,23 +318,3 @@ export const getTaskTreeSchema = {
     type: 'object',
     properties: {},
 };
-
-/**
- * Schema for task visualization
- */
-export const visualizeTasksSchema = {
-    type: 'object',
-    properties: {
-        format: {
-            type: 'string',
-            enum: ['terminal', 'html', 'both'],
-            description: 'Visualization format to generate',
-            default: 'both'
-        },
-        outputDir: {
-            type: 'string',
-            description: 'Directory to save visualizations (defaults to ~/Documents/atlas-tasks/visualizations)',
-        }
-    },
-    additionalProperties: false,
-};

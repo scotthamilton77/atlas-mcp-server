@@ -34,6 +34,17 @@ ATLAS implements the Model Context Protocol (MCP), created by Anthropic, which i
 
 This architecture creates a secure boundary between LLMs and external systems while enabling controlled access to functionality.
 
+### Core Components
+
+ATLAS is built on several robust core components:
+
+- **TaskManager**: Central coordinator for all task operations
+- **TaskStore**: Handles persistent storage and retrieval of tasks
+- **DependencyValidator**: Ensures valid task relationships and dependencies
+- **StatusManager**: Manages task state transitions and propagation
+- **StorageManager**: Provides durable data persistence
+- **VisualizationHandler**: Generates task visualizations and reports
+
 Through the MCP protocol, ATLAS empowers LLMs to break down complex projects into manageable tasks, track their progress, and maintain dependencies — all within an organized hierarchical structure.
 
 ## Features
@@ -43,6 +54,7 @@ Through the MCP protocol, ATLAS empowers LLMs to break down complex projects int
 - Parent-child relationships
 - Dependency management
 - Status tracking and propagation
+- Bulk operations support
 
 ### Content Support
 - Markdown documentation
@@ -50,12 +62,22 @@ Through the MCP protocol, ATLAS empowers LLMs to break down complex projects int
 - JSON data structures
 - Rich metadata
 - Task reasoning documentation
+- Decision-making history
+
+### Visualization
+- Terminal tree view with status indicators
+- Interactive HTML visualization using Mermaid.js
+- Status-based color coding
+- Dependency relationship graphs
+- Task hierarchy visualization
+- Progress tracking dashboards
 
 ### Session Management
 - Persistent storage
 - Session isolation
 - Backup support
 - State recovery
+- Audit logging
 
 ## Installation
 
@@ -668,6 +690,45 @@ Gets full task hierarchy.
 
 #### get_tasks_by_status
 Filters tasks by status.
+
+### Visualization
+
+#### visualize_tasks
+Generates visual representations of tasks.
+
+```typescript
+{
+  "format": "terminal" | "html" | "both", // Visualization format
+  "outputDir": string                     // Directory to save visualizations (optional)
+}
+```
+
+##### Terminal Tree View
+- Hierarchical display with status indicators:
+  - ○ pending
+  - ◔ in progress
+  - ● completed
+  - ✕ failed
+  - ⊘ blocked
+- Task type symbols:
+  - 📋 task
+  - 🏁 milestone
+  - 📁 group
+- Dependency information
+- Compact and readable format
+- Indentation-based hierarchy
+- Detailed task information inline
+
+##### HTML Visualization
+- Interactive Mermaid.js diagram
+- Status-based color coding
+- Collapsible task details
+- Dependency arrows
+- Task metadata display
+- Hover tooltips with details
+- Zoomable interface
+- Search and filter capabilities
+- Export options (PNG, SVG)
 
 ## Best Practices
 

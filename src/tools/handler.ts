@@ -15,9 +15,6 @@ import {
     getTasksByStatusSchema,
 } from './schemas.js';
 import { formatResponse } from '../tools/utils.js';
-import { VisualizationHandler } from './visualization-handler.js';
-import path from 'path';
-import os from 'os';
 
 /**
  * Handles all tool-related operations for the Atlas MCP Server
@@ -85,26 +82,6 @@ export class ToolHandler {
                     name: 'get_tasks_by_status',
                     description: this.getTasksByStatusDescription(),
                     inputSchema: getTasksByStatusSchema,
-                },
-                {
-                    name: 'visualize_tasks',
-                    description: this.getVisualizeTasksDescription(),
-                    inputSchema: {
-                        type: 'object',
-                        properties: {
-                            format: {
-                                type: 'string',
-                                enum: ['terminal', 'html', 'both'],
-                                description: 'Visualization format to generate',
-                                default: 'both'
-                            },
-                            outputDir: {
-                                type: 'string',
-                                description: 'Directory to save visualizations (defaults to ~/Documents/atlas-tasks/visualizations)',
-                                optional: true
-                            }
-                        }
-                    },
                 },
             ],
         };
@@ -187,41 +164,6 @@ export class ToolHandler {
             case 'get_tasks_by_status': {
                 const { status } = request.params.arguments as { status: any };
                 return await this.taskManager.getTasksByStatus(status);
-            }
-
-            case 'visualize_tasks': {
-                const { format = 'both', outputDir } = request.params.arguments as {
-                    format?: 'terminal' | 'html' | 'both';
-                    outputDir?: string;
-                };
-
-                const tasks = (await this.taskManager.getTaskTree()).data;
-                if (!tasks) {
-                    return {
-                        success: false,
-                        error: {
-                            code: 'NO_TASKS',
-                            message: 'No tasks found to visualize'
-                        }
-                    };
-                }
-
-                const defaultDir = path.join(os.homedir(), 'Documents', 'atlas-tasks', 'visualizations');
-                const visualizationDir = outputDir || defaultDir;
-
-                const result = await VisualizationHandler.visualizeTasks(tasks, visualizationDir);
-
-                return {
-                    success: true,
-                    data: {
-                        format,
-                        ...(format === 'terminal' || format === 'both' ? { terminalOutput: result.terminalOutput } : {}),
-                        ...(format === 'html' || format === 'both' ? { htmlPath: result.htmlPath } : {})
-                    },
-                    metadata: {
-                        timestamp: new Date().toISOString()
-                    }
-                };
             }
 
             default:
@@ -596,55 +538,5 @@ Best Practices:
    - Track decisions
    - Monitor impact
    - Update estimates`;
-    }
-
-    /**
-     * Returns the description for the visualize_tasks tool
-     */
-    private getVisualizeTasksDescription(): string {
-        return `Generate visual representations of tasks including terminal tree view and interactive HTML visualization.
-
-Visualization Types:
-1. Terminal Tree:
-   - Compact hierarchy view
-   - Status indicators
-   - Dependency markers
-   - Quick overview
-
-2. HTML Diagram:
-   - Interactive Mermaid.js
-   - Full task details
-   - Status colors
-   - Dependency arrows
-
-3. Combined View:
-   - Complete overview
-   - All task details
-   - Full context
-   - Rich formatting
-
-Best Practices:
-1. Regular Updates:
-   - Generate daily
-   - Track changes
-   - Monitor progress
-   - Share updates
-
-2. Documentation:
-   - Save snapshots
-   - Track progress
-   - Monitor changes
-   - Share reports
-
-3. Analysis:
-   - Review structure
-   - Check progress
-   - Monitor blockers
-   - Plan updates
-
-Output Types:
-- Terminal: Quick text view
-- HTML: Rich interactive
-- Both: Complete overview`;
     }
 }
