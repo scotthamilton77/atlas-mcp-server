@@ -283,17 +283,6 @@ export class TaskStore {
                 this.getDependentTasks.bind(this)
             );
 
-            // Remove from indexes and cache
-            this.indexManager.unindexTask(task);
-            await this.indexManager.unindexDependencies(task);
-            this.cacheManager.delete(taskId);
-
-            // Record operation
-            this.transactionManager.addOperation(transactionId, {
-                type: 'remove',
-                task
-            });
-
             // Update parent if needed
             if (task.parentId && !task.parentId.startsWith('ROOT-')) {
                 const parent = this.getTaskById(task.parentId);
@@ -306,17 +295,52 @@ export class TaskStore {
                 }
             }
 
-            // Handle dependent tasks
+            // Get dependent tasks before removing the task and its indexes
             const dependentTasks = this.getDependentTasks(taskId);
-            await this.batchProcessor.processInBatches(
-                dependentTasks,
-                50,
-                async (depTask) => {
-                    if (depTask.status !== TaskStatuses.BLOCKED) {
-                        await this.updateTask(depTask.id, { status: TaskStatuses.BLOCKED });
+
+            // Remove task from indexes and cache
+            this.indexManager.unindexTask(task);
+            await this.indexManager.unindexDependencies(task);
+            this.cacheManager.delete(taskId);
+
+            // Record task removal operation
+            this.transactionManager.addOperation(transactionId, {
+                type: 'remove',
+                task
+            });
+
+            // Update dependent tasks
+            for (const depTask of dependentTasks) {
+                const updatedTask = {
+                    ...depTask,
+                    status: TaskStatuses.BLOCKED,
+                    dependencies: depTask.dependencies.filter(id => id !== taskId),
+                    metadata: {
+                        ...depTask.metadata,
+                        updated: new Date().toISOString()
                     }
-                }
-            );
+                };
+
+                // Update indexes and cache
+                this.indexManager.unindexTask(depTask);
+                this.indexManager.indexTask(updatedTask);
+                await this.indexManager.indexDependencies(updatedTask);
+                this.cacheManager.set(updatedTask.id, updatedTask);
+
+                // Record update operation
+                this.transactionManager.addOperation(transactionId, {
+                    type: 'update',
+                    task: updatedTask,
+                    previousState: depTask
+                });
+            }
+
+            // Verify updates
+            const verifyDependentTasks = dependentTasks.map(t => this.getTaskById(t.id));
+            if (verifyDependentTasks.some(t => t?.dependencies.includes(taskId))) {
+                await this.transactionManager.rollbackTransaction(transactionId);
+                throw new Error('Failed to clean up task dependencies');
+            }
 
             // Remove subtasks
             await this.batchProcessor.processInBatches(
