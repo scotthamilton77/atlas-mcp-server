@@ -15,13 +15,16 @@ This document provides a complete mapping of every file in the repository and it
 atlas-mcp-server/
 ├── src/                              # Source directory
 │   ├── core/                         # NEW: Core directory
-│   │   ├── storage/                  # NEW: Unified storage system
-│   │   │   ├── file-manager.ts      # NEW: File operations
-│   │   │   ├── memory-manager.ts    # NEW: Memory operations
-│   │   │   ├── unified-engine.ts    # NEW: Storage coordination
-│   │   │   └── cache/              # NEW: Caching system
-│   │   │       ├── manager.ts      # NEW: From task/core/cache/cache-manager.ts
-│   │   │       └── types.ts        # NEW: From task/core/cache/cache-types.ts
+│   │   ├── storage/                  # DONE: Unified storage system
+│   │   │   ├── file-manager.ts      # DONE: Persistent file storage with backup/restore
+│   │   │   ├── memory-manager.ts    # DONE: In-memory storage with LRU caching
+│   │   │   ├── storage-transaction.ts # DONE: Transaction management
+│   │   │   ├── unified-engine.ts    # DONE: Storage coordination with transactions
+│   │   │   ├── index.ts            # DONE: Storage system exports
+│   │   │   └── types/              # NEW: Storage type definitions
+│   │   │       ├── operations.ts   # NEW: Storage operation types
+│   │   │       ├── results.ts      # NEW: Operation result types
+│   │   │       └── errors.ts       # NEW: Storage error types
 │   │   ├── transaction/            # NEW: Transaction system
 │   │   │   ├── coordinator/        # NEW: Transaction coordination
 │   │   │   │   ├── memory.ts      # NEW: Memory transaction coordinator
