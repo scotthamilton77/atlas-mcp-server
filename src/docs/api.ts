@@ -3,7 +3,7 @@
  * @module api
  * 
  * This module provides comprehensive documentation for the Atlas MCP Server's public API.
- * It includes interfaces, tools, error codes, and configuration options.
+ * It includes interfaces, tools, error codes, configuration options, and best practices.
  */
 
 import {
@@ -14,6 +14,14 @@ import {
     TaskType,
     TaskStatus
 } from '../types/task.js';
+import {
+    Session,
+    TaskList,
+    CreateSessionInput,
+    CreateTaskListInput,
+    SessionResponse,
+    TaskListResponse
+} from '../types/session.js';
 
 /**
  * Task Management API
@@ -29,12 +37,22 @@ import {
  * @throws {TaskError} If task creation fails
  * @throws {ValidationError} If input validation fails
  * 
+ * Best Practices:
+ * - Use clear, action-oriented task names
+ * - Keep task hierarchies shallow (3-4 levels max)
+ * - Document assumptions and dependencies
+ * - Include acceptance criteria in descriptions
+ * 
  * @example
  * ```typescript
  * const task = await createTask(null, {
- *   name: "My Task",
- *   description: "Task description",
- *   type: "task"
+ *   name: "Implement User Authentication",
+ *   description: "Add OAuth2 authentication with role-based access control",
+ *   type: "task",
+ *   notes: [{
+ *     type: "markdown",
+ *     content: "## Acceptance Criteria\n- Support Google OAuth\n- Role management UI\n- JWT implementation"
+ *   }]
  * });
  * ```
  */
@@ -51,16 +69,83 @@ export interface CreateTask {
  * @throws {TaskError} If task update fails
  * @throws {ValidationError} If update validation fails
  * 
+ * Best Practices:
+ * - Document reasons for status changes
+ * - Update dependencies when blocking issues arise
+ * - Maintain consistent metadata across updates
+ * - Append rather than replace existing notes
+ * 
  * @example
  * ```typescript
  * const updatedTask = await updateTask("task-id", {
  *   status: "in_progress",
- *   description: "Updated description"
+ *   notes: [{
+ *     type: "markdown",
+ *     content: "Started implementation with Google OAuth integration"
+ *   }],
+ *   metadata: {
+ *     tags: ["feature", "security", "in-sprint"]
+ *   }
  * });
  * ```
  */
 export interface UpdateTask {
     (taskId: string, updates: UpdateTaskInput): Promise<TaskResponse<Task>>;
+}
+
+/**
+ * Session Management API
+ * @namespace SessionAPI
+ */
+
+/**
+ * Creates a new session
+ * 
+ * Best Practices:
+ * - Use descriptive session names with dates
+ * - Document session goals and participants
+ * - Use consistent tag prefixes
+ * - Include relevant project context
+ * 
+ * @example
+ * ```typescript
+ * const session = await createSession({
+ *   name: "Sprint Planning - March 2024",
+ *   metadata: {
+ *     tags: ["sprint:2024-03", "team:backend"],
+ *     context: "Q1 Feature Development"
+ *   }
+ * });
+ * ```
+ */
+export interface CreateSession {
+    (input: CreateSessionInput): Promise<SessionResponse>;
+}
+
+/**
+ * Creates a new task list
+ * 
+ * Best Practices:
+ * - Group related tasks logically
+ * - Use clear, thematic names
+ * - Document success criteria
+ * - Consider persistence needs
+ * 
+ * @example
+ * ```typescript
+ * const taskList = await createTaskList({
+ *   name: "Authentication System Overhaul",
+ *   description: "Modernize auth system with OAuth2 and RBAC",
+ *   persistent: true,
+ *   metadata: {
+ *     tags: ["project:auth", "quarter:Q1"],
+ *     context: "Security Enhancement Initiative"
+ *   }
+ * });
+ * ```
+ */
+export interface CreateTaskList {
+    (input: CreateTaskListInput): Promise<TaskListResponse>;
 }
 
 /**
@@ -75,51 +160,57 @@ export interface UpdateTask {
  * 
  * @remarks
  * This tool supports:
- * - Task hierarchy through parentId (recommended max depth: 5 levels)
- * - Task dependencies
- * - Rich task notes
- * - Task metadata
+ * - Task hierarchy through parentId (recommended max depth: 3-4 levels)
+ * - Rich documentation with multiple note types
+ * - Comprehensive metadata and tagging
+ * - Dependency management
  * 
  * Best Practices:
- * - Keep task hierarchies to 5 levels or less for better organization and maintainability
- * - Use group tasks as containers for related subtasks
- * - Consider splitting deep hierarchies into separate task groups
+ * - Use clear, action-oriented task names
+ * - Document assumptions and constraints
+ * - Include acceptance criteria
+ * - Maintain consistent metadata
+ * - Use appropriate task types
  * 
  * @example
  * ```typescript
  * const response = await handleToolCall("create_task", {
- *   parentId: null,
- *   name: "Root Task",
- *   type: "group",
- *   subtasks: [{
- *     name: "Subtask",
- *     type: "task"
- *   }]
+ *   name: "Implement OAuth2 Authentication",
+ *   type: "task",
+ *   description: "Add secure authentication using OAuth2 protocol",
+ *   notes: [{
+ *     type: "markdown",
+ *     content: "## Acceptance Criteria\n- Google OAuth support\n- Secure token handling"
+ *   }],
+ *   metadata: {
+ *     tags: ["feature:auth", "priority:high"],
+ *     context: "Security Enhancement Initiative"
+ *   }
  * });
  * ```
  */
 export const CREATE_TASK_SCHEMA = {
     name: "create_task",
-    description: "Creates a new task",
+    description: "Creates a new task with comprehensive documentation and organization features",
     inputSchema: {
         type: "object",
         properties: {
             parentId: {
                 type: ["string", "null"],
-                description: "ID of parent task. For better organization, keep hierarchy depth to 5 levels or less"
+                description: "ID of parent task. Best practice: Keep hierarchy depth to 3-4 levels for maintainability"
             },
             name: {
                 type: "string",
-                description: "Task name"
+                description: "Task name. Best practice: Use clear, action-oriented names describing the outcome"
             },
             description: {
                 type: "string",
-                description: "Task description"
+                description: "Task description. Best practice: Include context, acceptance criteria, and technical considerations"
             },
             type: {
                 type: "string",
                 enum: ["task", "milestone", "group"],
-                description: "Task type"
+                description: "Task type. Best practice: Use appropriate types for better organization"
             }
         },
         required: ["name"]
@@ -145,19 +236,25 @@ export const CREATE_TASK_SCHEMA = {
  * - TASK_INVALID_TYPE: Invalid task type
  * - TASK_INVALID_STATUS: Invalid status value
  * - TASK_INVALID_PARENT: Invalid parent task
+ * 
+ * Best Practices for Error Handling:
+ * - Validate task existence before operations
+ * - Check dependency cycles
+ * - Verify status transitions
+ * - Handle concurrent modifications
  */
 export const TASK_ERROR_CODES = {
     /** Task not found */
     TASK_NOT_FOUND: {
         code: "TASK_NOT_FOUND",
         message: "Task not found",
-        recovery: "Verify the task ID exists"
+        recovery: "Verify the task ID exists and you have access permissions"
     },
     /** Task validation failed */
     TASK_VALIDATION: {
         code: "TASK_VALIDATION",
         message: "Task validation failed",
-        recovery: "Check input data against schema"
+        recovery: "Check input data against schema and best practices"
     }
     // ... other task error codes
 };
@@ -174,13 +271,19 @@ export const TASK_ERROR_CODES = {
  * - STORAGE_DELETE: Failed to delete from storage
  * - STORAGE_PERMISSION: Permission denied
  * - STORAGE_NOT_FOUND: Storage path not found
+ * 
+ * Best Practices for Storage:
+ * - Implement proper error recovery
+ * - Use appropriate retry strategies
+ * - Maintain data consistency
+ * - Handle concurrent access
  */
 export const STORAGE_ERROR_CODES = {
     /** Storage read failed */
     STORAGE_READ: {
         code: "STORAGE_READ",
         message: "Failed to read from storage",
-        recovery: "Check storage permissions and path"
+        recovery: "Check storage permissions, path, and connection status"
     }
     // ... other storage error codes
 };
@@ -205,6 +308,12 @@ export const STORAGE_ERROR_CODES = {
  * }
  * ```
  * 
+ * Best Practices:
+ * - Use semantic versioning
+ * - Configure appropriate timeouts
+ * - Enable security features
+ * - Set up proper logging
+ * 
  * @example
  * ```typescript
  * const config = {
@@ -224,19 +333,19 @@ export const SERVER_CONFIG = {
         properties: {
             name: {
                 type: "string",
-                description: "Server name"
+                description: "Server name. Best practice: Use descriptive, consistent naming"
             },
             version: {
                 type: "string",
-                description: "Server version"
+                description: "Server version. Best practice: Follow semantic versioning"
             },
             host: {
                 type: "string",
-                description: "Server host"
+                description: "Server host. Best practice: Use environment-specific configuration"
             },
             port: {
                 type: "number",
-                description: "Server port"
+                description: "Server port. Best practice: Use standard ports or environment variables"
             }
         },
         required: ["name", "version", "host", "port"]
@@ -266,11 +375,17 @@ export const SERVER_CONFIG = {
  * }
  * ```
  * 
+ * Best Practices:
+ * - Configure appropriate backup intervals
+ * - Set reasonable retention policies
+ * - Use absolute paths
+ * - Enable WAL mode for better concurrency
+ * 
  * @example
  * ```typescript
  * const config = {
  *   storage: {
- *     baseDir: "./storage",
+ *     baseDir: "/var/lib/atlas-mcp",
  *     maxSessions: 100,
  *     sessionTTL: 86400,
  *     backupEnabled: true,
@@ -286,23 +401,23 @@ export const STORAGE_CONFIG = {
         properties: {
             baseDir: {
                 type: "string",
-                description: "Base storage directory"
+                description: "Base storage directory. Best practice: Use absolute paths"
             },
             maxSessions: {
                 type: "number",
-                description: "Maximum sessions to keep"
+                description: "Maximum sessions. Best practice: Balance resource usage"
             },
             sessionTTL: {
                 type: "number",
-                description: "Session time-to-live in seconds"
+                description: "Session TTL in seconds. Best practice: Set appropriate expiration"
             },
             backupEnabled: {
                 type: "boolean",
-                description: "Enable backups"
+                description: "Enable backups. Best practice: Enable for production"
             },
             maxBackups: {
                 type: "number",
-                description: "Maximum backups to keep"
+                description: "Maximum backups. Best practice: Consider storage capacity"
             }
         },
         required: ["baseDir"]
@@ -333,12 +448,18 @@ export const STORAGE_CONFIG = {
  * }
  * ```
  * 
+ * Best Practices:
+ * - Use appropriate log levels
+ * - Implement log rotation
+ * - Include contextual information
+ * - Configure proper file permissions
+ * 
  * @example
  * ```typescript
  * const config = {
  *   logging: {
  *     level: "INFO",
- *     logDir: "./logs",
+ *     logDir: "/var/log/atlas-mcp",
  *     console: true,
  *     file: true,
  *     maxFiles: 5,
@@ -355,27 +476,27 @@ export const LOGGING_CONFIG = {
             level: {
                 type: "string",
                 enum: ["DEBUG", "INFO", "WARN", "ERROR", "FATAL"],
-                description: "Minimum log level"
+                description: "Minimum log level. Best practice: Use INFO for production"
             },
             logDir: {
                 type: "string",
-                description: "Log directory path"
+                description: "Log directory path. Best practice: Use absolute paths"
             },
             console: {
                 type: "boolean",
-                description: "Enable console logging"
+                description: "Enable console logging. Best practice: Enable for development"
             },
             file: {
                 type: "boolean",
-                description: "Enable file logging"
+                description: "Enable file logging. Best practice: Enable for production"
             },
             maxFiles: {
                 type: "number",
-                description: "Maximum log files"
+                description: "Maximum log files. Best practice: Configure rotation policy"
             },
             maxFileSize: {
                 type: "number",
-                description: "Maximum file size in bytes"
+                description: "Maximum file size in bytes. Best practice: Consider disk space"
             }
         },
         required: ["level"]
@@ -407,11 +528,17 @@ export const LOGGING_CONFIG = {
  * }
  * ```
  * 
+ * Best Practices:
+ * - Use strong session secrets
+ * - Enable rate limiting
+ * - Configure appropriate timeouts
+ * - Implement proper access controls
+ * 
  * @example
  * ```typescript
  * const config = {
  *   security: {
- *     sessionSecret: "your-secret-key",
+ *     sessionSecret: process.env.SESSION_SECRET,
  *     rateLimiting: {
  *       enabled: true,
  *       maxRequests: 100,
@@ -428,22 +555,22 @@ export const SECURITY_CONFIG = {
         properties: {
             sessionSecret: {
                 type: "string",
-                description: "Session encryption secret"
+                description: "Session encryption secret. Best practice: Use environment variables"
             },
             rateLimiting: {
                 type: "object",
                 properties: {
                     enabled: {
                         type: "boolean",
-                        description: "Enable rate limiting"
+                        description: "Enable rate limiting. Best practice: Enable in production"
                     },
                     maxRequests: {
                         type: "number",
-                        description: "Maximum requests per window"
+                        description: "Maximum requests per window. Best practice: Tune based on usage"
                     },
                     windowMs: {
                         type: "number",
-                        description: "Time window in milliseconds"
+                        description: "Time window in milliseconds. Best practice: Balance security and usability"
                     }
                 },
                 required: ["enabled", "maxRequests", "windowMs"]

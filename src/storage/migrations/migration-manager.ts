@@ -31,18 +31,24 @@ export class MigrationManager {
     /**
      * Gets list of applied migrations
      */
+    private async ensureMigrationsTable(): Promise<void> {
+        try {
+            await this.db.run(`
+                CREATE TABLE IF NOT EXISTS migrations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT UNIQUE NOT NULL,
+                    applied_at INTEGER NOT NULL
+                )
+            `);
+        } catch (error) {
+            this.logger.error('Failed to create migrations table', { error });
+            throw error;
+        }
+    }
+
     private async getAppliedMigrations(): Promise<string[]> {
         try {
-            // Check if migrations table exists
-            const tableExists = await this.db.get(`
-                SELECT name 
-                FROM sqlite_master 
-                WHERE type='table' AND name='migrations'
-            `);
-
-            if (!tableExists) {
-                return [];
-            }
+            await this.ensureMigrationsTable();
 
             const records = await this.db.all<MigrationRecord[]>(`
                 SELECT * FROM migrations ORDER BY id ASC
@@ -85,7 +91,15 @@ export class MigrationManager {
 
             try {
                 await this.db.run('BEGIN TRANSACTION');
+
                 await migration.up(this.db);
+
+                // Record migration
+                await this.db.run(`
+                    INSERT INTO migrations (name, applied_at)
+                    VALUES (?, ?)
+                `, [name, Date.now()]);
+
                 await this.db.run('COMMIT');
                 
                 this.logger.info(`Migration ${name} completed successfully`);
@@ -117,12 +131,18 @@ export class MigrationManager {
             throw new Error(`Migration ${lastMigration} not found`);
         }
 
-        try {
-            await this.db.run('BEGIN TRANSACTION');
-            await migration.down(this.db);
-            await this.db.run('COMMIT');
-            
-            this.logger.info(`Migration ${lastMigration} rolled back successfully`);
+            try {
+                await this.db.run('BEGIN TRANSACTION');
+                await migration.down(this.db);
+
+                // Remove migration record
+                await this.db.run(`
+                    DELETE FROM migrations WHERE name = ?
+                `, [lastMigration]);
+
+                await this.db.run('COMMIT');
+                
+                this.logger.info(`Migration ${lastMigration} rolled back successfully`);
         } catch (error) {
             await this.db.run('ROLLBACK');
             this.logger.error(`Failed to roll back migration ${lastMigration}`, { error });
@@ -171,6 +191,12 @@ export class MigrationManager {
             try {
                 await this.db.run('BEGIN TRANSACTION');
                 await migration.down(this.db);
+
+                // Remove migration record
+                await this.db.run(`
+                    DELETE FROM migrations WHERE name = ?
+                `, [name]);
+
                 await this.db.run('COMMIT');
                 
                 this.logger.info(`Migration ${name} rolled back successfully`);

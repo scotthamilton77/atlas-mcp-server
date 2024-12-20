@@ -1,4 +1,6 @@
-import { StorageConfig, StorageManager, StorageError, SqliteStorageManager, BaseStorageManager } from './index.js';
+import { StorageError } from './index.js';
+import { UnifiedStorageConfig, UnifiedStorageManager } from './unified-storage.js';
+import { UnifiedSqliteStorage } from './unified-sqlite-storage.js';
 import { promises as fs } from 'fs';
 import path from 'path';
 
@@ -8,24 +10,17 @@ import path from 'path';
  * @returns Promise resolving to a StorageManager instance
  * @throws StorageError if initialization fails
  */
-export async function createStorageManager(config: StorageConfig): Promise<StorageManager> {
+export async function createStorageManager(config: UnifiedStorageConfig): Promise<UnifiedStorageManager> {
     try {
         // Ensure base directory exists with proper permissions
         await fs.mkdir(config.baseDir, { recursive: true, mode: 0o750 });
 
-        // Configure storage type
-        let manager: StorageManager;
-        if (config.useSqlite) {
-            // SQLite storage with WAL mode for better concurrency
-            const sqliteConfig: StorageConfig = {
-                ...config,
-                baseDir: path.join(config.baseDir, 'sqlite')
-            };
-            manager = new SqliteStorageManager(sqliteConfig);
-        } else {
-            // Default JSON file storage
-            manager = new BaseStorageManager(config);
-        }
+        // Create SQLite storage (we no longer support JSON storage)
+        const sqliteConfig: UnifiedStorageConfig = {
+            ...config,
+            baseDir: path.join(config.baseDir, 'sqlite')
+        };
+        const manager = new UnifiedSqliteStorage(sqliteConfig);
 
         // Initialize storage
         await manager.initialize();
@@ -45,18 +40,18 @@ export async function createStorageManager(config: StorageConfig): Promise<Stora
  * @returns Promise resolving to a StorageManager instance
  * @throws StorageError if initialization fails
  */
-export async function createDefaultStorageManager(): Promise<StorageManager> {
+export async function createDefaultStorageManager(): Promise<UnifiedStorageManager> {
     const baseDir = process.env.ATLAS_STORAGE_DIR || path.join(process.cwd(), 'data');
     const sessionId = process.env.ATLAS_SESSION_ID || 'default';
     const useSqlite = process.env.ATLAS_USE_SQLITE === 'true';
 
-    const config: StorageConfig = {
+    const config: UnifiedStorageConfig = {
         baseDir,
         sessionId,
         maxRetries: Number(process.env.ATLAS_MAX_RETRIES) || 3,
         retryDelay: Number(process.env.ATLAS_RETRY_DELAY) || 1000,
         maxBackups: Number(process.env.ATLAS_MAX_BACKUPS) || 5,
-        useSqlite
+        useSqlite: true // Always use SQLite for better reliability
     };
 
     return createStorageManager(config);

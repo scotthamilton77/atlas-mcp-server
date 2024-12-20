@@ -1,18 +1,9 @@
 import { Database } from 'sqlite';
 
 /**
- * Initial database schema migration
+ * Initial unified database schema migration
  */
 export async function up(db: Database): Promise<void> {
-    // Create migrations table first
-    await db.exec(`
-        CREATE TABLE IF NOT EXISTS migrations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL UNIQUE,
-            applied_at INTEGER NOT NULL
-        )
-    `);
-
     // Create tasks table
     await db.exec(`
         CREATE TABLE IF NOT EXISTS tasks (
@@ -56,7 +47,49 @@ export async function up(db: Database): Promise<void> {
         )
     `);
 
-    // Create indexes
+    // Create sessions table
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS sessions (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            metadata TEXT NOT NULL,
+            active_task_list_id TEXT,
+            task_list_ids TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        )
+    `);
+
+    // Create task lists table
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS task_lists (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT,
+            metadata TEXT NOT NULL,
+            root_task_ids TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        )
+    `);
+
+    // Create active state table
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS active_state (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            active_session_id TEXT,
+            active_task_list_id TEXT,
+            updated_at INTEGER NOT NULL
+        )
+    `);
+
+    // Insert initial active state
+    await db.exec(`
+        INSERT OR IGNORE INTO active_state (id, updated_at)
+        VALUES (1, unixepoch())
+    `);
+
+    // Create indexes for tasks
     await db.exec(`
         CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_id);
         CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
@@ -66,11 +99,13 @@ export async function up(db: Database): Promise<void> {
         CREATE INDEX IF NOT EXISTS idx_dependencies_depends ON dependencies(depends_on);
     `);
 
-    // Record migration
-    await db.run(
-        'INSERT INTO migrations (name, applied_at) VALUES (?, ?)',
-        ['001_initial_schema', Date.now()]
-    );
+    // Create indexes for sessions and task lists
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_sessions_active_list ON sessions(active_task_list_id);
+        CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updated_at);
+        CREATE INDEX IF NOT EXISTS idx_task_lists_updated ON task_lists(updated_at);
+    `);
+
 }
 
 /**
@@ -79,6 +114,9 @@ export async function up(db: Database): Promise<void> {
 export async function down(db: Database): Promise<void> {
     // Drop tables in reverse order to handle foreign key constraints
     await db.exec(`
+        DROP TABLE IF EXISTS active_state;
+        DROP TABLE IF EXISTS task_lists;
+        DROP TABLE IF EXISTS sessions;
         DROP TABLE IF EXISTS dependencies;
         DROP TABLE IF EXISTS notes;
         DROP TABLE IF EXISTS tasks;

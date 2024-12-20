@@ -6,6 +6,8 @@
 import { z } from 'zod';
 import { ConfigError, ErrorCodes } from '../errors/index.js';
 import { LogLevels } from '../logging/index.js';
+import { UnifiedStorageConfig } from '../storage/unified-storage.js';
+import path from 'path';
 
 /**
  * Environment variable names
@@ -62,8 +64,18 @@ export const configSchema = z.object({
         maxSize: z.number().positive().default(5242880) // 5MB
     }),
     storage: z.object({
-        dir: z.string(),
-        sessionId: z.string().uuid()
+        baseDir: z.string(),
+        sessionId: z.string().uuid(),
+        maxSessions: z.number().positive().optional(),
+        maxTaskLists: z.number().positive().optional(),
+        maxBackups: z.number().positive().optional(),
+        maxRetries: z.number().positive().optional(),
+        retryDelay: z.number().positive().optional(),
+        backup: z.object({
+            enabled: z.boolean(),
+            interval: z.number().positive(),
+            directory: z.string().optional()
+        }).optional()
     })
 });
 
@@ -139,6 +151,10 @@ export class ConfigManager {
             logging: {
                 ...this.config.logging,
                 ...(updates.logging || {})
+            },
+            storage: {
+                ...this.config.storage,
+                ...(updates.storage || {})
             }
         };
 
@@ -172,6 +188,10 @@ export class ConfigManager {
                     ...defaultLoggingConfig,
                     ...(envConfig.logging || {}),
                     ...(customConfig.logging || {})
+                },
+                storage: {
+                    ...(envConfig.storage || {}),
+                    ...(customConfig.storage || {})
                 }
             };
 
@@ -204,7 +224,7 @@ export class ConfigManager {
     private loadEnvConfig(customConfig: Partial<Config>): Partial<Config> {
         const env = process.env[EnvVars.NODE_ENV];
         const logLevel = process.env[EnvVars.LOG_LEVEL];
-        const storageDir = customConfig.storage?.dir || process.env[EnvVars.TASK_STORAGE_DIR];
+        const storageDir = customConfig.storage?.baseDir || process.env[EnvVars.TASK_STORAGE_DIR];
         const sessionId = customConfig.storage?.sessionId || process.env[EnvVars.SESSION_ID];
 
         if (!storageDir) {
@@ -216,8 +236,18 @@ export class ConfigManager {
 
         const config: Partial<Config> = {
             storage: {
-                dir: storageDir,
-                sessionId: sessionId || crypto.randomUUID()
+                baseDir: storageDir,
+                sessionId: sessionId || crypto.randomUUID(),
+                maxSessions: 100,
+                maxTaskLists: 100,
+                maxRetries: 3,
+                retryDelay: 1000,
+                maxBackups: 5,
+                backup: {
+                    enabled: true,
+                    interval: 300000, // 5 minutes
+                    directory: path.join(storageDir, 'backups')
+                }
             },
             logging: { ...defaultLoggingConfig }
         };

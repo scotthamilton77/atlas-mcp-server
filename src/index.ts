@@ -19,9 +19,11 @@ import {
     McpError,
     ErrorCode
 } from '@modelcontextprotocol/sdk/types.js';
-import { StorageManager, BaseStorageManager } from './storage/index.js';
+import path from 'path';
+import { StorageManager, BaseStorageManager, SqliteStorageManager } from './storage/index.js';
 import { TaskManager } from './task-manager.js';
 import { ToolHandler } from './tools/handler.js';
+import { SessionSystem } from './session/index.js';
 import { Logger } from './logging/index.js';
 import { ConfigManager, defaultConfig } from './config/index.js';
 import { RateLimiter } from './server/rate-limiter.js';
@@ -38,6 +40,7 @@ export class AtlasMcpServer {
     private storage: StorageManager;
     private taskManager: TaskManager;
     private toolHandler: ToolHandler;
+    private sessionSystem: SessionSystem;
     private logger: Logger;
     private rateLimiter: RateLimiter;
     private healthMonitor: HealthMonitor;
@@ -56,8 +59,18 @@ export class AtlasMcpServer {
 
         ConfigManager.initialize({
             storage: {
-                dir: storageDir,
-                sessionId: crypto.randomUUID()
+                baseDir: storageDir,
+                sessionId: crypto.randomUUID(),
+                maxSessions: 100,
+                maxTaskLists: 100,
+                maxBackups: 5,
+                maxRetries: 3,
+                retryDelay: 1000,
+                backup: {
+                    enabled: true,
+                    interval: 300000, // 5 minutes
+                    directory: path.join(storageDir, 'backups')
+                }
             }
         });
 
@@ -65,10 +78,11 @@ export class AtlasMcpServer {
         const config = ConfigManager.getInstance().getConfig();
         this.logger = Logger.getInstance().child({ component: 'AtlasMcpServer' });
         
-        this.storage = new BaseStorageManager({
-            baseDir: config.storage.dir,
-            sessionId: config.storage.sessionId
-        });
+        // Initialize storage
+        this.storage = new SqliteStorageManager(config.storage);
+
+        // Initialize session system
+        this.sessionSystem = new SessionSystem(config.storage);
 
         this.taskManager = new TaskManager(this.storage);
         this.toolHandler = new ToolHandler(this.taskManager);
@@ -101,11 +115,21 @@ export class AtlasMcpServer {
      */
     async initialize(): Promise<void> {
         try {
-            // Initialize storage
-            await this.storage.initialize();
+            // Initialize storage and session system
+            await Promise.all([
+                this.storage.initialize(),
+                this.sessionSystem.initialize()
+            ]);
 
             // Initialize task manager
             await this.taskManager.initialize();
+
+            // Add session tools to tool handler with their handler
+            const sessionToolHandler = await this.sessionSystem.getToolHandler();
+            this.toolHandler.addTools(
+                sessionToolHandler.getTools(),
+                (name, args) => sessionToolHandler.handleToolCall(name, args)
+            );
 
             // Set up request handlers
             this.setupRequestHandlers();
@@ -162,7 +186,13 @@ export class AtlasMcpServer {
                 this.activeRequests.add(requestId);
                 
                 const startTime = Date.now();
-                const response = await this.toolHandler.listTools();
+                const response = await this.toolHandler.listTools() as {
+                tools: Array<{
+                    name: string;
+                    description: string;
+                    inputSchema: Record<string, unknown>;
+                }>;
+            };
                 
                 this.metricsCollector.recordResponseTime(Date.now() - startTime);
                 return response;
@@ -190,10 +220,13 @@ export class AtlasMcpServer {
                 this.activeRequests.add(requestId);
                 
                 const startTime = Date.now();
-                const response = await Promise.race([
-                    this.toolHandler.handleToolCall(request),
-                    this.createTimeout(30000) // 30 second timeout
-                ]);
+            const response = await Promise.race([
+                this.toolHandler.handleToolCall(request) as Promise<{
+                    _meta?: Record<string, unknown>;
+                    content: Array<{ type: string; text: string }>;
+                }>,
+                this.createTimeout(30000) // 30 second timeout
+            ]);
                 
                 this.metricsCollector.recordResponseTime(Date.now() - startTime);
                 return response;
@@ -342,7 +375,10 @@ export class AtlasMcpServer {
                 await new Promise(resolve => setTimeout(resolve, 100));
             }
 
-            await this.server.close();
+            await Promise.all([
+                this.server.close(),
+                this.sessionSystem.close()
+            ]);
             this.logger.info('Server stopped successfully', {
                 metrics: this.getMetrics()
             });
