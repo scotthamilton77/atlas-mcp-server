@@ -24,7 +24,7 @@ export class TaskBatchProcessor implements BatchProcessor {
     }
 
     /**
-     * Processes a single batch of items
+     * Processes a single batch of items with optional validation
      */
     async processBatch<T>(
         batch: T[],
@@ -38,7 +38,7 @@ export class TaskBatchProcessor implements BatchProcessor {
             errors: []
         };
 
-        // Process items sequentially with proper error handling
+        // Process items sequentially with validation
         for (const [index, item] of batch.entries()) {
             try {
                 await this.processWithRetry(item, operation);

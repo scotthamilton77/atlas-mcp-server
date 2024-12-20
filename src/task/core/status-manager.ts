@@ -284,39 +284,74 @@ export class StatusManager {
     /**
      * Validates status transition rules with more flexible transitions
      */
+    /**
+     * Validates status transition rules with proper state machine logic
+     */
     private validateStatusTransitionRules(
         currentStatus: TaskStatus,
-        newStatus: TaskStatus
+        newStatus: TaskStatus,
+        context: { taskId: string; hasSubtasks: boolean; hasDependencies: boolean } = { 
+            taskId: 'unknown',
+            hasSubtasks: false,
+            hasDependencies: false
+        }
     ): void {
-        const allowedTransitions: Record<TaskStatus, Set<TaskStatus>> = {
-            [TaskStatus.PENDING]: new Set([
-                TaskStatus.IN_PROGRESS,
-                TaskStatus.BLOCKED,
-                TaskStatus.FAILED // Allow direct failure from pending
-            ]),
-            [TaskStatus.IN_PROGRESS]: new Set([
-                TaskStatus.COMPLETED,
-                TaskStatus.FAILED,
-                TaskStatus.BLOCKED,
-                TaskStatus.PENDING // Allow reverting to pending if needed
-            ]),
-            [TaskStatus.COMPLETED]: new Set([
-                TaskStatus.FAILED, // Allow marking as failed after completion
-                TaskStatus.IN_PROGRESS // Allow reopening if needed
-            ]),
-            [TaskStatus.FAILED]: new Set([
-                TaskStatus.IN_PROGRESS, // Allow retry
-                TaskStatus.PENDING // Allow reset
-            ]),
-            [TaskStatus.BLOCKED]: new Set([
-                TaskStatus.IN_PROGRESS,
-                TaskStatus.FAILED,
-                TaskStatus.PENDING // Allow reset when unblocked
-            ])
+        // Define the state machine for status transitions
+        const stateMachine: Record<TaskStatus, {
+            allowedTransitions: Set<TaskStatus>;
+            conditions?: (ctx: typeof context) => { allowed: boolean; reason?: string };
+        }> = {
+            [TaskStatus.PENDING]: {
+                allowedTransitions: new Set([
+                    TaskStatus.IN_PROGRESS,
+                    TaskStatus.BLOCKED,
+                    TaskStatus.FAILED
+                ]),
+                conditions: (ctx) => ({
+                    allowed: !ctx.hasDependencies || newStatus === TaskStatus.BLOCKED,
+                    reason: ctx.hasDependencies ? 'Task has dependencies and must be blocked first' : undefined
+                })
+            },
+            [TaskStatus.IN_PROGRESS]: {
+                allowedTransitions: new Set([
+                    TaskStatus.COMPLETED,
+                    TaskStatus.FAILED,
+                    TaskStatus.BLOCKED,
+                    TaskStatus.PENDING
+                ]),
+                conditions: (ctx) => ({
+                    allowed: newStatus !== TaskStatus.COMPLETED || !ctx.hasSubtasks,
+                    reason: ctx.hasSubtasks ? 'Cannot complete task with incomplete subtasks' : undefined
+                })
+            },
+            [TaskStatus.COMPLETED]: {
+                allowedTransitions: new Set([
+                    TaskStatus.FAILED,
+                    TaskStatus.IN_PROGRESS
+                ])
+            },
+            [TaskStatus.FAILED]: {
+                allowedTransitions: new Set([
+                    TaskStatus.IN_PROGRESS,
+                    TaskStatus.PENDING
+                ])
+            },
+            [TaskStatus.BLOCKED]: {
+                allowedTransitions: new Set([
+                    TaskStatus.IN_PROGRESS,
+                    TaskStatus.FAILED,
+                    TaskStatus.PENDING
+                ]),
+                conditions: (ctx) => ({
+                    allowed: newStatus !== TaskStatus.IN_PROGRESS || !ctx.hasDependencies,
+                    reason: ctx.hasDependencies ? 'Cannot start blocked task with incomplete dependencies' : undefined
+                })
+            }
         };
 
-        if (!allowedTransitions[currentStatus]?.has(newStatus)) {
-            const allowedStates = Array.from(allowedTransitions[currentStatus] || []);
+        const stateConfig = stateMachine[currentStatus];
+        if (!stateConfig?.allowedTransitions.has(newStatus)) {
+            const allowedStates = Array.from(stateConfig?.allowedTransitions || []);
             const guidance = allowedStates.map(state => {
                 const guide = STATUS_TRANSITION_GUIDE[currentStatus]?.[state];
                 return `${state}: ${guide || 'No specific guidance available'}`;
@@ -326,6 +361,7 @@ export class StatusManager {
                 ErrorCodes.TASK_STATUS,
                 'Invalid status transition',
                 {
+                    taskId: context.taskId,
                     currentStatus,
                     newStatus,
                     allowedTransitions: allowedStates,
@@ -333,6 +369,24 @@ export class StatusManager {
                     suggestion: `Consider these valid transitions from '${currentStatus}' status:\n${guidance.join('\n')}`
                 }
             );
+        }
+
+        // Check additional conditions if they exist
+        if (stateConfig.conditions) {
+            const { allowed, reason } = stateConfig.conditions(context);
+            if (!allowed) {
+                throw new TaskError(
+                    ErrorCodes.TASK_STATUS,
+                    'Status transition condition failed',
+                    {
+                        taskId: context.taskId,
+                        currentStatus,
+                        newStatus,
+                        reason,
+                        suggestion: reason
+                    }
+                );
+            }
         }
     }
 
