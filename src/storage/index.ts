@@ -2,11 +2,13 @@
  * Storage module for Atlas MCP Server
  * Handles task persistence, session management, and file operations
  */
-import fs from 'fs/promises';
-import path from 'path';
 import { Task } from '../types/task.js';
-import { createHash } from 'crypto';
-import { setTimeout } from 'timers/promises';
+import { randomUUID, createHash } from 'crypto';
+import { promises as fs } from 'fs';
+import path from 'path';
+import { promisify } from 'util';
+
+const sleep = promisify(setTimeout);
 
 export interface StorageConfig {
     baseDir: string;
@@ -14,6 +16,7 @@ export interface StorageConfig {
     maxRetries?: number;
     retryDelay?: number;
     maxBackups?: number;
+    useSqlite?: boolean; // Whether to use SQLite storage (default: false)
 }
 
 /**
@@ -31,14 +34,60 @@ export class StorageError extends Error {
 }
 
 /**
+ * Storage statistics interface
+ */
+export interface StorageStats {
+    size: number;       // Total size in bytes
+    tasks: number;      // Number of tasks
+    notes?: number;     // Number of notes (optional)
+    backups?: number;   // Number of backups (optional)
+}
+
+/**
+ * Interface for storage implementations
+ */
+export interface StorageManager {
+    // Core operations
+    initialize(): Promise<void>;
+    saveTasks(tasks: Task[]): Promise<void>;
+    loadTasks(): Promise<Task[]>;
+    getTasksByStatus(status: string): Promise<Task[]>;
+    getSubtasks(parentId: string): Promise<Task[]>;
+    close(): Promise<void>;
+    maintenance(): Promise<void>;
+
+    // Optional operations
+    estimate?(): Promise<StorageStats>;
+    getDirectory?(): Promise<string>;
+    persist?(): Promise<boolean>;
+    persisted?(): Promise<boolean>;
+}
+
+// Export storage implementations
+export { SqliteStorageManager } from './sqlite-storage.js';
+
+/**
  * Lock manager for concurrent operations
  */
+interface QueuedLockRequest {
+    resolve: (release: () => void) => void;
+    reject: (error: Error) => void;
+    timestamp: number;
+    priority: number;
+}
+
 class LockManager {
     private locks: Map<string, Promise<void>> = new Map();
+    private lockQueues: Map<string, QueuedLockRequest[]> = new Map();
     private timeoutHandles: Map<string, ReturnType<typeof globalThis.setTimeout>> = new Map();
     private readonly LOCK_TIMEOUT = 30000; // 30 seconds
+    private readonly QUEUE_TIMEOUT = 60000; // 60 seconds queue wait timeout
+    private readonly MAX_QUEUE_LENGTH = 100; // Maximum number of queued requests per lock
 
-    async acquireLock(key: string): Promise<() => void> {
+    /**
+     * Acquires a lock with priority-based queueing and timeout
+     */
+    async acquireLock(key: string, priority: number = 0): Promise<() => void> {
         // Clear any existing timeout
         if (this.timeoutHandles.has(key)) {
             const existingTimeout = this.timeoutHandles.get(key);
@@ -48,16 +97,18 @@ class LockManager {
             this.timeoutHandles.delete(key);
         }
 
-        while (this.locks.has(key)) {
-            try {
-                await this.locks.get(key);
-            } catch (error) {
-                // Lock was forcibly released due to timeout
-                this.locks.delete(key);
-                break;
-            }
+        // If lock is held, add to queue
+        if (this.locks.has(key)) {
+            return this.queueLockRequest(key, priority);
         }
 
+        return this.createLock(key);
+    }
+
+    /**
+     * Creates a new lock with timeout
+     */
+    private createLock(key: string): Promise<() => void> {
         let releaseLock: () => void;
         const lockPromise = new Promise<void>((resolve, reject) => {
             releaseLock = () => {
@@ -67,6 +118,10 @@ class LockManager {
                     globalThis.clearTimeout(timeoutHandle);
                     this.timeoutHandles.delete(key);
                 }
+                
+                // Process next queued request if any
+                this.processNextQueuedRequest(key);
+                
                 resolve();
             };
 
@@ -74,6 +129,10 @@ class LockManager {
             const timeoutHandle = globalThis.setTimeout(() => {
                 this.locks.delete(key);
                 this.timeoutHandles.delete(key);
+                
+                // Process next queued request on timeout
+                this.processNextQueuedRequest(key);
+                
                 reject(new Error('Lock timeout'));
             }, this.LOCK_TIMEOUT);
 
@@ -81,7 +140,66 @@ class LockManager {
         });
 
         this.locks.set(key, lockPromise);
-        return releaseLock!;
+        return Promise.resolve(releaseLock!);
+    }
+
+    /**
+     * Queues a lock request with priority
+     */
+    private queueLockRequest(key: string, priority: number): Promise<() => void> {
+        return new Promise((resolve, reject) => {
+            // Initialize queue if it doesn't exist
+            if (!this.lockQueues.has(key)) {
+                this.lockQueues.set(key, []);
+            }
+
+            const queue = this.lockQueues.get(key)!;
+
+            // Check queue length limit
+            if (queue.length >= this.MAX_QUEUE_LENGTH) {
+                reject(new Error('Lock queue full'));
+                return;
+            }
+
+            // Add request to queue with priority
+            const request: QueuedLockRequest = {
+                resolve,
+                reject,
+                timestamp: Date.now(),
+                priority
+            };
+
+            // Insert maintaining priority order (higher priority first)
+            const insertIndex = queue.findIndex(r => r.priority < priority);
+            if (insertIndex === -1) {
+                queue.push(request);
+            } else {
+                queue.splice(insertIndex, 0, request);
+            }
+
+            // Set timeout for queued request
+            globalThis.setTimeout(() => {
+                const index = queue.indexOf(request);
+                if (index !== -1) {
+                    queue.splice(index, 1);
+                    reject(new Error('Queue wait timeout'));
+                }
+            }, this.QUEUE_TIMEOUT);
+        });
+    }
+
+    /**
+     * Processes the next queued request for a lock
+     */
+    private processNextQueuedRequest(key: string): void {
+        const queue = this.lockQueues.get(key);
+        if (!queue || queue.length === 0) {
+            this.lockQueues.delete(key);
+            return;
+        }
+
+        const request = queue.shift()!;
+        this.createLock(key).then(request.resolve).catch(request.reject);
     }
 
     async withLock<T>(key: string, operation: () => Promise<T>): Promise<T> {
@@ -129,7 +247,27 @@ class TransactionManager {
 /**
  * Manages task persistence and session data
  */
-export class StorageManager {
+export class BaseStorageManager implements StorageManager {
+    // ... existing code ...
+
+    async getTasksByStatus(status: string): Promise<Task[]> {
+        const tasks = await this.loadTasks();
+        return tasks.filter(task => task.status === status);
+    }
+
+    async getSubtasks(parentId: string): Promise<Task[]> {
+        const tasks = await this.loadTasks();
+        return tasks.filter(task => task.parentId === parentId);
+    }
+
+    async close(): Promise<void> {
+        // No-op for file-based storage
+    }
+
+    async maintenance(): Promise<void> {
+        // Clean up old backups
+        await this.cleanupBackups();
+    }
     private storageDir: string;
     private sessionFile: string;
     private lockManager: LockManager;
@@ -137,6 +275,20 @@ export class StorageManager {
     private maxRetries: number;
     private retryDelay: number;
     private maxBackups: number;
+
+    async estimate(): Promise<StorageStats> {
+        const stats = await fs.stat(this.sessionFile);
+        const data = await fs.readFile(this.sessionFile, 'utf-8');
+        const { tasks } = JSON.parse(data);
+        return {
+            size: stats.size,
+            tasks: tasks.length
+        };
+    }
+
+    async getDirectory(): Promise<string> {
+        return this.storageDir;
+    }
 
     constructor(private config: StorageConfig) {
         this.storageDir = path.join(config.baseDir, 'sessions');
@@ -209,7 +361,7 @@ export class StorageManager {
             if (retryCount >= this.maxRetries) {
                 throw error;
             }
-            await setTimeout(this.retryDelay * Math.pow(2, retryCount));
+            await sleep(this.retryDelay * Math.pow(2, retryCount));
             return this.withRetry(operation, retryCount + 1);
         }
     }
