@@ -110,11 +110,11 @@ export class AtlasMcpServer {
             {
                 capabilities: {
                     tools: {},
-                },
+                }
             }
         );
 
-        // Set up error handling
+        // Set up error handling that logs to file instead of console
         this.setupErrorHandling();
     }
 
@@ -253,10 +253,12 @@ export class AtlasMcpServer {
      * Sets up error handling
      */
     private setupErrorHandling(): void {
+        // Handle server errors by logging to file only
         this.server.onerror = (error) => {
             this.metricsCollector.incrementErrorCount();
             
-            const errorContext = {
+            // Only log to file, not console
+            this.logger.error('Server error', {
                 timestamp: new Date().toISOString(),
                 error: error instanceof Error ? {
                     name: error.name,
@@ -264,9 +266,7 @@ export class AtlasMcpServer {
                     stack: error.stack
                 } : error,
                 metrics: this.getMetrics()
-            };
-
-            this.logger.error('Server error', errorContext);
+            });
         };
 
         process.on('unhandledRejection', (reason, promise) => {
