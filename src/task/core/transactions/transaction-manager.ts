@@ -85,26 +85,81 @@ export class TaskTransactionManager implements TransactionManager {
     }
 
     /**
-     * Commits a transaction
+     * Maximum number of retry attempts for transaction conflicts
+     */
+    private readonly MAX_RETRIES = 3;
+
+    /**
+     * Delay between retry attempts (in milliseconds)
+     */
+    private readonly RETRY_DELAY = 100;
+
+    /**
+     * Commits a transaction with retry logic for handling conflicts
      */
     async commitTransaction(transactionId: string): Promise<TransactionResult> {
+        let retryCount = 0;
+        
+        while (retryCount < this.MAX_RETRIES) {
+            try {
+                return await this.attemptCommit(transactionId, retryCount);
+            } catch (error) {
+                if (this.isTransactionConflict(error) && retryCount < this.MAX_RETRIES - 1) {
+                    retryCount++;
+                    this.logger.warn('Transaction conflict detected, retrying...', {
+                        transactionId,
+                        retryCount,
+                        error
+                    });
+                    await this.delay(this.RETRY_DELAY * retryCount);
+                    continue;
+                }
+                throw this.enhanceError(error, transactionId);
+            }
+        }
+
+        throw createError(
+            ErrorCodes.OPERATION_FAILED,
+            {
+                message: 'Transaction failed after maximum retry attempts',
+                transactionId,
+                maxRetries: this.MAX_RETRIES
+            }
+        );
+    }
+
+    /**
+     * Attempts to commit a transaction
+     */
+    private async attemptCommit(transactionId: string, retryCount: number): Promise<TransactionResult> {
         const transaction = this.transactions.get(transactionId);
         if (!transaction) {
             throw createError(
                 ErrorCodes.OPERATION_FAILED,
-                { message: 'Transaction not found', transactionId }
+                { 
+                    message: 'Transaction not found or already completed',
+                    transactionId 
+                }
             );
         }
 
         try {
             this.clearTransactionTimeout(transactionId);
+            
+            // Group operations by type for better batching
+            const groupedOps = this.groupOperations(transaction.operations);
+            
+            // Process operations in optimal order
+            await this.processOperations(groupedOps, transactionId);
+            
             this.transactions.delete(transactionId);
 
             const affectedTasks = transaction.operations.map(op => op.task.id);
             
-            this.logger.info('Transaction committed', {
+            this.logger.info('Transaction committed successfully', {
                 transactionId,
                 operationCount: transaction.operations.length,
+                retryCount,
                 affectedTasks
             });
 
@@ -116,6 +171,7 @@ export class TaskTransactionManager implements TransactionManager {
         } catch (error) {
             this.logger.error('Failed to commit transaction', {
                 transactionId,
+                retryCount,
                 error
             });
 
@@ -123,15 +179,89 @@ export class TaskTransactionManager implements TransactionManager {
                 await this.rollbackTransaction(transactionId);
             }
 
-            throw createError(
+            throw error;
+        }
+    }
+
+    /**
+     * Groups operations by type for efficient processing
+     */
+    private groupOperations(operations: TaskOperation[]): Map<string, TaskOperation[]> {
+        const groups = new Map<string, TaskOperation[]>();
+        for (const op of operations) {
+            const existing = groups.get(op.type) || [];
+            existing.push(op);
+            groups.set(op.type, existing);
+        }
+        return groups;
+    }
+
+    /**
+     * Processes grouped operations in optimal order
+     */
+    private async processOperations(
+        groups: Map<string, TaskOperation[]>,
+        transactionId: string
+    ): Promise<void> {
+        // Process creates first, then updates, then deletes
+        const order = ['create', 'update', 'delete'];
+        for (const type of order) {
+            const ops = groups.get(type);
+            if (ops && ops.length > 0) {
+                await this.processBatch(ops, transactionId);
+            }
+        }
+    }
+
+    /**
+     * Processes a batch of operations
+     */
+    private async processBatch(
+        operations: TaskOperation[],
+        transactionId: string
+    ): Promise<void> {
+        // Implementation would depend on the specific storage layer
+        // This is where you'd implement batch processing logic
+        this.logger.debug('Processing operation batch', {
+            transactionId,
+            operationType: operations[0].type,
+            batchSize: operations.length
+        });
+    }
+
+    /**
+     * Checks if an error is a transaction conflict
+     */
+    private isTransactionConflict(error: unknown): boolean {
+        return error instanceof Error && 
+               error.message.includes('SQLITE_ERROR: cannot start a transaction within a transaction');
+    }
+
+    /**
+     * Enhances error with more context
+     */
+    private enhanceError(error: unknown, transactionId: string): Error {
+        if (this.isTransactionConflict(error)) {
+            return createError(
                 ErrorCodes.OPERATION_FAILED,
-                { 
-                    message: 'Transaction commit failed',
+                {
+                    message: 'Transaction conflict detected. This usually happens when trying to perform multiple operations simultaneously. Try:\n' +
+                            '1. Using bulk operations instead of multiple individual operations\n' +
+                            '2. Ensuring operations are properly sequenced\n' +
+                            '3. Reducing the number of concurrent operations',
                     transactionId,
-                    error
+                    originalError: error
                 }
             );
         }
+        return error instanceof Error ? error : new Error(String(error));
+    }
+
+    /**
+     * Delays execution for specified milliseconds
+     */
+    private delay(ms: number): Promise<void> {
+        return new Promise(resolve => setTimeout(resolve, ms));
     }
 
     /**

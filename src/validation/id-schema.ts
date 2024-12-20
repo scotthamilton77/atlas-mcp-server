@@ -11,8 +11,18 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0
 // Base ID schema for reuse across different entity types
 export const baseIdSchema = z.string().regex(
     ID_CONSTANTS.PATTERN,
-    `ID must be ${ID_CONSTANTS.LENGTH} characters long and contain only [${ID_CONSTANTS.ALPHABET}]`
+    `Task/Entity ID must be exactly ${ID_CONSTANTS.LENGTH} characters long and contain only alphanumeric characters [${ID_CONSTANTS.ALPHABET}]. Example: "xK7cPq2Z". You cannot use descriptive names like "Project Setup" as IDs.`
 );
+
+// Helper function to validate ID format
+export function validateIdFormat(id: string, context: string = 'ID'): void {
+    if (!ID_CONSTANTS.PATTERN.test(id)) {
+        throw new Error(
+            `Invalid ${context}: Must be exactly ${ID_CONSTANTS.LENGTH} characters long and contain only alphanumeric characters [${ID_CONSTANTS.ALPHABET}]. ` +
+            `Received: "${id}". Example valid ID: "xK7cPq2Z"`
+        );
+    }
+}
 
 // Transitional schema that accepts both short IDs and UUIDs
 export const transitionalIdSchema = z.string().refine(

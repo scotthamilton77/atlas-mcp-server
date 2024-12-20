@@ -97,11 +97,15 @@ export const createTaskSchema = {
             enum: ['task', 'milestone', 'group'],
             description: 'Type of task. Best practice: Use "milestone" for major deliverables, "group" for organizing related tasks, and "task" for concrete work items.',
         },
-        dependencies: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'List of task IDs this task depends on. Best practice: Keep dependencies minimal and explicit. Consider using task groups for better organization.',
-        },
+            dependencies: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'List of task IDs this task depends on. IMPORTANT: Must use actual task IDs (e.g., "xK7cPq2Z"), not task names. Best practices:\n' +
+                           '1. Keep dependencies minimal and explicit\n' +
+                           '2. Store task IDs when creating tasks for later reference\n' +
+                           '3. Use get_task_tree to view all task IDs and relationships\n' +
+                           '4. Consider using task groups for better organization',
+            },
         metadata: {
             type: 'object',
             properties: {
@@ -128,7 +132,14 @@ export const createTaskSchema = {
     required: ['name'],
 };
 
-/** Creates multiple tasks at once. IMPORTANT: Requires an active session and task list - use create_session and create_task_list first if you haven't already. Use this for efficiently creating related tasks in bulk. */
+/** Creates multiple tasks at once. IMPORTANT: Requires an active session and task list - use create_session and create_task_list first if you haven't already. 
+
+Best Practices:
+1. Use this for efficiently creating related tasks in bulk instead of individual create_task calls
+2. Group related tasks together to minimize transaction overhead
+3. Keep track of returned task IDs for setting up dependencies
+4. Consider task relationships and hierarchy when organizing bulk creation
+*/
 export const bulkCreateTasksSchema = {
     type: 'object',
     properties: {
@@ -247,7 +258,15 @@ export const updateTaskSchema = {
     required: ['taskId', 'updates'],
 };
 
-/** Updates multiple tasks at once. IMPORTANT: Requires an active session - ensure you have created or switched to the appropriate session. Use this for efficiently updating related tasks in bulk. */
+/** Updates multiple tasks at once. IMPORTANT: Requires an active session - ensure you have created or switched to the appropriate session. 
+
+Best Practices:
+1. Use this for efficiently updating related tasks in bulk instead of individual update_task calls
+2. Group all related updates into a single bulk_update_tasks call to avoid transaction conflicts
+3. Ensure all task IDs are valid 8-character alphanumeric strings
+4. Consider dependencies and task relationships when planning updates
+5. Use get_task_tree to verify task IDs and relationships before updating
+*/
 export const bulkUpdateTasksSchema = {
     type: 'object',
     properties: {
