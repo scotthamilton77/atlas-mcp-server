@@ -104,21 +104,98 @@ export class ToolHandler {
      */
     async handleToolCall(request: any) {
         try {
-            // Only check for empty input on tools that require parameters
+            // Storage is handled by config manager, no need to check here
+
+            // Check for empty input
             if (this.TOOLS_REQUIRING_INPUT.has(request.params.name) && 
                 (!request.params.arguments || Object.keys(request.params.arguments).length === 0)) {
                 return this.handleEmptyInputError(request.params.name);
             }
 
+            // Validate tool exists
+            if (!request.params.name) {
+                throw new McpError(
+                    ErrorCode.InvalidRequest,
+                    'Tool name is required',
+                    'Specify a valid tool name from the available tools list.'
+                );
+            }
+
+            // Execute request with validation
             const response = await this.executeToolRequest(request);
+            const formattedResponse = formatResponse(response);
             return {
-                content: [{ 
-                    type: 'text', 
-                    text: formatResponse(response)
-                }],
+                success: true,
+                content: [{
+                    type: 'text',
+                    text: formattedResponse
+                }]
             };
         } catch (error) {
-            return this.handleToolError(error, request.params.name);
+            // Enhanced error handling
+            if (error instanceof McpError) {
+                return {
+                    success: false,
+                    content: [{
+                        type: 'text',
+                        text: JSON.stringify({
+                            error: {
+                                code: error.code,
+                                message: error.message,
+                                help: error.stack || 'Check configuration and try again.'
+                            }
+                        }, null, 2)
+                    }]
+                };
+            }
+
+            // Convert other errors to MCP errors
+            const mcpError = new McpError(
+                ErrorCode.InternalError,
+                error instanceof Error ? error.message : 'An unexpected error occurred',
+                this.getErrorHelp(error, request.params.name)
+            );
+
+            return {
+                success: false,
+                content: [{
+                    type: 'text',
+                    text: JSON.stringify({
+                        error: {
+                            code: mcpError.code,
+                            message: mcpError.message,
+                            help: mcpError.stack
+                        }
+                    }, null, 2)
+                }]
+            };
+        }
+    }
+
+    /**
+     * Get helpful error message based on error type
+     */
+    private getErrorHelp(error: unknown, toolName: string): string {
+        if (error instanceof Error) {
+            if (error.message.includes('TASK_STORAGE_DIR')) {
+                return 'Environment Setup Required:\n1. Set TASK_STORAGE_DIR environment variable\n2. Ensure directory exists and is writable\n3. Restart the server';
+            }
+            if (error.message.includes('validation')) {
+                return 'Validation Error:\n1. Check required fields\n2. Verify data types\n3. Ensure values are within limits\n4. Review schema documentation';
+            }
+            if (error.message.includes('UUID')) {
+                return 'Invalid UUID:\n1. Ensure all IDs are valid UUIDs\n2. Check parent and dependency IDs\n3. Verify task references';
+            }
+        }
+
+        // Default tool-specific help
+        switch (toolName) {
+            case 'create_task':
+                return 'Task Creation Help:\n1. Provide required name field\n2. Check field types and limits\n3. Verify parent task exists if specified\n4. Ensure valid note formats';
+            case 'update_task':
+                return 'Task Update Help:\n1. Verify task exists\n2. Check status transitions\n3. Validate field updates\n4. Ensure dependency consistency';
+            default:
+                return 'General Help:\n1. Check input format\n2. Verify required fields\n3. Review documentation\n4. Ensure proper configuration';
         }
     }
 
@@ -170,8 +247,25 @@ export class ToolHandler {
      * Handles tool errors with improved messaging
      */
     private handleToolError(error: unknown, toolName: string) {
-        let help: string;
+        if (error instanceof McpError) {
+            return {
+                success: false,
+                content: [{
+                    type: 'text',
+                    text: JSON.stringify({
+                        error: {
+                            code: error.code,
+                            message: error.message,
+                            help: error.message.includes('Task hierarchy') ?
+                                'Task hierarchies are limited to 5 levels deep to maintain manageable complexity. Consider restructuring your tasks into smaller, more focused groups.' :
+                                'Check the tool schema for required parameters and format'
+                        }
+                    }, null, 2)
+                }]
+            };
+        }
 
+        let help: string;
         switch (toolName) {
             case 'create_task':
                 help = 'Task creation requires at least a name. Example:\n{\n  "name": "My Task",\n  "description": "Optional description"\n}';
@@ -186,18 +280,16 @@ export class ToolHandler {
                 help = 'Check the tool schema for required parameters and format';
         }
 
-        const errorResponse = {
-            error: {
-                code: error instanceof McpError ? error.code : ErrorCode.InternalError,
-                message: error instanceof Error ? error.message : 'An unexpected error occurred',
-                help
-            }
-        };
-        
         return {
             content: [{
                 type: 'text',
-                text: JSON.stringify(errorResponse, null, 2)
+                text: JSON.stringify({
+                    error: {
+                        code: ErrorCode.InternalError,
+                        message: error instanceof Error ? error.message : 'An unexpected error occurred',
+                        help
+                    }
+                }, null, 2)
             }]
         };
     }
@@ -253,10 +345,36 @@ export class ToolHandler {
     private getCreateTaskDescription(): string {
         return `Creates a new task with rich content support and automatic status tracking. Supports nested subtask creation.
 
-Task Types:
-- task: Standard work item (default)
-- milestone: Key achievement or deliverable
-- group: Container for related tasks
+Technical Constraints:
+1. Task Structure:
+   - Name: 1-200 characters (required)
+   - Description: Max 2000 characters (optional)
+   - Hierarchy: Maximum 5 levels deep
+   - IDs: Valid UUIDs required for task/parent IDs
+
+2. Note Types and Requirements:
+   text:
+   - content: Required, non-empty string
+   - metadata: Optional key-value pairs
+   
+   code:
+   - content: Required, non-empty string
+   - language: Required, programming language
+   - metadata: Optional key-value pairs
+   
+   json:
+   - content: Required, valid JSON string
+   - metadata: Optional key-value pairs
+   
+   markdown:
+   - content: Required, non-empty string
+   - metadata: Optional key-value pairs
+
+3. Schema Validation:
+   - Strict validation enforced
+   - No additional properties allowed
+   - Required fields must be present
+   - All UUIDs must be valid
 
 Status Flow:
 1. Initial Status:
@@ -272,67 +390,104 @@ Status Flow:
    blocked → in_progress: Dependencies resolved
    failed → in_progress: Retry attempt
 
+Example Task Creation:
+{
+  "name": "Task Name",  // Required
+  "description": "Details",  // Optional, max 2000 chars
+  "type": "task",  // Optional: task|milestone|group
+  "notes": [{
+    "type": "code",
+    "content": "function example() {}",
+    "language": "typescript"  // Required for code notes
+  }],
+  "metadata": {
+    "context": "Feature implementation",
+    "tags": ["api", "auth"]
+  }
+}
+
 Best Practices:
 1. Task Structure:
    - Use clear, action-oriented names
    - Keep descriptions focused and specific
    - Break complex tasks into subtasks
    - Group related tasks under a parent
-   - Limit hierarchy depth for clarity
+   - Monitor hierarchy depth (max 5 levels)
 
 2. Dependencies:
    - Create dependent tasks first
-   - Use actual task IDs (not placeholders)
+   - Use valid UUIDs for task IDs
    - Document dependency rationale
    - Avoid circular dependencies
    - Consider task order carefully
 
-3. Documentation:
-   - Use markdown for detailed docs
-   - Add code examples with language tags
-   - Include JSON for structured data
-   - Document assumptions clearly
-   - Keep notes updated
+3. Content Validation:
+   - Verify JSON content is valid
+   - Include language for code notes
+   - Keep content within length limits
+   - Use appropriate note types
+   - Structure markdown properly
 
-4. Metadata:
-   - Add clear task context
-   - Use consistent tag naming
-   - Tag for easy filtering
-   - Include priority levels
-   - Reference related resources
-
-Error Prevention:
-1. Dependencies:
-   - Verify task IDs exist
-   - Check for circular refs
-   - Document relationships
-   - Consider task order
-
-2. Status Updates:
-   - Follow valid transitions
-   - Check dependencies first
-   - Update parent status
-   - Handle blocked states
-
-3. Content Management:
-   - Validate task names
-   - Check description length
-   - Verify note formats
-   - Update metadata
+4. Error Handling:
+   - Validate all UUIDs
+   - Check hierarchy depth
+   - Verify note format
+   - Handle status transitions
+   - Monitor dependency cycles
 
 Common Mistakes:
-- Creating circular dependencies
-- Missing dependency documentation
-- Unclear task hierarchies
-- Incomplete metadata
-- Empty task names/description
-- Do not include the task ID field in the first task
+- Exceeding hierarchy depth limit
+- Missing required fields
+- Invalid JSON in notes
+- Missing code languages
+- Invalid UUID formats
+- Circular dependencies
 - Invalid status transitions
-- Poor error handling`;
+- Schema validation errors`;
     }
 
     private getBulkCreateTasksDescription(): string {
         return `Creates multiple tasks at once with automatic relationship management and validation.
+
+Technical Constraints:
+1. Task Structure:
+   - Name: 1-200 characters (required for each task)
+   - Description: Max 2000 characters (optional)
+   - Hierarchy: Maximum 5 levels deep total
+   - IDs: Valid UUIDs required for task/parent IDs
+   - Parent ID: Must be valid UUID or null
+
+2. Batch Validation:
+   - All tasks must pass individual validation
+   - Consistent note types across tasks
+   - Valid parent-child relationships
+   - No circular dependencies
+   - Proper UUID formats
+
+3. Schema Requirements:
+   - parentId: UUID or null (optional)
+   - tasks: Array of task objects (required)
+   - Each task follows create_task schema
+
+Example Batch Creation:
+{
+  "parentId": "parent-uuid",  // Optional
+  "tasks": [
+    {
+      "name": "Task 1",
+      "type": "milestone",
+      "notes": [{
+        "type": "markdown",
+        "content": "# Milestone 1"
+      }]
+    },
+    {
+      "name": "Task 2",
+      "type": "task",
+      "dependencies": ["task-1-uuid"]
+    }
+  ]
+}
 
 Operation Patterns:
 1. Project Setup:
@@ -356,73 +511,138 @@ Operation Patterns:
 Best Practices:
 1. Task Organization:
    - Group related tasks
-   - Maintain clear hierarchy
+   - Maintain hierarchy (max 5 levels)
    - Use consistent naming
    - Set proper task types
    - Define clear boundaries
 
 2. Dependency Management:
    - Create independent tasks first
-   - Add dependencies later
+   - Use valid UUIDs for dependencies
    - Document relationships
    - Verify task order
    - Check for cycles
 
-3. Status Handling:
-   - Start tasks as pending
-   - Update parent status
-   - Track blocked tasks
-   - Monitor progress
-   - Handle failures
+3. Validation:
+   - Verify all UUIDs
+   - Check note formats
+   - Validate JSON content
+   - Ensure required fields
+   - Monitor hierarchy depth
 
 4. Error Prevention:
-   - Validate task IDs
+   - Pre-validate task data
    - Check relationships
    - Verify status flow
    - Handle failures
    - Maintain consistency
 
 Common Errors:
-1. Dependency Issues:
+1. Schema Validation:
+   - Invalid UUID formats
+   - Missing required fields
+   - Malformed note content
+   - Invalid JSON data
+   - Wrong note types
+
+2. Hierarchy Issues:
+   - Exceeding depth limit
+   - Invalid parent IDs
    - Circular references
-   - Missing tasks
-   - Invalid order
-   - Unclear rationale
+   - Broken relationships
+   - Missing dependencies
 
-2. Status Problems:
-   - Invalid transitions
-   - Blocked tasks
-   - Parent updates
-   - Progress tracking
-
-3. Structure Issues:
-   - Deep hierarchies
-   - Unclear grouping
-   - Poor organization
-   - Missing context
+3. Content Problems:
+   - Invalid task names
+   - Description too long
+   - Wrong note formats
+   - Missing languages
+   - Invalid metadata
 
 Recovery Steps:
-1. Dependency Errors:
-   - Review task order
-   - Fix circular refs
-   - Update documentation
-   - Verify relationships
+1. Validation Errors:
+   - Check UUID formats
+   - Verify required fields
+   - Fix note content
+   - Update relationships
+   - Correct metadata
 
-2. Status Errors:
-   - Check transitions
+2. Structure Issues:
+   - Reduce hierarchy depth
+   - Fix parent references
    - Update dependencies
-   - Fix blocked tasks
-   - Sync parent status
+   - Correct relationships
+   - Validate task order
 
-3. Structure Errors:
-   - Simplify hierarchy
-   - Improve organization
-   - Add clear context
-   - Update metadata`;
+3. Content Fixes:
+   - Trim long content
+   - Fix note formats
+   - Add missing fields
+   - Update metadata
+   - Correct JSON data`;
     }
 
     private getUpdateTaskDescription(): string {
         return `Updates an existing task with automatic status propagation and dependency validation.
+
+Technical Constraints:
+1. Update Structure:
+   - taskId: Valid UUID (required)
+   - Name: 1-200 characters if updating
+   - Description: Max 2000 characters if updating
+   - All UUIDs must be valid
+   - Status transitions must be valid
+
+2. Schema Requirements:
+   - taskId: UUID (required)
+   - updates: {
+       name?: string
+       description?: string
+       notes?: TaskNote[]
+       reasoning?: TaskReasoning
+       type?: 'task' | 'milestone' | 'group'
+       status?: TaskStatus
+       dependencies?: UUID[]
+       metadata?: {
+         context?: string
+         tags?: string[]
+         [key: string]: unknown
+       }
+   }
+
+3. Note Validation:
+   text:
+   - content: Required, non-empty string
+   - metadata: Optional key-value pairs
+   
+   code:
+   - content: Required, non-empty string
+   - language: Required, programming language
+   - metadata: Optional key-value pairs
+   
+   json:
+   - content: Required, valid JSON string
+   - metadata: Optional key-value pairs
+   
+   markdown:
+   - content: Required, non-empty string
+   - metadata: Optional key-value pairs
+
+Example Update:
+{
+  "taskId": "task-uuid",
+  "updates": {
+    "status": "in_progress",
+    "notes": [{
+      "type": "text",
+      "content": "Implementation started"
+    }],
+    "metadata": {
+      "startedAt": "2024-01-20",
+      "priority": "high"
+    }
+  }
+}
 
 Status Workflow:
 1. New Task Flow:
@@ -456,12 +676,12 @@ Status Rules:
    - Maintain consistency
 
 Best Practices:
-1. Status Updates:
-   - Check current status
-   - Verify dependencies
-   - Update documentation
-   - Handle failures
-   - Monitor progress
+1. Validation:
+   - Verify UUID format
+   - Check status transitions
+   - Validate note content
+   - Ensure dependencies exist
+   - Monitor relationships
 
 2. Content Updates:
    - Keep context clear
@@ -485,38 +705,52 @@ Best Practices:
    - Maintain state
 
 Common Errors:
-1. Status:
+1. Schema Validation:
+   - Invalid UUID format
+   - Invalid status transition
+   - Malformed note content
+   - Invalid JSON data
+   - Wrong note types
+
+2. Status Issues:
    - Invalid transitions
    - Dependency conflicts
    - Parent-child sync
    - Progress tracking
 
-2. Content:
+3. Content Problems:
    - Missing context
    - Poor documentation
    - Unclear changes
    - Lost history
 
-3. Dependencies:
+4. Dependencies:
    - Circular refs
    - Missing tasks
    - Unclear reasons
    - Status conflicts
 
 Recovery Steps:
-1. Status Issues:
+1. Validation Errors:
+   - Check UUID format
+   - Verify status flow
+   - Fix note content
+   - Update relationships
+   - Correct metadata
+
+2. Status Issues:
    - Check transitions
    - Verify dependencies
    - Update parents
    - Fix conflicts
 
-2. Content Problems:
+3. Content Problems:
    - Add context
    - Update docs
    - Track changes
    - Maintain history
 
-3. Dependency Errors:
+4. Dependency Errors:
    - Fix cycles
    - Verify tasks
    - Document reasons
@@ -525,6 +759,61 @@ Recovery Steps:
 
     private getBulkUpdateTasksDescription(): string {
         return `Updates multiple tasks at once with automatic status propagation and validation.
+
+Technical Constraints:
+1. Update Structure:
+   - taskId: Valid UUID (required for each update)
+   - updates: Object containing fields to update
+   - Name: 1-200 characters if updating
+   - Description: Max 2000 characters if updating
+   - All UUIDs must be valid
+
+2. Batch Validation:
+   - All updates must pass validation
+   - Status transitions must be valid
+   - Dependencies must exist
+   - No circular references
+   - Parent-child consistency
+
+3. Schema Requirements:
+   - updates: Array of update objects (required)
+   - Each update follows schema:
+     {
+       taskId: UUID (required)
+       updates: {
+         name?: string
+         description?: string
+         notes?: TaskNote[]
+         status?: TaskStatus
+         dependencies?: UUID[]
+         metadata?: object
+       }
+     }
+
+Example Batch Update:
+{
+  "updates": [
+    {
+      "taskId": "task-1-uuid",
+      "updates": {
+        "status": "in_progress",
+        "notes": [{
+          "type": "text",
+          "content": "Started implementation"
+        }]
+      }
+    },
+    {
+      "taskId": "task-2-uuid",
+      "updates": {
+        "status": "completed",
+        "metadata": {
+          "completedAt": "2024-01-20"
+        }
+      }
+    }
+  ]
+}
 
 Update Patterns:
 1. Sprint Updates:
@@ -546,150 +835,200 @@ Update Patterns:
    - Track changes
 
 Best Practices:
-1. Planning:
-   - Group updates
-   - Check dependencies
-   - Verify states
-   - Document changes
-   - Handle errors
+1. Validation:
+   - Verify all UUIDs
+   - Check status transitions
+   - Validate note content
+   - Ensure dependencies exist
+   - Monitor relationships
 
 2. Execution:
-   - Update in order
-   - Check impacts
+   - Group related updates
+   - Update in dependency order
    - Maintain consistency
    - Track progress
    - Handle failures
 
 3. Documentation:
-   - Note changes
-   - Update times
+   - Note changes clearly
    - Track decisions
-   - Monitor impact
+   - Update timestamps
+   - Monitor impacts
    - Keep history
 
 Error Prevention:
-1. Status:
-   - Check transitions
+1. Status Validation:
+   - Check valid transitions
    - Verify dependencies
-   - Update parents
+   - Update parent status
    - Handle conflicts
    - Track progress
 
-2. Content:
-   - Validate changes
-   - Update context
-   - Track history
-   - Maintain docs
-   - Check formats
+2. Content Validation:
+   - Check note formats
+   - Validate JSON content
+   - Verify field lengths
+   - Update metadata
+   - Maintain history
 
-3. Dependencies:
-   - Verify tasks
-   - Check cycles
-   - Update status
-   - Document reasons
+3. Dependency Management:
+   - Verify task existence
+   - Check for cycles
+   - Update status properly
+   - Document changes
    - Handle blocking
 
 Recovery Steps:
-1. Status Issues:
-   - Review transitions
+1. Validation Errors:
+   - Check UUID formats
+   - Verify status flows
+   - Fix note content
+   - Update relationships
+   - Correct metadata
+
+2. Structure Issues:
    - Fix dependencies
-   - Update hierarchy
-   - Handle blocks
+   - Update hierarchies
+   - Correct relationships
+   - Validate task order
+   - Handle conflicts
 
-2. Content Problems:
-   - Add context
-   - Fix formats
-   - Update docs
-   - Track changes
-
-3. Dependency Errors:
-   - Fix cycles
-   - Verify tasks
-   - Update status
-   - Document fixes`;
+3. Content Problems:
+   - Fix note formats
+   - Update invalid content
+   - Correct metadata
+   - Add missing fields
+   - Document changes`;
     }
 
     private getDeleteTaskDescription(): string {
         return `Safely deletes a task and its subtasks with dependency validation and cleanup.
 
+Technical Constraints:
+1. Delete Requirements:
+   - taskId: Valid UUID (required)
+   - Task must not be in_progress
+   - Task must not have dependent tasks
+   - Parent task must exist if specified
+
+2. Schema Requirements:
+   - taskId: UUID (required)
+   - No additional parameters allowed
+   - Strict schema validation enforced
+
+Example Delete:
+{
+  "taskId": "task-uuid"
+}
+
 Deletion Rules:
-1. Task State:
-   - Cannot delete in_progress
-   - Verify no dependents
-   - Clean up references
-   - Update parent status
+1. Task State Validation:
+   - Cannot delete in_progress tasks
+   - Cannot delete tasks with active dependents
+   - Must clean up all references
+   - Must update parent task status
 
-2. Subtasks:
-   - Delete recursively
-   - Update references
-   - Clean dependencies
-   - Maintain history
+2. Subtask Handling:
+   - Recursive deletion of all subtasks
+   - Update all task references
+   - Clean up dependency links
+   - Maintain audit history
+   - Update parent aggregates
 
-3. Dependencies:
-   - Update dependent tasks
-   - Remove references
-   - Handle blocking
-   - Clean up links
+3. Dependency Management:
+   - Remove from dependent tasks
+   - Update blocking status
+   - Clean up reference links
+   - Maintain consistency
+   - Handle orphaned tasks
 
 Best Practices:
-1. Pre-Delete:
-   - Check status
-   - Verify deps
+1. Pre-Delete Validation:
+   - Verify UUID format
+   - Check task status
+   - Validate dependencies
    - Document reason
-   - Update refs
-   - Plan cleanup
+   - Plan cleanup steps
 
-2. Execution:
-   - Handle subtasks
-   - Update parents
-   - Clean refs
+2. Execution Strategy:
+   - Handle subtasks first
+   - Update parent tasks
+   - Clean references
    - Track changes
-   - Maintain logs
+   - Maintain audit logs
 
-3. Post-Delete:
-   - Verify cleanup
-   - Update docs
+3. Post-Delete Verification:
+   - Confirm cleanup
+   - Verify references
    - Check impacts
    - Monitor state
    - Handle errors
 
 Common Errors:
-1. Status:
-   - Active tasks
-   - Blocked tasks
-   - Parent updates
-   - Progress tracking
-
-2. Dependencies:
-   - Missing cleanup
-   - Broken refs
-   - Status conflicts
-   - Update failures
-
-3. Structure:
-   - Incomplete cleanup
-   - Lost history
-   - Missing docs
-   - Ref problems
-
-Recovery Steps:
-1. Status Issues:
-   - Check states
-   - Update deps
-   - Fix parents
-   - Handle blocks
+1. Validation Issues:
+   - Invalid UUID format
+   - Task in wrong status
+   - Active dependencies
+   - Missing parent
+   - Schema violations
 
 2. Dependency Problems:
-   - Clean refs
-   - Update tasks
-   - Fix status
-   - Document changes
+   - Unhandled references
+   - Broken dependencies
+   - Status conflicts
+   - Update failures
+   - Orphaned tasks
 
-3. Structure Errors:
+3. Structure Issues:
+   - Incomplete cleanup
+   - Lost references
+   - Missing history
+   - Parent conflicts
+   - Data inconsistency
+
+Recovery Steps:
+1. Validation Errors:
+   - Check UUID format
+   - Verify task status
+   - Clear dependencies
+   - Update references
+   - Fix schema issues
+
+2. Dependency Cleanup:
+   - Remove references
+   - Update dependent tasks
+   - Fix status issues
+   - Document changes
+   - Verify consistency
+
+3. Structure Recovery:
    - Complete cleanup
-   - Update docs
-   - Fix refs
-   - Verify state`;
+   - Restore references
+   - Update hierarchy
+   - Fix parent links
+   - Verify integrity
+
+Error Prevention:
+1. Pre-Delete Checks:
+   - Validate task exists
+   - Check status rules
+   - Verify dependencies
+   - Document changes
+   - Plan rollback
+
+2. Execution Safety:
+   - Handle errors
+   - Track progress
+   - Maintain logs
+   - Enable rollback
+   - Verify results
+
+3. Post-Delete Validation:
+   - Check consistency
+   - Verify cleanup
+   - Update related tasks
+   - Document results
+   - Monitor impacts`;
     }
 
     private getSubtasksDescription(): string {

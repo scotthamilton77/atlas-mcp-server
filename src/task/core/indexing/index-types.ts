@@ -3,7 +3,7 @@ import { Task, TaskStatus } from '../../../types/task.js';
 export interface TaskIndex {
     byId: Map<string, Task>;
     byStatus: Map<TaskStatus, Set<string>>;
-    byParent: Map<string, Set<string>>;
+    byParent: Map<string | null, Set<string>>;
     bySession: Map<string, Set<string>>;
     byDependency: Map<string, Set<string>>;
 }

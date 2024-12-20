@@ -13,7 +13,7 @@ import { LogLevels } from '../logging/index.js';
 export const EnvVars = {
     NODE_ENV: 'NODE_ENV',
     LOG_LEVEL: 'LOG_LEVEL',
-    STORAGE_DIR: 'STORAGE_DIR',
+    TASK_STORAGE_DIR: 'TASK_STORAGE_DIR',
     SESSION_ID: 'SESSION_ID'
 } as const;
 
@@ -204,7 +204,7 @@ export class ConfigManager {
     private loadEnvConfig(customConfig: Partial<Config>): Partial<Config> {
         const env = process.env[EnvVars.NODE_ENV];
         const logLevel = process.env[EnvVars.LOG_LEVEL];
-        const storageDir = customConfig.storage?.dir || process.env[EnvVars.STORAGE_DIR];
+        const storageDir = customConfig.storage?.dir || process.env[EnvVars.TASK_STORAGE_DIR];
         const sessionId = customConfig.storage?.sessionId || process.env[EnvVars.SESSION_ID];
 
         if (!storageDir) {

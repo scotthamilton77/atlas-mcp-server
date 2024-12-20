@@ -11,15 +11,16 @@ import {
     CreateTaskInput,
     UpdateTaskInput,
     TaskResponse,
-    TaskTypes,
-    TaskStatuses,
+    TaskType,
     TaskStatus,
     BulkCreateTaskInput,
     BulkUpdateTasksInput
 } from './types/task.js';
 import { StorageManager } from './storage/index.js';
 import { Logger } from './logging/index.js';
+import { z } from 'zod';
 import { validateCreateTask, validateUpdateTask } from './validation/task.js';
+import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { TaskError, ErrorCodes, createError } from './errors/index.js';
 import { TaskStore, DependencyValidator, StatusManager } from './task/core/index.js';
 
@@ -32,8 +33,10 @@ export class TaskManager {
     private dependencyValidator: DependencyValidator;
     private statusManager: StatusManager;
     private currentSessionId: string;
+    private storage: StorageManager;
 
     constructor(storage: StorageManager) {
+        this.storage = storage;
         this.logger = Logger.getInstance().child({ component: 'TaskManager' });
         this.taskStore = new TaskStore(storage);
         this.dependencyValidator = new DependencyValidator();
@@ -45,7 +48,35 @@ export class TaskManager {
      * Initializes the task manager
      */
     async initialize(): Promise<void> {
-        await this.taskStore.initialize();
+        try {
+            // Initialize storage first
+            await this.storage.initialize();
+            // Then initialize task store
+            await this.taskStore.initialize();
+            this.logger.info('Task manager initialized successfully');
+        } catch (error) {
+            this.logger.error('Failed to initialize task manager', error);
+            throw new McpError(
+                ErrorCode.InternalError,
+                'Failed to initialize task manager'
+            );
+        }
+    }
+
+    /**
+     * Validates task hierarchy depth
+     */
+    private validateHierarchyDepth(task: CreateTaskInput, depth: number = 1): void {
+        const MAX_DEPTH = 5;
+        if (depth > MAX_DEPTH) {
+            throw createError(
+                ErrorCodes.VALIDATION_ERROR,
+                { message: `Task hierarchy cannot exceed ${MAX_DEPTH} levels deep` }
+            );
+        }
+        if (task.subtasks) {
+            task.subtasks.forEach(subtask => this.validateHierarchyDepth(subtask, depth + 1));
+        }
     }
 
     /**
@@ -59,22 +90,73 @@ export class TaskManager {
      */
     async createTask(parentId: string | null, input: CreateTaskInput, newSession: boolean = false): Promise<TaskResponse<Task>> {
         try {
-            // Validate input data
-            const validatedInput = validateCreateTask(input);
+            // Validate input data first
+            let validatedInput: CreateTaskInput;
+            try {
+                validatedInput = validateCreateTask(input);
+            } catch (error) {
+                if (error instanceof z.ZodError) {
+                    const fieldErrors = error.errors.map(err => 
+                        `${err.path.join('.')}: ${err.message}`
+                    ).join('\n');
+                    throw new McpError(
+                        ErrorCode.InvalidRequest,
+                        `Task validation failed:\n${fieldErrors}`
+                    );
+                }
+                throw error;
+            }
+
+            // Validate hierarchy depth before any task creation
+            const validateHierarchy = (task: CreateTaskInput, currentDepth: number = 1): void => {
+                const MAX_DEPTH = 5;
+                if (currentDepth > MAX_DEPTH) {
+                    const error = new McpError(
+                        ErrorCode.InvalidRequest,
+                        `Task hierarchy depth of ${currentDepth} exceeds maximum allowed depth of ${MAX_DEPTH}. Found task "${task.name}" at level ${currentDepth}. Please restructure your tasks to be no more than ${MAX_DEPTH} levels deep.`
+                    );
+                    this.logger.error('Task hierarchy validation failed', { error, task: task.name, depth: currentDepth });
+                    throw error;
+                }
+                if (task.subtasks?.length) {
+                    task.subtasks.forEach(subtask => validateHierarchy(subtask, currentDepth + 1));
+                }
+            };
+
+            try {
+                validateHierarchy(input);
+            } catch (error) {
+                if (error instanceof McpError) {
+                    throw error;
+                }
+                throw new McpError(
+                    ErrorCode.InvalidRequest,
+                    error instanceof Error ? error.message : 'Failed to validate task hierarchy'
+                );
+            }
 
             // Generate new session ID if requested
             if (newSession) {
                 this.currentSessionId = uuidv4();
             }
 
+            // Determine effective parentId (input.parentId takes precedence)
+            const effectiveParentId = input.parentId || parentId;
+
             // Check parent task if provided
-            if (parentId) {
-                const parentTask = this.taskStore.getTaskById(parentId);
+            if (effectiveParentId) {
+                const parentTask = this.taskStore.getTaskById(effectiveParentId);
                 if (!parentTask) {
-                    throw createError(ErrorCodes.TASK_NOT_FOUND, { parentId });
+                    throw new McpError(
+                        ErrorCode.InvalidRequest,
+                        `Parent task with ID "${effectiveParentId}" not found. Please ensure the parent task exists before creating child tasks.`
+                    );
                 }
-                if (parentTask.type !== TaskTypes.GROUP) {
-                    throw createError(ErrorCodes.TASK_INVALID_TYPE, { parentId });
+                if (parentTask.type !== TaskType.GROUP) {
+                    throw new McpError(
+                        ErrorCode.InvalidRequest,
+                        `Parent task "${parentTask.name}" (${effectiveParentId}) must be of type "group" to contain child tasks. Current type: "${parentTask.type}"`
+                    );
                 }
             }
 
@@ -88,20 +170,64 @@ export class TaskManager {
                 ...input.metadata
             };
 
-            // Create task object
+            // Process subtasks
+            const subtaskIds: string[] = [];
+            if (input.subtasks && input.subtasks.length > 0) {
+                try {
+                    const subtaskResults = await Promise.all(
+                        input.subtasks.map(subtaskInput => this.createTask(taskId, subtaskInput))
+                    );
+                    subtaskIds.push(...subtaskResults.map(result => {
+                        if (!result.data) {
+                            throw new McpError(
+                                ErrorCode.InvalidRequest,
+                                'Failed to create subtask: Invalid task data'
+                            );
+                        }
+                        return result.data.id;
+                    }));
+                } catch (error) {
+                    // Re-throw MCP errors directly
+                    if (error instanceof McpError) {
+                        throw error;
+                    }
+                    // Wrap other errors
+                    throw new McpError(
+                        ErrorCode.InvalidRequest,
+                        `Failed to create subtasks: ${error instanceof Error ? error.message : 'Unknown error'}`
+                    );
+                }
+            }
+
+            // Create task object with collected subtask IDs using validated input
             const task: Task = {
                 id: taskId,
-                name: input.name,
-                description: input.description,
-                notes: input.notes || [],
-                reasoning: input.reasoning,
-                type: input.type || TaskTypes.TASK,
-                status: TaskStatuses.PENDING,
-                dependencies: input.dependencies || [],
-                subtasks: [],
+                name: validatedInput.name,
+                description: validatedInput.description || '',
+                notes: validatedInput.notes || [],
+                reasoning: validatedInput.reasoning,
+                type: validatedInput.type || TaskType.TASK,
+                status: TaskStatus.PENDING,
+                dependencies: validatedInput.dependencies || [],
+                subtasks: subtaskIds,
                 metadata,
-                parentId: parentId || `ROOT-${this.currentSessionId}`
+                parentId: effectiveParentId || `ROOT-${this.currentSessionId}`
             };
+
+            try {
+                // Add task to store
+                await this.taskStore.addTask(task);
+            } catch (error) {
+                this.logger.error('Failed to add task to store', {
+                    error,
+                    taskId: task.id,
+                    taskName: task.name
+                });
+                throw new McpError(
+                    ErrorCode.InvalidRequest,
+                    error instanceof Error ? error.message : 'Failed to add task to store'
+                );
+            }
 
             // Validate dependencies if any
             if (task.dependencies.length > 0) {
@@ -109,16 +235,6 @@ export class TaskManager {
                     task,
                     id => this.taskStore.getTaskById(id)
                 );
-            }
-
-            // Add task to store
-            await this.taskStore.addTask(task);
-
-            // Create subtasks if provided
-            if (input.subtasks && input.subtasks.length > 0) {
-                for (const subtaskInput of input.subtasks) {
-                    await this.createTask(taskId, subtaskInput);
-                }
             }
 
             this.logger.info('Task created successfully', { taskId, parentId });
@@ -133,8 +249,33 @@ export class TaskManager {
                 }
             };
         } catch (error) {
-            this.logger.error('Failed to create task', error);
-            throw error;
+            this.logger.error('Failed to create task', { 
+                error,
+                taskName: input.name,
+                parentId: input.parentId || parentId,
+                type: input.type,
+                validationErrors: error instanceof z.ZodError ? 
+                    error.errors.map(err => ({
+                        path: err.path.join('.'),
+                        message: err.message
+                    })) : undefined
+            });
+            // Re-throw MCP errors directly
+            if (error instanceof McpError) {
+                throw error;
+            }
+            // Convert Zod validation errors
+            if (error instanceof z.ZodError) {
+                throw new McpError(
+                    ErrorCode.InvalidRequest,
+                    error.errors.map((e) => e.message).join(', ')
+                );
+            }
+            // Wrap other errors
+            throw new McpError(
+                ErrorCode.InvalidRequest,
+                error instanceof Error ? error.message : 'Unknown error occurred'
+            );
         }
     }
 
@@ -330,12 +471,60 @@ export class TaskManager {
     }
 
     /**
-     * Creates multiple tasks in bulk
+     * Creates multiple tasks in bulk with proper hierarchy
      */
     async bulkCreateTasks(input: BulkCreateTaskInput): Promise<TaskResponse<Task[]>> {
         try {
+            // Create a map to store tasks by their temporary IDs
+            const tempIdMap = new Map<string, string>();
+            
+            // First pass: Create all tasks and store their actual IDs
             const createdTasks = await Promise.all(
-                input.tasks.map(taskInput => this.createTask(input.parentId, taskInput))
+                input.tasks.map(async taskInput => {
+                    // Generate a temporary ID for reference
+                    const tempId = uuidv4();
+                    
+                    // Determine the correct parentId
+                    // Priority: taskInput.parentId > input.parentId > ROOT
+                    const effectiveParentId = taskInput.parentId || input.parentId || null;
+                    
+                    // Create the task
+                    const result = await this.createTask(effectiveParentId, taskInput);
+                    
+                    if (!result.data) {
+                        throw new McpError(
+                            ErrorCode.InvalidRequest,
+                            'Failed to create task: Invalid task data'
+                        );
+                    }
+                    
+                    // Store the mapping of temp ID to actual ID
+                    tempIdMap.set(tempId, result.data.id);
+                    
+                    return result;
+                })
+            );
+
+            // Second pass: Update parent-child relationships
+            await Promise.all(
+                createdTasks.map(async response => {
+                    if (!response.data) return;
+                    
+                    const task = response.data;
+                    const parentId = task.parentId;
+                    
+                    if (parentId && !parentId.startsWith('ROOT-')) {
+                        // Get the parent task
+                        const parentTask = this.taskStore.getTaskById(parentId);
+                        if (parentTask && !parentTask.subtasks.includes(task.id)) {
+                            // Update parent's subtasks array
+                            await this.taskStore.updateTask(parentId, {
+                                ...parentTask,
+                                subtasks: [...parentTask.subtasks, task.id]
+                            });
+                        }
+                    }
+                })
             );
 
             return {
@@ -349,7 +538,12 @@ export class TaskManager {
                 }
             };
         } catch (error) {
-            this.logger.error('Failed to create tasks in bulk', error);
+            this.logger.error('Failed to create tasks in bulk', {
+                error,
+                taskCount: input.tasks.length,
+                parentId: input.parentId,
+                failedTask: error instanceof McpError ? error.message : 'Unknown error'
+            });
             throw error;
         }
     }

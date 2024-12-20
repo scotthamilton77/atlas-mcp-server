@@ -3,6 +3,8 @@
  * Provides centralized error handling and error types with detailed guidance
  */
 
+import { z } from 'zod';
+
 /**
  * Error codes enumeration with categories
  */
@@ -136,7 +138,7 @@ export const ErrorMessages: Record<ErrorCode, { message: string; suggestion: str
     // Validation errors
     [ErrorCodes.VALIDATION_ERROR]: {
         message: 'Validation failed',
-        suggestion: 'Check input against validation requirements'
+        suggestion: 'Check input against validation requirements. Common issues: missing required fields, invalid field types, or constraint violations. Review the validation error details for specific field issues.'
     },
     [ErrorCodes.INVALID_INPUT]: {
         message: 'Invalid input provided',
@@ -226,8 +228,78 @@ export class StorageError extends BaseError {
  * Validation-related errors
  */
 export class ValidationError extends BaseError {
-    constructor(code: ErrorCode, message: string, details?: unknown, suggestion?: string) {
-        super(code, message, details, suggestion);
+    constructor(
+        code: ErrorCode,
+        message: string,
+        public readonly validationErrors?: Array<{
+            field: string;
+            error: string;
+            received?: unknown;
+            expected?: string;
+        }>,
+        details?: unknown,
+        suggestion?: string
+    ) {
+        const formattedMessage = validationErrors 
+            ? `${message}\nValidation Errors:\n${validationErrors.map(
+                err => `- ${err.field}: ${err.error}${err.received ? ` (received: ${JSON.stringify(err.received)})` : ''}${err.expected ? ` (expected: ${err.expected})` : ''}`
+              ).join('\n')}`
+            : message;
+        super(code, formattedMessage, details, suggestion);
+    }
+
+    /**
+     * Creates a validation error from Zod validation issues
+     */
+    static fromZodError(error: z.ZodError): ValidationError {
+        const validationErrors = error.errors.map((err: z.ZodIssue) => {
+            const base = {
+                field: err.path.join('.'),
+                error: err.message
+            };
+
+            // Handle different types of Zod issues
+            if (err.code === 'invalid_type') {
+                return {
+                    ...base,
+                    received: err.received,
+                    expected: err.expected
+                };
+            }
+
+            if (err.code === 'invalid_enum_value') {
+                return {
+                    ...base,
+                    received: err.received,
+                    expected: err.options.join(' | ')
+                };
+            }
+
+            if (err.code === 'too_small') {
+                return {
+                    ...base,
+                    received: 'value too small',
+                    expected: `${err.type === 'string' ? 'length' : 'value'} >= ${(err as z.ZodTooSmallIssue).minimum}`
+                };
+            }
+
+            if (err.code === 'too_big') {
+                return {
+                    ...base,
+                    received: 'value too big',
+                    expected: `${err.type === 'string' ? 'length' : 'value'} <= ${(err as z.ZodTooBigIssue).maximum}`
+                };
+            }
+
+            // Default case for other types of errors
+            return base;
+        });
+
+        return new ValidationError(
+            ErrorCodes.VALIDATION_ERROR,
+            'Task validation failed',
+            validationErrors
+        );
     }
 }
 
@@ -272,7 +344,10 @@ export function createError(
         case ErrorCodes.VALIDATION_ERROR:
         case ErrorCodes.INVALID_INPUT:
         case ErrorCodes.INVALID_STATE:
-            return new ValidationError(code, message, details, suggestion);
+            if (details instanceof z.ZodError) {
+                return ValidationError.fromZodError(details);
+            }
+            return new ValidationError(code, message, undefined, details, suggestion);
 
         default:
             return new BaseError(code, message, details, suggestion);

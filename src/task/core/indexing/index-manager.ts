@@ -204,7 +204,7 @@ export class TaskIndexManager implements IndexManager {
     /**
      * Gets tasks by parent ID
      */
-    getTasksByParent(parentId: string): Task[] {
+    getTasksByParent(parentId: string | null): Task[] {
         const taskIds = this.indexes.byParent.get(parentId) || new Set();
         return Array.from(taskIds)
             .map(id => this.getTaskById(id))
@@ -236,7 +236,7 @@ export class TaskIndexManager implements IndexManager {
      */
     getRootTasks(): Task[] {
         return Array.from(this.indexes.byParent.entries())
-            .filter(([parentId]) => parentId.startsWith('ROOT-'))
+            .filter(([parentId]) => parentId && parentId.startsWith('ROOT-'))
             .flatMap(([, taskIds]) => 
                 Array.from(taskIds)
                     .map(id => this.getTaskById(id))

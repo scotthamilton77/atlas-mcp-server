@@ -161,6 +161,9 @@ export class StorageManager {
     async initialize(): Promise<void> {
         return this.lockManager.withLock('init', async () => {
             try {
+                // Create base directory first
+                await fs.mkdir(this.config.baseDir, { recursive: true, mode: 0o750 });
+                
                 // Create main storage directory
                 await fs.mkdir(this.storageDir, { recursive: true, mode: 0o750 });
                 

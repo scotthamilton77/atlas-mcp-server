@@ -89,7 +89,7 @@ export const envVarSchema = z.object({
     SERVER_VERSION: z.string().regex(/^\d+\.\d+\.\d+$/).optional(),
     SERVER_HOST: z.string().optional(),
     SERVER_PORT: z.string().transform(Number).pipe(z.number().int().min(1).max(65535)).optional(),
-    STORAGE_DIR: z.string(),
+    TASK_STORAGE_DIR: z.string(),
     STORAGE_MAX_SESSIONS: z.string().transform(Number).pipe(z.number().int().positive()).optional(),
     STORAGE_SESSION_TTL: z.string().transform(Number).pipe(z.number().int().positive()).optional(),
     STORAGE_BACKUP_ENABLED: z.enum(['true', 'false']).transform(val => val === 'true').optional(),

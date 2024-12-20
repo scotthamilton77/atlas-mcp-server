@@ -9,7 +9,7 @@
  * - Dependency management with parallel processing
  */
 
-import { Task, TaskStatus, TaskStatuses } from '../../types/task.js';
+import { Task, TaskStatus } from '../../types/task.js';
 import { Logger } from '../../logging/index.js';
 import { StorageManager } from '../../storage/index.js';
 import { DependencyValidator } from './dependency-validator.js';
@@ -141,8 +141,13 @@ export class TaskStore {
     /**
      * Adds a task
      */
-    async addTask(task: Task): Promise<void> {
-        const transactionId = this.transactionManager.startTransaction();
+    /**
+     * Adds a task and all its subtasks atomically
+     */
+    async addTask(task: Task, transactionId?: string): Promise<void> {
+        const isRootTransaction = !transactionId;
+        transactionId = transactionId || this.transactionManager.startTransaction();
+
         try {
             if (this.indexManager.getTaskById(task.id)) {
                 throw createError(
@@ -156,7 +161,7 @@ export class TaskStore {
 
             // Check if task should be blocked
             const shouldBlock = this.statusManager.isBlocked(task, this.getTaskById.bind(this));
-            const taskToAdd = shouldBlock ? { ...task, status: TaskStatuses.BLOCKED } : task;
+            const taskToAdd = shouldBlock ? { ...task, status: TaskStatus.BLOCKED } : task;
 
             // Add to indexes and cache
             this.indexManager.indexTask(taskToAdd);
@@ -177,16 +182,31 @@ export class TaskStore {
                         ...parent,
                         subtasks: [...parent.subtasks, taskToAdd.id]
                     };
-                    await this.updateTask(parent.id, updatedParent);
+                    // Use same transaction for parent update
+                    await this.updateTask(parent.id, updatedParent, transactionId);
                 }
             }
 
-            // Persist changes
-            await this.storage.saveTasks(Array.from(this.indexManager.getAllTasks()));
-            await this.transactionManager.commitTransaction(transactionId);
+            // Process subtasks recursively within the same transaction
+            if (task.subtasks?.length > 0) {
+                for (const subtaskId of task.subtasks) {
+                    const subtask = this.getTaskById(subtaskId);
+                    if (subtask) {
+                        await this.addTask(subtask, transactionId);
+                    }
+                }
+            }
+
+            // Only persist and commit if this is the root transaction
+            if (isRootTransaction) {
+                await this.storage.saveTasks(Array.from(this.indexManager.getAllTasks()));
+                await this.transactionManager.commitTransaction(transactionId);
+            }
 
         } catch (error) {
-            await this.transactionManager.rollbackTransaction(transactionId);
+            if (isRootTransaction) {
+                await this.transactionManager.rollbackTransaction(transactionId);
+            }
             throw error;
         }
     }
@@ -194,8 +214,9 @@ export class TaskStore {
     /**
      * Updates a task
      */
-    async updateTask(taskId: string, updates: Partial<Task>): Promise<void> {
-        const transactionId = this.transactionManager.startTransaction();
+    async updateTask(taskId: string, updates: Partial<Task>, transactionId?: string): Promise<void> {
+        const isRootTransaction = !transactionId;
+        transactionId = transactionId || this.transactionManager.startTransaction();
         try {
             const existingTask = this.getTaskById(taskId);
             if (!existingTask) {
@@ -257,7 +278,9 @@ export class TaskStore {
             await this.transactionManager.commitTransaction(transactionId);
 
         } catch (error) {
-            await this.transactionManager.rollbackTransaction(transactionId);
+            if (isRootTransaction) {
+                await this.transactionManager.rollbackTransaction(transactionId);
+            }
             throw error;
         }
     }
@@ -313,7 +336,7 @@ export class TaskStore {
             for (const depTask of dependentTasks) {
                 const updatedTask = {
                     ...depTask,
-                    status: TaskStatuses.BLOCKED,
+                    status: TaskStatus.BLOCKED,
                     dependencies: depTask.dependencies.filter(id => id !== taskId),
                     metadata: {
                         ...depTask.metadata,

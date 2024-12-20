@@ -9,7 +9,7 @@
  * - Automatic dependency-based blocking
  */
 
-import { Task, TaskStatus, TaskStatuses } from '../../types/task.js';
+import { Task, TaskStatus } from '../../types/task.js';
 import { TaskError, ErrorCodes } from '../../errors/index.js';
 import { DependencyValidator } from './dependency-validator.js';
 import { Logger } from '../../logging/index.js';
@@ -27,29 +27,29 @@ interface StatusTransaction {
     timestamp: number;
 }
 
-type CompletedOrFailed = typeof TaskStatuses.COMPLETED | typeof TaskStatuses.FAILED;
-type PendingOrInProgress = typeof TaskStatuses.PENDING | typeof TaskStatuses.IN_PROGRESS;
+type CompletedOrFailed = TaskStatus.COMPLETED | TaskStatus.FAILED;
+type PendingOrInProgress = TaskStatus.PENDING | TaskStatus.IN_PROGRESS;
 
 // Status transition guidance for error messages
 const STATUS_TRANSITION_GUIDE: Record<TaskStatus, Partial<Record<TaskStatus, string>>> = {
-    [TaskStatuses.PENDING]: {
-        [TaskStatuses.IN_PROGRESS]: "Start work on the task",
-        [TaskStatuses.BLOCKED]: "Mark as blocked by dependencies"
+    [TaskStatus.PENDING]: {
+        [TaskStatus.IN_PROGRESS]: "Start work on the task",
+        [TaskStatus.BLOCKED]: "Mark as blocked by dependencies"
     },
-    [TaskStatuses.IN_PROGRESS]: {
-        [TaskStatuses.COMPLETED]: "Mark work as completed",
-        [TaskStatuses.FAILED]: "Mark task as failed due to issues",
-        [TaskStatuses.BLOCKED]: "Mark as blocked by dependencies"
+    [TaskStatus.IN_PROGRESS]: {
+        [TaskStatus.COMPLETED]: "Mark work as completed",
+        [TaskStatus.FAILED]: "Mark task as failed due to issues",
+        [TaskStatus.BLOCKED]: "Mark as blocked by dependencies"
     },
-    [TaskStatuses.COMPLETED]: {
-        [TaskStatuses.FAILED]: "Mark as failed after verification issues"
+    [TaskStatus.COMPLETED]: {
+        [TaskStatus.FAILED]: "Mark as failed after verification issues"
     },
-    [TaskStatuses.FAILED]: {
-        [TaskStatuses.IN_PROGRESS]: "Retry the failed task"
+    [TaskStatus.FAILED]: {
+        [TaskStatus.IN_PROGRESS]: "Retry the failed task"
     },
-    [TaskStatuses.BLOCKED]: {
-        [TaskStatuses.IN_PROGRESS]: "Resume work after resolving blockers",
-        [TaskStatuses.FAILED]: "Mark as failed due to unresolvable blockers"
+    [TaskStatus.BLOCKED]: {
+        [TaskStatus.IN_PROGRESS]: "Resume work after resolving blockers",
+        [TaskStatus.FAILED]: "Mark as failed due to unresolvable blockers"
     }
 };
 
@@ -91,16 +91,16 @@ export class StatusManager {
      */
     isBlocked(task: Task, getTaskById: (id: string) => Task | null): boolean {
         // Don't block completed or failed tasks
-        if (task.status === TaskStatuses.COMPLETED || task.status === TaskStatuses.FAILED) {
+        if (task.status === TaskStatus.COMPLETED || task.status === TaskStatus.FAILED) {
             return false;
         }
 
         // Only enforce strict dependency checking for completion
-        if (task.status === TaskStatuses.IN_PROGRESS && task.dependencies.length > 0) {
+        if (task.status === TaskStatus.IN_PROGRESS && task.dependencies.length > 0) {
             // Allow parallel work unless dependencies have failed
             return task.dependencies.some(depId => {
                 const depTask = getTaskById(depId);
-                return !depTask || depTask.status === TaskStatuses.FAILED;
+                return !depTask || depTask.status === TaskStatus.FAILED;
             });
         }
 
@@ -129,7 +129,7 @@ export class StatusManager {
             await this.acquireLockWithRetry(task.id);
 
             // Check if task should be automatically blocked
-            if (this.isBlocked(task, getTaskById) && newStatus !== TaskStatuses.BLOCKED) {
+            if (this.isBlocked(task, getTaskById) && newStatus !== TaskStatus.BLOCKED) {
                 throw new TaskError(
                     ErrorCodes.TASK_STATUS,
                     'Task is blocked by incomplete dependencies',
@@ -228,10 +228,10 @@ export class StatusManager {
     ): Promise<void> {
         // Cannot transition from completed/failed to pending/in_progress
         const isCompletedOrFailed = (status: TaskStatus): status is CompletedOrFailed => 
-            status === TaskStatuses.COMPLETED || status === TaskStatuses.FAILED;
+            status === TaskStatus.COMPLETED || status === TaskStatus.FAILED;
         
         const isPendingOrInProgress = (status: TaskStatus): status is PendingOrInProgress =>
-            status === TaskStatuses.PENDING || status === TaskStatuses.IN_PROGRESS;
+            status === TaskStatus.PENDING || status === TaskStatus.IN_PROGRESS;
 
         if (isCompletedOrFailed(task.status) && isPendingOrInProgress(newStatus)) {
             throw new TaskError(
@@ -250,14 +250,14 @@ export class StatusManager {
         await this.dependencyValidator.validateDependenciesForStatus(task, newStatus, getTaskById);
 
         // Check dependencies for completion
-        if (newStatus === TaskStatuses.COMPLETED) {
+        if (newStatus === TaskStatus.COMPLETED) {
             // Validate dependencies
             await this.dependencyValidator.validateDependenciesForCompletion(task, getTaskById);
 
             // Check subtasks for completion
             const incompleteSubtasks = task.subtasks
                 .map(id => getTaskById(id))
-                .filter(subtask => !subtask || subtask.status !== TaskStatuses.COMPLETED);
+                .filter(subtask => !subtask || subtask.status !== TaskStatus.COMPLETED);
 
             if (incompleteSubtasks.length > 0) {
                 throw new TaskError(
@@ -288,29 +288,29 @@ export class StatusManager {
         newStatus: TaskStatus
     ): void {
         const allowedTransitions: Record<TaskStatus, Set<TaskStatus>> = {
-            [TaskStatuses.PENDING]: new Set([
-                TaskStatuses.IN_PROGRESS,
-                TaskStatuses.BLOCKED,
-                TaskStatuses.FAILED // Allow direct failure from pending
+            [TaskStatus.PENDING]: new Set([
+                TaskStatus.IN_PROGRESS,
+                TaskStatus.BLOCKED,
+                TaskStatus.FAILED // Allow direct failure from pending
             ]),
-            [TaskStatuses.IN_PROGRESS]: new Set([
-                TaskStatuses.COMPLETED,
-                TaskStatuses.FAILED,
-                TaskStatuses.BLOCKED,
-                TaskStatuses.PENDING // Allow reverting to pending if needed
+            [TaskStatus.IN_PROGRESS]: new Set([
+                TaskStatus.COMPLETED,
+                TaskStatus.FAILED,
+                TaskStatus.BLOCKED,
+                TaskStatus.PENDING // Allow reverting to pending if needed
             ]),
-            [TaskStatuses.COMPLETED]: new Set([
-                TaskStatuses.FAILED, // Allow marking as failed after completion
-                TaskStatuses.IN_PROGRESS // Allow reopening if needed
+            [TaskStatus.COMPLETED]: new Set([
+                TaskStatus.FAILED, // Allow marking as failed after completion
+                TaskStatus.IN_PROGRESS // Allow reopening if needed
             ]),
-            [TaskStatuses.FAILED]: new Set([
-                TaskStatuses.IN_PROGRESS, // Allow retry
-                TaskStatuses.PENDING // Allow reset
+            [TaskStatus.FAILED]: new Set([
+                TaskStatus.IN_PROGRESS, // Allow retry
+                TaskStatus.PENDING // Allow reset
             ]),
-            [TaskStatuses.BLOCKED]: new Set([
-                TaskStatuses.IN_PROGRESS,
-                TaskStatuses.FAILED,
-                TaskStatuses.PENDING // Allow reset when unblocked
+            [TaskStatus.BLOCKED]: new Set([
+                TaskStatus.IN_PROGRESS,
+                TaskStatus.FAILED,
+                TaskStatus.PENDING // Allow reset when unblocked
             ])
         };
 
@@ -356,15 +356,15 @@ export class StatusManager {
         });
 
         // Update dependent tasks if task is being deleted or failed
-        if (newStatus === TaskStatuses.FAILED || task.status === TaskStatuses.COMPLETED) {
+        if (newStatus === TaskStatus.FAILED || task.status === TaskStatus.COMPLETED) {
             const dependentTasks = this.getDependentTasks(task.id, getTaskById);
             await Promise.all(dependentTasks.map(async depTask => {
-                if (depTask.status !== TaskStatuses.BLOCKED && depTask.status !== TaskStatuses.FAILED) {
+                if (depTask.status !== TaskStatus.BLOCKED && depTask.status !== TaskStatus.FAILED) {
                     try {
                         await this.acquireLockWithRetry(depTask.id);
                         await this.propagateStatusChange(
                             depTask,
-                            TaskStatuses.BLOCKED,
+                            TaskStatus.BLOCKED,
                             getTaskById,
                             updateTask,
                             transactionId
@@ -377,7 +377,7 @@ export class StatusManager {
         }
 
         // Update parent status if needed
-        if (!task.parentId.startsWith('ROOT-')) {
+        if (task.parentId && !task.parentId.startsWith('ROOT-')) {
             const parent = getTaskById(task.parentId);
             if (parent) {
                 try {
@@ -403,15 +403,15 @@ export class StatusManager {
         }
 
         // Update subtask status if needed
-        if (newStatus === TaskStatuses.BLOCKED) {
+        if (newStatus === TaskStatus.BLOCKED) {
             await Promise.all(task.subtasks.map(async subtaskId => {
                 const subtask = getTaskById(subtaskId);
-                if (subtask && subtask.status !== TaskStatuses.BLOCKED) {
+                if (subtask && subtask.status !== TaskStatus.BLOCKED) {
                     try {
                         await this.acquireLockWithRetry(subtaskId);
                         await this.propagateStatusChange(
                             subtask,
-                            TaskStatuses.BLOCKED,
+                            TaskStatus.BLOCKED,
                             getTaskById,
                             updateTask,
                             transactionId
@@ -446,23 +446,23 @@ export class StatusManager {
         statuses.add(updatedChildStatus);
 
         // All completed -> completed
-        if (Array.from(statuses).every(s => s === TaskStatuses.COMPLETED)) {
-            return TaskStatuses.COMPLETED;
+        if (Array.from(statuses).every(s => s === TaskStatus.COMPLETED)) {
+            return TaskStatus.COMPLETED;
         }
 
         // Any failed -> failed
-        if (statuses.has(TaskStatuses.FAILED)) {
-            return TaskStatuses.FAILED;
+        if (statuses.has(TaskStatus.FAILED)) {
+            return TaskStatus.FAILED;
         }
 
         // Any blocked -> blocked
-        if (statuses.has(TaskStatuses.BLOCKED)) {
-            return TaskStatuses.BLOCKED;
+        if (statuses.has(TaskStatus.BLOCKED)) {
+            return TaskStatus.BLOCKED;
         }
 
         // Any in progress -> in progress
-        if (statuses.has(TaskStatuses.IN_PROGRESS)) {
-            return TaskStatuses.IN_PROGRESS;
+        if (statuses.has(TaskStatus.IN_PROGRESS)) {
+            return TaskStatus.IN_PROGRESS;
         }
 
         return null;
@@ -535,5 +535,3 @@ export class StatusManager {
         return this.computeParentStatus(subtasks, task.status) || task.status;
     }
 }
-
-

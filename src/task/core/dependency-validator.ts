@@ -10,7 +10,7 @@
  * - Status-based dependency validation
  */
 
-import { Task, TaskStatus, TaskStatuses } from '../../types/task.js';
+import { Task, TaskStatus } from '../../types/task.js';
 import { TaskError, ErrorCodes } from '../../errors/index.js';
 import { Logger } from '../../logging/index.js';
 
@@ -142,10 +142,10 @@ export class DependencyValidator {
         getTaskById: (id: string) => Task | null
     ): Promise<void> {
         // Only enforce strict dependency checking for completion
-        if (newStatus === TaskStatuses.COMPLETED) {
+        if (newStatus === TaskStatus.COMPLETED) {
             const incompleteDeps = task.dependencies
                 .map(depId => getTaskById(depId))
-                .filter(depTask => !depTask || depTask.status !== TaskStatuses.COMPLETED);
+                .filter(depTask => !depTask || depTask.status !== TaskStatus.COMPLETED);
 
             if (incompleteDeps.length > 0) {
                 throw new TaskError(
@@ -165,10 +165,10 @@ export class DependencyValidator {
         }
 
         // For in_progress, only check for failed dependencies
-        if (newStatus === TaskStatuses.IN_PROGRESS) {
+        if (newStatus === TaskStatus.IN_PROGRESS) {
             const failedDeps = task.dependencies
                 .map(depId => getTaskById(depId))
-                .filter(depTask => depTask?.status === TaskStatuses.FAILED);
+                .filter(depTask => depTask?.status === TaskStatus.FAILED);
 
             if (failedDeps.length > 0) {
                 throw new TaskError(
@@ -272,7 +272,7 @@ export class DependencyValidator {
         try {
             const incompleteDeps = task.dependencies
                 .map(depId => getTaskById(depId))
-                .filter(depTask => !depTask || depTask.status !== TaskStatuses.COMPLETED);
+                .filter(depTask => !depTask || depTask.status !== TaskStatus.COMPLETED);
 
             if (incompleteDeps.length > 0) {
                 throw new TaskError(
@@ -325,7 +325,7 @@ export class DependencyValidator {
         
         if (dependentTasks.length > 0) {
             const inProgressDependents = dependentTasks.filter(
-                t => t.status === TaskStatuses.IN_PROGRESS
+                t => t.status === TaskStatus.IN_PROGRESS
             );
 
             if (inProgressDependents.length > 0) {

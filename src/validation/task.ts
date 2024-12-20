@@ -2,13 +2,159 @@
  * Task validation schemas using Zod
  */
 import { z } from 'zod';
-import { TaskTypes, TaskStatuses, NoteTypes, CreateTaskInput } from '../types/task.js';
+import {
+    TaskType,
+    TaskStatus,
+    NoteType,
+    CreateTaskInput,
+    UpdateTaskInput,
+    TaskNote,
+    TaskReasoning,
+    TaskMetadata,
+    Task
+} from '../types/task.js';
+import { ErrorCodes, createError } from '../errors/index.js';
+
+/**
+ * Validation functions for individual task components
+ */
+export function validateTaskNotes(notes: TaskNote[]): void {
+    for (const note of notes) {
+        if (!Object.values(NoteType).includes(note.type)) {
+            throw createError(ErrorCodes.TASK_VALIDATION, `Invalid note type: ${note.type}`);
+        }
+        if (note.type === NoteType.CODE && !note.language) {
+            throw createError(ErrorCodes.TASK_VALIDATION, 'Language must be specified for code notes');
+        }
+        if (note.type === NoteType.JSON) {
+            try {
+                JSON.parse(note.content);
+            } catch {
+                throw createError(ErrorCodes.TASK_VALIDATION, 'Invalid JSON content in note');
+            }
+        }
+    }
+}
+
+export function validateTaskReasoning(reasoning: TaskReasoning): void {
+    if (reasoning.assumptions && !Array.isArray(reasoning.assumptions)) {
+        throw createError(ErrorCodes.TASK_VALIDATION, 'Assumptions must be an array of strings');
+    }
+    if (reasoning.alternatives && !Array.isArray(reasoning.alternatives)) {
+        throw createError(ErrorCodes.TASK_VALIDATION, 'Alternatives must be an array of strings');
+    }
+    if (reasoning.risks && !Array.isArray(reasoning.risks)) {
+        throw createError(ErrorCodes.TASK_VALIDATION, 'Risks must be an array of strings');
+    }
+    if (reasoning.tradeoffs && !Array.isArray(reasoning.tradeoffs)) {
+        throw createError(ErrorCodes.TASK_VALIDATION, 'Tradeoffs must be an array of strings');
+    }
+    if (reasoning.constraints && !Array.isArray(reasoning.constraints)) {
+        throw createError(ErrorCodes.TASK_VALIDATION, 'Constraints must be an array of strings');
+    }
+    if (reasoning.dependencies_rationale && !Array.isArray(reasoning.dependencies_rationale)) {
+        throw createError(ErrorCodes.TASK_VALIDATION, 'Dependencies rationale must be an array of strings');
+    }
+    if (reasoning.impact_analysis && !Array.isArray(reasoning.impact_analysis)) {
+        throw createError(ErrorCodes.TASK_VALIDATION, 'Impact analysis must be an array of strings');
+    }
+}
+
+export function validateTaskMetadata(metadata: Record<string, unknown>): void {
+    if (!metadata.created || typeof metadata.created !== 'string') {
+        throw createError(ErrorCodes.TASK_VALIDATION, 'Created timestamp is required and must be a string');
+    }
+    if (!metadata.updated || typeof metadata.updated !== 'string') {
+        throw createError(ErrorCodes.TASK_VALIDATION, 'Updated timestamp is required and must be a string');
+    }
+    if (!metadata.sessionId || typeof metadata.sessionId !== 'string') {
+        throw createError(ErrorCodes.TASK_VALIDATION, 'Session ID is required and must be a string');
+    }
+    if (metadata.tags !== undefined) {
+        if (!Array.isArray(metadata.tags)) {
+            throw createError(ErrorCodes.TASK_VALIDATION, 'Tags must be an array of strings');
+        }
+        if (metadata.tags.some(tag => typeof tag !== 'string')) {
+            throw createError(ErrorCodes.TASK_VALIDATION, 'All tags must be strings');
+        }
+    }
+    if (metadata.context !== undefined && typeof metadata.context !== 'string') {
+        throw createError(ErrorCodes.TASK_VALIDATION, 'Context must be a string');
+    }
+}
+
+/**
+ * Input sanitization and validation
+ */
+export function sanitizeTaskInput(input: CreateTaskInput | UpdateTaskInput): void {
+    // Sanitize name
+    if ('name' in input && input.name) {
+        // Remove any HTML/script tags
+        input.name = input.name
+            .replace(/<[^>]*>/g, '')
+            .replace(/[<>]/g, '')
+            .trim();
+        
+        if (input.name.length === 0) {
+            throw createError(ErrorCodes.TASK_VALIDATION, 'Task name cannot be empty');
+        }
+        if (input.name.length > 200) {
+            throw createError(ErrorCodes.TASK_VALIDATION, 'Task name too long (max 200 characters)');
+        }
+        
+        // Prevent path traversal
+        if (input.name.includes('..') || input.name.includes('/') || input.name.includes('\\')) {
+            throw createError(ErrorCodes.TASK_VALIDATION, 'Task name contains invalid characters');
+        }
+    }
+
+    // Sanitize description
+    if (input.description) {
+        input.description = input.description.trim();
+        if (input.description.length > 2000) {
+            throw createError(ErrorCodes.TASK_VALIDATION, 'Description too long (max 2000 characters)');
+        }
+    }
+
+    // Validate notes if present
+    if (input.notes) {
+        validateTaskNotes(input.notes);
+    }
+
+    // Validate reasoning if present
+    if (input.reasoning) {
+        validateTaskReasoning(input.reasoning);
+    }
+
+    // Validate metadata if present
+    if (input.metadata) {
+        validateTaskMetadata(input.metadata);
+    }
+
+    // Validate dependencies
+    if (input.dependencies) {
+        if (!Array.isArray(input.dependencies)) {
+            throw createError(ErrorCodes.TASK_VALIDATION, 'Dependencies must be an array');
+        }
+        if (new Set(input.dependencies).size !== input.dependencies.length) {
+            throw createError(ErrorCodes.TASK_VALIDATION, 'Duplicate dependencies are not allowed');
+        }
+    }
+
+    // Validate subtasks if present
+    if ('subtasks' in input && input.subtasks) {
+        if (!Array.isArray(input.subtasks)) {
+            throw createError(ErrorCodes.TASK_VALIDATION, 'Subtasks must be an array');
+        }
+        input.subtasks.forEach(subtask => sanitizeTaskInput(subtask));
+    }
+}
 
 /**
  * Task note validation schema
  */
 export const taskNoteSchema = z.object({
-    type: z.enum([NoteTypes.TEXT, NoteTypes.CODE, NoteTypes.JSON, NoteTypes.MARKDOWN], {
+    type: z.nativeEnum(NoteType, {
         required_error: "Note type is required",
         invalid_type_error: "Invalid note type. Must be one of: text, code, json, markdown"
     }),
@@ -18,22 +164,26 @@ export const taskNoteSchema = z.object({
     }).min(1, 'Content cannot be empty'),
     language: z.string().optional(),
     metadata: z.record(z.unknown()).optional()
-}).refine(data => {
-    if (data.type === NoteTypes.CODE && !data.language) {
-        return false;
+}).superRefine((data, ctx) => {
+    // More flexible validation with better error messages
+    if (data.type === NoteType.CODE && !data.language) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Code note requires a language field. Supported languages include: javascript, typescript, python, java, etc.`,
+            path: ["language"]
+        });
     }
-    if (data.type === NoteTypes.JSON) {
+    if (data.type === NoteType.JSON && data.content) {
         try {
             JSON.parse(data.content);
-            return true;
-        } catch {
-            return false;
+        } catch (e) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: `Invalid JSON content: ${e instanceof Error ? e.message : 'Parse error'}. Please provide valid JSON.`,
+                path: ["content"]
+            });
         }
     }
-    return true;
-}, {
-    message: "Invalid note format. Code notes require a language, and JSON notes must contain valid JSON",
-    path: ["content"]
 });
 
 /**
@@ -85,7 +235,7 @@ const baseTaskSchema = z.object({
         .optional(),
     notes: z.array(taskNoteSchema).optional(),
     reasoning: taskReasoningSchema.optional(),
-    type: z.enum([TaskTypes.TASK, TaskTypes.MILESTONE, TaskTypes.GROUP], {
+    type: z.nativeEnum(TaskType, {
         invalid_type_error: "Invalid task type. Must be one of: task, milestone, group"
     }).optional()
 });
@@ -93,33 +243,73 @@ const baseTaskSchema = z.object({
 /**
  * Task creation input validation schema
  */
+// Maximum allowed depth for task hierarchies
+const MAX_HIERARCHY_DEPTH = 5;
+
+// Helper to calculate task depth
+const calculateTaskDepth = (task: any): number => {
+    if (!task.subtasks?.length) {
+        return 1;
+    }
+    const maxSubtaskDepth = Math.max(...task.subtasks.map(calculateTaskDepth));
+    return 1 + maxSubtaskDepth;
+};
+
+// Helper to validate task hierarchy
+const validateTaskHierarchy = (task: any): boolean => {
+    const depth = calculateTaskDepth(task);
+    if (depth > MAX_HIERARCHY_DEPTH) {
+        return false;
+    }
+    if (task.subtasks?.length) {
+        return task.subtasks.every(validateTaskHierarchy);
+    }
+    return true;
+};
+
 export const createTaskSchema: z.ZodType<CreateTaskInput> = baseTaskSchema.extend({
     parentId: z.string().uuid({
         message: "Parent ID must be a valid UUID"
-    }).nullable().optional(),
+    }).nullable().optional()
+        .describe('ID of the parent task. Takes precedence over bulk operation parentId'),
     dependencies: z.array(z.string().uuid({
         message: "Dependencies must be valid task UUIDs"
-    })).optional(),
+    })).default([]),
     metadata: z.object({
         context: z.string().optional(),
         tags: z.array(z.string()).optional()
-    }).catchall(z.unknown()).optional(),
+    }).strict().optional()
+        .describe('Optional metadata for the task. If provided, must contain only context and/or tags'),
     subtasks: z.array(z.lazy(() => createTaskSchema)).optional()
-}).strict({
-    message: "Invalid task properties provided. Check the schema for allowed fields."
+}).strict()
+.superRefine((task, ctx) => {
+    // Validate hierarchy depth
+    const depth = calculateTaskDepth(task);
+    if (depth > MAX_HIERARCHY_DEPTH) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Task hierarchy cannot exceed ${MAX_HIERARCHY_DEPTH} levels deep`,
+            path: ['subtasks']
+        });
+    }
+
+    // Validate parent ID is not null when provided
+    if (task.parentId !== undefined && task.parentId !== null) {
+        if (!z.string().uuid().safeParse(task.parentId).success) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: 'Parent ID must be a valid UUID',
+                path: ['parentId']
+            });
+        }
+    }
 });
 
 /**
  * Task update input validation schema
  */
 export const updateTaskSchema = baseTaskSchema.partial().extend({
-    status: z.enum([
-        TaskStatuses.PENDING,
-        TaskStatuses.IN_PROGRESS,
-        TaskStatuses.COMPLETED,
-        TaskStatuses.FAILED,
-        TaskStatuses.BLOCKED
-    ], {
+    status: z.nativeEnum(TaskStatus, {
         invalid_type_error: "Invalid status. Must be one of: pending, in_progress, completed, failed, blocked"
     }).optional(),
     dependencies: z.array(z.string().uuid({
@@ -128,8 +318,17 @@ export const updateTaskSchema = baseTaskSchema.partial().extend({
     metadata: z.object({
         context: z.string().optional(),
         tags: z.array(z.string()).optional()
-    }).catchall(z.unknown()).optional()
-}).strict();
+    }).strict().optional()
+}).strict()
+.superRefine((updates, ctx) => {
+    if (updates.status === TaskStatus.COMPLETED && updates.dependencies?.length) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Cannot complete task with dependencies until all dependencies are completed",
+            path: ["status"]
+        });
+    }
+});
 
 /**
  * Complete task validation schema
@@ -138,13 +337,7 @@ export const taskSchema = baseTaskSchema.extend({
     id: z.string().uuid({
         message: "Task ID must be a valid UUID"
     }),
-    status: z.enum([
-        TaskStatuses.PENDING,
-        TaskStatuses.IN_PROGRESS,
-        TaskStatuses.COMPLETED,
-        TaskStatuses.FAILED,
-        TaskStatuses.BLOCKED
-    ], {
+    status: z.nativeEnum(TaskStatus, {
         invalid_type_error: "Invalid status. Must be one of: pending, in_progress, completed, failed, blocked"
     }),
     dependencies: z.array(z.string().uuid()),
@@ -159,19 +352,71 @@ export const taskSchema = baseTaskSchema.extend({
 }).strict();
 
 /**
- * Bulk operations validation schemas
+ * Bulk operations validation schemas with improved flexibility
  */
 export const bulkCreateTaskSchema = z.object({
-    parentId: z.string().uuid().nullable(),
+    parentId: z.string().uuid({
+        message: "Parent ID must be a valid UUID"
+    }).nullable()
+        .describe('Default parent ID for tasks. Individual task parentIds take precedence'),
     tasks: z.array(createTaskSchema)
-}).strict();
+        .min(1, "Must provide at least one task to create")
+}).strict()
+.superRefine((data, ctx) => {
+    if (data.tasks.length > 50) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Batch size cannot exceed 50 tasks",
+            path: ["tasks"]
+        });
+    }
+
+    // Validate parent IDs in bulk creation
+    const parentIds = new Set<string>();
+    data.tasks.forEach((task, index) => {
+        if (task.parentId) {
+            if (task.parentId === data.parentId) {
+                ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message: 'Task cannot specify the same parentId as the bulk operation',
+                    path: ['tasks', index, 'parentId']
+                });
+            }
+            parentIds.add(task.parentId);
+        }
+    });
+});
 
 export const bulkUpdateTaskSchema = z.object({
     updates: z.array(z.object({
-        taskId: z.string().uuid(),
+        taskId: z.string().uuid({
+            message: "Task ID must be a valid UUID"
+        }),
         updates: updateTaskSchema
-    }))
-}).strict();
+    }).strict())
+    .min(1, "Must provide at least one update")
+}).strict()
+.superRefine((data, ctx) => {
+    if (data.updates.length > 50) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Batch size cannot exceed 50 tasks",
+            path: ["updates"]
+        });
+    }
+
+    const taskIds = new Set();
+    data.updates.forEach((update, index) => {
+        if (taskIds.has(update.taskId)) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "Duplicate task IDs are not allowed",
+                path: ["updates", index, "taskId"]
+            });
+        }
+        taskIds.add(update.taskId);
+    });
+});
 
 /**
  * Task validation functions with explicit return types
