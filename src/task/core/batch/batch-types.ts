@@ -13,6 +13,13 @@ export interface BatchResult {
     errors: Array<{
         item: unknown;
         error: Error;
+        context?: {
+            batchSize: number;
+            currentIndex: number;
+            processedCount: number;
+            failureReason?: string;
+            [key: string]: unknown;
+        };
     }>;
 }
 

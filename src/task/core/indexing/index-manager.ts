@@ -37,6 +37,25 @@ export class TaskIndexManager implements IndexManager {
      */
     indexTask(task: Task): void {
         try {
+            // Validate task data
+            if (!task.id || !task.status || !task.metadata?.sessionId) {
+                throw new Error('Invalid task data: missing required fields');
+            }
+
+            // Log task details before indexing
+            this.logger.debug('Indexing task', {
+                taskId: task.id,
+                status: task.status,
+                parentId: task.parentId,
+                sessionId: task.metadata.sessionId,
+                currentIndexSizes: {
+                    byId: this.indexes.byId.size,
+                    byStatus: this.indexes.byStatus.size,
+                    byParent: this.indexes.byParent.size,
+                    bySession: this.indexes.bySession.size
+                }
+            });
+
             // Index by ID
             this.indexes.byId.set(task.id, task);
 
@@ -58,10 +77,18 @@ export class TaskIndexManager implements IndexManager {
             }
             this.indexes.bySession.get(task.metadata.sessionId)!.add(task.id);
 
-            this.logger.debug('Task indexed', {
+            // Log successful indexing
+            this.logger.debug('Task indexed successfully', {
                 taskId: task.id,
                 status: task.status,
-                parentId: task.parentId
+                parentId: task.parentId,
+                sessionId: task.metadata.sessionId,
+                updatedIndexSizes: {
+                    byId: this.indexes.byId.size,
+                    byStatus: this.indexes.byStatus.size,
+                    byParent: this.indexes.byParent.size,
+                    bySession: this.indexes.bySession.size
+                }
             });
         } catch (error) {
             this.logger.error('Failed to index task', {

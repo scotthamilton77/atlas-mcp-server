@@ -149,10 +149,11 @@ export class TaskTransactionManager implements TransactionManager {
         try {
             this.clearTransactionTimeout(transactionId);
 
-            // Reverse operations for rollback
+            // Get affected tasks before deleting transaction
             const affectedTasks = transaction.operations.map(op => op.task.id);
             
-            this.transactions.delete(transactionId);
+            // Keep transaction until rollback is complete in TaskStore
+            // this.transactions.delete(transactionId);
 
             this.logger.info('Transaction rolled back', {
                 transactionId,
@@ -246,6 +247,14 @@ export class TaskTransactionManager implements TransactionManager {
             clearTimeout(timeout);
             this.activeTimeouts.delete(transactionId);
         }
+    }
+
+    /**
+     * Deletes a transaction after rollback is complete
+     */
+    deleteTransaction(transactionId: string): void {
+        this.transactions.delete(transactionId);
+        this.logger.debug('Transaction deleted after rollback', { transactionId });
     }
 
     /**

@@ -38,22 +38,49 @@ export class TaskBatchProcessor implements BatchProcessor {
             errors: []
         };
 
-        await Promise.all(
-            batch.map(async (item, index) => {
-                try {
-                    await this.processWithRetry(item, operation);
-                    result.processedCount++;
+        // Process items sequentially with proper error handling
+        for (const [index, item] of batch.entries()) {
+            try {
+                await this.processWithRetry(item, operation);
+                result.processedCount++;
 
-                    if (progressCallback?.onOperationComplete) {
-                        progressCallback.onOperationComplete(index + 1, batch.length);
-                    }
-                } catch (error) {
-                    result.failedCount++;
-                    result.errors.push({ item, error: error as Error });
-                    result.success = false;
+                if (progressCallback?.onOperationComplete) {
+                    progressCallback.onOperationComplete(index + 1, batch.length);
                 }
-            })
-        );
+            } catch (error) {
+                result.failedCount++;
+                result.errors.push({
+                    item,
+                    error: error instanceof Error ? error : new Error(String(error)),
+                    context: {
+                        batchSize: batch.length,
+                        currentIndex: index,
+                        processedCount: result.processedCount,
+                        failureReason: error instanceof Error ? error.message : String(error)
+                    }
+                });
+                result.success = false;
+                
+                // Enhanced error logging
+                this.logger.error('Batch item processing failed', {
+                    error,
+                    itemIndex: index,
+                    batchProgress: `${index + 1}/${batch.length}`,
+                    processedCount: result.processedCount,
+                    failedCount: result.failedCount,
+                    context: {
+                        batchSize: batch.length,
+                        currentIndex: index,
+                        processedCount: result.processedCount
+                    }
+                });
+
+                // Allow progress callback to handle error
+                if (progressCallback?.onOperationComplete) {
+                    progressCallback.onOperationComplete(index + 1, batch.length);
+                }
+            }
+        }
 
         return result;
     }
@@ -142,39 +169,56 @@ export class TaskBatchProcessor implements BatchProcessor {
     }
 
     /**
-     * Processes an item with retry logic
+     * Processes an item with retry logic and enhanced error handling
      */
     private async processWithRetry<T>(
         item: T,
         operation: (item: T) => Promise<void>
     ): Promise<void> {
         let lastError: Error | undefined;
+        let lastAttemptContext: Record<string, unknown> = {};
 
         for (let attempt = 1; attempt <= this.config.retryCount; attempt++) {
             try {
                 await operation(item);
+                if (attempt > 1) {
+                    this.logger.info('Operation succeeded after retry', {
+                        successfulAttempt: attempt,
+                        totalAttempts: this.config.retryCount
+                    });
+                }
                 return;
             } catch (error) {
-                lastError = error as Error;
-                this.logger.warn('Operation failed, retrying', {
+                lastError = error instanceof Error ? error : new Error(String(error));
+                lastAttemptContext = {
                     attempt,
                     maxAttempts: this.config.retryCount,
-                    error: lastError
-                });
+                    error: lastError,
+                    item: typeof item === 'object' ? JSON.stringify(item) : item,
+                    timestamp: new Date().toISOString()
+                };
+
+                this.logger.warn('Operation failed, retrying', lastAttemptContext);
 
                 if (attempt < this.config.retryCount) {
-                    await this.delay(this.config.retryDelay * attempt); // Exponential backoff
+                    const delay = this.config.retryDelay * Math.pow(2, attempt - 1); // Exponential backoff
+                    await this.delay(delay);
                 }
             }
         }
 
+        // Enhanced error creation with detailed context
         throw createError(
             ErrorCodes.OPERATION_FAILED,
             {
-                message: 'Operation failed after retries',
+                message: 'Operation failed after all retry attempts',
                 retryCount: this.config.retryCount,
-                error: lastError
-            }
+                error: lastError,
+                context: lastAttemptContext,
+                item: typeof item === 'object' ? JSON.stringify(item) : item
+            },
+            `Operation failed after ${this.config.retryCount} attempts`,
+            'Check logs for detailed error history and consider increasing retry count or delay'
         );
     }
 

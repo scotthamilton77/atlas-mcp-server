@@ -1,15 +1,25 @@
 import { Task } from '../../../types/task.js';
 
+export interface CacheConfig {
+    maxSize: number;        // Maximum number of entries in cache
+    baseTTL: number;        // Base time-to-live in milliseconds
+    maxTTL: number;         // Maximum time-to-live in milliseconds
+    cleanupInterval: number; // Cleanup interval in milliseconds
+    persistPath: string | null; // Optional path for cache persistence
+}
+
 export interface CacheEntry {
     task: Task;
     timestamp: number;
+    lastAccessed: number;
     accessCount: number;
 }
 
-export interface CacheConfig {
-    baseTTL: number;
-    maxTTL: number;
-    cleanupInterval: number;
+export interface CacheStats {
+    size: number;
+    hitRate: number;
+    averageAccessCount: number;
+    memoryUsage: number;
 }
 
 export interface CacheManager {
@@ -18,4 +28,6 @@ export interface CacheManager {
     delete(taskId: string): void;
     clear(): void;
     cleanup(): void;
+    destroy(): void;
+    getStats(): CacheStats;
 }
