@@ -1,4 +1,4 @@
-import { StorageError } from './index.js';
+import { UnifiedStorageError } from './unified-storage.js';
 import { UnifiedStorageConfig, UnifiedStorageManager } from './unified-storage.js';
 import { UnifiedSqliteStorage } from './unified-sqlite-storage.js';
 import { promises as fs } from 'fs';
@@ -7,8 +7,8 @@ import path from 'path';
 /**
  * Creates a storage manager instance based on configuration
  * @param config Storage configuration options
- * @returns Promise resolving to a StorageManager instance
- * @throws StorageError if initialization fails
+ * @returns Promise resolving to a UnifiedStorageManager instance
+ * @throws UnifiedStorageError if initialization fails
  */
 export async function createStorageManager(config: UnifiedStorageConfig): Promise<UnifiedStorageManager> {
     try {
@@ -27,7 +27,7 @@ export async function createStorageManager(config: UnifiedStorageConfig): Promis
 
         return manager;
     } catch (error) {
-        throw new StorageError(
+        throw new UnifiedStorageError(
             'Failed to create storage manager',
             'STORAGE_INIT_ERROR',
             error instanceof Error ? error : new Error(String(error))
@@ -37,8 +37,8 @@ export async function createStorageManager(config: UnifiedStorageConfig): Promis
 
 /**
  * Creates a storage manager with default configuration from environment variables
- * @returns Promise resolving to a StorageManager instance
- * @throws StorageError if initialization fails
+ * @returns Promise resolving to a UnifiedStorageManager instance
+ * @throws UnifiedStorageError if initialization fails
  */
 export async function createDefaultStorageManager(): Promise<UnifiedStorageManager> {
     const baseDir = process.env.ATLAS_STORAGE_DIR || path.join(process.cwd(), 'data');
