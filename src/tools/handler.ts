@@ -57,7 +57,7 @@ export class ToolHandler {
         const defaultTools = [
             {
                 name: 'create_task',
-                description: `Creates a new task
+                description: `IMPORTANT: Requires both an active session and task list (use create_session and create_task_list first). Creates a new task
 
 Parameters:
 - parentId: ID of the parent task, or null for root tasks. Use this for creating hierarchical task structures. Best practice: Keep hierarchies shallow (max 3-4 levels) for better maintainability.
@@ -80,7 +80,7 @@ Parameters:
             },
             {
                 name: 'bulk_create_tasks',
-                description: `Creates multiple tasks at once
+                description: `IMPORTANT: Requires both an active session and task list (use create_session and create_task_list first). Creates multiple tasks at once
 
 Parameters:
 - parentId: ID of the parent task. Best practice: Use for creating related tasks under a common parent.
@@ -94,7 +94,7 @@ Parameters:
             },
             {
                 name: 'update_task',
-                description: `Updates an existing task
+                description: `IMPORTANT: Requires an active session. Updates an existing task
 
 Parameters:
 - taskId*: ID of the task to update. Best practice: Verify task exists before updating.
@@ -114,7 +114,7 @@ Parameters:
             },
             {
                 name: 'bulk_update_tasks',
-                description: `Updates multiple tasks at once
+                description: `IMPORTANT: Requires an active session. Updates multiple tasks at once
 
 Parameters:
 - updates*: Array of updates. Best practice: Group related updates together and consider dependency order.`,
@@ -127,7 +127,7 @@ Parameters:
             },
             {
                 name: 'get_tasks_by_status',
-                description: `Retrieves tasks filtered by status
+                description: `IMPORTANT: Requires an active session. Retrieves tasks filtered by status
 
 Parameters:
 - status*: Status filter. Best practice: Use for progress tracking and identifying bottlenecks.`,
@@ -145,7 +145,7 @@ Parameters:
             },
             {
                 name: 'delete_task',
-                description: `Deletes a task
+                description: `IMPORTANT: Requires an active session. Deletes a task
 
 Parameters:
 - taskId*: Task ID to delete. Best practice: Check for dependent tasks before deletion.`,
@@ -163,7 +163,7 @@ Parameters:
             },
             {
                 name: 'get_subtasks',
-                description: `Retrieves subtasks of a task
+                description: `IMPORTANT: Requires an active session. Retrieves subtasks of a task
 
 Parameters:
 - taskId*: Parent task ID. Best practice: Use for progress tracking and dependency management.`,
@@ -181,7 +181,7 @@ Parameters:
             },
             {
                 name: 'get_task_tree',
-                description: 'Retrieves the complete task hierarchy. Best practice: Use frequently to maintain awareness of all tasks, their relationships, and current progress. Regular checks help keep the full task context fresh in memory and ensure proper task management.',
+                description: 'IMPORTANT: Requires an active session. Retrieves the complete task hierarchy. Best practice: Use frequently to maintain awareness of all tasks, their relationships, and current progress. Regular checks help keep the full task context fresh in memory and ensure proper task management.',
                 inputSchema: getTaskTreeSchema,
                 handler: async () => {
                     const result = await this.taskManager.getTaskTree();

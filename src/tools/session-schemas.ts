@@ -3,7 +3,7 @@
  * Defines schemas for managing work sessions and task organization
  */
 
-/** Creates a new task list in the current session */
+/** Creates a new task list in the current session. IMPORTANT: Requires an active session - use create_session first if you haven't already. Task lists organize related tasks and provide structure for task management. */
 export const createTaskListSchema = {
     type: 'object',
     properties: {
@@ -75,7 +75,7 @@ export const archiveTaskListSchema = {
     required: ['taskListId'],
 };
 
-/** Creates a new session */
+/** Creates a new session. IMPORTANT: This must be called first before any task operations can be performed. A session provides the required context for managing tasks and task lists. */
 export const createSessionSchema = {
     type: 'object',
     properties: {

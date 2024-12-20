@@ -4,7 +4,7 @@
  */
 import { TaskStatus } from '../types.js';
 
-/** Creates a new task */
+/** Creates a new task. IMPORTANT: Requires an active session and task list - use create_session and create_task_list first if you haven't already. Tasks represent individual work items within a task list. */
 export const createTaskSchema = {
     type: 'object',
     properties: {
@@ -128,7 +128,7 @@ export const createTaskSchema = {
     required: ['name'],
 };
 
-/** Creates multiple tasks at once */
+/** Creates multiple tasks at once. IMPORTANT: Requires an active session and task list - use create_session and create_task_list first if you haven't already. Use this for efficiently creating related tasks in bulk. */
 export const bulkCreateTasksSchema = {
     type: 'object',
     properties: {
@@ -145,7 +145,7 @@ export const bulkCreateTasksSchema = {
     required: ['tasks'],
 };
 
-/** Updates an existing task */
+/** Updates an existing task. IMPORTANT: Requires an active session - ensure you have created or switched to the appropriate session. */
 export const updateTaskSchema = {
     type: 'object',
     properties: {
@@ -247,7 +247,7 @@ export const updateTaskSchema = {
     required: ['taskId', 'updates'],
 };
 
-/** Updates multiple tasks at once */
+/** Updates multiple tasks at once. IMPORTANT: Requires an active session - ensure you have created or switched to the appropriate session. Use this for efficiently updating related tasks in bulk. */
 export const bulkUpdateTasksSchema = {
     type: 'object',
     properties: {
@@ -260,7 +260,7 @@ export const bulkUpdateTasksSchema = {
     required: ['updates']
 };
 
-/** Retrieves tasks filtered by status */
+/** Retrieves tasks filtered by status. IMPORTANT: Requires an active session - ensure you have created or switched to the appropriate session before querying tasks. */
 export const getTasksByStatusSchema = {
     type: 'object',
     properties: {
@@ -273,7 +273,7 @@ export const getTasksByStatusSchema = {
     required: ['status'],
 };
 
-/** Deletes a task */
+/** Deletes a task. IMPORTANT: Requires an active session - ensure you have created or switched to the appropriate session before deleting tasks. */
 export const deleteTaskSchema = {
     type: 'object',
     properties: {
@@ -285,7 +285,7 @@ export const deleteTaskSchema = {
     required: ['taskId'],
 };
 
-/** Retrieves subtasks of a task */
+/** Retrieves subtasks of a task. IMPORTANT: Requires an active session - ensure you have created or switched to the appropriate session before querying tasks. */
 export const getSubtasksSchema = {
     type: 'object',
     properties: {
@@ -297,7 +297,7 @@ export const getSubtasksSchema = {
     required: ['taskId'],
 };
 
-/** Retrieves the complete task hierarchy */
+/** Retrieves the complete task hierarchy. IMPORTANT: Requires an active session - ensure you have created or switched to the appropriate session before querying the task tree. Best practice: Use frequently to maintain awareness of all tasks, their relationships, and current progress. Regular checks help keep the full task context fresh in memory and ensure proper task management. */
 export const getTaskTreeSchema = {
     type: 'object',
     properties: {},

@@ -149,12 +149,81 @@ export interface CreateTaskList {
 }
 
 /**
- * Tool Schemas
+ * Tool Documentation
  * @namespace Tools
+ * 
+ * IMPORTANT: Session Initialization
+ * Before using any task-related tools, you must:
+ * 1. Create a session using create_session
+ * 2. Create a task list using create_task_list
+ * 3. Then proceed with task operations
+ * 
+ * This initialization sequence is required as tasks must belong to an active session and task list.
+ */
+
+/**
+ * Create Session Tool
+ * 
+ * IMPORTANT: This must be called first before any task operations can be performed.
+ * Creates a new session to provide the required context for managing tasks and task lists.
+ * 
+ * @remarks
+ * This tool is essential for:
+ * - Establishing the task management context
+ * - Organizing work into focused sessions
+ * - Enabling task and task list operations
+ * 
+ * Best Practices:
+ * - Create a new session for each distinct work period or project phase
+ * - Use descriptive names with dates
+ * - Include relevant metadata for tracking
+ * 
+ * @example
+ * ```typescript
+ * const response = await handleToolCall("create_session", {
+ *   name: "Feature Development - March 2024",
+ *   metadata: {
+ *     tags: ["project:auth", "phase:development"],
+ *     context: "Authentication System Implementation"
+ *   }
+ * });
+ * ```
+ */
+
+/**
+ * Create Task List Tool
+ * 
+ * IMPORTANT: Requires an active session (use create_session first).
+ * Creates a new task list to organize related tasks within the current session.
+ * 
+ * @remarks
+ * This tool is used for:
+ * - Organizing related tasks into logical groups
+ * - Structuring work within a session
+ * - Managing task collections
+ * 
+ * Best Practices:
+ * - Create task lists for related work items
+ * - Use clear, thematic names
+ * - Consider persistence needs
+ * 
+ * @example
+ * ```typescript
+ * const response = await handleToolCall("create_task_list", {
+ *   name: "Authentication Features",
+ *   description: "Core authentication system implementation tasks",
+ *   persistent: true,
+ *   metadata: {
+ *     tags: ["feature:auth", "sprint:current"]
+ *   }
+ * });
+ * ```
  */
 
 /**
  * Create Task Tool
+ * 
+ * IMPORTANT: Requires both an active session and task list (use create_session and create_task_list first).
  * 
  * Creates a new task with optional subtasks and dependencies.
  * 

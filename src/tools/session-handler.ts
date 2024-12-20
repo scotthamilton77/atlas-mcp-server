@@ -30,7 +30,7 @@ export class SessionToolHandler {
         return [
             {
                 name: 'create_session',
-                description: `Creates a new session
+                description: `IMPORTANT: This must be called first before any task operations can be performed. Creates a new session to provide the required context for managing tasks and task lists.
 
 Parameters:
 - name*: Name of the session. Best practice: Use descriptive names that include purpose and date (e.g., "Feature Development - March 2024").
@@ -39,7 +39,7 @@ Parameters:
             },
             {
                 name: 'create_task_list',
-                description: `Creates a new task list in the current session
+                description: `IMPORTANT: Requires an active session (use create_session first). Creates a new task list in the current session.
 
 Parameters:
 - name*: Name of the task list. Best practice: Use descriptive names that reflect the purpose or theme (e.g., "Q1 Feature Development", "Security Improvements").
@@ -50,7 +50,7 @@ Parameters:
             },
             {
                 name: 'switch_session',
-                description: `Switches to a different session
+                description: `Switches to a different session. Best practice: Create a new session first if none exists.
 
 Parameters:
 - sessionId*: ID of the session to switch to. Best practice: Save any pending changes in current session before switching.`,
@@ -58,7 +58,7 @@ Parameters:
             },
             {
                 name: 'switch_task_list',
-                description: `Switches to a different task list in the current session
+                description: `IMPORTANT: Requires an active session. Switches to a different task list in the current session.
 
 Parameters:
 - taskListId*: ID of the task list to switch to. Best practice: Verify task list exists and contains active tasks before switching.`,
@@ -66,7 +66,7 @@ Parameters:
             },
             {
                 name: 'list_sessions',
-                description: `Lists all available sessions
+                description: `Lists all available sessions. Use this to find existing sessions or verify if you need to create a new one.
 
 Parameters:
 - includeArchived: Whether to include archived sessions. Best practice: Use for auditing or reviewing historical work patterns.`,
@@ -74,7 +74,7 @@ Parameters:
             },
             {
                 name: 'list_task_lists',
-                description: `Lists all task lists in the current session
+                description: `IMPORTANT: Requires an active session. Lists all task lists in the current session.
 
 Parameters:
 - includeArchived: Whether to include archived task lists. Best practice: Use true when reviewing historical data or reactivating old projects.`,
@@ -82,7 +82,7 @@ Parameters:
             },
             {
                 name: 'archive_session',
-                description: `Archives a session
+                description: `Archives a session. Best practice: Create or switch to a new session first if you need to continue working.
 
 Parameters:
 - sessionId*: ID of the session to archive. Best practice: Document session outcomes and ensure all task lists are properly resolved before archiving.`,
@@ -90,7 +90,7 @@ Parameters:
             },
             {
                 name: 'archive_task_list',
-                description: `Archives a task list
+                description: `IMPORTANT: Requires an active session. Archives a task list in the current session.
 
 Parameters:
 - taskListId*: ID of the task list to archive. Best practice: Ensure all tasks are completed or properly transferred before archiving.`,
