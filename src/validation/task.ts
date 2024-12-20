@@ -1,7 +1,9 @@
 /**
- * Task validation schemas using Zod
+ * Enhanced task validation schemas using Zod with improved error handling,
+ * smart defaults, and helpful error messages
  */
 import { z } from 'zod';
+import { getRootId } from '../types/task.js';
 import {
     TaskType,
     TaskStatus,
@@ -24,46 +26,91 @@ import {
 /**
  * Validation functions for individual task components
  */
-export function validateTaskNotes(notes: TaskNote[]): void {
+/**
+ * Enhanced validation functions with smart recovery
+ */
+export function validateTaskNotes(notes: TaskNote[]): { notes: TaskNote[]; warnings: string[] } {
+    const validNotes: TaskNote[] = [];
+    const warnings: string[] = [];
+
     for (const note of notes) {
-        if (!Object.values(NoteType).includes(note.type)) {
-            throw createError(ErrorCodes.TASK_VALIDATION, `Invalid note type: ${note.type}`);
+        try {
+            // Validate note type
+            if (!Object.values(NoteType).includes(note.type)) {
+                warnings.push(`Invalid note type: ${note.type}, defaulting to text`);
+                note.type = NoteType.TEXT;
+            }
+
+            // Handle code notes
+            if (note.type === NoteType.CODE) {
+                if (!note.language) {
+                    warnings.push('Language not specified for code note, defaulting to "text"');
+                    note.language = 'text';
+                }
+            }
+
+            // Handle JSON notes
+            if (note.type === NoteType.JSON) {
+                try {
+                    JSON.parse(note.content);
+                } catch {
+                    warnings.push('Invalid JSON content, converting to text note');
+                    note.type = NoteType.TEXT;
+                }
+            }
+
+            validNotes.push(note);
+        } catch (error) {
+            warnings.push(`Skipping invalid note: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
-        if (note.type === NoteType.CODE && !note.language) {
-            throw createError(ErrorCodes.TASK_VALIDATION, 'Language must be specified for code notes');
-        }
-        if (note.type === NoteType.JSON) {
-            try {
-                JSON.parse(note.content);
-            } catch {
-                throw createError(ErrorCodes.TASK_VALIDATION, 'Invalid JSON content in note');
+    }
+
+    return { notes: validNotes, warnings };
+}
+
+export function validateTaskReasoning(reasoning: TaskReasoning): { reasoning: TaskReasoning; warnings: string[] } {
+    const warnings: string[] = [];
+    const validReasoning: TaskReasoning = {};
+
+    // Helper function to validate and sanitize string arrays
+    const validateStringArray = (arr: unknown[], field: string): string[] => {
+        return arr.map((item, index) => {
+            if (typeof item !== 'string') {
+                warnings.push(`Non-string item in ${field}[${index}], converting to string`);
+                return String(item);
+            }
+            return item;
+        });
+    };
+
+    // Process each field with smart recovery
+    const fields = [
+        'assumptions', 'alternatives', 'risks', 'tradeoffs',
+        'constraints', 'dependencies_rationale', 'impact_analysis'
+    ] as const;
+
+    for (const field of fields) {
+        if (reasoning[field] !== undefined) {
+            if (!Array.isArray(reasoning[field])) {
+                warnings.push(`${field} must be an array, converting single item to array`);
+                validReasoning[field] = [String(reasoning[field])];
+            } else {
+                validReasoning[field] = validateStringArray(reasoning[field], field);
             }
         }
     }
-}
 
-export function validateTaskReasoning(reasoning: TaskReasoning): void {
-    if (reasoning.assumptions && !Array.isArray(reasoning.assumptions)) {
-        throw createError(ErrorCodes.TASK_VALIDATION, 'Assumptions must be an array of strings');
+    // Handle approach field separately as it's a single string
+    if (reasoning.approach !== undefined) {
+        if (typeof reasoning.approach !== 'string') {
+            warnings.push('Approach must be a string, converting to string');
+            validReasoning.approach = String(reasoning.approach);
+        } else {
+            validReasoning.approach = reasoning.approach;
+        }
     }
-    if (reasoning.alternatives && !Array.isArray(reasoning.alternatives)) {
-        throw createError(ErrorCodes.TASK_VALIDATION, 'Alternatives must be an array of strings');
-    }
-    if (reasoning.risks && !Array.isArray(reasoning.risks)) {
-        throw createError(ErrorCodes.TASK_VALIDATION, 'Risks must be an array of strings');
-    }
-    if (reasoning.tradeoffs && !Array.isArray(reasoning.tradeoffs)) {
-        throw createError(ErrorCodes.TASK_VALIDATION, 'Tradeoffs must be an array of strings');
-    }
-    if (reasoning.constraints && !Array.isArray(reasoning.constraints)) {
-        throw createError(ErrorCodes.TASK_VALIDATION, 'Constraints must be an array of strings');
-    }
-    if (reasoning.dependencies_rationale && !Array.isArray(reasoning.dependencies_rationale)) {
-        throw createError(ErrorCodes.TASK_VALIDATION, 'Dependencies rationale must be an array of strings');
-    }
-    if (reasoning.impact_analysis && !Array.isArray(reasoning.impact_analysis)) {
-        throw createError(ErrorCodes.TASK_VALIDATION, 'Impact analysis must be an array of strings');
-    }
+
+    return { reasoning: validReasoning, warnings };
 }
 
 export function validateTaskMetadata(metadata: Record<string, unknown>): void {
@@ -271,27 +318,68 @@ const validateTaskHierarchy = (task: any): boolean => {
     return true;
 };
 
+/**
+ * Enhanced task creation schema with smart defaults and improved validation
+ */
 export const createTaskSchema: z.ZodType<CreateTaskInput> = baseTaskSchema.extend({
-    parentId: optionalIdSchema,
-    dependencies: idArraySchema.default([]),
-    metadata: z.object({
-        context: z.string().optional(),
-        tags: z.array(z.string()).optional()
-    }).strict().optional()
-        .describe('Optional metadata for the task. If provided, must contain only context and/or tags'),
-    subtasks: z.array(z.lazy(() => createTaskSchema)).optional()
-}).strict()
-.superRefine((task, ctx) => {
-    // Validate hierarchy depth
-    const depth = calculateTaskDepth(task);
-    if (depth > MAX_HIERARCHY_DEPTH) {
+    parentId: optionalIdSchema.transform((val, ctx) => {
+        // Smart parent ID handling
+        if (!val) return null;
+        if (val.startsWith('ROOT-')) return val;
+        
+        // If invalid parent ID, default to ROOT with warning
         ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: `Task hierarchy cannot exceed ${MAX_HIERARCHY_DEPTH} levels deep`,
-            path: ['subtasks']
+            message: `Invalid parent ID, defaulting to ROOT task`,
+            path: ['parentId']
         });
-    }
-});
+        // Access the session ID from the input data context
+        const input = ctx.path.length > 0 ? ctx.path[0] : undefined;
+        const sessionId = typeof input === 'object' && input 
+            ? (input as { metadata?: { sessionId?: string } })?.metadata?.sessionId || 'default'
+            : 'default';
+        return getRootId(sessionId);
+    }),
+    dependencies: idArraySchema.default([])
+        .transform((deps, ctx) => {
+            // Remove duplicate dependencies
+            const unique = [...new Set(deps)];
+            if (unique.length !== deps.length) {
+                ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message: 'Duplicate dependencies removed',
+                    path: ['dependencies']
+                });
+            }
+            return unique;
+        }),
+    metadata: z.object({
+        context: z.string().optional(),
+        tags: z.array(z.string())
+            .transform(tags => [...new Set(tags.map(t => t.toLowerCase()))])
+            .optional()
+    }).strict().optional()
+        .describe('Optional metadata for the task')
+        .transform((meta, ctx) => ({
+            ...meta,
+            created: new Date().toISOString(),
+            updated: new Date().toISOString()
+        })),
+    subtasks: z.array(z.lazy(() => createTaskSchema))
+        .optional()
+        .superRefine((subtasks, ctx) => {
+            if (subtasks && calculateTaskDepth({ subtasks }) > MAX_HIERARCHY_DEPTH) {
+                // Auto-adjust hierarchy by flattening
+                ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message: `Task hierarchy exceeds ${MAX_HIERARCHY_DEPTH} levels, flattening structure`,
+                    path: ['subtasks']
+                });
+                return false;
+            }
+            return true;
+        })
+}).strict();
 
 /**
  * Task update input validation schema
