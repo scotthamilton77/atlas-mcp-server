@@ -301,5 +301,5 @@ export const getSubtasksSchema = {
 export const getTaskTreeSchema = {
     type: 'object',
     properties: {},
-    description: 'Retrieves complete task hierarchy. Best practice: Use for visualization and dependency analysis.',
+    description: 'Retrieves complete task hierarchy. Best practice: Use frequently to maintain awareness of all tasks, their relationships, and current progress. Regular checks help keep the full task context fresh in memory and ensure proper task management.',
 };

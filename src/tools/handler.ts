@@ -181,7 +181,7 @@ Parameters:
             },
             {
                 name: 'get_task_tree',
-                description: 'Retrieves the complete task hierarchy. Best practice: Use for visualization and dependency analysis.',
+                description: 'Retrieves the complete task hierarchy. Best practice: Use frequently to maintain awareness of all tasks, their relationships, and current progress. Regular checks help keep the full task context fresh in memory and ensure proper task management.',
                 inputSchema: getTaskTreeSchema,
                 handler: async () => {
                     const result = await this.taskManager.getTaskTree();
