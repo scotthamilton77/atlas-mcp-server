@@ -43,6 +43,9 @@ export class UnifiedSqliteStorage extends BaseUnifiedStorage {
         if (this.initialized) return;
 
         try {
+            // Ensure storage directory exists
+            await this.getDirectory();
+
             // Get database connection from connection manager
             this.db = await ConnectionManager.getInstance().getConnection(
                 this.dbPath,
@@ -641,7 +644,14 @@ export class UnifiedSqliteStorage extends BaseUnifiedStorage {
 
     async getDirectory(): Promise<string> {
         const dirPath = path.dirname(this.dbPath);
-        return fs.mkdir(dirPath, { recursive: true }).then(() => dirPath);
+        const backupsPath = path.join(dirPath, 'backups');
+        
+        await Promise.all([
+            fs.mkdir(dirPath, { recursive: true }),
+            fs.mkdir(backupsPath, { recursive: true })
+        ]);
+        
+        return dirPath;
     }
 
     async persist(): Promise<boolean> {
