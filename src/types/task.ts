@@ -180,6 +180,7 @@ export interface TaskResponse<T> {
     requestId: string;
     sessionId: string;
     affectedTasks?: string[];
+    transactionId?: string;
   };
 }
 

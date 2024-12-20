@@ -268,9 +268,16 @@ const validateTaskHierarchy = (task: any): boolean => {
 };
 
 export const createTaskSchema: z.ZodType<CreateTaskInput> = baseTaskSchema.extend({
-    parentId: z.string().uuid({
-        message: "Parent ID must be a valid UUID"
-    }).nullable().optional()
+    parentId: z.string()
+        .refine(val => {
+            if (!val) return true;
+            if (val.startsWith('ROOT-')) return true;
+            return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
+        }, {
+            message: "Parent ID must be a valid UUID or start with 'ROOT-'"
+        })
+        .nullable()
+        .optional()
         .describe('ID of the parent task. Takes precedence over bulk operation parentId'),
     dependencies: z.array(z.string().uuid({
         message: "Dependencies must be valid task UUIDs"
@@ -293,16 +300,7 @@ export const createTaskSchema: z.ZodType<CreateTaskInput> = baseTaskSchema.exten
         });
     }
 
-    // Validate parent ID is not null when provided
-    if (task.parentId !== undefined && task.parentId !== null) {
-        if (!z.string().uuid().safeParse(task.parentId).success) {
-            ctx.addIssue({
-                code: z.ZodIssueCode.custom,
-                message: 'Parent ID must be a valid UUID',
-                path: ['parentId']
-            });
-        }
-    }
+    // Parent ID validation is handled by the refine above
 });
 
 /**
@@ -343,7 +341,13 @@ export const taskSchema = baseTaskSchema.extend({
     dependencies: z.array(z.string().uuid()),
     subtasks: z.array(z.string().uuid()),
     metadata: taskMetadataSchema,
-    parentId: z.string(),
+    parentId: z.string()
+        .refine(val => {
+            if (val.startsWith('ROOT-')) return true;
+            return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
+        }, {
+            message: "Parent ID must be a valid UUID or start with 'ROOT-'"
+        }),
     error: z.object({
         code: z.string(),
         message: z.string(),
@@ -355,9 +359,15 @@ export const taskSchema = baseTaskSchema.extend({
  * Bulk operations validation schemas with improved flexibility
  */
 export const bulkCreateTaskSchema = z.object({
-    parentId: z.string().uuid({
-        message: "Parent ID must be a valid UUID"
-    }).nullable()
+    parentId: z.string()
+        .refine(val => {
+            if (!val) return true;
+            if (val.startsWith('ROOT-')) return true;
+            return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
+        }, {
+            message: "Parent ID must be a valid UUID or start with 'ROOT-'"
+        })
+        .nullable()
         .describe('Default parent ID for tasks. Individual task parentIds take precedence'),
     tasks: z.array(createTaskSchema)
         .min(1, "Must provide at least one task to create")
