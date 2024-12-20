@@ -75,10 +75,15 @@ export interface UpdateTask {
  * 
  * @remarks
  * This tool supports:
- * - Task hierarchy through parentId
+ * - Task hierarchy through parentId (recommended max depth: 5 levels)
  * - Task dependencies
  * - Rich task notes
  * - Task metadata
+ * 
+ * Best Practices:
+ * - Keep task hierarchies to 5 levels or less for better organization and maintainability
+ * - Use group tasks as containers for related subtasks
+ * - Consider splitting deep hierarchies into separate task groups
  * 
  * @example
  * ```typescript
@@ -101,7 +106,7 @@ export const CREATE_TASK_SCHEMA = {
         properties: {
             parentId: {
                 type: ["string", "null"],
-                description: "ID of parent task"
+                description: "ID of parent task. For better organization, keep hierarchy depth to 5 levels or less"
             },
             name: {
                 type: "string",
