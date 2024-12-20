@@ -4,15 +4,23 @@
 import { Task } from '../types/task.js';
 import { Session, TaskList } from '../types/session.js';
 import { StorageMetrics } from '../types/storage.js';
-import { StorageManager } from './index.js';
 import { SessionStorage } from '../types/session.js';
 
-export interface UnifiedStorageManager extends StorageManager, SessionStorage {
-    // Additional methods for coordinated operations
+export interface UnifiedStorageManager extends SessionStorage {
+    // Task storage methods
+    saveTasks(tasks: Task[]): Promise<void>;
+    loadTasks(): Promise<Task[]>;
+    getTasksByStatus(status: string): Promise<Task[]>;
+    getSubtasks(parentId: string): Promise<Task[]>;
+
+    // Common operations
     initialize(): Promise<void>;
     close(): Promise<void>;
     maintenance(): Promise<void>;
     estimate(): Promise<StorageMetrics>;
+    getDirectory?(): Promise<string>;
+    persist?(): Promise<boolean>;
+    persisted?(): Promise<boolean>;
 }
 
 export interface UnifiedStorageConfig {
