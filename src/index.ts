@@ -75,14 +75,15 @@ export class AtlasMcpServer {
             }
         });
 
-        // Initialize components with non-colorized logging
+        // Initialize components with logging to file only for MCP server
         const config = ConfigManager.getInstance().getConfig();
         Logger.initialize({
             minLevel: process.env.LOG_LEVEL as LogLevel || LogLevels.INFO,
-            console: true,
-            file: false,
-            // Disable colors for MCP communication
-            noColors: true
+            console: false, // Disable console output for MCP communication
+            file: true,
+            logDir: process.env.TASK_STORAGE_DIR,
+            maxFiles: 5,
+            maxFileSize: 10 * 1024 * 1024 // 10MB
         });
         this.logger = Logger.getInstance().child({ component: 'AtlasMcpServer' });
         
@@ -422,7 +423,9 @@ if (import.meta.url === new URL(import.meta.url).href) {
             process.exit(0);
         });
     } catch (error) {
-        console.error('Failed to start server:', error);
+        // Log to file instead of console to avoid interfering with MCP communication
+        const logger = Logger.getInstance();
+        logger.error('Failed to start server', error);
         process.exit(1);
     }
 }
