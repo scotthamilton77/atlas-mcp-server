@@ -7,6 +7,8 @@ import { z } from 'zod';
 import { ConfigError, ErrorCodes } from '../errors/index.js';
 import { LogLevels } from '../logging/index.js';
 import { UnifiedStorageConfig } from '../storage/unified-storage.js';
+import { sessionIdSchema } from '../validation/id-schema.js';
+import { generateShortId } from '../utils/id-generator.js';
 import path from 'path';
 
 /**
@@ -65,7 +67,7 @@ export const configSchema = z.object({
     }),
     storage: z.object({
         baseDir: z.string(),
-        sessionId: z.string().uuid(),
+        sessionId: sessionIdSchema,
         maxSessions: z.number().positive().optional(),
         maxTaskLists: z.number().positive().optional(),
         maxBackups: z.number().positive().optional(),
@@ -237,7 +239,7 @@ export class ConfigManager {
         const config: Partial<Config> = {
             storage: {
                 baseDir: storageDir,
-                sessionId: sessionId || crypto.randomUUID(),
+                sessionId: sessionId || generateShortId(),
                 maxSessions: 100,
                 maxTaskLists: 100,
                 maxRetries: 3,

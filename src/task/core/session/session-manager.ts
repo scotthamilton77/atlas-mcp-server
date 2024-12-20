@@ -3,8 +3,8 @@
  * Handles session and task list management with persistence
  */
 
-import { randomUUID } from 'crypto';
-import { 
+import { generateShortId } from '../../../utils/id-generator.js';
+import {
     Session, 
     SessionManager, 
     SessionStorage, 
@@ -57,7 +57,7 @@ export class DefaultSessionManager implements SessionManager {
         try {
             const now = Date.now();
             const session: Session = {
-                id: randomUUID(),
+                id: generateShortId(),
                 name: input.name,
                 metadata: {
                     created: now,
@@ -192,7 +192,7 @@ export class DefaultSessionManager implements SessionManager {
         try {
             const now = Date.now();
             const taskList: TaskList = {
-                id: randomUUID(),
+                id: generateShortId(),
                 name: input.name,
                 description: input.description,
                 metadata: {

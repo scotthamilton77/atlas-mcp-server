@@ -8,6 +8,7 @@ import { StorageMetrics } from '../types/storage.js';
 import { Logger } from '../logging/index.js';
 import { ConnectionManager } from './connection-manager.js';
 import { BaseUnifiedStorage, UnifiedStorageConfig, UnifiedStorageError } from './unified-storage.js';
+import { generateShortId } from '../utils/id-generator.js';
 import path from 'path';
 import { promises as fs, statSync } from 'fs';
 import { createHash } from 'crypto';
@@ -126,7 +127,7 @@ export class UnifiedSqliteStorage extends BaseUnifiedStorage {
                                 id, task_id, type, content, language, metadata, created_at
                             ) VALUES (?, ?, ?, ?, ?, ?, ?)
                         `, [
-                            crypto.randomUUID(),
+                            generateShortId(),
                             task.id,
                             note.type,
                             note.content,

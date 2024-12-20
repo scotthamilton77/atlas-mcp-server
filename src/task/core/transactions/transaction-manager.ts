@@ -8,6 +8,7 @@ import {
     TransactionResult 
 } from './transaction-types.js';
 import { ErrorCodes, createError } from '../../../errors/index.js';
+import { generateShortId } from '../../../utils/id-generator.js';
 
 const DEFAULT_CONFIG: TransactionConfig = {
     timeout: 30000, // 30 seconds
@@ -32,7 +33,7 @@ export class TaskTransactionManager implements TransactionManager {
      * Starts a new transaction
      */
     startTransaction(): string {
-        const transactionId = crypto.randomUUID();
+        const transactionId = generateShortId();
         const transaction: Transaction = {
             id: transactionId,
             operations: [],

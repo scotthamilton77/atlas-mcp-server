@@ -2,6 +2,8 @@
  * Request tracer for tracking request lifecycle and debugging
  */
 
+import { generateShortId } from '../utils/id-generator.js';
+
 interface TraceEvent {
     id: string;
     type: 'start' | 'end' | 'error';
@@ -35,14 +37,14 @@ export class RequestTracer {
      * Starts tracing a new request
      */
     startRequest(metadata: Record<string, unknown> = {}): string {
-        const id = crypto.randomUUID();
+        const id = generateShortId();
         const startTime = Date.now();
 
         const trace: RequestTrace = {
             id,
             startTime,
             events: [{
-                id: crypto.randomUUID(),
+                id: generateShortId(),
                 type: 'start',
                 timestamp: startTime,
                 metadata
@@ -67,7 +69,7 @@ export class RequestTracer {
         trace.metadata = { ...trace.metadata, ...metadata };
 
         trace.events.push({
-            id: crypto.randomUUID(),
+            id: generateShortId(),
             type: 'end',
             timestamp: endTime,
             duration: trace.duration,
@@ -86,7 +88,7 @@ export class RequestTracer {
         trace.metadata = { ...trace.metadata, ...metadata };
 
         trace.events.push({
-            id: crypto.randomUUID(),
+            id: generateShortId(),
             type: 'error',
             timestamp: Date.now(),
             error,

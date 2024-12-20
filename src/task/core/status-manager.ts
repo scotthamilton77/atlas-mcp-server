@@ -13,6 +13,7 @@ import { Task, TaskStatus } from '../../types/task.js';
 import { TaskError, ErrorCodes } from '../../errors/index.js';
 import { DependencyValidator } from './dependency-validator.js';
 import { Logger } from '../../logging/index.js';
+import { generateShortId } from '../../utils/id-generator.js';
 
 interface StatusUpdate {
     taskId: string;
@@ -117,7 +118,7 @@ export class StatusManager {
         getTaskById: (id: string) => Task | null,
         updateTask: (taskId: string, updates: { status: TaskStatus }) => Promise<void>
     ): Promise<void> {
-        const transactionId = crypto.randomUUID();
+        const transactionId = generateShortId();
         this.transactions.set(transactionId, {
             id: transactionId,
             updates: [],
