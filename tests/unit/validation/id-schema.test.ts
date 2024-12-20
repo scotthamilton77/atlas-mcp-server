@@ -34,10 +34,33 @@ describe('ID Schema Validation', () => {
             expect(result.success).toBe(true);
         });
 
-        it('validates session IDs', () => {
-            const id = generateTestId('ss', 1);
-            const result = sessionIdSchema.safeParse(id);
-            expect(result.success).toBe(true);
+        describe('session IDs', () => {
+            it('validates short IDs', () => {
+                const id = generateTestId('ss', 1);
+                const result = sessionIdSchema.safeParse(id);
+                expect(result.success).toBe(true);
+            });
+
+            it('validates legacy UUIDs', () => {
+                const uuid = '123e4567-e89b-4d3c-8456-426614174000';
+                const result = sessionIdSchema.safeParse(uuid);
+                expect(result.success).toBe(true);
+            });
+
+            it('rejects invalid IDs', () => {
+                const invalidIds = [
+                    '', // empty
+                    'abc', // too short
+                    'toolong123', // too long
+                    'invalid!@#', // invalid chars
+                    '12345-67', // invalid format
+                    '123e4567-e89b-5d3c-8456-426614174000', // invalid UUID version
+                ];
+                invalidIds.forEach(id => {
+                    const result = sessionIdSchema.safeParse(id);
+                    expect(result.success).toBe(false);
+                });
+            });
         });
 
         it('validates task list IDs', () => {
