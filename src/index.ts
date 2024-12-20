@@ -24,7 +24,8 @@ import { UnifiedSqliteStorage } from './storage/unified-sqlite-storage.js';
 import { TaskManager } from './task-manager.js';
 import { ToolHandler } from './tools/handler.js';
 import { SessionSystem } from './session/index.js';
-import { Logger } from './logging/index.js';
+import { Logger, LogLevel, LogLevels } from './logging/index.js';
+import { format } from 'winston';
 import { ConfigManager, defaultConfig } from './config/index.js';
 import { RateLimiter } from './server/rate-limiter.js';
 import { HealthMonitor } from './server/health-monitor.js';
@@ -74,8 +75,15 @@ export class AtlasMcpServer {
             }
         });
 
-        // Initialize components
+        // Initialize components with non-colorized logging
         const config = ConfigManager.getInstance().getConfig();
+        Logger.initialize({
+            minLevel: process.env.LOG_LEVEL as LogLevel || LogLevels.INFO,
+            console: true,
+            file: false,
+            // Disable colors for MCP communication
+            noColors: true
+        });
         this.logger = Logger.getInstance().child({ component: 'AtlasMcpServer' });
         
         // Initialize storage and session system

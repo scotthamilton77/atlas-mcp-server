@@ -47,6 +47,7 @@ export interface LoggerConfig {
     file?: boolean;
     maxFiles?: number;
     maxFileSize?: number;
+    noColors?: boolean;  // Whether to disable colored console output
 }
 
 /**
@@ -144,12 +145,13 @@ export class Logger {
 
         // Console transport
         if (config.console) {
+            const formats = [format.simple()];
+            if (!config.noColors) {
+                formats.unshift(format.colorize());
+            }
             loggerTransports.push(
                 new transports.Console({
-                    format: format.combine(
-                        format.colorize(),
-                        format.simple()
-                    )
+                    format: format.combine(...formats)
                 })
             );
         }
