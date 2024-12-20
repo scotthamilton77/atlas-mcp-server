@@ -20,7 +20,7 @@ import {
     ErrorCode
 } from '@modelcontextprotocol/sdk/types.js';
 import path from 'path';
-import { StorageManager, BaseStorageManager, SqliteStorageManager } from './storage/index.js';
+import { UnifiedSqliteStorage } from './storage/unified-sqlite-storage.js';
 import { TaskManager } from './task-manager.js';
 import { ToolHandler } from './tools/handler.js';
 import { SessionSystem } from './session/index.js';
@@ -37,7 +37,7 @@ import { RequestTracer } from './server/request-tracer.js';
  */
 export class AtlasMcpServer {
     private server: Server;
-    private storage: StorageManager;
+    private storage: UnifiedSqliteStorage;
     private taskManager: TaskManager;
     private toolHandler: ToolHandler;
     private sessionSystem: SessionSystem;
@@ -78,12 +78,11 @@ export class AtlasMcpServer {
         const config = ConfigManager.getInstance().getConfig();
         this.logger = Logger.getInstance().child({ component: 'AtlasMcpServer' });
         
-        // Initialize storage
-        this.storage = new SqliteStorageManager(config.storage);
-
-        // Initialize session system
+        // Initialize storage and session system
+        this.storage = new UnifiedSqliteStorage(config.storage);
         this.sessionSystem = new SessionSystem(config.storage);
-
+        
+        // Initialize task manager without session manager for now
         this.taskManager = new TaskManager(this.storage);
         this.toolHandler = new ToolHandler(this.taskManager);
         
@@ -115,12 +114,14 @@ export class AtlasMcpServer {
      */
     async initialize(): Promise<void> {
         try {
-            // Initialize storage and session system
-            await Promise.all([
-                this.storage.initialize(),
-                this.sessionSystem.initialize()
-            ]);
+            // Initialize storage and session system first
+            await this.storage.initialize();
+            await this.sessionSystem.initialize();
 
+            // Now that session system is initialized, update task manager with session manager
+            this.taskManager = new TaskManager(this.storage, this.sessionSystem.getSessionManager());
+            this.toolHandler = new ToolHandler(this.taskManager);
+            
             // Initialize task manager
             await this.taskManager.initialize();
 

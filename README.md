@@ -36,17 +36,29 @@ This architecture creates a secure boundary between LLMs and external systems wh
 
 ### Core Components
 
-ATLAS is built on several robust core components:
+ATLAS is built on several robust core components organized into specialized subsystems:
 
+#### Task Management
 - **TaskManager**: Central coordinator for all task operations
 - **TaskStore**: Handles persistent storage and retrieval of tasks
 - **DependencyValidator**: Ensures valid task relationships and dependencies
 - **StatusManager**: Manages task state transitions and propagation
-- **StorageManager**: Provides durable data persistence
+- **BatchProcessor**: Handles efficient bulk task operations
+- **CacheManager**: Optimizes task retrieval performance
+- **IndexManager**: Maintains searchable task indices
+- **TransactionManager**: Ensures ACID compliance for task operations
+
+#### System Infrastructure
+- **StorageManager**: Provides durable data persistence with SQLite integration
+- **SessionManager**: Handles session lifecycle and task list management
+- **ConfigManager**: Manages environment-based configuration
+- **ValidationSystem**: Ensures data integrity with Zod schema integration
+
+#### Performance & Monitoring
 - **RateLimiter**: Controls request rates (600 req/min)
-- **HealthMonitor**: Tracks system health
-- **MetricsCollector**: Gathers performance metrics
-- **RequestTracer**: Traces request flow
+- **HealthMonitor**: Tracks system health with comprehensive metrics
+- **MetricsCollector**: Gathers detailed performance statistics
+- **RequestTracer**: Traces request flow with debugging capabilities
 
 Through the MCP protocol, ATLAS empowers LLMs to break down complex projects into manageable tasks, track their progress, and maintain dependencies — all within an organized hierarchical structure.
 
@@ -60,28 +72,51 @@ Through the MCP protocol, ATLAS empowers LLMs to break down complex projects int
 - Session-based task isolation
 
 ### Content Support
-- Markdown documentation
-- Code snippets with syntax highlighting
-- JSON data structures
-- Rich metadata and tagging
-- Task reasoning documentation
-- Decision-making history
+- Markdown documentation with rich formatting
+- Code snippets with multi-language syntax highlighting
+- JSON data structures with schema validation
+- Rich metadata and hierarchical tagging
+- Comprehensive task reasoning documentation
+- Decision-making history with context preservation
+- Cross-reference support between tasks
+- Version tracking for content changes
 
 ### System Features
-- Rate limiting (600 requests/minute)
-- Health monitoring and metrics
-- Request tracing
-- Error handling with detailed context
-- Graceful shutdown handling
-- Session management
-- Audit logging
+- Rate limiting (600 requests/minute) with sliding window
+- Health monitoring with comprehensive metrics
+  * Memory and CPU usage tracking
+  * Error rate calculation
+  * Response time monitoring
+  * Component-level health indicators
+- Request tracing with lifecycle tracking
+  * Request timing analysis
+  * Error context capture
+  * Event recording
+  * Trace management (1000 trace limit, 1-hour TTL)
+- Sophisticated error handling
+  * Categorized error types
+  * Detailed context preservation
+  * Recovery suggestions
+  * Error aggregation
+- Graceful shutdown with resource cleanup
+- Session management with persistence
+- Comprehensive audit logging
+- Automatic maintenance operations
 
 ### Performance
 - Efficient task storage and retrieval
-- Bulk operation support
-- Request timeout handling
-- Concurrent request management
-- Resource cleanup
+  * Caching with invalidation
+  * Index-based searching
+  * Query optimization
+- Bulk operation support with transaction handling
+- Request timeout handling (30-second default)
+- Concurrent request management with isolation
+- Resource cleanup and memory optimization
+- Automatic performance tuning
+- Statistical analysis of metrics
+  * Response time percentiles (p95, p99)
+  * Error rate tracking
+  * Load analysis
 
 ## Installation
 
@@ -140,7 +175,7 @@ ATLAS requires configuration in your MCP client settings:
 
 ## Task Structure
 
-Tasks support rich content, metadata, and reasoning documentation:
+Tasks support rich content, metadata, and reasoning documentation within a hierarchical structure (maximum 5 levels deep). All task operations are transactional with automatic validation using Zod schemas:
 
 ```typescript
 {
@@ -196,7 +231,7 @@ Tasks support rich content, metadata, and reasoning documentation:
 }
 ```
 
-The reasoning field provides structured documentation of decision-making:
+The reasoning field provides structured documentation of decision-making, which is indexed for efficient search and retrieval:
 - **approach**: High-level implementation strategy
 - **assumptions**: Key assumptions made during planning
 - **alternatives**: Other approaches that were considered
@@ -206,10 +241,19 @@ The reasoning field provides structured documentation of decision-making:
 - **dependencies_rationale**: Reasoning for task dependencies
 - **impact_analysis**: Analysis of changes on the system
 
+### Task Storage Features
+
+- **Validation**: Zod schema validation for all fields
+- **Caching**: Automatic caching with invalidation
+- **Indexing**: Full-text search on content and metadata
+- **Transactions**: ACID compliance for all operations
+- **Performance**: Optimized retrieval with batch support
+- **History**: Change tracking and version management
+
 ### Example Task List (Without reasoning)
 
-The following example demonstrates a task breakdown for a personal portfolio website project. The task list was generated from the following prompt:
-> You are a web developer for modern apps. Architect, design, and plan the required tasks for a personal portfolio website for a web dev that has a modern UI/UX.
+The following example demonstrates a task breakdown for a personal portfolio website project, showcasing the hierarchical structure and metadata capabilities. The task list was generated from the following prompt:
+> Create a comprehensive plan for a modern, responsive personal portfolio website that showcases a web developer's projects, skills, and professional experience, incorporating best practices in UI/UX design, performance optimization, and accessibility. The site should feature an elegant, minimalist design with smooth animations, dark/light mode support, and interactive project demonstrations, while ensuring cross-browser compatibility and optimal load times.
 
 <details>
 <summary><b>Portfolio Website Development Task List</b></summary>
@@ -736,35 +780,121 @@ Safely removes a task and its subtasks:
 
 #### get_task
 Retrieves a task by ID with full context:
-- Complete task details
-- Status information
-- Dependency data
-- Metadata and history
+- Complete task details with rich content
+- Status information and history
+- Dependency data and validation
+- Metadata and context inheritance
 - Error context if applicable
+- Cache utilization for performance
 
 #### get_subtasks
 Lists all subtasks of a specified task:
-- Direct child tasks
-- Status information
-- Dependency relationships
-- Metadata and context
-- Hierarchical structure
+- Direct child tasks with hierarchy info
+- Status information and propagation
+- Dependency relationships and validation
+- Metadata and context inheritance
+- Hierarchical structure maintenance
+- Index-based retrieval optimization
 
 #### get_task_tree
 Retrieves the complete task hierarchy:
-- Full task tree structure
-- Status aggregation
-- Dependency mapping
-- Metadata inheritance
-- Performance optimized
+- Full task tree structure (max 5 levels)
+- Status aggregation and propagation
+- Dependency mapping and validation
+- Metadata inheritance and merging
+- Performance optimized with caching
+- Batch retrieval capabilities
+- Index-based search support
 
 #### get_tasks_by_status
 Filters tasks by their current status:
-- Status-based filtering
-- Optional parent filtering
-- Dependency context
-- Metadata inclusion
-- Performance optimized
+- Status-based filtering with validation
+- Optional parent/hierarchy filtering
+- Dependency context and validation
+- Metadata inclusion and inheritance
+- Performance optimized retrieval
+- Cache utilization
+- Index-based search
+
+### Session Management
+
+#### create_session
+Creates a new session with optional metadata:
+```typescript
+{
+  "name": string,           // Session name (required)
+  "metadata": {            // Optional session metadata
+    "tags": string[],      // Session categorization
+    "context": string      // Additional context
+  }
+}
+```
+
+#### create_task_list
+Creates a new task list in the current session:
+```typescript
+{
+  "name": string,           // List name (required)
+  "description": string,    // List description
+  "metadata": {            // Optional metadata
+    "tags": string[],      // List categorization
+    "context": string      // Additional context
+  },
+  "persistent": boolean    // Persist across sessions
+}
+```
+
+#### switch_session
+Switches to a different session:
+- Validates session existence
+- Handles state transition
+- Preserves task context
+- Updates active session
+
+#### switch_task_list
+Switches to a different task list:
+- Validates list existence
+- Handles list transition
+- Maintains session context
+- Updates active list
+
+#### list_sessions
+Lists all available sessions:
+- Optional archived session inclusion
+- Session metadata and stats
+- Creation/update timestamps
+- Task list summaries
+
+#### list_task_lists
+Lists all task lists in current session:
+- Optional archived list inclusion
+- List metadata and context
+- Task count and status
+- Persistence information
+
+### Storage Operations
+
+#### Task Storage
+- SQLite-based persistence
+- Transaction support
+- Automatic migrations
+- Backup management
+- Connection pooling
+- Error recovery
+
+#### Session Storage
+- Session state persistence
+- Task list management
+- Active state tracking
+- Cross-session relationships
+- Cleanup operations
+
+#### Maintenance
+- Automatic cleanup
+- Index optimization
+- Cache management
+- Backup rotation
+- Resource monitoring
 
 ### System Features
 
@@ -859,15 +989,31 @@ npm run type-check
 
 ## Up Next
 
-### Enhanced Task Management
-- Task scheduling with time-based triggers
-- Recurring task support
-- Task templates and presets
-- Advanced filtering and search
-- Custom task types
-- Task archiving
+### Session Management Improvements
+- Session file consolidation
+- Distributed session locking
+- Improved state synchronization
+- Race condition prevention
+- Cross-session data consistency
+- Session cleanup optimization
 
-### System Improvements
+### Storage Layer Enhancements
+- Storage abstraction simplification
+- Tighter migration integration
+- Version control improvements
+- Storage manager coordination
+- Backup strategy optimization
+- Data integrity validation
+
+### Task Core Improvements
+- Task core coordinator implementation
+- Cache coherency protocol
+- Transaction boundary strengthening
+- Subsystem coordination
+- Batch operation optimization
+- Index performance tuning
+
+### System Enhancements
 - Enhanced performance monitoring
 - Advanced caching strategies
 - Improved error recovery
