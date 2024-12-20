@@ -14,11 +14,35 @@ import { customAlphabet } from 'nanoid';
 const ID_LENGTH = 8;
 const ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 
+// Sequence counters for readable IDs
+let sessionCounter = 1;
+let taskCounter = 1;
+
 // Create ID generator with specified alphabet and length
 const generateId = customAlphabet(ALPHABET, ID_LENGTH);
 
 /**
- * Generates a short, unique identifier
+ * Generates a readable session ID
+ * Format: session-XXX where XXX is a sequential number
+ */
+export function generateSessionId(): string {
+    const id = `session-${sessionCounter.toString().padStart(3, '0')}`;
+    sessionCounter++;
+    return id;
+}
+
+/**
+ * Generates a readable task ID
+ * Format: task-XXX where XXX is a sequential number
+ */
+export function generateTaskId(): string {
+    const id = `task-${taskCounter.toString().padStart(3, '0')}`;
+    taskCounter++;
+    return id;
+}
+
+/**
+ * Generates a short, unique identifier (for other entities)
  * Format: 8 characters using [0-9A-Za-z]
  * Example: "xK7cPq2Z"
  */
@@ -27,7 +51,7 @@ export function generateShortId(): string {
 }
 
 /**
- * Validates if a string matches the short ID format
+ * Validates if a string matches any of the valid ID formats
  */
 export function isValidShortId(value: string): boolean {
     if (!value) return false;

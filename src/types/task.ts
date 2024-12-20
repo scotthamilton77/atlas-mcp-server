@@ -66,6 +66,7 @@ export interface TaskMetadata {
   updated: string;
   sessionId: string;
   version?: string;  // Added for storage versioning
+  resolvedSubtasks?: Task[];  // Added for task tree resolution
 }
 
 /**

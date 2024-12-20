@@ -608,7 +608,8 @@ export class TaskStore {
                 metadata: {
                     ...existingTask.metadata,
                     ...updates.metadata,
-                    updated: new Date().toISOString()
+                    updated: new Date().toISOString(),
+                    resolvedSubtasks: undefined // Remove resolved subtasks from metadata
                 }
             };
 

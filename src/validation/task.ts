@@ -14,6 +14,12 @@ import {
     Task
 } from '../types/task.js';
 import { ErrorCodes, createError } from '../errors/index.js';
+import { 
+    taskIdSchema, 
+    sessionIdSchema, 
+    idArraySchema, 
+    optionalIdSchema 
+} from './id-schema.js';
 
 /**
  * Validation functions for individual task components
@@ -210,9 +216,7 @@ export const taskMetadataSchema = z.object({
     updated: z.string().datetime({
         message: "Updated date must be a valid ISO datetime string"
     }),
-    sessionId: z.string().uuid({
-        message: "Session ID must be a valid UUID"
-    }),
+    sessionId: sessionIdSchema,
     context: z.string().optional(),
     tags: z.array(z.string()).optional()
 }).catchall(z.unknown());
@@ -268,20 +272,8 @@ const validateTaskHierarchy = (task: any): boolean => {
 };
 
 export const createTaskSchema: z.ZodType<CreateTaskInput> = baseTaskSchema.extend({
-    parentId: z.string()
-        .refine(val => {
-            if (!val) return true;
-            if (val.startsWith('ROOT-')) return true;
-            return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
-        }, {
-            message: "Parent ID must be a valid UUID or start with 'ROOT-'"
-        })
-        .nullable()
-        .optional()
-        .describe('ID of the parent task. Takes precedence over bulk operation parentId'),
-    dependencies: z.array(z.string().uuid({
-        message: "Dependencies must be valid task UUIDs"
-    })).default([]),
+    parentId: optionalIdSchema,
+    dependencies: idArraySchema.default([]),
     metadata: z.object({
         context: z.string().optional(),
         tags: z.array(z.string()).optional()
@@ -299,8 +291,6 @@ export const createTaskSchema: z.ZodType<CreateTaskInput> = baseTaskSchema.exten
             path: ['subtasks']
         });
     }
-
-    // Parent ID validation is handled by the refine above
 });
 
 /**
@@ -310,9 +300,7 @@ export const updateTaskSchema = baseTaskSchema.partial().extend({
     status: z.nativeEnum(TaskStatus, {
         invalid_type_error: "Invalid status. Must be one of: pending, in_progress, completed, failed, blocked"
     }).optional(),
-    dependencies: z.array(z.string().uuid({
-        message: "Dependencies must be valid task UUIDs"
-    })).optional(),
+    dependencies: idArraySchema.optional(),
     metadata: z.object({
         context: z.string().optional(),
         tags: z.array(z.string()).optional()
@@ -332,22 +320,14 @@ export const updateTaskSchema = baseTaskSchema.partial().extend({
  * Complete task validation schema
  */
 export const taskSchema = baseTaskSchema.extend({
-    id: z.string().uuid({
-        message: "Task ID must be a valid UUID"
-    }),
+    id: taskIdSchema,
     status: z.nativeEnum(TaskStatus, {
         invalid_type_error: "Invalid status. Must be one of: pending, in_progress, completed, failed, blocked"
     }),
-    dependencies: z.array(z.string().uuid()),
-    subtasks: z.array(z.string().uuid()),
+    dependencies: idArraySchema,
+    subtasks: idArraySchema,
     metadata: taskMetadataSchema,
-    parentId: z.string()
-        .refine(val => {
-            if (val.startsWith('ROOT-')) return true;
-            return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
-        }, {
-            message: "Parent ID must be a valid UUID or start with 'ROOT-'"
-        }),
+    parentId: optionalIdSchema,
     error: z.object({
         code: z.string(),
         message: z.string(),
@@ -359,15 +339,7 @@ export const taskSchema = baseTaskSchema.extend({
  * Bulk operations validation schemas with improved flexibility
  */
 export const bulkCreateTaskSchema = z.object({
-    parentId: z.string()
-        .refine(val => {
-            if (!val) return true;
-            if (val.startsWith('ROOT-')) return true;
-            return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
-        }, {
-            message: "Parent ID must be a valid UUID or start with 'ROOT-'"
-        })
-        .nullable()
+    parentId: optionalIdSchema
         .describe('Default parent ID for tasks. Individual task parentIds take precedence'),
     tasks: z.array(createTaskSchema)
         .min(1, "Must provide at least one task to create")
@@ -399,9 +371,7 @@ export const bulkCreateTaskSchema = z.object({
 
 export const bulkUpdateTaskSchema = z.object({
     updates: z.array(z.object({
-        taskId: z.string().uuid({
-            message: "Task ID must be a valid UUID"
-        }),
+        taskId: taskIdSchema,
         updates: updateTaskSchema
     }).strict())
     .min(1, "Must provide at least one update")

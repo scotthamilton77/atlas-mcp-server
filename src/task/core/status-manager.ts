@@ -446,26 +446,25 @@ export class StatusManager {
         const statuses = new Set(children.map(c => c.status));
         statuses.add(updatedChildStatus);
 
+        // Only update parent status in specific cases:
+        
         // All completed -> completed
         if (Array.from(statuses).every(s => s === TaskStatus.COMPLETED)) {
             return TaskStatus.COMPLETED;
         }
 
-        // Any failed -> failed
-        if (statuses.has(TaskStatus.FAILED)) {
+        // All failed -> failed (don't propagate individual failures)
+        if (Array.from(statuses).every(s => s === TaskStatus.FAILED)) {
             return TaskStatus.FAILED;
         }
 
-        // Any blocked -> blocked
-        if (statuses.has(TaskStatus.BLOCKED)) {
+        // All blocked -> blocked (don't propagate individual blocks)
+        if (Array.from(statuses).every(s => s === TaskStatus.BLOCKED)) {
             return TaskStatus.BLOCKED;
         }
 
-        // Any in progress -> in progress
-        if (statuses.has(TaskStatus.IN_PROGRESS)) {
-            return TaskStatus.IN_PROGRESS;
-        }
-
+        // Don't automatically change parent status for in_progress
+        // Let parent status be explicitly set
         return null;
     }
 

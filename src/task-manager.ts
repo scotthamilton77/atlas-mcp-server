@@ -5,7 +5,7 @@
  * Coordinates between task store, dependency validation, and status management.
  */
 
-import { v4 as uuidv4 } from 'uuid';
+import { generateShortId } from './utils/id-generator.js';
 import {
     Task,
     CreateTaskInput,
@@ -14,7 +14,8 @@ import {
     TaskType,
     TaskStatus,
     BulkCreateTaskInput,
-    BulkUpdateTasksInput
+    BulkUpdateTasksInput,
+    TaskWithSubtasks
 } from './types/task.js';
 import { StorageManager } from './storage/index.js';
 import { Logger } from './logging/index.js';
@@ -55,7 +56,7 @@ export class TaskManager {
         this.taskStore = new TaskStore(storage);
         this.dependencyValidator = new DependencyValidator();
         this.statusManager = new StatusManager();
-        this.currentSessionId = crypto.randomUUID();
+        this.currentSessionId = generateShortId();
     }
 
     /**
@@ -151,7 +152,7 @@ export class TaskManager {
 
             // Generate new session ID if requested
             if (newSession) {
-                this.currentSessionId = uuidv4();
+                this.currentSessionId = generateShortId();
             }
 
             // Determine effective parentId (input.parentId takes precedence)
@@ -183,7 +184,7 @@ export class TaskManager {
             }
 
             // Generate task ID and metadata
-            const taskId = uuidv4();
+            const taskId = generateShortId();
             const now = new Date().toISOString();
             const metadata = {
                 created: now,
@@ -266,7 +267,7 @@ export class TaskManager {
                 data: task,
                 metadata: {
                     timestamp: new Date().toISOString(),
-                    requestId: uuidv4(),
+                    requestId: generateShortId(),
                     sessionId: this.currentSessionId
                 }
             };
@@ -378,7 +379,7 @@ export class TaskManager {
                 data: updatedTask,
                 metadata: {
                     timestamp: new Date().toISOString(),
-                    requestId: uuidv4(),
+                    requestId: generateShortId(),
                     sessionId: updatedTask.metadata.sessionId
                 }
             };
@@ -403,7 +404,7 @@ export class TaskManager {
                 data: task,
                 metadata: {
                     timestamp: new Date().toISOString(),
-                    requestId: uuidv4(),
+                    requestId: generateShortId(),
                     sessionId: task.metadata.sessionId
                 }
             };
@@ -424,7 +425,7 @@ export class TaskManager {
                 data: tasks,
                 metadata: {
                     timestamp: new Date().toISOString(),
-                    requestId: uuidv4(),
+                    requestId: generateShortId(),
                     sessionId: this.currentSessionId
                 }
             };
@@ -453,7 +454,7 @@ export class TaskManager {
                 data: subtasks,
                 metadata: {
                     timestamp: new Date().toISOString(),
-                    requestId: uuidv4(),
+                    requestId: generateShortId(),
                     sessionId: task.metadata.sessionId
                 }
             };
@@ -466,15 +467,39 @@ export class TaskManager {
     /**
      * Gets the complete task tree
      */
+    /**
+     * Recursively builds a task tree with full subtask details
+     */
+    private buildTaskTreeRecursive(task: Task): Task {
+        // First get all subtask objects
+        const subtaskObjects = task.subtasks
+            .map(subtaskId => this.taskStore.getTaskById(subtaskId))
+            .filter((t): t is Task => t !== null)
+            .map(subtask => this.buildTaskTreeRecursive(subtask));
+
+        // Store the full subtask objects in task metadata for client use
+        const enrichedTask: Task = {
+            ...task,
+            metadata: {
+                ...task.metadata,
+                resolvedSubtasks: subtaskObjects
+            }
+        };
+
+        return enrichedTask;
+    }
+
     async getTaskTree(): Promise<TaskResponse<Task[]>> {
         try {
             const rootTasks = this.taskStore.getRootTasks();
+            const fullTree = rootTasks.map(task => this.buildTaskTreeRecursive(task));
+            
             return {
                 success: true,
-                data: rootTasks,
+                data: fullTree,
                 metadata: {
                     timestamp: new Date().toISOString(),
-                    requestId: uuidv4(),
+                    requestId: generateShortId(),
                     sessionId: this.currentSessionId
                 }
             };
@@ -505,7 +530,7 @@ export class TaskManager {
                 success: true,
                 metadata: {
                     timestamp: new Date().toISOString(),
-                    requestId: uuidv4(),
+                    requestId: generateShortId(),
                     sessionId: task.metadata.sessionId
                 }
             };
@@ -612,7 +637,7 @@ export class TaskManager {
                     }
 
                     // Create task object
-                    const taskId = uuidv4();
+                    const taskId = generateShortId();
                     const now = new Date().toISOString();
                     const task: Task = {
                         id: taskId,
@@ -657,7 +682,7 @@ export class TaskManager {
                         data: task,
                         metadata: {
                             timestamp: now,
-                            requestId: uuidv4(),
+                            requestId: generateShortId(),
                             sessionId: this.currentSessionId
                         }
                     };
@@ -702,7 +727,7 @@ export class TaskManager {
                 data: createdTasks.map(response => response.data!),
                 metadata: {
                     timestamp: new Date().toISOString(),
-                    requestId: uuidv4(),
+                    requestId: generateShortId(),
                     sessionId: this.currentSessionId,
                     affectedTasks: createdTasks.map(response => response.data!.id),
                     transactionId
@@ -764,7 +789,7 @@ export class TaskManager {
                 data: updatedTasks.map(response => response.data!),
                 metadata: {
                     timestamp: new Date().toISOString(),
-                    requestId: uuidv4(),
+                    requestId: generateShortId(),
                     sessionId: this.currentSessionId,
                     affectedTasks: updatedTasks.map(response => response.data!.id)
                 }

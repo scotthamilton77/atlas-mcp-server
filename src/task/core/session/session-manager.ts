@@ -3,7 +3,7 @@
  * Handles session and task list management with persistence
  */
 
-import { generateShortId } from '../../../utils/id-generator.js';
+import { generateSessionId, generateTaskId } from '../../../utils/id-generator.js';
 import {
     Session, 
     SessionManager, 
@@ -57,7 +57,7 @@ export class DefaultSessionManager implements SessionManager {
         try {
             const now = Date.now();
             const session: Session = {
-                id: generateShortId(),
+                id: generateSessionId(),
                 name: input.name,
                 metadata: {
                     created: now,
@@ -192,7 +192,7 @@ export class DefaultSessionManager implements SessionManager {
         try {
             const now = Date.now();
             const taskList: TaskList = {
-                id: generateShortId(),
+                id: generateTaskId(),
                 name: input.name,
                 description: input.description,
                 metadata: {
