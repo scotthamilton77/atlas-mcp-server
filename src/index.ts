@@ -60,7 +60,7 @@ export class AtlasMcpServer {
         ConfigManager.initialize({
             storage: {
                 baseDir: storageDir,
-                sessionId: crypto.randomUUID(),
+                sessionId: '00000000-0000-4000-a000-000000000001', // Use a fixed UUID for persistence
                 maxSessions: 100,
                 maxTaskLists: 100,
                 maxBackups: 5,
