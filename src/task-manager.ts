@@ -233,8 +233,11 @@ export class TaskManager {
 
     /**
      * Updates an existing task
+     * @param taskId ID of the task to update
+     * @param updates Updates to apply to the task
+     * @param isBulkOperation Whether this update is part of a bulk operation
      */
-    async updateTask(taskId: string, updates: UpdateTaskInput): Promise<TaskResponse<Task>> {
+    async updateTask(taskId: string, updates: UpdateTaskInput, isBulkOperation: boolean = false): Promise<TaskResponse<Task>> {
         try {
             const validatedUpdates = validateUpdateTask(updates);
             const task = this.taskStore.getTaskById(taskId);
@@ -252,7 +255,8 @@ export class TaskManager {
                         if (taskToUpdate) {
                             await this.taskStore.updateTask(id, statusUpdate);
                         }
-                    }
+                    },
+                    isBulkOperation
                 );
             }
 
@@ -467,10 +471,17 @@ export class TaskManager {
      * Updates multiple tasks in bulk
      */
     async bulkUpdateTasks(input: BulkUpdateTasksInput): Promise<TaskResponse<Task[]>> {
+        const transactionId = this.taskStore.startTransaction();
         try {
-            const updatedTasks = await Promise.all(
-                input.updates.map(({ taskId, updates }) => this.updateTask(taskId, updates))
-            );
+            const updatedTasks = [];
+            
+            // Process updates sequentially within the transaction
+            for (const { taskId, updates } of input.updates) {
+                const result = await this.updateTask(taskId, updates, true);
+                updatedTasks.push(result);
+            }
+
+            await this.taskStore.commitTransaction(transactionId);
 
             return {
                 success: true,
@@ -479,10 +490,12 @@ export class TaskManager {
                     timestamp: new Date().toISOString(),
                     requestId: generateShortId(),
                     sessionId: updatedTasks[0]?.data?.metadata.sessionId || generateShortId(),
-                    affectedTasks: updatedTasks.map(response => response.data!.id)
+                    affectedTasks: updatedTasks.map(response => response.data!.id),
+                    transactionId
                 }
             };
         } catch (error) {
+            await this.taskStore.rollbackTransaction(transactionId);
             this.logger.error('Failed to update tasks in bulk', error);
             throw error;
         }

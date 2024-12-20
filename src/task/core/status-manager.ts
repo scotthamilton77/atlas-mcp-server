@@ -111,12 +111,14 @@ export class StatusManager {
 
     /**
      * Validates and processes a status transition with rollback support
+     * @param isBulkOperation Set to true to enable bulk operation mode with relaxed transition rules
      */
     async validateAndProcessStatusChange(
         task: Task,
         newStatus: TaskStatus,
         getTaskById: (id: string) => Task | null,
-        updateTask: (taskId: string, updates: { status: TaskStatus }) => Promise<void>
+        updateTask: (taskId: string, updates: { status: TaskStatus }) => Promise<void>,
+        isBulkOperation: boolean = false
     ): Promise<void> {
         const transactionId = generateShortId();
         this.transactions.set(transactionId, {
@@ -143,8 +145,8 @@ export class StatusManager {
                 );
             }
 
-            // Validate the transition
-            await this.validateStatusTransition(task, newStatus, getTaskById);
+            // Validate the transition with bulk operation context
+            await this.validateStatusTransition(task, newStatus, getTaskById, { isBulkOperation });
 
             // Process status change effects
             await this.propagateStatusChange(
@@ -220,21 +222,43 @@ export class StatusManager {
     }
 
     /**
-     * Validates a status transition
+     * Validates a status transition with support for bulk operations
      */
     private async validateStatusTransition(
         task: Task,
         newStatus: TaskStatus,
-        getTaskById: (id: string) => Task | null
+        getTaskById: (id: string) => Task | null,
+        context: { isBulkOperation?: boolean } = {}
     ): Promise<void> {
-        // Cannot transition from completed/failed to pending/in_progress
         const isCompletedOrFailed = (status: TaskStatus): status is CompletedOrFailed => 
             status === TaskStatus.COMPLETED || status === TaskStatus.FAILED;
         
         const isPendingOrInProgress = (status: TaskStatus): status is PendingOrInProgress =>
             status === TaskStatus.PENDING || status === TaskStatus.IN_PROGRESS;
 
-        if (isCompletedOrFailed(task.status) && isPendingOrInProgress(newStatus)) {
+        // Special handling for bulk operations
+        if (context.isBulkOperation) {
+            // Allow direct completion in bulk operations when dependencies are satisfied
+            if (newStatus === TaskStatus.COMPLETED) {
+                const dependenciesSatisfied = task.dependencies.every(depId => {
+                    const depTask = getTaskById(depId);
+                    return depTask && depTask.status === TaskStatus.COMPLETED;
+                });
+
+                if (dependenciesSatisfied) {
+                    // Skip normal transition rules for bulk completion
+                    return;
+                }
+            }
+
+            // Allow resetting tasks in bulk operations
+            if (newStatus === TaskStatus.PENDING) {
+                return;
+            }
+        }
+
+        // Allow reverting completed/failed tasks in bulk operations
+        if (!context.isBulkOperation && isCompletedOrFailed(task.status) && isPendingOrInProgress(newStatus)) {
             throw new TaskError(
                 ErrorCodes.TASK_STATUS,
                 'Invalid status transition: Cannot revert completed or failed tasks to pending or in_progress state',
@@ -248,10 +272,12 @@ export class StatusManager {
         }
 
         // Validate dependencies for status transition
-        await this.dependencyValidator.validateDependenciesForStatus(task, newStatus, getTaskById);
+        if (!context.isBulkOperation) {
+            await this.dependencyValidator.validateDependenciesForStatus(task, newStatus, getTaskById);
+        }
 
-        // Check dependencies for completion
-        if (newStatus === TaskStatus.COMPLETED) {
+        // Check dependencies and subtasks for completion
+        if (newStatus === TaskStatus.COMPLETED && !context.isBulkOperation) {
             // Validate dependencies
             await this.dependencyValidator.validateDependenciesForCompletion(task, getTaskById);
 
@@ -278,39 +304,53 @@ export class StatusManager {
         }
 
         // Validate status transition based on current status
-        this.validateStatusTransitionRules(task.status, newStatus);
+        this.validateStatusTransitionRules(task.status, newStatus, { 
+            taskId: task.id,
+            hasSubtasks: task.subtasks.length > 0,
+            hasDependencies: task.dependencies.length > 0,
+            isBulkOperation: context.isBulkOperation
+        });
     }
 
     /**
      * Validates status transition rules with more flexible transitions
      */
     /**
-     * Validates status transition rules with proper state machine logic
+     * Validates status transition rules with enhanced flexibility for bulk operations
      */
     private validateStatusTransitionRules(
         currentStatus: TaskStatus,
         newStatus: TaskStatus,
-        context: { taskId: string; hasSubtasks: boolean; hasDependencies: boolean } = { 
+        context: { taskId: string; hasSubtasks: boolean; hasDependencies: boolean; isBulkOperation?: boolean } = { 
             taskId: 'unknown',
             hasSubtasks: false,
-            hasDependencies: false
+            hasDependencies: false,
+            isBulkOperation: false
         }
     ): void {
-        // Define the state machine for status transitions
+        // Enhanced state machine with special handling for bulk operations
         const stateMachine: Record<TaskStatus, {
             allowedTransitions: Set<TaskStatus>;
+            bulkAllowedTransitions?: Set<TaskStatus>; // Additional transitions allowed in bulk operations
             conditions?: (ctx: typeof context) => { allowed: boolean; reason?: string };
         }> = {
             [TaskStatus.PENDING]: {
                 allowedTransitions: new Set([
                     TaskStatus.IN_PROGRESS,
                     TaskStatus.BLOCKED,
-                    TaskStatus.FAILED
+                    TaskStatus.FAILED,
+                    TaskStatus.COMPLETED // Allow direct completion always
                 ]),
-                conditions: (ctx) => ({
-                    allowed: !ctx.hasDependencies || newStatus === TaskStatus.BLOCKED,
-                    reason: ctx.hasDependencies ? 'Task has dependencies and must be blocked first' : undefined
-                })
+                conditions: (ctx): { allowed: boolean; reason?: string } => {
+                    // In bulk operations, allow any transition
+                    if (ctx.isBulkOperation) {
+                        return { allowed: true };
+                    }
+                    // For non-bulk operations, enforce normal rules
+                    const allowed = !ctx.hasDependencies || newStatus === TaskStatus.BLOCKED || newStatus === TaskStatus.IN_PROGRESS;
+                    const reason = ctx.hasDependencies ? 'Task has dependencies and must be blocked first' : undefined;
+                    return { allowed, reason };
+                }
             },
             [TaskStatus.IN_PROGRESS]: {
                 allowedTransitions: new Set([
@@ -319,21 +359,28 @@ export class StatusManager {
                     TaskStatus.BLOCKED,
                     TaskStatus.PENDING
                 ]),
-                conditions: (ctx) => ({
-                    allowed: newStatus !== TaskStatus.COMPLETED || !ctx.hasSubtasks,
-                    reason: ctx.hasSubtasks ? 'Cannot complete task with incomplete subtasks' : undefined
-                })
+                conditions: (ctx): { allowed: boolean; reason?: string } => {
+                    const allowed = (newStatus !== TaskStatus.COMPLETED || !ctx.hasSubtasks) || Boolean(ctx.isBulkOperation);
+                    const reason = ctx.hasSubtasks && !ctx.isBulkOperation ? 'Cannot complete task with incomplete subtasks' : undefined;
+                    return { allowed, reason };
+                }
             },
             [TaskStatus.COMPLETED]: {
                 allowedTransitions: new Set([
                     TaskStatus.FAILED,
                     TaskStatus.IN_PROGRESS
+                ]),
+                bulkAllowedTransitions: new Set([
+                    TaskStatus.PENDING // Allow resetting in bulk operations
                 ])
             },
             [TaskStatus.FAILED]: {
                 allowedTransitions: new Set([
                     TaskStatus.IN_PROGRESS,
                     TaskStatus.PENDING
+                ]),
+                bulkAllowedTransitions: new Set([
+                    TaskStatus.COMPLETED // Allow direct completion in bulk operations
                 ])
             },
             [TaskStatus.BLOCKED]: {
@@ -342,16 +389,25 @@ export class StatusManager {
                     TaskStatus.FAILED,
                     TaskStatus.PENDING
                 ]),
-                conditions: (ctx) => ({
-                    allowed: newStatus !== TaskStatus.IN_PROGRESS || !ctx.hasDependencies,
-                    reason: ctx.hasDependencies ? 'Cannot start blocked task with incomplete dependencies' : undefined
-                })
+                bulkAllowedTransitions: new Set([
+                    TaskStatus.COMPLETED // Allow direct completion in bulk operations
+                ]),
+                conditions: (ctx): { allowed: boolean; reason?: string } => {
+                    const allowed = (newStatus !== TaskStatus.IN_PROGRESS || !ctx.hasDependencies) || Boolean(ctx.isBulkOperation);
+                    const reason = ctx.hasDependencies && !ctx.isBulkOperation ? 'Cannot start blocked task with incomplete dependencies' : undefined;
+                    return { allowed, reason };
+                }
             }
         };
 
         const stateConfig = stateMachine[currentStatus];
-        if (!stateConfig?.allowedTransitions.has(newStatus)) {
-            const allowedStates = Array.from(stateConfig?.allowedTransitions || []);
+        const allowedTransitions = new Set([
+            ...Array.from(stateConfig?.allowedTransitions || []),
+            ...(context.isBulkOperation ? Array.from(stateConfig?.bulkAllowedTransitions || []) : [])
+        ]);
+
+        if (!allowedTransitions.has(newStatus)) {
+            const allowedStates = Array.from(allowedTransitions);
             const guidance = allowedStates.map(state => {
                 const guide = STATUS_TRANSITION_GUIDE[currentStatus]?.[state];
                 return `${state}: ${guide || 'No specific guidance available'}`;
