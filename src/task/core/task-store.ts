@@ -298,6 +298,9 @@ export class TaskStore {
             const taskToAdd = shouldBlock ? { ...task, status: TaskStatus.BLOCKED } : task;
 
             try {
+                // Update parent relationships first
+                await this.updateParentSubtasks(taskToAdd, transactionId);
+
                 // Add to indexes and cache
                 this.indexManager.indexTask(taskToAdd);
                 await this.indexManager.indexDependencies(taskToAdd);
@@ -428,8 +431,74 @@ export class TaskStore {
     }
 
     /**
-     * Process parent updates in a separate phase
+     * Updates parent's subtasks array and maintains relationships
      */
+    private async updateParentSubtasks(task: Task, transactionId?: string): Promise<void> {
+        if (task.parentId && !task.parentId.startsWith('ROOT-')) {
+            const parent = this.getTaskById(task.parentId);
+            if (parent) {
+                // Verify parent is a group
+                if (parent.type !== TaskType.GROUP) {
+                    throw createError(
+                        ErrorCodes.TASK_INVALID_PARENT,
+                        { 
+                            taskId: task.id,
+                            parentId: parent.id,
+                            parentType: parent.type
+                        },
+                        `Parent task must be of type "group" (got "${parent.type}")`,
+                        'Change parent task type to "group" or choose a different parent'
+                    );
+                }
+
+                // Check for duplicate task names under the same parent
+                const siblings = this.getTasksByParent(parent.id);
+                const hasDuplicate = siblings.some(
+                    t => t.id !== task.id && 
+                        t.name === task.name && 
+                        t.status !== TaskStatus.FAILED
+                );
+                
+                if (hasDuplicate) {
+                    throw createError(
+                        ErrorCodes.TASK_DUPLICATE,
+                        { 
+                            taskName: task.name,
+                            parentId: parent.id 
+                        },
+                        `A task named "${task.name}" already exists under the same parent`,
+                        'Use a different name for the task or update the existing task'
+                    );
+                }
+
+                // Update parent's subtasks array, ensuring no duplicates
+                const uniqueSubtasks = Array.from(new Set([...parent.subtasks, task.id]));
+                const updatedParent = {
+                    ...parent,
+                    subtasks: uniqueSubtasks,
+                    metadata: {
+                        ...parent.metadata,
+                        updated: new Date().toISOString()
+                    }
+                };
+
+                // Update indexes and cache
+                this.indexManager.unindexTask(parent);
+                this.indexManager.indexTask(updatedParent);
+                this.cacheManager.set(updatedParent.id, updatedParent);
+
+                // Record operation
+                if (transactionId) {
+                    this.transactionManager.addOperation(transactionId, {
+                        type: 'update',
+                        task: updatedParent,
+                        previousState: parent
+                    });
+                }
+            }
+        }
+    }
+
     /**
      * Validates note content based on type
      */
@@ -509,9 +578,11 @@ export class TaskStore {
                     );
                 }
 
+                // Ensure no duplicate subtask IDs
+                const uniqueSubtasks = Array.from(new Set([...parent.subtasks, childId]));
                 const updatedParent = {
                     ...parent,
-                    subtasks: [...parent.subtasks, childId],
+                    subtasks: uniqueSubtasks,
                     metadata: {
                         ...parent.metadata,
                         updated: new Date().toISOString()
@@ -576,6 +647,31 @@ export class TaskStore {
                     ErrorCodes.TASK_NOT_FOUND,
                     { taskId }
                 );
+            }
+
+            // Check for duplicate names if name is being updated
+            if (updates.name && updates.name !== existingTask.name) {
+                const siblings = existingTask.parentId && !existingTask.parentId.startsWith('ROOT-')
+                    ? this.getTasksByParent(existingTask.parentId)
+                    : this.getRootTasks(existingTask.metadata.sessionId);
+                
+                const hasDuplicate = siblings.some(
+                    t => t.id !== taskId && 
+                        t.name === updates.name && 
+                        t.status !== TaskStatus.FAILED
+                );
+                
+                if (hasDuplicate) {
+                    throw createError(
+                        ErrorCodes.TASK_DUPLICATE,
+                        { 
+                            taskName: updates.name,
+                            parentId: existingTask.parentId || `ROOT-${existingTask.metadata.sessionId}`
+                        },
+                        `A task named "${updates.name}" already exists at this level`,
+                        'Use a different name for the task'
+                    );
+                }
             }
 
             // Handle status updates

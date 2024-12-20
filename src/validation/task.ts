@@ -288,7 +288,20 @@ const baseTaskSchema = z.object({
     reasoning: taskReasoningSchema.optional(),
     type: z.nativeEnum(TaskType, {
         invalid_type_error: "Invalid task type. Must be one of: task, milestone, group"
-    }).optional()
+    })
+    .default(TaskType.TASK)
+    .superRefine((type, ctx) => {
+        const parentId = (ctx.path[0] as any)?.parentId;
+        const subtasks = (ctx.path[0] as any)?.subtasks;
+        
+        if (subtasks?.length > 0 && type !== TaskType.GROUP) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "Tasks with subtasks must be of type 'group'",
+                path: ['type']
+            });
+        }
+    })
 });
 
 /**
@@ -322,24 +335,23 @@ const validateTaskHierarchy = (task: any): boolean => {
  * Enhanced task creation schema with smart defaults and improved validation
  */
 export const createTaskSchema: z.ZodType<CreateTaskInput> = baseTaskSchema.extend({
-    parentId: optionalIdSchema.transform((val, ctx) => {
-        // Smart parent ID handling
-        if (!val) return null;
-        if (val.startsWith('ROOT-')) return val;
-        
-        // If invalid parent ID, default to ROOT with warning
-        ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: `Invalid parent ID, defaulting to ROOT task`,
-            path: ['parentId']
-        });
-        // Access the session ID from the input data context
-        const input = ctx.path.length > 0 ? ctx.path[0] : undefined;
-        const sessionId = typeof input === 'object' && input 
-            ? (input as { metadata?: { sessionId?: string } })?.metadata?.sessionId || 'default'
-            : 'default';
-        return getRootId(sessionId);
-    }),
+    parentId: optionalIdSchema
+        .transform((val) => {
+            if (!val) return null;
+            return val;
+        })
+        .refine((val) => {
+            if (!val) return true;
+            return val.startsWith('ROOT-') || val.match(/^[a-zA-Z0-9]{8}$/);
+        }, {
+            message: "Parent ID must be either a ROOT- prefixed ID or a valid task ID"
+        })
+        .superRefine((val, ctx) => {
+            // This will be checked in TaskManager.createTask
+            // Here we just define the validation rule
+            // Using superRefine instead of refine to access context
+            return;
+        }),
     dependencies: idArraySchema.default([])
         .transform((deps, ctx) => {
             // Remove duplicate dependencies

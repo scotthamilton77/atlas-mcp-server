@@ -136,7 +136,7 @@ export class TaskManager {
             // Determine effective parentId (input.parentId takes precedence)
             const effectiveParentId = input.parentId || parentId;
 
-            // Check parent task if provided
+            // Check parent task and duplicate names
             if (effectiveParentId) {
                 const parentTask = this.taskStore.getTaskById(effectiveParentId);
                 if (!parentTask) {
@@ -149,6 +149,40 @@ export class TaskManager {
                     throw createError(
                         ErrorCodes.TASK_INVALID_PARENT,
                         { taskId: effectiveParentId }
+                    );
+                }
+
+                // Check for duplicate task names under the same parent
+                const siblingTasks = this.taskStore.getTasksByParent(effectiveParentId);
+                const hasDuplicate = siblingTasks.some(
+                    t => t.name === validatedInput.name && t.status !== TaskStatus.FAILED
+                );
+                if (hasDuplicate) {
+                    throw createError(
+                        ErrorCodes.TASK_DUPLICATE,
+                        { 
+                            taskName: validatedInput.name,
+                            parentId: effectiveParentId 
+                        },
+                        `A task named "${validatedInput.name}" already exists under the same parent`,
+                        'Use a different name for the task or update the existing task'
+                    );
+                }
+            } else {
+                // Check for duplicate root tasks
+                const rootTasks = this.taskStore.getRootTasks(sessionId);
+                const hasDuplicate = rootTasks.some(
+                    t => t.name === validatedInput.name && t.status !== TaskStatus.FAILED
+                );
+                if (hasDuplicate) {
+                    throw createError(
+                        ErrorCodes.TASK_DUPLICATE,
+                        { 
+                            taskName: validatedInput.name,
+                            parentId: `ROOT-${sessionId}`
+                        },
+                        `A root task named "${validatedInput.name}" already exists`,
+                        'Use a different name for the task or update the existing task'
                     );
                 }
             }
@@ -258,6 +292,31 @@ export class TaskManager {
                     },
                     isBulkOperation
                 );
+            }
+
+            // Check for duplicate names if name is being updated
+            if (updates.name && updates.name !== task.name) {
+                const siblings = task.parentId 
+                    ? this.taskStore.getTasksByParent(task.parentId)
+                    : this.taskStore.getRootTasks(task.metadata.sessionId);
+                
+                const hasDuplicate = siblings.some(
+                    t => t.id !== taskId && // Exclude current task
+                        t.name === updates.name && 
+                        t.status !== TaskStatus.FAILED
+                );
+                
+                if (hasDuplicate) {
+                    throw createError(
+                        ErrorCodes.TASK_DUPLICATE,
+                        { 
+                            taskName: updates.name,
+                            parentId: task.parentId || `ROOT-${task.metadata.sessionId}`
+                        },
+                        `A task named "${updates.name}" already exists at this level`,
+                        'Use a different name for the task'
+                    );
+                }
             }
 
             if (updates.dependencies) {
