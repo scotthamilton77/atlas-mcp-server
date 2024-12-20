@@ -19,7 +19,7 @@ import {
     McpError,
     ErrorCode
 } from '@modelcontextprotocol/sdk/types.js';
-import { StorageManager } from './storage/index.js';
+import { StorageManager, BaseStorageManager } from './storage/index.js';
 import { TaskManager } from './task-manager.js';
 import { ToolHandler } from './tools/handler.js';
 import { Logger } from './logging/index.js';
@@ -65,7 +65,7 @@ export class AtlasMcpServer {
         const config = ConfigManager.getInstance().getConfig();
         this.logger = Logger.getInstance().child({ component: 'AtlasMcpServer' });
         
-        this.storage = new StorageManager({
+        this.storage = new BaseStorageManager({
             baseDir: config.storage.dir,
             sessionId: config.storage.sessionId
         });
