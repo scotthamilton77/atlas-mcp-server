@@ -65,6 +65,7 @@ export interface TaskMetadata {
   created: string;
   updated: string;
   sessionId: string;
+  taskListId: string;  // Required for task list organization
   version?: string;  // Added for storage versioning
   resolvedSubtasks?: Task[];  // Added for task tree resolution
 }
@@ -180,6 +181,7 @@ export interface TaskResponse<T> {
     timestamp: string;
     requestId: string;
     sessionId: string;
+    taskListId?: string;
     affectedTasks?: string[];
     transactionId?: string;
   };

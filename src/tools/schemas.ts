@@ -269,6 +269,14 @@ export const getTasksByStatusSchema = {
             enum: ['pending', 'in_progress', 'completed', 'failed', 'blocked'] as TaskStatus[],
             description: 'Status filter. Best practice: Use for progress tracking and identifying bottlenecks.',
         },
+        sessionId: {
+            type: 'string',
+            description: 'Optional session ID to filter by. If not provided, uses active session.',
+        },
+        taskListId: {
+            type: 'string',
+            description: 'Optional task list ID to filter by. If not provided, uses active task list.',
+        }
     },
     required: ['status'],
 };
@@ -293,6 +301,14 @@ export const getSubtasksSchema = {
             type: 'string',
             description: 'Parent task ID. Best practice: Use for progress tracking and dependency management.',
         },
+        sessionId: {
+            type: 'string',
+            description: 'Optional session ID to filter by. If not provided, uses parent task\'s session.',
+        },
+        taskListId: {
+            type: 'string',
+            description: 'Optional task list ID to filter by. If not provided, uses parent task\'s task list.',
+        }
     },
     required: ['taskId'],
 };
@@ -300,6 +316,15 @@ export const getSubtasksSchema = {
 /** Retrieves the complete task hierarchy. IMPORTANT: Requires an active session - ensure you have created or switched to the appropriate session before querying the task tree. Best practice: Use frequently to maintain awareness of all tasks, their relationships, and current progress. Regular checks help keep the full task context fresh in memory and ensure proper task management. */
 export const getTaskTreeSchema = {
     type: 'object',
-    properties: {},
-    description: 'Retrieves complete task hierarchy. Best practice: Use frequently to maintain awareness of all tasks, their relationships, and current progress. Regular checks help keep the full task context fresh in memory and ensure proper task management.',
+    properties: {
+        sessionId: {
+            type: 'string',
+            description: 'Optional session ID to filter tasks by. If not provided, uses the active session.',
+        },
+        taskListId: {
+            type: 'string',
+            description: 'Optional task list ID to filter tasks by. If not provided, uses the active task list.',
+        }
+    },
+    description: 'Retrieves complete task hierarchy with optional session and task list filtering. Best practice: Use frequently to maintain awareness of all tasks, their relationships, and current progress.',
 };

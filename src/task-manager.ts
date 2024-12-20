@@ -156,11 +156,16 @@ export class TaskManager {
             // Generate task ID and metadata
             const taskId = generateShortId();
             const now = new Date().toISOString();
+            // Get active task list ID from session manager or use default
+            const activeTaskList = await this.sessionManager?.getActiveTaskList() || null;
+            const taskListId = activeTaskList?.id || 'default';
+
             // Create metadata with required fields first
             const metadata: TaskMetadata = {
                 created: now,
                 updated: now,
                 sessionId: sessionId,
+                taskListId: taskListId,
                 // Add optional fields from input.metadata if they exist
                 ...(input.metadata ? {
                     context: input.metadata.context,
@@ -287,10 +292,10 @@ export class TaskManager {
     /**
      * Gets tasks by status
      */
-    async getTasksByStatus(status: TaskStatus): Promise<TaskResponse<Task[]>> {
+    async getTasksByStatus(status: TaskStatus, sessionId?: string, taskListId?: string): Promise<TaskResponse<Task[]>> {
         try {
-            const tasks = this.taskStore.getTasksByStatus(status);
-            const sessionId = tasks[0]?.metadata.sessionId || generateShortId();
+            const effectiveSessionId = sessionId || (await this.getCurrentSessionId());
+            const tasks = this.taskStore.getTasksByStatus(status, effectiveSessionId, taskListId);
             
             return {
                 success: true,
@@ -298,7 +303,8 @@ export class TaskManager {
                 metadata: {
                     timestamp: new Date().toISOString(),
                     requestId: generateShortId(),
-                    sessionId
+                    sessionId: effectiveSessionId,
+                    taskListId: taskListId
                 }
             };
         } catch (error) {
@@ -310,16 +316,23 @@ export class TaskManager {
     /**
      * Gets subtasks of a task
      */
-    async getSubtasks(taskId: string): Promise<TaskResponse<Task[]>> {
+    async getSubtasks(taskId: string, sessionId?: string, taskListId?: string): Promise<TaskResponse<Task[]>> {
         try {
             const task = this.taskStore.getTaskById(taskId);
             if (!task) {
                 throw createError(ErrorCodes.TASK_NOT_FOUND, { taskId });
             }
 
+            const effectiveSessionId = sessionId || task.metadata.sessionId;
+            const effectiveTaskListId = taskListId || task.metadata.taskListId;
+
             const subtasks = task.subtasks
                 .map(id => this.taskStore.getTaskById(id))
-                .filter((t): t is Task => t !== null);
+                .filter((t): t is Task => t !== null)
+                .filter(t => 
+                    (!sessionId || t.metadata.sessionId === effectiveSessionId) &&
+                    (!taskListId || t.metadata.taskListId === effectiveTaskListId)
+                );
 
             return {
                 success: true,
@@ -327,7 +340,8 @@ export class TaskManager {
                 metadata: {
                     timestamp: new Date().toISOString(),
                     requestId: generateShortId(),
-                    sessionId: task.metadata.sessionId
+                    sessionId: effectiveSessionId,
+                    taskListId: effectiveTaskListId
                 }
             };
         } catch (error) {
@@ -354,11 +368,16 @@ export class TaskManager {
         };
     }
 
-    async getTaskTree(): Promise<TaskResponse<Task[]>> {
+    async getTaskTree(sessionId?: string, taskListId?: string): Promise<TaskResponse<Task[]>> {
         try {
-            const rootTasks = this.taskStore.getRootTasks();
+            // Get the effective session ID
+            const effectiveSessionId = sessionId || (await this.getCurrentSessionId());
+            
+            // Get root tasks with filtering
+            const rootTasks = this.taskStore.getRootTasks(effectiveSessionId, taskListId);
+            
+            // Build tree for each root task
             const fullTree = rootTasks.map(task => this.buildTaskTreeRecursive(task));
-            const sessionId = rootTasks[0]?.metadata.sessionId || generateShortId();
             
             return {
                 success: true,
@@ -366,7 +385,8 @@ export class TaskManager {
                 metadata: {
                     timestamp: new Date().toISOString(),
                     requestId: generateShortId(),
-                    sessionId
+                    sessionId: effectiveSessionId,
+                    taskListId: taskListId
                 }
             };
         } catch (error) {

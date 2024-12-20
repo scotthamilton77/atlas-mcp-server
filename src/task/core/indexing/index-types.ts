@@ -5,6 +5,7 @@ export interface TaskIndex {
     byStatus: Map<TaskStatus, Set<string>>;
     byParent: Map<string | null, Set<string>>;
     bySession: Map<string, Set<string>>;
+    byTaskList: Map<string, Set<string>>;
     byDependency: Map<string, Set<string>>;
 }
 
@@ -20,12 +21,13 @@ export interface IndexManager {
     indexDependencies(task: Task): Promise<void>;
     unindexDependencies(task: Task): Promise<void>;
     getTaskById(taskId: string): Task | null;
-    getTasksByStatus(status: TaskStatus): Task[];
-    getTasksByParent(parentId: string): Task[];
-    getTasksBySession(sessionId: string): Task[];
+    getTasksByStatus(status: TaskStatus, sessionId?: string, taskListId?: string): Task[];
+    getTasksByParent(parentId: string, sessionId?: string, taskListId?: string): Task[];
+    getTasksBySession(sessionId: string, taskListId?: string): Task[];
+    getTasksByTaskList(taskListId: string): Task[];
     getDependentTasks(taskId: string): Task[];
-    getRootTasks(): Task[];
-    getAllTasks(): Task[];
+    getRootTasks(sessionId?: string, taskListId?: string): Task[];
+    getAllTasks(sessionId?: string, taskListId?: string): Task[];
     clear(): void;
 }
 

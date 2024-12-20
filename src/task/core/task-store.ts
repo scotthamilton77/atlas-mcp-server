@@ -11,7 +11,7 @@
 
 import { Task, TaskStatus, TaskType } from '../../types/task.js';
 import { Logger } from '../../logging/index.js';
-import { StorageManager } from '../../storage/index.js';
+import { UnifiedStorageManager } from '../../storage/unified-storage.js';
 import { DependencyValidator } from './dependency-validator.js';
 import { StatusManager } from './status-manager.js';
 import { EnhancedCacheManager } from './cache/cache-manager.js';
@@ -30,7 +30,7 @@ export class TaskStore {
     private dependencyValidator: DependencyValidator;
 
     constructor(
-        private storage: StorageManager
+        private storage: UnifiedStorageManager
     ) {
         this.logger = Logger.getInstance().child({ component: 'TaskStore' });
         this.cacheManager = new EnhancedCacheManager();
@@ -153,22 +153,22 @@ export class TaskStore {
     /**
      * Gets tasks by status
      */
-    getTasksByStatus(status: TaskStatus): Task[] {
-        return this.indexManager.getTasksByStatus(status);
+    getTasksByStatus(status: TaskStatus, sessionId?: string, taskListId?: string): Task[] {
+        return this.indexManager.getTasksByStatus(status, sessionId, taskListId);
     }
 
     /**
      * Gets tasks by parent ID
      */
-    getTasksByParent(parentId: string): Task[] {
-        return this.indexManager.getTasksByParent(parentId);
+    getTasksByParent(parentId: string, sessionId?: string, taskListId?: string): Task[] {
+        return this.indexManager.getTasksByParent(parentId, sessionId, taskListId);
     }
 
     /**
-     * Gets root tasks
+     * Gets root tasks with optional session and task list filtering
      */
-    getRootTasks(): Task[] {
-        return this.indexManager.getRootTasks();
+    getRootTasks(sessionId?: string, taskListId?: string): Task[] {
+        return this.indexManager.getRootTasks(sessionId, taskListId);
     }
 
     /**
@@ -757,8 +757,8 @@ export class TaskStore {
     /**
      * Gets all tasks
      */
-    getAllTasks(): Task[] {
-        return this.indexManager.getAllTasks();
+    getAllTasks(sessionId?: string, taskListId?: string): Task[] {
+        return this.indexManager.getAllTasks(sessionId, taskListId);
     }
 
     /**

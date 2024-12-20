@@ -28,6 +28,7 @@ export class TaskIndexManager implements IndexManager {
             byStatus: new Map(),
             byParent: new Map(),
             bySession: new Map(),
+            byTaskList: new Map(),
             byDependency: new Map()
         };
     }
@@ -38,8 +39,8 @@ export class TaskIndexManager implements IndexManager {
     indexTask(task: Task): void {
         try {
             // Validate task data
-            if (!task.id || !task.status || !task.metadata?.sessionId) {
-                throw new Error('Invalid task data: missing required fields');
+            if (!task.id || !task.status || !task.metadata?.sessionId || !task.metadata?.taskListId) {
+                throw new Error('Invalid task data: missing required fields (id, status, sessionId, taskListId)');
             }
 
             // Log task details before indexing
@@ -48,11 +49,13 @@ export class TaskIndexManager implements IndexManager {
                 status: task.status,
                 parentId: task.parentId,
                 sessionId: task.metadata.sessionId,
+                taskListId: task.metadata.taskListId,
                 currentIndexSizes: {
                     byId: this.indexes.byId.size,
                     byStatus: this.indexes.byStatus.size,
                     byParent: this.indexes.byParent.size,
-                    bySession: this.indexes.bySession.size
+                    bySession: this.indexes.bySession.size,
+                    byTaskList: this.indexes.byTaskList.size
                 }
             });
 
@@ -77,17 +80,25 @@ export class TaskIndexManager implements IndexManager {
             }
             this.indexes.bySession.get(task.metadata.sessionId)!.add(task.id);
 
+            // Index by task list
+            if (!this.indexes.byTaskList.has(task.metadata.taskListId)) {
+                this.indexes.byTaskList.set(task.metadata.taskListId, new Set());
+            }
+            this.indexes.byTaskList.get(task.metadata.taskListId)!.add(task.id);
+
             // Log successful indexing
             this.logger.debug('Task indexed successfully', {
                 taskId: task.id,
                 status: task.status,
                 parentId: task.parentId,
                 sessionId: task.metadata.sessionId,
+                taskListId: task.metadata.taskListId,
                 updatedIndexSizes: {
                     byId: this.indexes.byId.size,
                     byStatus: this.indexes.byStatus.size,
                     byParent: this.indexes.byParent.size,
-                    bySession: this.indexes.bySession.size
+                    bySession: this.indexes.bySession.size,
+                    byTaskList: this.indexes.byTaskList.size
                 }
             });
         } catch (error) {
@@ -108,9 +119,12 @@ export class TaskIndexManager implements IndexManager {
             this.indexes.byStatus.get(task.status)?.delete(task.id);
             this.indexes.byParent.get(task.parentId)?.delete(task.id);
             this.indexes.bySession.get(task.metadata.sessionId)?.delete(task.id);
+            this.indexes.byTaskList.get(task.metadata.taskListId)?.delete(task.id);
 
             this.logger.debug('Task unindexed', {
-                taskId: task.id
+                taskId: task.id,
+                sessionId: task.metadata.sessionId,
+                taskListId: task.metadata.taskListId
             });
         } catch (error) {
             this.logger.error('Failed to unindex task', {
@@ -221,8 +235,19 @@ export class TaskIndexManager implements IndexManager {
     /**
      * Gets tasks by status
      */
-    getTasksByStatus(status: TaskStatus): Task[] {
-        const taskIds = this.indexes.byStatus.get(status) || new Set();
+    getTasksByStatus(status: TaskStatus, sessionId?: string, taskListId?: string): Task[] {
+        let taskIds = this.indexes.byStatus.get(status) || new Set();
+        
+        if (sessionId) {
+            const sessionTasks = this.indexes.bySession.get(sessionId) || new Set();
+            taskIds = new Set([...taskIds].filter(id => sessionTasks.has(id)));
+        }
+        
+        if (taskListId) {
+            const taskListTasks = this.indexes.byTaskList.get(taskListId) || new Set();
+            taskIds = new Set([...taskIds].filter(id => taskListTasks.has(id)));
+        }
+
         return Array.from(taskIds)
             .map(id => this.getTaskById(id))
             .filter((t): t is Task => t !== null);
@@ -231,8 +256,19 @@ export class TaskIndexManager implements IndexManager {
     /**
      * Gets tasks by parent ID
      */
-    getTasksByParent(parentId: string | null): Task[] {
-        const taskIds = this.indexes.byParent.get(parentId) || new Set();
+    getTasksByParent(parentId: string | null, sessionId?: string, taskListId?: string): Task[] {
+        let taskIds = this.indexes.byParent.get(parentId) || new Set();
+        
+        if (sessionId) {
+            const sessionTasks = this.indexes.bySession.get(sessionId) || new Set();
+            taskIds = new Set([...taskIds].filter(id => sessionTasks.has(id)));
+        }
+        
+        if (taskListId) {
+            const taskListTasks = this.indexes.byTaskList.get(taskListId) || new Set();
+            taskIds = new Set([...taskIds].filter(id => taskListTasks.has(id)));
+        }
+
         return Array.from(taskIds)
             .map(id => this.getTaskById(id))
             .filter((t): t is Task => t !== null);
@@ -241,8 +277,21 @@ export class TaskIndexManager implements IndexManager {
     /**
      * Gets tasks by session ID
      */
-    getTasksBySession(sessionId: string): Task[] {
-        const taskIds = this.indexes.bySession.get(sessionId) || new Set();
+    getTasksBySession(sessionId: string, taskListId?: string): Task[] {
+        let taskIds = this.indexes.bySession.get(sessionId) || new Set();
+        
+        if (taskListId) {
+            const taskListTasks = this.indexes.byTaskList.get(taskListId) || new Set();
+            taskIds = new Set([...taskIds].filter(id => taskListTasks.has(id)));
+        }
+
+        return Array.from(taskIds)
+            .map(id => this.getTaskById(id))
+            .filter((t): t is Task => t !== null);
+    }
+
+    getTasksByTaskList(taskListId: string): Task[] {
+        const taskIds = this.indexes.byTaskList.get(taskListId) || new Set();
         return Array.from(taskIds)
             .map(id => this.getTaskById(id))
             .filter((t): t is Task => t !== null);
@@ -261,21 +310,41 @@ export class TaskIndexManager implements IndexManager {
     /**
      * Gets root tasks
      */
-    getRootTasks(): Task[] {
-        return Array.from(this.indexes.byParent.entries())
+    getRootTasks(sessionId?: string, taskListId?: string): Task[] {
+        let rootTasks = Array.from(this.indexes.byParent.entries())
             .filter(([parentId]) => parentId && parentId.startsWith('ROOT-'))
             .flatMap(([, taskIds]) => 
                 Array.from(taskIds)
                     .map(id => this.getTaskById(id))
                     .filter((t): t is Task => t !== null)
             );
+
+        if (sessionId) {
+            rootTasks = rootTasks.filter(task => task.metadata.sessionId === sessionId);
+        }
+
+        if (taskListId) {
+            rootTasks = rootTasks.filter(task => task.metadata.taskListId === taskListId);
+        }
+
+        return rootTasks;
     }
 
     /**
      * Gets all tasks
      */
-    getAllTasks(): Task[] {
-        return Array.from(this.indexes.byId.values());
+    getAllTasks(sessionId?: string, taskListId?: string): Task[] {
+        let tasks = Array.from(this.indexes.byId.values());
+
+        if (sessionId) {
+            tasks = tasks.filter(task => task.metadata.sessionId === sessionId);
+        }
+
+        if (taskListId) {
+            tasks = tasks.filter(task => task.metadata.taskListId === taskListId);
+        }
+
+        return tasks;
     }
 
     /**

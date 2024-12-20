@@ -130,7 +130,9 @@ Parameters:
                 description: `IMPORTANT: Requires an active session. Retrieves tasks filtered by status
 
 Parameters:
-- status*: Status filter. Best practice: Use for progress tracking and identifying bottlenecks.`,
+- status*: Status filter. Best practice: Use for progress tracking and identifying bottlenecks.
+- sessionId: Optional session ID to filter by. If not provided, uses active session.
+- taskListId: Optional task list ID to filter by. If not provided, uses active task list.`,
                 inputSchema: getTasksByStatusSchema,
                 handler: async (args: Record<string, unknown>) => {
                     if (!args.status || !Object.values(TaskStatus).includes(args.status as TaskStatus)) {
@@ -139,7 +141,11 @@ Parameters:
                             'Invalid task status'
                         );
                     }
-                    const result = await this.taskManager.getTasksByStatus(args.status as TaskStatus);
+                    const result = await this.taskManager.getTasksByStatus(
+                        args.status as TaskStatus,
+                        args.sessionId as string | undefined,
+                        args.taskListId as string | undefined
+                    );
                     return this.formatResponse(result);
                 }
             },
@@ -166,7 +172,9 @@ Parameters:
                 description: `IMPORTANT: Requires an active session. Retrieves subtasks of a task
 
 Parameters:
-- taskId*: Parent task ID. Best practice: Use for progress tracking and dependency management.`,
+- taskId*: Parent task ID. Best practice: Use for progress tracking and dependency management.
+- sessionId: Optional session ID to filter by. If not provided, uses parent task's session.
+- taskListId: Optional task list ID to filter by. If not provided, uses parent task's task list.`,
                 inputSchema: getSubtasksSchema,
                 handler: async (args: Record<string, unknown>) => {
                     if (!args.taskId || typeof args.taskId !== 'string') {
@@ -175,7 +183,11 @@ Parameters:
                             'Missing or invalid taskId'
                         );
                     }
-                    const result = await this.taskManager.getSubtasks(args.taskId);
+                    const result = await this.taskManager.getSubtasks(
+                        args.taskId,
+                        args.sessionId as string | undefined,
+                        args.taskListId as string | undefined
+                    );
                     return this.formatResponse(result);
                 }
             },
@@ -183,8 +195,11 @@ Parameters:
                 name: 'get_task_tree',
                 description: 'IMPORTANT: Requires an active session. Retrieves the complete task hierarchy. Best practice: Use frequently to maintain awareness of all tasks, their relationships, and current progress. Regular checks help keep the full task context fresh in memory and ensure proper task management.',
                 inputSchema: getTaskTreeSchema,
-                handler: async () => {
-                    const result = await this.taskManager.getTaskTree();
+                handler: async (args: Record<string, unknown>) => {
+                    const result = await this.taskManager.getTaskTree(
+                        args.sessionId as string | undefined,
+                        args.taskListId as string | undefined
+                    );
                     return this.formatResponse(result);
                 }
             }
