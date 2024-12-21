@@ -66,8 +66,15 @@ export const createTaskSchema = z.object({
         reasoning: z.string().max(2000).optional(),
         toolsUsed: z.array(z.string().max(100)).max(100).optional(),
         resourcesAccessed: z.array(z.string().max(100)).max(100).optional(),
-        contextUsed: z.array(z.string().max(1000)).max(100).optional()
-    }).partial().optional()
+        contextUsed: z.array(z.string().max(1000)).max(100).optional(),
+        dependencies: z.array(z.string()).max(50).optional() // Support legacy format
+    }).partial().optional().transform(data => {
+        if (data?.dependencies) {
+            // Log migration of dependencies from metadata
+            console.warn('Migrating dependencies from metadata to main task structure');
+        }
+        return data;
+    })
 });
 
 // Update task input schema
@@ -85,8 +92,16 @@ export const updateTaskSchema = z.object({
         reasoning: z.string().max(2000).optional(),
         toolsUsed: z.array(z.string().max(100)).max(100).optional(),
         resourcesAccessed: z.array(z.string().max(100)).max(100).optional(),
-        contextUsed: z.array(z.string().max(1000)).max(100).optional()
-    }).partial().optional()
+        contextUsed: z.array(z.string().max(1000)).max(100).optional(),
+        dependencies: z.array(z.string()).max(50).optional() // Support legacy format
+    }).partial().optional().transform(data => {
+        if (data?.dependencies) {
+            // Log migration of dependencies from metadata
+            console.warn('Migrating dependencies from metadata to main task structure');
+        }
+        const { dependencies: _, ...rest } = data || {};
+        return rest;
+    })
 });
 
 // Task response schema

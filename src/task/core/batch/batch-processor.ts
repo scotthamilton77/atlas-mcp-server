@@ -180,14 +180,24 @@ export class TaskBatchProcessor implements BatchProcessor {
 
         for (let attempt = 1; attempt <= this.config.retryCount; attempt++) {
             try {
-                await operation(item);
-                if (attempt > 1) {
-                    this.logger.info('Operation succeeded after retry', {
-                        successfulAttempt: attempt,
-                        totalAttempts: this.config.retryCount
-                    });
+                try {
+                    await operation(item);
+                    if (attempt > 1) {
+                        this.logger.info('Operation succeeded after retry', {
+                            successfulAttempt: attempt,
+                            totalAttempts: this.config.retryCount
+                        });
+                    }
+                    return;
+                } catch (error) {
+                    // Don't retry certain errors
+                    if (error instanceof Error && 
+                        (error.message.includes('TASK_CYCLE') || 
+                         error.message.includes('TASK_DEPENDENCY'))) {
+                        throw error; // Immediately fail for dependency/cycle errors
+                    }
+                    throw error;
                 }
-                return;
             } catch (error) {
                 lastError = error instanceof Error ? error : new Error(String(error));
                 lastAttemptContext = {

@@ -38,7 +38,7 @@ export const createTaskSchema = {
         dependencies: {
             type: 'array',
             items: { type: 'string' },
-            description: 'Paths of tasks that must be completed first. Use for managing execution order and prerequisites.',
+            description: 'Paths of tasks that must be completed first. Tasks will be automatically blocked if dependencies are not met. Dependencies can be specified here (recommended) or in metadata.dependencies (legacy).',
         },
         metadata: {
             type: 'object',
@@ -46,36 +46,32 @@ export const createTaskSchema = {
                 priority: {
                     type: 'string',
                     enum: ['low', 'medium', 'high'],
-                    description: 'Task urgency and impact level'
+                    description: 'Task urgency and impact level. Affects task ordering and scheduling.'
                 },
                 tags: {
                     type: 'array',
                     items: { type: 'string' },
-                    description: 'Keywords for categorization (e.g., ["api", "security", "optimization"])'
-                },
-                dueDate: {
-                    type: 'number',
-                    description: 'Unix timestamp for completion deadline'
+                    description: 'Keywords for categorization and filtering (e.g., ["api", "security", "optimization"]). Used in path pattern matching.'
                 },
                 assignee: {
                     type: 'string',
-                    description: 'System or component responsible for the task'
-                },
-                estimatedHours: {
-                    type: 'number',
-                    description: 'Estimated processing time in hours'
+                    description: 'System or component responsible for the task. Used for task distribution and filtering.'
                 },
                 reasoning: {
                     type: 'string',
-                    description: 'LLM reasoning about task creation, importance, and approach'
+                    description: 'LLM reasoning about task decisions, importance, and approach. Provides context for status changes and dependencies.'
                 },
                 notes: {
                     type: 'array',
                     items: { type: 'string' },
-                    description: 'Additional context, observations, and planning notes'
+                    description: 'Additional context, observations, and planning notes. Used to track progress and document decisions.'
                 }
             },
-            description: 'Additional task context and tracking information.',
+            description: 'Additional task context and tracking information. Fields affect:\n' +
+                        '- Task organization (priority, tags, assignee)\n' +
+                        '- Progress tracking (notes)\n' +
+                        '- Decision history (reasoning)\n\n' +
+                        'Note: dependencies in metadata.dependencies will be migrated to the main dependencies array.',
         }
     },
     required: ['name'],
@@ -118,7 +114,7 @@ export const updateTaskSchema = {
                 dependencies: {
                     type: 'array',
                     items: { type: 'string' },
-                    description: 'Updated task dependencies based on discovered requirements.',
+                    description: 'Updated task dependencies. Tasks will be automatically blocked if new dependencies are not met. Status changes propagate through dependency chain.',
                 },
                 metadata: {
                     type: 'object',
@@ -126,43 +122,45 @@ export const updateTaskSchema = {
                         priority: {
                             type: 'string',
                             enum: ['low', 'medium', 'high'],
-                            description: 'Adjusted priority based on current context'
+                            description: 'Task urgency and impact level. Affects task ordering and scheduling.'
                         },
                         tags: {
                             type: 'array',
                             items: { type: 'string' },
-                            description: 'Updated categorization tags'
-                        },
-                        dueDate: {
-                            type: 'number',
-                            description: 'Adjusted completion deadline'
+                            description: 'Keywords for categorization and filtering (e.g., ["api", "security", "optimization"]). Used in path pattern matching.'
                         },
                         assignee: {
                             type: 'string',
                             description: 'Updated system/component assignment'
                         },
-                        estimatedHours: {
-                            type: 'number',
-                            description: 'Refined time estimate'
-                        },
-                        actualHours: {
-                            type: 'number',
-                            description: 'Actual processing time spent'
-                        },
                         reasoning: {
                             type: 'string',
-                            description: 'Updated LLM reasoning about task progress and changes'
+                            description: 'LLM reasoning about task decisions, importance, and approach. Provides context for status changes and dependencies.'
                         },
                         notes: {
                             type: 'array',
                             items: { type: 'string' },
-                            description: 'Additional observations and progress notes'
+                            description: 'Additional context, observations, and planning notes. Used to track progress and document decisions.'
                         }
                     },
-                    description: 'Updated task metadata reflecting current state and understanding.',
+                    description: 'Task metadata fields affect:\n' +
+                                '- Task organization (priority, tags, assignee)\n' +
+                                '- Progress tracking (notes)\n' +
+                                '- Decision history (reasoning)',
                 },
             },
-            description: 'Fields to update. Only specified fields will be modified.',
+            description: 'Fields to update. Available fields:\n' +
+                        '- name: Update task name\n' +
+                        '- description: Update task details\n' +
+                        '- type: Change task type (task/milestone/group)\n' +
+                        '- status: Update execution state with automatic dependency checks\n' +
+                        '- dependencies: Add/remove dependencies with validation\n' +
+                        '- metadata: Update task metadata (priority, tags, notes, etc.)\n\n' +
+                        'Status changes trigger:\n' +
+                        '- Automatic dependency validation\n' +
+                        '- Status propagation to parent tasks\n' +
+                        '- Dependent task blocking\n' +
+                        '- Child task status updates',
         },
     },
     required: ['path', 'updates'],
@@ -246,9 +244,14 @@ export const bulkTaskSchema = {
                     data: {
                         type: 'object',
                         description: 'Operation-specific data:\n' +
-                                   '- create: Full task definition including context\n' +
-                                   '- update: Fields to modify with reasoning\n' +
-                                   '- delete: Optional deletion context'
+                                   '- create: Full task definition including dependencies and context\n' +
+                                   '- update: Fields to modify including status and dependencies\n' +
+                                   '- delete: Optional deletion context\n\n' +
+                                   'Dependency handling:\n' +
+                                   '- Dependencies are validated across all operations\n' +
+                                   '- Status changes respect dependency constraints\n' +
+                                   '- Circular dependencies are prevented\n' +
+                                   '- Failed operations trigger rollback'
                     },
                 },
                 required: ['type', 'path'],

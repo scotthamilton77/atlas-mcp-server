@@ -271,9 +271,24 @@ export class SqliteStorage implements TaskStorage {
         }
 
         try {
+            // Convert glob pattern to SQL LIKE pattern
+            const sqlPattern = pattern
+                .replace(/\*/g, '%') // * becomes %
+                .replace(/\?/g, '_') // ? becomes _
+                .replace(/\[!/g, '[^') // [!a-z] becomes [^a-z]
+                .replace(/\[([^\]]+)]/g, (_match, chars) => 
+                    // Handle character classes [a-z] -> [a-z]
+                    `[${chars.replace(/\\([*?[])/g, '$1')}]`
+                );
+
+            this.logger.debug('Converting glob pattern to SQL', {
+                original: pattern,
+                sql: sqlPattern
+            });
+
             const rows = await this.db.all<Record<string, unknown>[]>(
-                'SELECT * FROM tasks WHERE path LIKE ?',
-                `${pattern}%`
+                'SELECT * FROM tasks WHERE path GLOB ?',
+                sqlPattern
             );
 
             return rows.map(row => this.rowToTask(row));

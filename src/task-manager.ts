@@ -51,6 +51,27 @@ export class TaskManager {
                 }
             }
 
+            // Validate dependencies if provided
+            if (input.dependencies?.length) {
+                for (const depPath of input.dependencies) {
+                    const depTask = await this.getTaskByPath(depPath);
+                    if (!depTask) {
+                        throw createError(
+                            ErrorCodes.INVALID_INPUT,
+                            `Dependency task not found: ${depPath}`
+                        );
+                    }
+                }
+            }
+
+            // Extract dependencies from metadata if present
+            const metadataDeps = input.metadata?.dependencies as string[] | undefined;
+            const dependencies = input.dependencies || metadataDeps || [];
+            
+            // Remove dependencies from metadata to avoid duplication
+            const metadata = { ...input.metadata };
+            delete metadata.dependencies;
+
             const task: Task = {
                 path,
                 name: input.name,
@@ -60,10 +81,10 @@ export class TaskManager {
                 parentPath: input.parentPath,
                 notes: input.notes,
                 reasoning: input.reasoning,
-                dependencies: input.dependencies || [],
+                dependencies,
                 subtasks: [],
                 metadata: {
-                    ...input.metadata,
+                    ...metadata,
                     created: Date.now(),
                     updated: Date.now(),
                     projectPath: path.split('/')[0],
@@ -102,6 +123,27 @@ export class TaskManager {
                 );
             }
 
+            // Extract dependencies from metadata if present
+            const metadataDeps = updates.metadata?.dependencies as string[] | undefined;
+            const dependencies = updates.dependencies || metadataDeps || task.dependencies;
+
+            // Validate new dependencies if changed
+            if (dependencies !== task.dependencies) {
+                for (const depPath of dependencies) {
+                    const depTask = await this.getTaskByPath(depPath);
+                    if (!depTask) {
+                        throw createError(
+                            ErrorCodes.INVALID_INPUT,
+                            `Dependency task not found: ${depPath}`
+                        );
+                    }
+                }
+            }
+
+            // Remove dependencies from metadata to avoid duplication
+            const metadata = { ...updates.metadata };
+            delete metadata?.dependencies;
+
             // Update task fields
             const updatedTask: Task = {
                 ...task,
@@ -111,10 +153,10 @@ export class TaskManager {
                 status: updates.status || task.status,
                 notes: updates.notes || task.notes,
                 reasoning: updates.reasoning || task.reasoning,
-                dependencies: updates.dependencies || task.dependencies,
+                dependencies,
                 metadata: {
                     ...task.metadata,
-                    ...updates.metadata,
+                    ...metadata,
                     updated: Date.now(),
                     version: task.metadata.version + 1
                 }

@@ -67,7 +67,11 @@ export const ErrorMessages: Record<ErrorCode, { message: string; suggestion: str
     },
     [ErrorCodes.TASK_DEPENDENCY]: {
         message: 'Invalid task dependency',
-        suggestion: 'Ensure all dependent tasks exist and form no circular dependencies'
+        suggestion: 'Ensure all dependent tasks exist and are valid. Common issues:\n' +
+                   '1. Referenced task does not exist\n' +
+                   '2. Dependency creates a circular reference\n' +
+                   '3. Dependent task is in a failed or blocked state\n' +
+                   '4. Dependencies specified in both task and metadata (use task.dependencies instead)'
     },
     [ErrorCodes.TASK_STATUS]: {
         message: 'Invalid task status transition',
@@ -107,7 +111,11 @@ export const ErrorMessages: Record<ErrorCode, { message: string; suggestion: str
     },
     [ErrorCodes.TASK_CYCLE]: {
         message: 'Circular dependency detected',
-        suggestion: 'Review and restructure task dependencies to eliminate cycles'
+        suggestion: 'Review and restructure task dependencies to eliminate cycles. Steps to resolve:\n' +
+                   '1. Identify the cycle path in the error message\n' +
+                   '2. Break the cycle by removing one of the dependencies\n' +
+                   '3. Consider using task ordering or parent-child relationships instead\n' +
+                   '4. Ensure dependencies flow in one direction'
     },
 
     // Storage errors

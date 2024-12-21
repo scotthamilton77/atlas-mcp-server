@@ -35,23 +35,23 @@ type GetTaskByPath = (path: string) => Promise<Task | null>;
 // Status transition guidance for error messages
 const STATUS_TRANSITION_GUIDE: Record<TaskStatus, Partial<Record<TaskStatus, string>>> = {
     [TaskStatus.PENDING]: {
-        [TaskStatus.IN_PROGRESS]: "Start work on the task",
-        [TaskStatus.BLOCKED]: "Mark as blocked by dependencies"
+        [TaskStatus.IN_PROGRESS]: "Begin task execution",
+        [TaskStatus.BLOCKED]: "Set blocked state due to dependencies"
     },
     [TaskStatus.IN_PROGRESS]: {
-        [TaskStatus.COMPLETED]: "Mark work as completed",
-        [TaskStatus.FAILED]: "Mark task as failed due to issues",
-        [TaskStatus.BLOCKED]: "Mark as blocked by dependencies"
+        [TaskStatus.COMPLETED]: "Set completion state",
+        [TaskStatus.FAILED]: "Set failed state due to execution errors",
+        [TaskStatus.BLOCKED]: "Set blocked state due to dependencies"
     },
     [TaskStatus.COMPLETED]: {
-        [TaskStatus.FAILED]: "Mark as failed after verification issues"
+        [TaskStatus.FAILED]: "Set failed state after validation errors"
     },
     [TaskStatus.FAILED]: {
-        [TaskStatus.IN_PROGRESS]: "Retry the failed task"
+        [TaskStatus.IN_PROGRESS]: "Retry task execution"
     },
     [TaskStatus.BLOCKED]: {
-        [TaskStatus.IN_PROGRESS]: "Resume work after resolving blockers",
-        [TaskStatus.FAILED]: "Mark as failed due to unresolvable blockers"
+        [TaskStatus.IN_PROGRESS]: "Resume execution after dependency resolution",
+        [TaskStatus.FAILED]: "Set failed state due to unresolvable dependencies"
     }
 };
 
@@ -89,23 +89,56 @@ export class StatusManager {
 
     /**
      * Determines if a task should be blocked based on dependencies
-     * Updated to allow parallel work and only block completion
+     * Updated to handle bulk operations and dependency states
      */
-    async isBlocked(task: Task, getTaskByPath: GetTaskByPath): Promise<boolean> {
+    async isBlocked(
+        task: Task, 
+        getTaskByPath: GetTaskByPath,
+        context: { isBulkOperation?: boolean } = {}
+    ): Promise<{ blocked: boolean; reason?: string }> {
         // Don't block completed or failed tasks
         if (task.status === TaskStatus.COMPLETED || task.status === TaskStatus.FAILED) {
-            return false;
+            return { blocked: false };
         }
 
-        // Only enforce strict dependency checking for completion
-        if (task.status === TaskStatus.IN_PROGRESS && task.dependencies.length > 0) {
-            // Allow parallel work unless dependencies have failed
-            const depTasks = await Promise.all(task.dependencies.map(depPath => getTaskByPath(depPath)));
-            return depTasks.some(depTask => !depTask || depTask.status === TaskStatus.FAILED);
+        if (task.dependencies.length === 0) {
+            return { blocked: false };
         }
 
-        // For all other cases, no blocking
-        return false;
+        const depTasks = await Promise.all(task.dependencies.map(depPath => getTaskByPath(depPath)));
+        
+        // In bulk operations, only block if dependencies have failed
+        if (context.isBulkOperation) {
+            const hasFailedDeps = depTasks.some(depTask => depTask?.status === TaskStatus.FAILED);
+            return {
+                blocked: hasFailedDeps,
+                reason: hasFailedDeps ? 'One or more dependencies have failed' : undefined
+            };
+        }
+
+        // For completion, all dependencies must be completed
+        if (task.status === TaskStatus.IN_PROGRESS) {
+            const incompleteDeps = depTasks.filter(
+                depTask => !depTask || depTask.status !== TaskStatus.COMPLETED
+            );
+            if (incompleteDeps.length > 0) {
+                return {
+                    blocked: true,
+                    reason: `Dependencies not completed: ${incompleteDeps.map(d => d?.path).join(', ')}`
+                };
+            }
+        }
+
+        // For other transitions, block if any dependency has failed
+        const failedDeps = depTasks.filter(depTask => depTask?.status === TaskStatus.FAILED);
+        if (failedDeps.length > 0) {
+            return {
+                blocked: true,
+                reason: `Failed dependencies: ${failedDeps.map(d => d?.path).join(', ')}`
+            };
+        }
+
+        return { blocked: false };
     }
 
     /**
@@ -131,15 +164,17 @@ export class StatusManager {
             await this.acquireLockWithRetry(task.path);
 
             // Check if task should be automatically blocked
-            if (await this.isBlocked(task, getTaskByPath) && newStatus !== TaskStatus.BLOCKED) {
+            const { blocked, reason } = await this.isBlocked(task, getTaskByPath, { isBulkOperation });
+            if (blocked && newStatus !== TaskStatus.BLOCKED) {
                 throw new TaskError(
                     ErrorCodes.TASK_STATUS,
-                    'Task is blocked by incomplete dependencies',
+                    'Task is blocked by dependencies',
                     {
                         path: task.path,
                         currentStatus: task.status,
                         requestedStatus: newStatus,
-                        suggestion: 'Complete all dependencies before proceeding'
+                        reason,
+                        suggestion: reason || 'Resolve dependency issues before proceeding'
                     }
                 );
             }
@@ -203,7 +238,7 @@ export class StatusManager {
                         path: taskPath,
                         timeout: this.LOCK_TIMEOUT - timeSinceLock,
                         retryAfter: Math.ceil((this.LOCK_TIMEOUT - timeSinceLock) / 1000),
-                        suggestion: 'Wait a moment and retry the operation'
+                        suggestion: 'Retry operation after lock expiration'
                     }
                 );
             }
@@ -263,7 +298,7 @@ export class StatusManager {
                     path: task.path, 
                     currentStatus: task.status, 
                     newStatus,
-                    suggestion: 'Create a new task instead of reverting a completed/failed task'
+                    suggestion: 'Create new task for retry operations - completed/failed states are terminal'
                 }
             );
         }
@@ -293,7 +328,7 @@ export class StatusManager {
                             status: t?.status,
                             name: t?.name
                         })),
-                        suggestion: 'Complete all subtasks before marking the parent task as completed'
+                        suggestion: 'Parent completion requires all subtasks to be in completed state'
                     }
                 );
             }
