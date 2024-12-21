@@ -2,19 +2,13 @@
  * Atlas MCP Server
  * Path-based task management system
  */
-import { fileURLToPath } from 'url';
 import { promises as fs } from 'fs';
-import path from 'path';
-
 import { TaskManager } from './task-manager.js';
 import { Logger } from './logging/index.js';
 import { StorageConfig, TaskStorage } from './types/storage.js';
 import { createStorage } from './storage/index.js';
 import { ToolHandler } from './tools/handler.js';
 import { AtlasServer } from './server/index.js';
-
-// Default storage directory relative to the current file
-const DEFAULT_STORAGE_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data');
 
 export class AtlasServerBootstrap {
     private readonly logger: Logger;
@@ -28,11 +22,27 @@ export class AtlasServerBootstrap {
         // Initialize logger
         this.logger = Logger.getInstance().child({ component: 'AtlasServerBootstrap' });
 
+        // Log environment variables
+        this.logger.debug('Environment variables:', {
+            ATLAS_STORAGE_DIR: process.env.ATLAS_STORAGE_DIR,
+            ATLAS_STORAGE_NAME: process.env.ATLAS_STORAGE_NAME,
+            LOG_LEVEL: process.env.LOG_LEVEL,
+            NODE_ENV: process.env.NODE_ENV
+        });
+
+        // Validate required environment variables
+        if (!process.env.ATLAS_STORAGE_DIR) {
+            throw new Error('ATLAS_STORAGE_DIR environment variable is required');
+        }
+        if (!process.env.ATLAS_STORAGE_NAME) {
+            throw new Error('ATLAS_STORAGE_NAME environment variable is required');
+        }
+
         // Set up storage configuration
-        const storageDir = process.env.ATLAS_STORAGE_DIR || DEFAULT_STORAGE_DIR;
+        const storageDir = process.env.ATLAS_STORAGE_DIR;
         this.storageConfig = {
             baseDir: storageDir,
-            name: process.env.ATLAS_STORAGE_NAME || 'atlas-tasks',
+            name: process.env.ATLAS_STORAGE_NAME,
             connection: {
                 maxRetries: Number(process.env.ATLAS_MAX_RETRIES) || 3,
                 retryDelay: Number(process.env.ATLAS_RETRY_DELAY) || 1000,
@@ -42,7 +52,9 @@ export class AtlasServerBootstrap {
                 checkpointInterval: Number(process.env.ATLAS_CHECKPOINT_INTERVAL) || 300000,
                 cacheSize: Number(process.env.ATLAS_CACHE_SIZE) || 2000,
                 mmapSize: Number(process.env.ATLAS_MMAP_SIZE) || 30000000000,
-                pageSize: Number(process.env.ATLAS_PAGE_SIZE) || 4096
+                pageSize: Number(process.env.ATLAS_PAGE_SIZE) || 4096,
+                maxMemory: Number(process.env.ATLAS_MAX_MEMORY) || 2 * 1024 * 1024 * 1024, // 2GB default
+                maxCacheMemory: Number(process.env.ATLAS_MAX_CACHE_MEMORY) || 512 * 1024 * 1024 // 512MB default
             }
         };
     }
@@ -86,9 +98,17 @@ export class AtlasServerBootstrap {
         try {
             await this.initialize();
             await this.server.run();
+            const maxMemory = this.storageConfig.performance?.maxMemory || 2 * 1024 * 1024 * 1024;
+            const maxCacheMemory = this.storageConfig.performance?.maxCacheMemory || 512 * 1024 * 1024;
+
             this.logger.info('Atlas MCP server started', {
                 storageDir: this.storageConfig.baseDir,
-                version: '0.1.0'
+                storageName: this.storageConfig.name,
+                version: '0.1.0',
+                environment: process.env.NODE_ENV,
+                logLevel: process.env.LOG_LEVEL,
+                maxMemory: `${Math.round(maxMemory / 1024 / 1024)}MB`,
+                maxCacheMemory: `${Math.round(maxCacheMemory / 1024 / 1024)}MB`
             });
         } catch (error) {
             this.logger.fatal('Failed to start server', { error });

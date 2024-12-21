@@ -30,13 +30,37 @@ export interface StorageConfig {
         mmapSize?: number;
         /** Page size */
         pageSize?: number;
+        /** Maximum memory usage in bytes */
+        maxMemory?: number;
+        /** Maximum cache memory usage in bytes */
+        maxCacheMemory?: number;
     };
 }
 
 /**
  * Storage interface for task operations
  */
-export interface TaskStorage {
+/**
+ * Cache management interface
+ */
+export interface CacheManager {
+    clearCache(): Promise<void>;
+    getCacheStats(): Promise<CacheStats>;
+}
+
+/**
+ * Cache statistics
+ */
+export interface CacheStats {
+    size: number;
+    hitRate: number;
+    memoryUsage: number;
+}
+
+/**
+ * Storage interface for task operations with cache management
+ */
+export interface TaskStorage extends CacheManager {
     // Lifecycle
     initialize(): Promise<void>;
     close(): Promise<void>;
@@ -56,13 +80,23 @@ export interface TaskStorage {
     vacuum(): Promise<void>;
     analyze(): Promise<void>;
     checkpoint(): Promise<void>;
-    getMetrics(): Promise<StorageMetrics>;
+    getMetrics(): Promise<StorageMetrics & {
+        cache?: CacheStats;
+        memory?: {
+            heapUsed: number;
+            heapTotal: number;
+            rss: number;
+        };
+    }>;
     clearAllTasks(): Promise<void>;
     repairRelationships(dryRun?: boolean): Promise<{ fixed: number, issues: string[] }>;
 }
 
 /**
  * Storage metrics
+ */
+/**
+ * Storage metrics with memory usage
  */
 export interface StorageMetrics {
     /** Task metrics */
@@ -95,6 +129,15 @@ export interface StorageMetrics {
         pageSize: number;
         /** Number of database pages */
         pageCount: number;
+        /** Cache metrics */
+        cache?: {
+            /** Cache hit rate */
+            hitRate: number;
+            /** Cache memory usage */
+            memoryUsage: number;
+            /** Cache entry count */
+            entryCount: number;
+        };
     };
 }
 

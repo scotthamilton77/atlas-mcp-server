@@ -1,19 +1,41 @@
 /**
  * Path-based task management schemas for LLM agents
  */
-import { TaskStatus } from '../types/task.js';
+import { TaskStatus, CONSTRAINTS } from '../types/task.js';
 
-/** Creates a new task with path-based hierarchy */
+// Schema validation messages
+const VALIDATION_MESSAGES = {
+    PATH_FORMAT: 'Path can only contain alphanumeric characters, underscores, dots, and hyphens',
+    PATH_DEPTH: `Path depth cannot exceed ${CONSTRAINTS.MAX_PATH_DEPTH} levels`,
+    NAME_LENGTH: `Name cannot exceed ${CONSTRAINTS.NAME_MAX_LENGTH} characters`,
+    DESC_LENGTH: `Description cannot exceed ${CONSTRAINTS.DESCRIPTION_MAX_LENGTH} characters`,
+    NOTE_LENGTH: `Notes cannot exceed ${CONSTRAINTS.NOTE_MAX_LENGTH} characters each`,
+    REASONING_LENGTH: `Reasoning cannot exceed ${CONSTRAINTS.REASONING_MAX_LENGTH} characters`,
+    DEPENDENCIES_SIZE: `Cannot have more than ${CONSTRAINTS.MAX_DEPENDENCIES} dependencies`,
+    SUBTASKS_SIZE: `Cannot have more than ${CONSTRAINTS.MAX_SUBTASKS} subtasks`,
+    NOTES_SIZE: `Cannot have more than ${CONSTRAINTS.MAX_NOTES} notes`,
+    METADATA_LENGTH: `Metadata string fields cannot exceed ${CONSTRAINTS.METADATA_STRING_MAX_LENGTH} characters`,
+    METADATA_ARRAY: `Metadata arrays cannot exceed ${CONSTRAINTS.MAX_ARRAY_ITEMS} items`
+};
+
+/** Creates a new task with path-based hierarchy and validation */
 export const createTaskSchema = {
     type: 'object',
     properties: {
         path: {
             type: 'string',
-            description: 'Hierarchical task path (e.g., "server/api/authentication"). Use paths to organize related tasks.',
+            description: 'Hierarchical task path (e.g., "server/api/authentication"). Use paths to organize related tasks.\n' +
+                        `Constraints:\n` +
+                        `- ${VALIDATION_MESSAGES.PATH_FORMAT}\n` +
+                        `- ${VALIDATION_MESSAGES.PATH_DEPTH}`,
+            pattern: '^[a-zA-Z0-9_.-]+(?:/[a-zA-Z0-9_.-]+)*$',
+            maxLength: CONSTRAINTS.MAX_PATH_DEPTH * 50 // Reasonable max length per segment
         },
         name: {
             type: 'string',
-            description: 'Clear, action-oriented task name (e.g., "Implement JWT authentication", "Refactor database queries").',
+            description: 'Clear, action-oriented task name (e.g., "Implement JWT authentication", "Refactor database queries").\n' +
+                        `Maximum length: ${CONSTRAINTS.NAME_MAX_LENGTH} characters`,
+            maxLength: CONSTRAINTS.NAME_MAX_LENGTH
         },
         parentPath: {
             type: 'string',
@@ -25,7 +47,9 @@ export const createTaskSchema = {
                         '- Objective: What needs to be accomplished\n' +
                         '- Context: Why this task is needed\n' +
                         '- Technical details: Implementation considerations\n' +
-                        '- Success criteria: How to verify completion',
+                        '- Success criteria: How to verify completion\n' +
+                        `Maximum length: ${CONSTRAINTS.DESCRIPTION_MAX_LENGTH} characters`,
+            maxLength: CONSTRAINTS.DESCRIPTION_MAX_LENGTH
         },
         type: {
             type: 'string',
@@ -37,8 +61,15 @@ export const createTaskSchema = {
         },
         dependencies: {
             type: 'array',
-            items: { type: 'string' },
-            description: 'Paths of tasks that must be completed first. Tasks will be automatically blocked if dependencies are not met. Dependencies can be specified here (recommended) or in metadata.dependencies (legacy).',
+            items: { 
+                type: 'string',
+                pattern: '^[a-zA-Z0-9_.-]+(?:/[a-zA-Z0-9_.-]+)*$'
+            },
+            maxItems: CONSTRAINTS.MAX_DEPENDENCIES,
+            description: 'Paths of tasks that must be completed first. Tasks will be automatically blocked if dependencies are not met.\n' +
+                        `Maximum dependencies: ${CONSTRAINTS.MAX_DEPENDENCIES}\n` +
+                        'Dependencies can be specified here (recommended) or in metadata.dependencies (legacy).',
+            uniqueItems: true
         },
         metadata: {
             type: 'object',
@@ -51,7 +82,10 @@ export const createTaskSchema = {
                 tags: {
                     type: 'array',
                     items: { type: 'string' },
-                    description: 'Keywords for categorization and filtering (e.g., ["api", "security", "optimization"]). Used in path pattern matching.'
+                    maxItems: CONSTRAINTS.MAX_ARRAY_ITEMS,
+                    description: 'Keywords for categorization and filtering (e.g., ["api", "security", "optimization"]). Used in path pattern matching.\n' +
+                                `Maximum tags: ${CONSTRAINTS.MAX_ARRAY_ITEMS}`,
+                    uniqueItems: true
                 },
                 assignee: {
                     type: 'string',
@@ -59,12 +93,20 @@ export const createTaskSchema = {
                 },
                 reasoning: {
                     type: 'string',
-                    description: 'LLM reasoning about task decisions, importance, and approach. Provides context for status changes and dependencies.'
+                    description: 'LLM reasoning about task decisions, importance, and approach. Provides context for status changes and dependencies.\n' +
+                                `Maximum length: ${CONSTRAINTS.REASONING_MAX_LENGTH} characters`,
+                    maxLength: CONSTRAINTS.REASONING_MAX_LENGTH
                 },
                 notes: {
                     type: 'array',
-                    items: { type: 'string' },
-                    description: 'Additional context, observations, and planning notes. Used to track progress and document decisions.'
+                    items: { 
+                        type: 'string',
+                        maxLength: CONSTRAINTS.NOTE_MAX_LENGTH
+                    },
+                    maxItems: CONSTRAINTS.MAX_NOTES,
+                    description: 'Additional context, observations, and planning notes. Used to track progress and document decisions.\n' +
+                                `Maximum notes: ${CONSTRAINTS.MAX_NOTES}\n` +
+                                `Maximum length per note: ${CONSTRAINTS.NOTE_MAX_LENGTH} characters`
                 }
             },
             description: 'Additional task context and tracking information. Fields affect:\n' +
@@ -90,11 +132,15 @@ export const updateTaskSchema = {
             properties: {
                 name: {
                     type: 'string',
-                    description: 'Updated task name with current action focus.',
+                    description: 'Updated task name with current action focus.\n' +
+                                `Maximum length: ${CONSTRAINTS.NAME_MAX_LENGTH} characters`,
+                    maxLength: CONSTRAINTS.NAME_MAX_LENGTH
                 },
                 description: {
                     type: 'string',
-                    description: 'Updated description with latest context, findings, and next steps.',
+                    description: 'Updated description with latest context, findings, and next steps.\n' +
+                                `Maximum length: ${CONSTRAINTS.DESCRIPTION_MAX_LENGTH} characters`,
+                    maxLength: CONSTRAINTS.DESCRIPTION_MAX_LENGTH
                 },
                 type: {
                     type: 'string',
@@ -113,8 +159,15 @@ export const updateTaskSchema = {
                 },
                 dependencies: {
                     type: 'array',
-                    items: { type: 'string' },
-                    description: 'Updated task dependencies. Tasks will be automatically blocked if new dependencies are not met. Status changes propagate through dependency chain.',
+                    items: { 
+                        type: 'string',
+                        pattern: '^[a-zA-Z0-9_.-]+(?:/[a-zA-Z0-9_.-]+)*$'
+                    },
+                    maxItems: CONSTRAINTS.MAX_DEPENDENCIES,
+                    description: 'Updated task dependencies. Tasks will be automatically blocked if new dependencies are not met.\n' +
+                                `Maximum dependencies: ${CONSTRAINTS.MAX_DEPENDENCIES}\n` +
+                                'Status changes propagate through dependency chain.',
+                    uniqueItems: true
                 },
                 metadata: {
                     type: 'object',
@@ -127,7 +180,10 @@ export const updateTaskSchema = {
                         tags: {
                             type: 'array',
                             items: { type: 'string' },
-                            description: 'Keywords for categorization and filtering (e.g., ["api", "security", "optimization"]). Used in path pattern matching.'
+                            maxItems: CONSTRAINTS.MAX_ARRAY_ITEMS,
+                            description: 'Keywords for categorization and filtering (e.g., ["api", "security", "optimization"]). Used in path pattern matching.\n' +
+                                      `Maximum tags: ${CONSTRAINTS.MAX_ARRAY_ITEMS}`,
+                            uniqueItems: true
                         },
                         assignee: {
                             type: 'string',
@@ -135,12 +191,20 @@ export const updateTaskSchema = {
                         },
                         reasoning: {
                             type: 'string',
-                            description: 'LLM reasoning about task decisions, importance, and approach. Provides context for status changes and dependencies.'
+                            description: 'LLM reasoning about task decisions, importance, and approach. Provides context for status changes and dependencies.\n' +
+                                      `Maximum length: ${CONSTRAINTS.REASONING_MAX_LENGTH} characters`,
+                            maxLength: CONSTRAINTS.REASONING_MAX_LENGTH
                         },
                         notes: {
                             type: 'array',
-                            items: { type: 'string' },
-                            description: 'Additional context, observations, and planning notes. Used to track progress and document decisions.'
+                            items: { 
+                                type: 'string',
+                                maxLength: CONSTRAINTS.NOTE_MAX_LENGTH
+                            },
+                            maxItems: CONSTRAINTS.MAX_NOTES,
+                            description: 'Additional context, observations, and planning notes. Used to track progress and document decisions.\n' +
+                                      `Maximum notes: ${CONSTRAINTS.MAX_NOTES}\n` +
+                                      `Maximum length per note: ${CONSTRAINTS.NOTE_MAX_LENGTH} characters`
                         }
                     },
                     description: 'Task metadata fields affect:\n' +
@@ -301,6 +365,7 @@ export const importTasksSchema = {
     required: ['filePath'],
 };
 
+/** Bulk task operations with validation */
 export const bulkTaskSchema = {
     type: 'object',
     properties: {
@@ -320,7 +385,12 @@ export const bulkTaskSchema = {
                     },
                     path: {
                         type: 'string',
-                        description: 'Task path for the operation. For create, this sets the desired hierarchy.'
+                        description: 'Task path for the operation. For create, this sets the desired hierarchy.\n' +
+                                   `Constraints:\n` +
+                                   `- ${VALIDATION_MESSAGES.PATH_FORMAT}\n` +
+                                   `- ${VALIDATION_MESSAGES.PATH_DEPTH}`,
+                        pattern: '^[a-zA-Z0-9_.-]+(?:/[a-zA-Z0-9_.-]+)*$',
+                        maxLength: CONSTRAINTS.MAX_PATH_DEPTH * 50
                     },
                     data: {
                         type: 'object',

@@ -3,17 +3,28 @@
  */
 import { Database, open } from 'sqlite';
 import { Task, TaskStatus } from '../types/task.js';
-import { StorageConfig, TaskStorage, StorageMetrics } from '../types/storage.js';
+import { StorageConfig, TaskStorage, StorageMetrics, CacheStats } from '../types/storage.js';
 import { Logger } from '../logging/index.js';
 import { ErrorCodes, createError } from '../errors/index.js';
 import { ConnectionManager } from './connection-manager.js';
 import { globToSqlPattern } from '../utils/pattern-matcher.js';
+
+interface CacheEntry {
+    task: Task;
+    timestamp: number;
+    hits: number;
+}
 
 export class SqliteStorage implements TaskStorage {
     private db: Database | null = null;
     private readonly logger: Logger;
     private readonly config: StorageConfig;
     private readonly connectionManager: ConnectionManager;
+    private readonly cache: Map<string, CacheEntry> = new Map();
+    private readonly MAX_CACHE_SIZE = 1000;
+    private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+    private cacheHits = 0;
+    private cacheMisses = 0;
 
     constructor(config: StorageConfig) {
         this.config = config;
@@ -244,7 +255,41 @@ export class SqliteStorage implements TaskStorage {
         }
     }
 
+    /**
+     * Implements CacheManager.clearCache
+     */
+    async clearCache(): Promise<void> {
+        this.cache.clear();
+        this.cacheHits = 0;
+        this.cacheMisses = 0;
+        this.logger.debug('Cache cleared');
+    }
+
+    /**
+     * Implements CacheManager.getCacheStats
+     */
+    async getCacheStats(): Promise<CacheStats> {
+        const totalRequests = this.cacheHits + this.cacheMisses;
+        return {
+            size: this.cache.size,
+            hitRate: totalRequests > 0 ? this.cacheHits / totalRequests : 0,
+            memoryUsage: process.memoryUsage().heapUsed
+        };
+    }
+
+    /**
+     * Gets a task from cache or database
+     */
     async getTask(path: string): Promise<Task | null> {
+        // Check cache first
+        const cached = this.cache.get(path);
+        if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
+            cached.hits++;
+            this.cacheHits++;
+            return cached.task;
+        }
+        this.cacheMisses++;
+
         if (!this.db) {
             throw createError(
                 ErrorCodes.STORAGE_ERROR,
@@ -262,7 +307,29 @@ export class SqliteStorage implements TaskStorage {
                 return null;
             }
 
-            return this.rowToTask(row);
+            const task = this.rowToTask(row);
+            
+            // Add to cache with LRU eviction
+            if (this.cache.size >= this.MAX_CACHE_SIZE) {
+                // Find least recently used entry
+                let oldestTime = Date.now();
+                let oldestKey = '';
+                for (const [key, entry] of this.cache.entries()) {
+                    if (entry.timestamp < oldestTime) {
+                        oldestTime = entry.timestamp;
+                        oldestKey = key;
+                    }
+                }
+                this.cache.delete(oldestKey);
+            }
+            
+            this.cache.set(path, {
+                task,
+                timestamp: Date.now(),
+                hits: 1
+            });
+
+            return task;
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
             this.logger.error('Failed to get task', { error: errorMessage, path });
@@ -587,7 +654,14 @@ export class SqliteStorage implements TaskStorage {
         }
     }
 
-    async getMetrics(): Promise<StorageMetrics> {
+    async getMetrics(): Promise<StorageMetrics & {
+        cache?: CacheStats;
+        memory?: {
+            heapUsed: number;
+            heapTotal: number;
+            rss: number;
+        };
+    }> {
         if (!this.db) {
             throw createError(
                 ErrorCodes.STORAGE_ERROR,
@@ -615,6 +689,9 @@ export class SqliteStorage implements TaskStorage {
                 `)
             ]);
 
+            const memUsage = process.memoryUsage();
+            const cacheStats = await this.getCacheStats();
+
             return {
                 tasks: {
                     total: Number(taskStats?.total || 0),
@@ -626,7 +703,18 @@ export class SqliteStorage implements TaskStorage {
                     totalSize: Number(storageStats?.totalSize || 0),
                     pageSize: Number(storageStats?.page_size || 0),
                     pageCount: Number(storageStats?.page_count || 0),
-                    walSize: Number(storageStats?.wal_size || 0)
+                    walSize: Number(storageStats?.wal_size || 0),
+                    cache: {
+                        hitRate: cacheStats.hitRate,
+                        memoryUsage: cacheStats.memoryUsage,
+                        entryCount: this.cache.size
+                    }
+                },
+                cache: cacheStats,
+                memory: {
+                    heapUsed: memUsage.heapUsed,
+                    heapTotal: memUsage.heapTotal,
+                    rss: memUsage.rss
                 }
             };
         } catch (error) {
@@ -787,6 +875,7 @@ export class SqliteStorage implements TaskStorage {
     }
 
     async close(): Promise<void> {
+        await this.clearCache();
         if (this.db) {
             await this.db.close();
             this.db = null;

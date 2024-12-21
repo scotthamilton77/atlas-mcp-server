@@ -10,10 +10,14 @@ import { validateTaskPath, isValidTaskHierarchy } from './types/task.js';
 export class TaskManager {
     private logger: Logger;
     readonly storage: TaskStorage;
+    private memoryMonitor?: NodeJS.Timeout;
+    private readonly MAX_CACHE_MEMORY = 512 * 1024 * 1024; // 512MB cache limit
+    private readonly MEMORY_CHECK_INTERVAL = 60000; // 1 minute
 
     constructor(storage: TaskStorage) {
         this.logger = Logger.getInstance().child({ component: 'TaskManager' });
         this.storage = storage;
+        this.setupMemoryMonitoring();
     }
 
     /**
@@ -322,7 +326,93 @@ export class TaskManager {
         return segments.join('/');
     }
 
+    /**
+     * Sets up memory monitoring for cache management
+     */
+    private setupMemoryMonitoring(): void {
+        this.memoryMonitor = setInterval(async () => {
+            const memUsage = process.memoryUsage();
+            
+            // Log memory stats
+            this.logger.debug('Task manager memory usage:', {
+                heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
+                heapTotal: `${Math.round(memUsage.heapTotal / 1024 / 1024)}MB`,
+                rss: `${Math.round(memUsage.rss / 1024 / 1024)}MB`
+            });
+
+            // Check if cache is using too much memory
+            if (memUsage.heapUsed > this.MAX_CACHE_MEMORY) {
+                this.logger.warn('Cache memory threshold exceeded, clearing caches', {
+                    heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
+                    threshold: `${Math.round(this.MAX_CACHE_MEMORY / 1024 / 1024)}MB`
+                });
+                
+                await this.clearCaches();
+            }
+        }, this.MEMORY_CHECK_INTERVAL);
+    }
+
+    /**
+     * Clears all caches to free memory
+     */
+    async clearCaches(): Promise<void> {
+        try {
+            // Clear storage caches
+            if ('clearCache' in this.storage) {
+                await (this.storage as any).clearCache();
+            }
+
+            // Force garbage collection if available
+            if (global.gc) {
+                global.gc();
+            }
+
+            this.logger.info('Caches cleared successfully');
+        } catch (error) {
+            this.logger.error('Failed to clear caches', { error });
+            throw error;
+        }
+    }
+
+    /**
+     * Cleans up resources and closes connections
+     */
+    async cleanup(): Promise<void> {
+        try {
+            // Stop memory monitoring
+            if (this.memoryMonitor) {
+                clearInterval(this.memoryMonitor);
+            }
+
+            // Clear caches
+            await this.clearCaches();
+
+            // Close storage
+            await this.storage.close();
+
+            this.logger.info('Task manager cleanup completed');
+        } catch (error) {
+            this.logger.error('Failed to cleanup task manager', { error });
+            throw error;
+        }
+    }
+
+    /**
+     * Gets current memory usage statistics
+     */
+    getMemoryStats(): { heapUsed: number; heapTotal: number; rss: number } {
+        const memUsage = process.memoryUsage();
+        return {
+            heapUsed: memUsage.heapUsed,
+            heapTotal: memUsage.heapTotal,
+            rss: memUsage.rss
+        };
+    }
+
+    /**
+     * Closes the task manager and releases resources
+     */
     async close(): Promise<void> {
-        await this.storage.close();
+        await this.cleanup();
     }
 }

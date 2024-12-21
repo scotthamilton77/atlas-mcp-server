@@ -24,6 +24,14 @@ export interface ServerConfig {
     shutdownTimeout?: number;
 }
 
+export interface ToolHandler {
+    listTools: () => Promise<any>;
+    handleToolCall: (request: any) => Promise<any>;
+    getStorageMetrics: () => Promise<any>;
+    clearCaches?: () => Promise<void>;
+    cleanup?: () => Promise<void>;
+}
+
 /**
  * AtlasServer class encapsulates MCP server functionality
  * Handles server lifecycle, transport, and error management
@@ -37,17 +45,16 @@ export class AtlasServer {
     private readonly requestTracer: RequestTracer;
     private isShuttingDown: boolean = false;
     private readonly activeRequests: Set<string> = new Set();
+    private memoryMonitor?: NodeJS.Timeout;
+    private readonly MAX_MEMORY_USAGE = 2 * 1024 * 1024 * 1024; // 2GB threshold
+    private readonly MEMORY_CHECK_INTERVAL = 30000; // 30 seconds
 
     /**
      * Creates a new AtlasServer instance
      */
     constructor(
         private readonly config: ServerConfig,
-        private readonly toolHandler: {
-            listTools: () => Promise<any>;
-            handleToolCall: (request: any) => Promise<any>;
-            getStorageMetrics: () => Promise<any>;
-        }
+        private readonly toolHandler: ToolHandler
     ) {
         this.logger = Logger.getInstance().child({ component: 'AtlasServer' });
         
@@ -73,6 +80,7 @@ export class AtlasServer {
         this.setupErrorHandling();
         this.setupToolHandlers();
         this.setupHealthCheck();
+        this.setupMemoryMonitoring();
     }
 
     /**
@@ -299,6 +307,42 @@ export class AtlasServer {
     /**
      * Gracefully shuts down the server
      */
+    /**
+     * Sets up memory monitoring to prevent leaks
+     */
+    private setupMemoryMonitoring(): void {
+        this.memoryMonitor = setInterval(() => {
+            const memUsage = process.memoryUsage();
+            
+            // Log memory stats
+            this.logger.debug('Memory usage:', {
+                heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
+                heapTotal: `${Math.round(memUsage.heapTotal / 1024 / 1024)}MB`,
+                rss: `${Math.round(memUsage.rss / 1024 / 1024)}MB`
+            });
+
+            // Trigger cleanup if memory usage is too high
+            if (memUsage.heapUsed > this.MAX_MEMORY_USAGE) {
+                this.logger.warn('High memory usage detected, triggering cleanup', {
+                    heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
+                    threshold: `${Math.round(this.MAX_MEMORY_USAGE / 1024 / 1024)}MB`
+                });
+                
+                // Force garbage collection if available
+                if (global.gc) {
+                    this.logger.info('Forcing garbage collection');
+                    global.gc();
+                }
+
+                // Clear caches
+                this.toolHandler.clearCaches?.();
+            }
+        }, this.MEMORY_CHECK_INTERVAL);
+    }
+
+    /**
+     * Gracefully shuts down the server and cleans up resources
+     */
     async shutdown(): Promise<void> {
         if (this.isShuttingDown) {
             return;
@@ -322,7 +366,21 @@ export class AtlasServer {
                 await new Promise(resolve => setTimeout(resolve, 100));
             }
 
+            // Clear monitoring intervals
+            if (this.memoryMonitor) {
+                clearInterval(this.memoryMonitor);
+            }
+            
+            // Clean up resources
+            await this.toolHandler.cleanup?.();
+            
+            // Close server
             await this.server.close();
+            
+            // Force final garbage collection
+            if (global.gc) {
+                global.gc();
+            }
             this.logger.info('Server closed successfully', {
                 metrics: this.metricsCollector.getMetrics()
             });

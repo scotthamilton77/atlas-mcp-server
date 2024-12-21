@@ -82,21 +82,150 @@ export interface TaskResponse<T> {
     };
 }
 
+// Field length constraints
+export const CONSTRAINTS = {
+    NAME_MAX_LENGTH: 200,
+    DESCRIPTION_MAX_LENGTH: 2000,
+    NOTE_MAX_LENGTH: 1000,
+    REASONING_MAX_LENGTH: 2000,
+    METADATA_STRING_MAX_LENGTH: 1000,
+    MAX_DEPENDENCIES: 50,
+    MAX_SUBTASKS: 100,
+    MAX_NOTES: 100,
+    MAX_ARRAY_ITEMS: 100,
+    MAX_PATH_DEPTH: 8
+} as const;
+
 /**
  * Validates a task path format and depth
  */
-export function validateTaskPath(path: string): boolean {
-    // Path must be non-empty and contain only allowed characters
-    if (!path.match(/^[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*$/)) {
-        return false;
-    }
-    
-    // Check path depth (max 8 levels)
-    if (path.split('/').length > 8) {
-        return false;
+export function validateTaskPath(path: string): { valid: boolean; error?: string } {
+    // Path must be non-empty
+    if (!path) {
+        return { valid: false, error: 'Path cannot be empty' };
     }
 
-    return true;
+    // Path must contain only allowed characters
+    if (!path.match(/^[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*$/)) {
+        return { 
+            valid: false, 
+            error: 'Path can only contain alphanumeric characters, underscores, dots, and hyphens' 
+        };
+    }
+    
+    // Check path depth
+    if (path.split('/').length > CONSTRAINTS.MAX_PATH_DEPTH) {
+        return { 
+            valid: false, 
+            error: `Path depth cannot exceed ${CONSTRAINTS.MAX_PATH_DEPTH} levels` 
+        };
+    }
+
+    return { valid: true };
+}
+
+/**
+ * Validates field length constraints
+ */
+export function validateFieldLength(
+    field: string | undefined,
+    maxLength: number,
+    fieldName: string
+): { valid: boolean; error?: string } {
+    if (!field) return { valid: true };
+    
+    if (field.length > maxLength) {
+        return {
+            valid: false,
+            error: `${fieldName} length cannot exceed ${maxLength} characters`
+        };
+    }
+    
+    return { valid: true };
+}
+
+/**
+ * Validates array size constraints
+ */
+export function validateArraySize<T>(
+    array: T[] | undefined,
+    maxSize: number,
+    arrayName: string
+): { valid: boolean; error?: string } {
+    if (!array) return { valid: true };
+    
+    if (array.length > maxSize) {
+        return {
+            valid: false,
+            error: `${arrayName} cannot contain more than ${maxSize} items`
+        };
+    }
+    
+    return { valid: true };
+}
+
+/**
+ * Validates a complete task
+ */
+export function validateTask(task: Task): { valid: boolean; errors: string[] } {
+    const errors: string[] = [];
+
+    // Validate path
+    const pathValidation = validateTaskPath(task.path);
+    if (!pathValidation.valid && pathValidation.error) {
+        errors.push(pathValidation.error);
+    }
+
+    // Validate field lengths
+    const fieldValidations = [
+        validateFieldLength(task.name, CONSTRAINTS.NAME_MAX_LENGTH, 'Name'),
+        validateFieldLength(task.description, CONSTRAINTS.DESCRIPTION_MAX_LENGTH, 'Description'),
+        validateFieldLength(task.reasoning, CONSTRAINTS.REASONING_MAX_LENGTH, 'Reasoning')
+    ];
+
+    fieldValidations.forEach(validation => {
+        if (!validation.valid && validation.error) {
+            errors.push(validation.error);
+        }
+    });
+
+    // Validate array sizes
+    const arrayValidations = [
+        validateArraySize(task.dependencies, CONSTRAINTS.MAX_DEPENDENCIES, 'Dependencies'),
+        validateArraySize(task.subtasks, CONSTRAINTS.MAX_SUBTASKS, 'Subtasks'),
+        validateArraySize(task.notes, CONSTRAINTS.MAX_NOTES, 'Notes')
+    ];
+
+    arrayValidations.forEach(validation => {
+        if (!validation.valid && validation.error) {
+            errors.push(validation.error);
+        }
+    });
+
+    // Validate notes length
+    task.notes?.forEach((note, index) => {
+        const noteValidation = validateFieldLength(note, CONSTRAINTS.NOTE_MAX_LENGTH, `Note ${index + 1}`);
+        if (!noteValidation.valid && noteValidation.error) {
+            errors.push(noteValidation.error);
+        }
+    });
+
+    // Validate metadata
+    if (task.metadata) {
+        Object.entries(task.metadata).forEach(([key, value]) => {
+            if (typeof value === 'string' && value.length > CONSTRAINTS.METADATA_STRING_MAX_LENGTH) {
+                errors.push(`Metadata field '${key}' exceeds maximum length of ${CONSTRAINTS.METADATA_STRING_MAX_LENGTH} characters`);
+            }
+            if (Array.isArray(value) && value.length > CONSTRAINTS.MAX_ARRAY_ITEMS) {
+                errors.push(`Metadata array '${key}' exceeds maximum size of ${CONSTRAINTS.MAX_ARRAY_ITEMS} items`);
+            }
+        });
+    }
+
+    return {
+        valid: errors.length === 0,
+        errors
+    };
 }
 
 /**
