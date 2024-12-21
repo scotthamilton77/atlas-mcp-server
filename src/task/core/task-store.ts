@@ -181,11 +181,18 @@ export class TaskStore {
                         );
                     }
 
-                    // Update parent's subtasks if needed
-                    if (!parent.subtasks.includes(task.path)) {
-                        parent.subtasks = [...parent.subtasks, task.path];
-                        parentUpdates.set(parent.path, parent);
-                    }
+            // Update and index parent's subtasks if needed
+            if (!parent.subtasks.includes(task.path)) {
+                parent.subtasks = [...parent.subtasks, task.path];
+                parentUpdates.set(parent.path, parent);
+                
+                // Ensure parent-child relationship is indexed
+                await this.indexManager.unindexTask(parent);
+                await this.indexManager.indexTask({
+                    ...parent,
+                    subtasks: parent.subtasks
+                });
+            }
                 }
             }
 
