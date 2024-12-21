@@ -1,6 +1,6 @@
 # ATLAS MCP Server
 
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.4-blue.svg)](https://www.typescriptlang.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
 [![Model Context Protocol](https://img.shields.io/badge/MCP-1.0.3-green.svg)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Status](https://img.shields.io/badge/Status-Stable-green.svg)]()
@@ -39,71 +39,49 @@ This architecture creates a secure boundary between LLMs and external systems wh
 ATLAS is built on several robust core components organized into specialized subsystems:
 
 #### Task Management
-- **TaskStore**: Advanced task storage system with:
-  * Atomic operations with transaction support
-  * Optimistic concurrency control
-  * Automatic rollback on failures
-  * Hierarchical task validation (max 5 levels recommended)
-  * Duplicate task name prevention within same parent
-  * Comprehensive error context and recovery suggestions
+- **TaskStore**: Path-based task storage system with:
+  * Memory-efficient caching (512MB limit)
+  * Automatic cache invalidation
+  * Path-based hierarchy management
+  * Task validation and verification
+  * Comprehensive error handling
+  * Periodic memory monitoring
+  * Cache cleanup on threshold
 
 - **Status Management**:
-  * Advanced state machine with transition rules
-  * Intelligent status propagation with deadlock prevention
-  * Optimistic locking with automatic retry
-  * Transaction-based status updates with rollback
-  * Bulk operation support with relaxed rules
-  * Race condition handling and lock timeouts
-  * Parent-child status synchronization
-  * Status transition guidance and suggestions
-  * Automatic dependency-based blocking
-  * Flexible completion rules for parallel work
+  * Basic state transitions
+  * Status propagation
+  * Dependency validation
+  * Parent-child status tracking
+  * Status-based task filtering
+  * Batch status updates
+  * Status consistency checks
 
 - **Dependency System**:
-  * Advanced dependency validation with caching
-  * Circular dependency detection with depth limits (max 10 levels)
-  * Intelligent parallel work support
-  * Completion requirement enforcement
-  * Dependency chain validation
-  * Self-dependency prevention
-  * Duplicate dependency detection
-  * Batch validation for efficiency
-  * Cache invalidation and cleanup
-  * Dependency impact analysis
-  * Deletion safety checks
-  * Status-aware dependency rules
+  * Path-based dependency tracking
+  * Dependency validation
+  * Circular dependency prevention
+  * Parent-child relationship repair
+  * Dependency cleanup on deletion
+  * Cross-task dependency management
+  * Dependency status tracking
 
-- **Transaction Handling**:
-  * ACID-compliant operations with retry logic
-  * Intelligent operation grouping and batching
-  * Conflict detection and resolution
-  * Automatic timeout handling (30s default)
-  * Operation limits (1000 per transaction)
-  * Transaction statistics and monitoring
-  * Optimized operation ordering
-  * Automatic rollback on failure
-  * Transaction state persistence
-  * Comprehensive error context
-
-- **Performance Optimization**:
-  * Multi-dimensional task indexing
-  * Parallel index operations
-  * Configurable batch processing
-  * Memory-optimized data structures
-  * Real-time index statistics
-  * Efficient query filtering
-  * Index-based relationship tracking
-  * Automatic index maintenance
-  * Parallel dependency processing
-  * Optimized bulk operations
+- **Performance Features**:
+  * Memory usage monitoring
+  * Automatic cache management
+  * Database optimization (vacuum)
+  * Relationship repair tools
+  * Efficient task retrieval
+  * Path pattern matching
+  * Memory threshold management
 
 - **Error Handling**:
-  * Detailed error context
-  * Recovery suggestions
-  * Operation rollback
-  * State consistency checks
-  * Validation error prevention
+  * Detailed error logging
+  * Operation validation
+  * Path format verification
+  * Dependency checks
   * Clear error messages
+  * Recovery procedures
 
 #### System Infrastructure
 - **StorageManager**: Provides durable data persistence with SQLite integration
@@ -139,42 +117,44 @@ Through the MCP protocol, ATLAS empowers LLMs to break down complex projects int
 - Version tracking for content changes
 
 ### System Features
-- Rate limiting (100 requests/minute) with sliding window
-- Health monitoring (In Progress)
+- Memory Management
+  * 512MB cache limit
+  * 60-second memory monitoring
+  * Automatic cache cleanup
+  * Memory usage statistics
+  * Resource cleanup on shutdown
+- Health Monitoring
   * Memory usage tracking
-  * Error rate monitoring (10% threshold)
-  * Response time monitoring
-  * Component-level health status
-  * Real-time health indicators with 60-second checks
-- Request tracing (In Progress)
-  * Basic request lifecycle tracking
-  * Error context capture
-  * TODO: Rich metadata enrichment
-  * TODO: Advanced event correlation
-- Sophisticated error handling
-  * Categorized error types
-  * Detailed context preservation
-  * Recovery suggestions
-  * Error aggregation
-- Graceful shutdown with resource cleanup
-- Session management with persistence
-- Comprehensive audit logging
-- Automatic maintenance operations
+  * Basic error monitoring
+  * Component health checks
+  * Resource utilization tracking
+- Error Handling
+  * Error categorization
+  * Detailed logging
+  * Recovery procedures
+  * Context preservation
+- Maintenance
+  * Database optimization
+  * Relationship repair
+  * Cache management
+  * Resource cleanup
 
 ### Performance
-- Efficient task storage and retrieval
-  * Caching with invalidation
-  * Index-based searching
-  * Query optimization
-- Bulk operation support with transaction handling
-- Request timeout handling (30-second default)
-- Concurrent request management with isolation
-- Resource cleanup and memory optimization
-- Automatic performance tuning
-- Statistical analysis of metrics
-  * Response time percentiles (p95, p99)
-  * Error rate tracking
-  * Load analysis
+- Memory-Optimized Operations
+  * Efficient task retrieval
+  * Automatic cache management
+  * Memory usage monitoring
+  * Resource optimization
+- Database Management
+  * SQLite optimization
+  * Vacuum operations
+  * Relationship repair
+  * Path-based indexing
+- Resource Management
+  * Memory threshold monitoring
+  * Cache invalidation
+  * Cleanup procedures
+  * Connection management
 
 ## Installation
 
@@ -249,7 +229,7 @@ ATLAS requires configuration in your MCP client settings:
 
 ## Task Structure
 
-Tasks support rich content, metadata, and reasoning documentation within a hierarchical structure (maximum 5 levels deep). All task operations are transactional with automatic validation using Zod schemas:
+Tasks support rich content, metadata, and reasoning documentation within a hierarchical structure (maximum 8 levels deep). All task operations are transactional with automatic validation using Zod schemas:
 
 ```typescript
 {
@@ -257,63 +237,36 @@ Tasks support rich content, metadata, and reasoning documentation within a hiera
   "description": "Implement core functionality",
   "type": "task",
   "notes": [
-    {
-      "type": "markdown",
-      "content": "# Requirements\n- Feature A\n- Feature B"
-    },
-    {
-      "type": "code",
-      "language": "typescript",
-      "content": "interface Feature {\n  name: string;\n  enabled: boolean;\n}"
-    }
+    "# Requirements\n- Feature A\n- Feature B",
+    "interface Feature {\n  name: string;\n  enabled: boolean;\n}"
   ],
-  "reasoning": {
-    "approach": "Modular development with focus on reusability",
-    "assumptions": [
-      "System supports TypeScript",
-      "Features can be toggled independently"
-    ],
-    "alternatives": [
-      "Monolithic implementation",
-      "Feature flags in configuration"
-    ],
-    "risks": [
-      "Increased complexity from modularity",
-      "Performance overhead from dynamic loading"
-    ],
-    "tradeoffs": [
-      "Flexibility vs simplicity",
-      "Runtime performance vs maintainability"
-    ],
-    "constraints": [
-      "Must maintain backward compatibility",
-      "Must work in all supported browsers"
-    ],
-    "dependencies_rationale": [
-      "Depends on core module for type definitions",
-      "Requires configuration service for feature flags"
-    ],
-    "impact_analysis": [
-      "Affects system startup time",
-      "Changes how features are loaded and managed"
-    ]
-  },
+  "reasoning": "Modular development approach chosen for reusability. Key considerations:\n- TypeScript support required\n- Features must be independently toggleable\n- Increased complexity balanced against maintainability\n- Backward compatibility required\n- Cross-browser support essential",
   "metadata": {
-    "context": "Core implementation phase",
-    "tags": ["core", "implementation"]
+    "priority": "high",
+    "tags": ["core", "implementation"],
+    "reasoning": "Additional context about task decisions",
+    "toolsUsed": ["npm", "typescript"],
+    "resourcesAccessed": ["package.json", "tsconfig.json"],
+    "contextUsed": ["project setup", "build configuration"],
+    "created": 1703094689310,
+    "updated": 1703094734316,
+    "projectPath": "server/core",
+    "version": 1
   }
 }
 ```
 
-The reasoning field provides structured documentation of decision-making, which is indexed for efficient search and retrieval:
-- **approach**: High-level implementation strategy
-- **assumptions**: Key assumptions made during planning
-- **alternatives**: Other approaches that were considered
-- **risks**: Potential issues and challenges
-- **tradeoffs**: Key decisions and their implications
-- **constraints**: Technical or business limitations
-- **dependencies_rationale**: Reasoning for task dependencies
-- **impact_analysis**: Analysis of changes on the system
+The reasoning field provides a concise explanation of the task's decision-making process and key considerations. The metadata field includes:
+
+- **priority**: Task urgency level (low/medium/high)
+- **tags**: Categorization labels
+- **reasoning**: Additional LLM context about decisions
+- **toolsUsed**: Tools used by LLM for the task
+- **resourcesAccessed**: Resources accessed during task
+- **contextUsed**: Key context pieces used in decisions
+- **created/updated**: Timestamps in milliseconds
+- **projectPath**: Task's project context
+- **version**: Task revision number
 
 ### Task Storage Features
 
@@ -879,41 +832,39 @@ The following example demonstrates a task breakdown for a personal portfolio web
 ### Task Management
 
 #### create_task
-Creates a new task with comprehensive validation and automatic relationship management:
+Creates a new task with path-based hierarchy and dependency management. Example:
 
 ```typescript
 {
-  "parentId": string | null,  // Parent task ID (null for root, max depth: 5)
-  "name": string,            // Task name (required, unique within parent)
-  "description": string,     // Task description
-  "notes": Array<{          // Rich content notes with type validation
-    type: "markdown" | "code" | "json",
-    content: string,        // Content with format validation
-    language?: string,      // Required for code notes
-    metadata?: object       // Optional note-specific metadata
-  }>,
-  "reasoning": {            // Structured decision documentation
-    "approach": string,     // Implementation strategy
-    "assumptions": string[],// Key assumptions
-    "alternatives": string[],// Other approaches considered
-    "risks": string[],      // Potential issues
-    "tradeoffs": string[], // Key decisions and implications
-    "constraints": string[],// Technical/business limitations
-    "dependencies_rationale": string[], // Dependency reasoning
-    "impact_analysis": string[] // System impact analysis
-  },
-  "type": "task" | "milestone" | "group", // Task type with validation rules
-  "dependencies": string[], // Task IDs (validated, no cycles, max depth: 10)
-  "metadata": {            // Indexed metadata for efficient querying
-    "context": string,     // Task context information
-    "tags": string[],      // Categorization tags
-    "created": string,     // ISO timestamp
-    "updated": string,     // ISO timestamp
-    "sessionId": string,   // Associated session
-    "taskListId": string   // Associated task list
+  "name": "Implement Authentication",
+  "path": "server/auth",
+  "description": "Implement secure user authentication system",
+  "type": "milestone",
+  "notes": [
+    "# Authentication System\n- JWT-based auth\n- Password reset flow\n- Session management",
+    "interface AuthConfig {\n  tokenExpiry: number;\n  maxAttempts: number;\n}"
+  ],
+  "reasoning": "Using JWT with Redis for scalable session management. Considered session-based auth but chose JWT for better scalability.",
+  "metadata": {
+    "priority": "high",
+    "tags": ["security", "api"],
+    "toolsUsed": ["read_file", "write_to_file"],
+    "resourcesAccessed": ["src/auth/*"],
+    "contextUsed": ["Security best practices"],
+    "created": 1703094689310,
+    "updated": 1703094734316,
+    "projectPath": "server/auth",
+    "version": 1
   }
 }
 ```
+
+Key Features:
+- Path-based hierarchy (max 8 levels)
+- Rich task metadata and context
+- LLM operation tracking
+- Dependency management
+- Status propagation rules
 
 Features:
 - Hierarchical validation with depth limits
@@ -1239,68 +1190,55 @@ Features:
 - Client feedback
 
 #### Health Monitoring
-- Comprehensive system health checks
-  * Memory usage tracking with thresholds (90%)
-  * CPU utilization monitoring
-  * Active request counting
-  * Component-level health status
+- Component Health Checks
+  * Storage system monitoring
+  * Rate limiter status
+  * Metrics system health
+  * Component-level status tracking
   * Real-time health indicators
 
-- Advanced metrics collection
+- Metrics Collection
   * Request count tracking
-  * Error rate calculation (10% threshold)
-  * Average response time monitoring (5s threshold)
-  * Performance statistics aggregation
-  * Resource utilization metrics
+  * Error rate monitoring (10% threshold)
+  * Average duration calculation
+  * Per-tool metrics tracking
+  * Error frequency analysis
 
-- Rate limiter monitoring
-  * Current request rate tracking
-  * Limit compliance verification
-  * Window-based monitoring
-  * Throttling effectiveness analysis
+- Rate Limiting
+  * 60-second window tracking
+  * Request count monitoring
+  * Limit enforcement
+  * Automatic request throttling
+  * Status reporting
 
-- Status aggregation and reporting
+- Health Status Reporting
   * Component-level health status
-  * Overall system health assessment
-  * Timestamp-based monitoring
-  * Detailed health status reports
-  * Early warning indicators
+  * Detailed error reporting
+  * Timestamp-based tracking
+  * Health check aggregation
+  * System status overview
 
-#### Request Tracing
-- Comprehensive lifecycle tracking
-  * Request start/end timestamps
-  * Duration measurement
-  * Event sequence recording
-  * Metadata enrichment
-  * Real-time trace updates
+#### Performance Metrics
+- Request Tracking
+  * Success/failure counting
+  * Duration measurements
+  * Tool-specific metrics
+  * Error categorization
+  * Hourly statistics
 
-- Advanced trace management
-  * Trace limit enforcement (1000 traces)
-  * Time-based cleanup (1-hour TTL)
-  * Automatic trace pruning
-  * Memory optimization
-  * Trace persistence
+- Tool Analytics
+  * Per-tool success rates
+  * Average operation duration
+  * Error frequency tracking
+  * Usage patterns
+  * Performance trends
 
-- Performance analysis
-  * Active request tracking
-  * Completion rate monitoring
-  * Error rate calculation
-  * Average duration tracking
-  * Resource utilization metrics
-
-- Error tracking and debugging
-  * Detailed error context capture
-  * Error trace isolation
-  * Debug metadata collection
-  * Trace event correlation
-  * Recovery context preservation
-
-- Trace aggregation and reporting
-  * Trace summaries and statistics
-  * Time-range based filtering
-  * Error trace filtering
-  * Active trace monitoring
-  * System health indicators
+- System Metrics
+  * Storage system stats
+  * Memory usage tracking
+  * Request rate monitoring
+  * Component health status
+  * Resource utilization
 
 #### Error Handling
 ATLAS provides comprehensive error handling:
@@ -1372,45 +1310,45 @@ npm run type-check
 
 ## Up Next
 
-### Session Management Improvements
-- Session file consolidation
-- Distributed session locking
-- Improved state synchronization
-- Race condition prevention
-- Cross-session data consistency
-- Session cleanup optimization
+### Advanced Task Features
+- Task templating system
+- Task state machine customization
+- Advanced task filtering
+- Task history tracking
+- Task archival system
+- Task import/export
 
-### Storage Layer Enhancements
-- Storage abstraction simplification
-- Tighter migration integration
-- Version control improvements
-- Storage manager coordination
-- Backup strategy optimization
-- Data integrity validation
-
-### Task Core Improvements
-- Task core coordinator implementation
-- Cache coherency protocol
-- Transaction boundary strengthening
-- Subsystem coordination
-- Batch operation optimization
-- Index performance tuning
-
-### System Enhancements
-- Enhanced performance monitoring
-- Advanced caching strategies
-- Improved error recovery
-- Better dependency management
-- Transaction optimizations
-- Resource usage tracking
-
-### Integration Features
+### Integration Capabilities
 - Webhook support
-- External system integration
 - Event streaming
-- Custom tool support
+- External system integration
 - Plugin architecture
 - API versioning
+- Custom tool support
+
+### Performance Optimizations
+- Query plan optimization
+- Index usage analysis
+- Transaction batching
+- Parallel task processing
+- Background task cleanup
+- Resource usage analytics
+
+### Monitoring Enhancements
+- Real-time metrics dashboard
+- Performance trend analysis
+- Anomaly detection
+- Resource usage alerts
+- System health reporting
+- Operational insights
+
+### Developer Tools
+- Task debugging utilities
+- Development console
+- Performance profiling
+- Testing framework
+- Documentation generator
+- Schema validation tools
 
 ## Contributing
 
