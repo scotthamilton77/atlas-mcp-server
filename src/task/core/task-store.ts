@@ -1,7 +1,7 @@
 /**
  * Path-based task storage with caching, indexing, and transaction support
  */
-import { Task, TaskStatus, validateTaskPath, isValidTaskHierarchy } from '../../types/task.js';
+import { Task, TaskStatus, TaskType, validateTaskPath, isValidTaskHierarchy, getParentPath } from '../../types/task.js';
 import { TaskStorage } from '../../types/storage.js';
 import { Logger } from '../../logging/index.js';
 import { TaskIndexManager } from './indexing/index-manager.js';
@@ -119,37 +119,6 @@ export class TaskStore {
     }
 
     /**
-     * Validates and updates parent-child relationships
-     */
-    private async validateAndUpdateHierarchy(task: Task): Promise<void> {
-        if (task.parentPath) {
-            const parent = await this.getTaskByPath(task.parentPath);
-            if (!parent) {
-                throw createError(
-                    ErrorCodes.TASK_INVALID_PARENT,
-                    `Parent task not found: ${task.parentPath}`
-                );
-            }
-
-            // Validate task type hierarchy
-            if (!isValidTaskHierarchy(parent.type, task.type)) {
-                throw createError(
-                    ErrorCodes.TASK_PARENT_TYPE,
-                    `Invalid parent-child relationship: ${parent.type} cannot contain ${task.type}`
-                );
-            }
-
-            // Update parent's subtasks if needed
-            if (!parent.subtasks.includes(task.path)) {
-                parent.subtasks.push(task.path);
-                await this.storage.saveTask(parent);
-                await this.indexManager.indexTask(parent);
-                await this.cacheManager.set(parent.path, parent);
-            }
-        }
-    }
-
-    /**
      * Saves tasks with validation, indexing, and transaction support
      */
     async saveTasks(tasks: Task[]): Promise<void> {
@@ -166,25 +135,87 @@ export class TaskStore {
         const transaction = await this.transactionManager.begin();
 
         try {
-            // Process each task
-            for (const task of tasks) {
-                // Validate and update parent-child relationships
-                await this.validateAndUpdateHierarchy(task);
+            // First pass: collect and validate parent-child relationships
+            const parentUpdates = new Map<string, Task>();
+            const tasksToSave = new Map<string, Task>();
 
-                // Index the task
+            for (const task of tasks) {
+                // Ensure task has subtasks array
+                if (!task.subtasks) {
+                    task.subtasks = [];
+                }
+
+                const parentPath = task.parentPath || getParentPath(task.path);
+                if (parentPath) {
+                    task.parentPath = parentPath;
+                    let parent = parentUpdates.get(parentPath) || await this.getTaskByPath(parentPath);
+                    
+                    if (parent) {
+                        // Validate task type hierarchy
+                        if (!isValidTaskHierarchy(parent.type, task.type)) {
+                            throw createError(
+                                ErrorCodes.TASK_PARENT_TYPE,
+                                `Invalid parent-child relationship: ${parent.type} cannot contain ${task.type}`
+                            );
+                        }
+
+                        // Ensure parent's subtasks array exists
+                        if (!parent.subtasks) {
+                            parent.subtasks = [];
+                        }
+
+                        // Update parent's subtasks if needed
+                        if (!parent.subtasks.includes(task.path)) {
+                            parent.subtasks = [...parent.subtasks, task.path];
+                            parentUpdates.set(parentPath, parent);
+                        }
+                    } else {
+                        // Create a new parent task if it doesn't exist
+                        this.logger.debug('Parent task not found, creating placeholder', {
+                            childPath: task.path,
+                            parentPath
+                        });
+                        parent = {
+                            path: parentPath,
+                            name: parentPath.split('/').pop() || '',
+                            type: TaskType.MILESTONE,  // Default to milestone to allow containing groups
+                            status: TaskStatus.PENDING,
+                            dependencies: [],
+                            subtasks: [task.path],
+                            metadata: {
+                                created: Date.now(),
+                                updated: Date.now(),
+                                projectPath: parentPath.split('/')[0],
+                                version: 1
+                            }
+                        };
+                        parentUpdates.set(parentPath, parent);
+                    }
+                }
+                tasksToSave.set(task.path, task);
+            }
+
+            // Save all tasks in a single transaction
+            const allTasks = [...Array.from(parentUpdates.values()), ...Array.from(tasksToSave.values())];
+            await this.storage.saveTasks(allTasks);
+
+            // Clear cache for all affected tasks
+            await Promise.all(allTasks.map(task => this.cacheManager.delete(task.path)));
+
+            // Reindex all tasks to ensure relationships are properly established
+            for (const task of allTasks) {
                 await this.indexManager.indexTask(task);
                 await this.cacheManager.set(task.path, task);
+            }
 
-                // Validate dependencies
+            // Validate dependencies for original tasks
+            for (const task of tasks) {
                 await this.dependencyValidator.validateDependencies(
                     task.path,
                     task.dependencies,
                     this.getTaskByPath.bind(this)
                 );
             }
-
-            // Save all tasks
-            await this.storage.saveTasks(tasks);
 
             // Propagate status changes
             await this.processBatch(tasks, async task => {
