@@ -342,7 +342,7 @@ export class TaskStore {
             if (taskToAdd.parentId && !taskToAdd.parentId.startsWith('ROOT-')) {
                 const parent = this.getTaskById(taskToAdd.parentId);
                 if (parent) {
-                    if (parent.type !== TaskType.GROUP) {
+                    if (parent.type === TaskType.TASK) {
                         throw createError(
                             ErrorCodes.TASK_INVALID_PARENT,
                             { 
@@ -350,8 +350,8 @@ export class TaskStore {
                                 parentId: parent.id,
                                 parentType: parent.type
                             },
-                            `Parent task must be of type "group" (got "${parent.type}")`,
-                            'Change parent task type to "group" or choose a different parent'
+                            `Regular tasks cannot contain subtasks. Parent must be type "group" or "milestone" (got "${parent.type}")`,
+                            'Change parent to a group or milestone task'
                         );
                     }
                     parentUpdates.push({
@@ -437,20 +437,6 @@ export class TaskStore {
         if (task.parentId && !task.parentId.startsWith('ROOT-')) {
             const parent = this.getTaskById(task.parentId);
             if (parent) {
-                // Verify parent is a group
-                if (parent.type !== TaskType.GROUP) {
-                    throw createError(
-                        ErrorCodes.TASK_INVALID_PARENT,
-                        { 
-                            taskId: task.id,
-                            parentId: parent.id,
-                            parentType: parent.type
-                        },
-                        `Parent task must be of type "group" (got "${parent.type}")`,
-                        'Change parent task type to "group" or choose a different parent'
-                    );
-                }
-
                 // Check for duplicate task names under the same parent
                 const siblings = this.getTasksByParent(parent.id);
                 const hasDuplicate = siblings.some(
@@ -534,7 +520,7 @@ export class TaskStore {
      */
     private async updateParentStatus(parentId: string, transactionId: string): Promise<void> {
         const parent = this.getTaskById(parentId);
-        if (!parent || parent.type !== TaskType.GROUP) return;
+        if (!parent || !parent.subtasks.length) return;
 
         const children = parent.subtasks
             .map(id => this.getTaskById(id))
@@ -548,10 +534,25 @@ export class TaskStore {
         const hasInProgress = children.some(t => t.status === TaskStatus.IN_PROGRESS);
         const allCompleted = children.every(t => t.status === TaskStatus.COMPLETED);
 
-        if (hasBlocked) newStatus = TaskStatus.BLOCKED;
-        else if (hasFailed) newStatus = TaskStatus.FAILED;
-        else if (hasInProgress) newStatus = TaskStatus.IN_PROGRESS;
-        else if (allCompleted) newStatus = TaskStatus.COMPLETED;
+        // Different status propagation rules based on task type
+        if (parent.type === TaskType.MILESTONE) {
+            // Milestones are only completed when all subtasks are completed
+            if (allCompleted) {
+                newStatus = TaskStatus.COMPLETED;
+            } else if (hasFailed) {
+                newStatus = TaskStatus.FAILED;
+            } else if (hasBlocked) {
+                newStatus = TaskStatus.BLOCKED;
+            } else if (hasInProgress || children.some(t => t.status === TaskStatus.PENDING)) {
+                newStatus = TaskStatus.IN_PROGRESS;
+            }
+        } else if (parent.type === TaskType.GROUP) {
+            // Groups follow standard status propagation
+            if (hasBlocked) newStatus = TaskStatus.BLOCKED;
+            else if (hasFailed) newStatus = TaskStatus.FAILED;
+            else if (hasInProgress) newStatus = TaskStatus.IN_PROGRESS;
+            else if (allCompleted) newStatus = TaskStatus.COMPLETED;
+        }
 
         if (newStatus !== parent.status) {
             await this.updateTask(parentId, { status: newStatus }, transactionId);
@@ -569,12 +570,12 @@ export class TaskStore {
             const parent = this.getTaskById(parentId);
             if (parent) {
                 // Validate parent type
-                if (parent.type !== TaskType.GROUP) {
+                if (parent.type === TaskType.TASK) {
                     throw createError(
                         ErrorCodes.TASK_INVALID_PARENT,
                         { parentId, childId },
-                        'Parent task must be of type "group"',
-                        'Change parent task type to "group" or choose a different parent'
+                        'Regular tasks cannot contain subtasks. Parent must be type "group" or "milestone"',
+                        'Change parent to a group or milestone task'
                     );
                 }
 

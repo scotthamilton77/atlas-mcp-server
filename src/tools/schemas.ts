@@ -4,6 +4,69 @@
  */
 import { TaskStatus } from '../types.js';
 
+/** Creates a new session for task management. IMPORTANT: Must be called first before any task operations can be performed. */
+export const createSessionSchema = {
+    type: 'object',
+    properties: {
+        name: {
+            type: 'string',
+            description: 'Name of the session. Best practice: Use descriptive names that include purpose and date (e.g., "Feature Development - March 2024").',
+        },
+        metadata: {
+            type: 'object',
+            properties: {
+                context: {
+                    type: 'string',
+                    description: 'Additional context about session purpose.',
+                },
+                tags: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: 'Tags for categorizing the session.',
+                }
+            },
+            description: 'Additional session metadata. Best practice: Use for tracking session objectives and outcomes.',
+        }
+    },
+    required: ['name'],
+};
+
+/** Creates a new task list in the current session. IMPORTANT: Requires an active session. */
+export const createTaskListSchema = {
+    type: 'object',
+    properties: {
+        name: {
+            type: 'string',
+            description: 'Name of the task list. Best practice: Use descriptive names that reflect the purpose or theme (e.g., "Q1 Feature Development", "Security Improvements").',
+        },
+        description: {
+            type: 'string',
+            description: 'Description of the task list. Best practice: Include goals, success criteria, and any relevant timelines or constraints.',
+        },
+        metadata: {
+            type: 'object',
+            properties: {
+                context: {
+                    type: 'string',
+                    description: 'Additional context about task list purpose.',
+                },
+                tags: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: 'Tags for categorizing the task list.',
+                }
+            },
+            description: 'Additional task list metadata. Best practice: Use for cross-referencing and organization.',
+        },
+        persistent: {
+            type: 'boolean',
+            description: 'Whether the task list should persist across sessions. Best practice: Use true for long-term projects, false for temporary task groupings.',
+            default: true
+        }
+    },
+    required: ['name'],
+};
+
 /** Creates a new task. IMPORTANT: Requires an active session and task list - use create_session and create_task_list first if you haven't already. Tasks represent individual work items within a task list. */
 export const createTaskSchema = {
     type: 'object',
@@ -95,7 +158,14 @@ export const createTaskSchema = {
         type: {
             type: 'string',
             enum: ['task', 'milestone', 'group'],
-            description: 'Type of task. Best practice: Use "milestone" for major deliverables, "group" for organizing related tasks, and "task" for concrete work items.',
+            description: 'Type of task. Options:\n' +
+                        '- milestone: Major project phases or deliverables (can contain subtasks, requires all subtasks completed for completion)\n' +
+                        '- group: Organizational containers for related tasks (can contain subtasks, allows partial completion)\n' +
+                        '- task: Individual work items (cannot contain subtasks)\n\n' +
+                        'Best Practices:\n' +
+                        '1. Use milestones for project phases that need strict completion requirements\n' +
+                        '2. Use groups for feature sets that can be partially completed\n' +
+                        '3. Use tasks for concrete, actionable work items',
         },
             dependencies: {
                 type: 'array',
@@ -123,9 +193,19 @@ export const createTaskSchema = {
         },
         subtasks: {
             type: 'array',
+            description: 'Nested subtasks for hierarchical task organization. Options:\n' +
+                        '- Under milestones: Represent phase deliverables that must all be completed\n' +
+                        '- Under groups: Represent feature components that can be partially completed\n\n' +
+                        'Best Practices:\n' +
+                        '1. Break down complex tasks into manageable pieces\n' +
+                        '2. Use consistent granularity within each level\n' +
+                        '3. Keep hierarchy depth under 5 levels\n' +
+                        '4. Consider dependencies between subtasks\n' +
+                        '5. Use milestones for strict phase completion\n' +
+                        '6. Use groups for flexible feature organization',
             items: {
                 type: 'object',
-                description: 'Nested subtasks. Best practice: Break down complex tasks into manageable pieces, but avoid deep nesting.',
+                description: 'Individual subtask definition. Each subtask follows the same schema as create_task.'
             }
         }
     },
@@ -166,6 +246,16 @@ export const updateTaskSchema = {
         },
         updates: {
             type: 'object',
+            description: 'Updates to apply to the task. Features:\n' +
+                        '- Smart status propagation based on task type\n' +
+                        '- Automatic dependency validation\n' +
+                        '- Parent task status updates\n' +
+                        '- Rich metadata management\n\n' +
+                        'Best Practices:\n' +
+                        '1. Update dependencies when marking tasks as blocked\n' +
+                        '2. Document reasons for status changes\n' +
+                        '3. Consider impact on dependent tasks\n' +
+                        '4. Follow status progression logically',
             properties: {
                 name: { 
                     type: 'string',
@@ -229,12 +319,30 @@ export const updateTaskSchema = {
                 type: {
                     type: 'string',
                     enum: ['task', 'milestone', 'group'],
-                    description: 'New task type. Best practice: Only change type if task scope fundamentally changes.',
+                    description: 'New task type. Options:\n' +
+                           '- milestone: Project phases (requires all subtasks completed)\n' +
+                           '- group: Feature sets (allows partial completion)\n' +
+                           '- task: Individual work items (no subtasks)\n\n' +
+                           'Best Practices:\n' +
+                           '1. Only change type if task scope fundamentally changes\n' +
+                           '2. Consider impact on existing subtasks\n' +
+                           '3. Update parent-child relationships if needed\n' +
+                           '4. Review status propagation rules',
                 },
                 status: {
                     type: 'string',
                     enum: ['pending', 'in_progress', 'completed', 'failed', 'blocked'],
-                    description: 'New status. Best practice: Update dependencies when marking tasks as blocked.',
+                    description: 'New status. Status Rules:\n' +
+                           '- pending: Initial state\n' +
+                           '- in_progress: Work started\n' +
+                           '- blocked: Dependencies or issues prevent progress\n' +
+                           '- completed: Work finished successfully\n' +
+                           '- failed: Work cannot be completed\n\n' +
+                           'Best Practices:\n' +
+                           '1. Update dependencies when marking tasks as blocked\n' +
+                           '2. Document reasons for status changes\n' +
+                           '3. Consider impact on dependent tasks\n' +
+                           '4. Follow status progression logically',
                 },
                 dependencies: {
                     type: 'array',

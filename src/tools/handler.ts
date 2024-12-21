@@ -27,6 +27,17 @@ import {
     getTaskTreeSchema
 } from './schemas.js';
 
+import {
+    createSessionSchema,
+    createTaskListSchema,
+    switchSessionSchema,
+    switchTaskListSchema,
+    listSessionsSchema,
+    listTaskListsSchema,
+    archiveSessionSchema,
+    archiveTaskListSchema
+} from './session-schemas.js';
+
 export interface Tool {
     name: string;
     description: string;
@@ -56,19 +67,140 @@ export class ToolHandler {
     private registerDefaultTools(): void {
         const defaultTools = [
             {
+                name: 'create_session',
+                description: 'Creates a new session for task management. Features:\n' +
+                           '- Isolated task context\n' +
+                           '- Multi-list support\n' +
+                           '- Session-level metadata\n\n' +
+                           'IMPORTANT: Must be called first before any task operations.',
+                inputSchema: createSessionSchema,
+                handler: async (args: Record<string, unknown>) => {
+                    const result = await this.taskManager.createSession(args as any);
+                    return this.formatResponse(result);
+                }
+            },
+            {
+                name: 'create_task_list',
+                description: 'Creates a new task list in the current session. Features:\n' +
+                           '- Supports milestone and group hierarchies\n' +
+                           '- Optional persistence across sessions\n' +
+                           '- List-level metadata and organization\n\n' +
+                           'IMPORTANT: Requires active session.',
+                inputSchema: createTaskListSchema,
+                handler: async (args: Record<string, unknown>) => {
+                    const result = await this.taskManager.createTaskList(args as any);
+                    return this.formatResponse(result);
+                }
+            },
+            {
+                name: 'switch_session',
+                description: 'Switches to a different session. Features:\n' +
+                           '- Preserves task list context\n' +
+                           '- Validates session existence\n' +
+                           '- Updates active state\n\n' +
+                           'IMPORTANT: Save any pending changes before switching.',
+                inputSchema: switchSessionSchema,
+                handler: async (args: Record<string, unknown>) => {
+                    if (!args.sessionId || typeof args.sessionId !== 'string') {
+                        throw createError(
+                            ErrorCodes.INVALID_INPUT,
+                            'Missing or invalid sessionId'
+                        );
+                    }
+                    await this.taskManager.switchSession(args.sessionId);
+                    return this.formatResponse({ success: true });
+                }
+            },
+            {
+                name: 'switch_task_list',
+                description: 'Switches to a different task list. Features:\n' +
+                           '- Preserves session context\n' +
+                           '- Validates task list existence\n' +
+                           '- Updates active state\n\n' +
+                           'IMPORTANT: Requires active session.',
+                inputSchema: switchTaskListSchema,
+                handler: async (args: Record<string, unknown>) => {
+                    if (!args.taskListId || typeof args.taskListId !== 'string') {
+                        throw createError(
+                            ErrorCodes.INVALID_INPUT,
+                            'Missing or invalid taskListId'
+                        );
+                    }
+                    await this.taskManager.switchTaskList(args.taskListId);
+                    return this.formatResponse({ success: true });
+                }
+            },
+            {
+                name: 'list_sessions',
+                description: 'Lists all available sessions. Features:\n' +
+                           '- Optional archived session inclusion\n' +
+                           '- Session metadata and status\n' +
+                           '- Active session indication\n\n' +
+                           'Use for session management and auditing.',
+                inputSchema: listSessionsSchema,
+                handler: async (args: Record<string, unknown>) => {
+                    const result = await this.taskManager.listSessions(args.includeArchived as boolean);
+                    return this.formatResponse(result);
+                }
+            },
+            {
+                name: 'list_task_lists',
+                description: 'Lists all task lists in current session. Features:\n' +
+                           '- Optional archived list inclusion\n' +
+                           '- Task list metadata and status\n' +
+                           '- Active list indication\n\n' +
+                           'IMPORTANT: Requires active session.',
+                inputSchema: listTaskListsSchema,
+                handler: async (args: Record<string, unknown>) => {
+                    const result = await this.taskManager.listTaskLists(args.includeArchived as boolean);
+                    return this.formatResponse(result);
+                }
+            },
+            {
+                name: 'archive_session',
+                description: 'Archives a session. Features:\n' +
+                           '- Preserves all task data\n' +
+                           '- Updates session metadata\n' +
+                           '- Clears active session if archived\n\n' +
+                           'Best practice: Create or switch to a new session first.',
+                inputSchema: archiveSessionSchema,
+                handler: async (args: Record<string, unknown>) => {
+                    if (!args.sessionId || typeof args.sessionId !== 'string') {
+                        throw createError(
+                            ErrorCodes.INVALID_INPUT,
+                            'Missing or invalid sessionId'
+                        );
+                    }
+                    await this.taskManager.archiveSession(args.sessionId);
+                    return this.formatResponse({ success: true });
+                }
+            },
+            {
+                name: 'archive_task_list',
+                description: 'Archives a task list. Features:\n' +
+                           '- Preserves all task data\n' +
+                           '- Updates task list metadata\n' +
+                           '- Clears active task list if archived\n\n' +
+                           'IMPORTANT: Requires active session.',
+                inputSchema: archiveTaskListSchema,
+                handler: async (args: Record<string, unknown>) => {
+                    if (!args.taskListId || typeof args.taskListId !== 'string') {
+                        throw createError(
+                            ErrorCodes.INVALID_INPUT,
+                            'Missing or invalid taskListId'
+                        );
+                    }
+                    await this.taskManager.archiveTaskList(args.taskListId);
+                    return this.formatResponse({ success: true });
+                }
+            },
+            {
                 name: 'create_task',
-                description: `IMPORTANT: Requires both an active session and task list (use create_session and create_task_list first). Creates a new task
-
-Parameters:
-- parentId: ID of the parent task, or null for root tasks. Use this for creating hierarchical task structures. Best practice: Keep hierarchies shallow (max 3-4 levels) for better maintainability.
-- name*: Name of the task (max 200 characters). Best practice: Use clear, action-oriented names that describe the outcome (e.g., "Implement user authentication" rather than "Auth work").
-- description: Description of the task (max 2000 characters). Best practice: Include context, acceptance criteria, and any technical considerations. Use markdown for better formatting.
-- notes: Rich notes associated with the task. Best practice: Use a combination of note types - markdown for documentation, code for examples, and JSON for structured data.
-- reasoning: Reasoning and decision-making documentation. Best practice: Keep this documentation up-to-date as decisions evolve.
-- type: Type of task. Best practice: Use "milestone" for major deliverables, "group" for organizing related tasks, and "task" for concrete work items.
-- dependencies: List of task IDs this task depends on. Best practice: Keep dependencies minimal and explicit. Consider using task groups for better organization.
-- metadata: Additional task metadata. Best practice: Use for cross-cutting concerns and categorization.
-- subtasks: Nested subtasks for breaking down work items.`,
+                description: 'Creates a new task with support for hierarchical organization. Key Features:\n' +
+                           '- Milestone tasks: Project phases with strict completion rules\n' +
+                           '- Group tasks: Feature sets with flexible completion\n' +
+                           '- Regular tasks: Individual work items\n\n' +
+                           'IMPORTANT: Requires active session and task list.',
                 inputSchema: createTaskSchema,
                 handler: async (args: Record<string, unknown>) => {
                     const input = this.validateCreateTaskInput(args);
@@ -80,11 +212,11 @@ Parameters:
             },
             {
                 name: 'bulk_create_tasks',
-                description: `IMPORTANT: Requires both an active session and task list (use create_session and create_task_list first). Creates multiple tasks at once
-
-Parameters:
-- parentId: ID of the parent task. Best practice: Use for creating related tasks under a common parent.
-- tasks*: Array of tasks to create. Best practice: Group related tasks together and maintain consistent structure.`,
+                description: 'Creates multiple tasks at once with support for complex hierarchies. Features:\n' +
+                           '- Bulk creation of related tasks\n' +
+                           '- Automatic parent-child relationships\n' +
+                           '- Efficient transaction handling\n\n' +
+                           'IMPORTANT: Maximum 50 tasks per operation.',
                 inputSchema: bulkCreateTasksSchema,
                 handler: async (args: Record<string, unknown>) => {
                     const input = this.validateBulkCreateTaskInput(args);
@@ -94,11 +226,11 @@ Parameters:
             },
             {
                 name: 'update_task',
-                description: `IMPORTANT: Requires an active session. Updates an existing task
-
-Parameters:
-- taskId*: ID of the task to update. Best practice: Verify task exists before updating.
-- updates*: Updates to apply to the task.`,
+                description: 'Updates an existing task with smart status propagation. Features:\n' +
+                           '- Different status rules for milestones vs groups\n' +
+                           '- Automatic dependency validation\n' +
+                           '- Parent status updates\n\n' +
+                           'IMPORTANT: Requires active session.',
                 inputSchema: updateTaskSchema,
                 handler: async (args: Record<string, unknown>) => {
                     if (!args.taskId || typeof args.taskId !== 'string') {
@@ -114,10 +246,11 @@ Parameters:
             },
             {
                 name: 'bulk_update_tasks',
-                description: `IMPORTANT: Requires an active session. Updates multiple tasks at once
-
-Parameters:
-- updates*: Array of updates. Best practice: Group related updates together and consider dependency order.`,
+                description: 'Updates multiple tasks at once with transaction safety. Features:\n' +
+                           '- Atomic updates across tasks\n' +
+                           '- Dependency preservation\n' +
+                           '- Status propagation handling\n\n' +
+                           'IMPORTANT: Maximum 50 updates per operation.',
                 inputSchema: bulkUpdateTasksSchema,
                 handler: async (args: Record<string, unknown>) => {
                     const input = this.validateBulkUpdateTaskInput(args);
@@ -127,12 +260,11 @@ Parameters:
             },
             {
                 name: 'get_tasks_by_status',
-                description: `IMPORTANT: Requires an active session. Retrieves tasks filtered by status
-
-Parameters:
-- status*: Status filter. Best practice: Use for progress tracking and identifying bottlenecks.
-- sessionId: Optional session ID to filter by. If not provided, uses active session.
-- taskListId: Optional task list ID to filter by. If not provided, uses active task list.`,
+                description: 'Retrieves tasks filtered by status with context awareness. Features:\n' +
+                           '- Status-based filtering\n' +
+                           '- Session and task list scoping\n' +
+                           '- Progress tracking support\n\n' +
+                           'Use for monitoring task progress and identifying bottlenecks.',
                 inputSchema: getTasksByStatusSchema,
                 handler: async (args: Record<string, unknown>) => {
                     if (!args.status || !Object.values(TaskStatus).includes(args.status as TaskStatus)) {
@@ -151,10 +283,11 @@ Parameters:
             },
             {
                 name: 'delete_task',
-                description: `IMPORTANT: Requires an active session. Deletes a task
-
-Parameters:
-- taskId*: Task ID to delete. Best practice: Check for dependent tasks before deletion.`,
+                description: 'Deletes a task with dependency cleanup. Features:\n' +
+                           '- Automatic subtask cleanup\n' +
+                           '- Dependency validation\n' +
+                           '- Parent task updates\n\n' +
+                           'IMPORTANT: Requires active session. Check for dependent tasks first.',
                 inputSchema: deleteTaskSchema,
                 handler: async (args: Record<string, unknown>) => {
                     if (!args.taskId || typeof args.taskId !== 'string') {
@@ -169,12 +302,11 @@ Parameters:
             },
             {
                 name: 'get_subtasks',
-                description: `IMPORTANT: Requires an active session. Retrieves subtasks of a task
-
-Parameters:
-- taskId*: Parent task ID. Best practice: Use for progress tracking and dependency management.
-- sessionId: Optional session ID to filter by. If not provided, uses parent task's session.
-- taskListId: Optional task list ID to filter by. If not provided, uses parent task's task list.`,
+                description: 'Retrieves subtasks of a task with hierarchy awareness. Features:\n' +
+                           '- Support for milestone and group subtasks\n' +
+                           '- Status inheritance information\n' +
+                           '- Dependency tracking\n\n' +
+                           'Use for understanding task relationships and progress.',
                 inputSchema: getSubtasksSchema,
                 handler: async (args: Record<string, unknown>) => {
                     if (!args.taskId || typeof args.taskId !== 'string') {
@@ -193,7 +325,11 @@ Parameters:
             },
             {
                 name: 'get_task_tree',
-                description: 'IMPORTANT: Requires an active session. Retrieves the complete task hierarchy. Best practice: Use frequently to maintain awareness of all tasks, their relationships, and current progress. Regular checks help keep the full task context fresh in memory and ensure proper task management.',
+                description: 'Retrieves the complete task hierarchy with rich context. Features:\n' +
+                           '- Full parent-child relationships\n' +
+                           '- Status propagation information\n' +
+                           '- Dependency mappings\n\n' +
+                           'Use for understanding project structure and relationships.',
                 inputSchema: getTaskTreeSchema,
                 handler: async (args: Record<string, unknown>) => {
                     const result = await this.taskManager.getTaskTree(

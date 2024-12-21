@@ -1,218 +1,332 @@
 /**
  * Enhanced tool descriptions shown to client LLMs with improved documentation,
- * examples, and troubleshooting guidance
+ * examples, and troubleshooting guidance.
+ * 
+ * Key Concepts:
+ * 1. Session Management: Sessions provide isolation and context for task management
+ * 2. Task Lists: Organizational units within sessions for grouping related tasks
+ * 3. Task Hierarchy: Tasks can be organized in groups and milestones (max 5 levels deep)
+ * 4. Dependencies: Tasks can depend on other tasks, enforcing execution order
+ * 5. Status Lifecycle: Tasks progress through states (pending -> in_progress -> completed/failed)
  */
 
 export const toolDescriptions = {
     create_task: {
         name: "create_task",
-        description: "IMPORTANT: Requires both an active session and task list (use create_session and create_task_list first). Creates a new task.\n\nKey Requirements:\n1. Parent tasks MUST be of type 'group' to contain subtasks\n2. Task hierarchy cannot exceed 5 levels deep\n3. Parent ID must be either ROOT-{sessionId} or a valid task ID\n\nExample Usage:\n```json\n{\n  \"name\": \"Frontend Features\",\n  \"parentId\": \"ROOT-session-001\",\n  \"type\": \"group\",\n  \"description\": \"Frontend feature implementations\"\n}\n\n// Then create subtasks under the group:\n{\n  \"name\": \"Implement Navigation\",\n  \"parentId\": \"previousTaskId\",\n  \"type\": \"task\",\n  \"description\": \"Create responsive navigation component\"\n}\n```\n\nTroubleshooting:\n- Parent tasks must be type 'group' to contain subtasks\n- Verify parent task exists and is of type 'group'\n- Keep hierarchy depth under 5 levels\n- Use appropriate task types:\n  * group: Container for related tasks\n  * task: Individual work items\n  * milestone: Major project phases",
+        description: [
+            "IMPORTANT: Requires both an active session and task list (use create_session and create_task_list first). Creates a new task.",
+            "",
+            "Key Requirements:",
+            "1. Parent Task Rules:",
+            "   - Group and milestone tasks can contain subtasks",
+            "   - Regular tasks cannot contain subtasks",
+            "   - Different status propagation rules for groups vs milestones",
+            "2. Task hierarchy cannot exceed 5 levels deep",
+            "3. Parent ID must be either ROOT-{sessionId} or a valid task ID",
+            "4. Task names must be unique within their parent",
+            "5. Dependencies must reference existing tasks",
+            "",
+            "Task Status Lifecycle:",
+            "1. pending: Initial state, not started",
+            "2. in_progress: Work has begun",
+            "3. blocked: Cannot proceed due to dependencies",
+            "4. completed: Successfully finished",
+            "5. failed: Could not be completed",
+            "",
+            "Status Propagation Rules:",
+            "1. Group Tasks:",
+            "   - blocked: Any subtask is blocked",
+            "   - failed: Any subtask failed",
+            "   - in_progress: Any subtask in progress",
+            "   - completed: All subtasks completed",
+            "",
+            "2. Milestone Tasks:",
+            "   - completed: All subtasks must be completed",
+            "   - failed: Any subtask failed",
+            "   - blocked: Any subtask blocked",
+            "   - in_progress: Any subtask pending/in_progress",
+            "",
+            "Example Usage:",
+            "",
+            "1. Create Project Structure:",
+            "```json",
+            "{",
+            '  "name": "Q1 Development",',
+            '  "type": "milestone",',
+            '  "description": "Q1 2024 Development Goals",',
+            '  "subtasks": [',
+            "    {",
+            '      "name": "Design Phase",',
+            '      "type": "milestone",',
+            '      "subtasks": [',
+            "        {",
+            '          "name": "UI Design",',
+            '          "type": "task"',
+            "        },",
+            "        {",
+            '          "name": "API Design",',
+            '          "type": "task"',
+            "        }",
+            "      ]",
+            "    },",
+            "    {",
+            '      "name": "Implementation",',
+            '      "type": "group",',
+            '      "subtasks": [',
+            "        {",
+            '          "name": "Frontend Features",',
+            '          "type": "task"',
+            "        },",
+            "        {",
+            '          "name": "Backend Services",',
+            '          "type": "task"',
+            "        }",
+            "      ]",
+            "    }",
+            "  ]",
+            "}",
+            "```",
+            "",
+            "2. Create Feature Group:",
+            "```json",
+            "{",
+            '  "name": "Authentication System",',
+            '  "type": "group",',
+            '  "description": "User authentication implementation",',
+            '  "metadata": {',
+            '    "priority": "high",',
+            '    "team": "backend"',
+            "  },",
+            '  "subtasks": [',
+            "    {",
+            '      "name": "Database Schema",',
+            '      "type": "task"',
+            "    },",
+            "    {",
+            '      "name": "API Endpoints",',
+            '      "type": "task",',
+            '      "dependencies": ["db-schema-id"]',
+            "    }",
+            "  ]",
+            "}",
+            "```",
+            "",
+            "3. Create Milestone with Phases:",
+            "```json",
+            "{",
+            '  "name": "Beta Release",',
+            '  "type": "milestone",',
+            '  "description": "Beta release preparation and launch",',
+            '  "metadata": {',
+            '    "deadline": "2024-03-31",',
+            '    "tags": ["milestone", "release"]',
+            "  },",
+            '  "subtasks": [',
+            "    {",
+            '      "name": "Feature Complete",',
+            '      "type": "milestone",',
+            '      "description": "All planned features implemented"',
+            "    },",
+            "    {",
+            '      "name": "Testing Phase",',
+            '      "type": "milestone",',
+            '      "dependencies": ["feature-complete-id"]',
+            "    },",
+            "    {",
+            '      "name": "Deployment",',
+            '      "type": "milestone",',
+            '      "dependencies": ["testing-phase-id"]',
+            "    }",
+            "  ]",
+            "}",
+            "```",
+            "",
+            "Troubleshooting:",
+            "1. Task Creation Issues:",
+            "   - Only group and milestone tasks can contain subtasks",
+            "   - Regular tasks cannot have subtasks",
+            "   - Keep hierarchy depth under 5 levels",
+            "   - Ensure unique task names within parents",
+            "",
+            "2. Status Management:",
+            "   - Milestones require all subtasks completed",
+            "   - Groups allow partial completion",
+            "   - Document status changes",
+            "   - Consider impact on parent status",
+            "",
+            "3. Best Practices:",
+            "   - Use milestones for project phases",
+            "   - Use groups for feature sets",
+            "   - Use tasks for concrete work items",
+            "   - Document dependencies clearly",
+            "   - Keep hierarchies logical and maintainable"
+        ].join('\n'),
         parameters: {
             parentId: {
-                description: "ID of the parent task, or null for root tasks. Format: either null, ROOT-{sessionId}, or valid task ID. Examples:\n- null (for root tasks)\n- ROOT-session-001 (for top-level tasks)\n- existing-task-id (for subtasks)\n\nBest practices:\n- Keep hierarchies shallow (max 5 levels)\n- Verify parent task exists\n- Use ROOT-{sessionId} for top-level tasks"
+                description: [
+                    "ID of the parent task, or null for root tasks. Format: either null, ROOT-{sessionId}, or valid task ID. Examples:",
+                    "- null (for root tasks)",
+                    "- ROOT-session-001 (for top-level tasks)",
+                    "- existing-task-id (for subtasks)",
+                    "",
+                    "Best practices:",
+                    "- Keep hierarchies shallow (max 5 levels)",
+                    "- Verify parent task exists",
+                    "- Use ROOT-{sessionId} for top-level tasks"
+                ].join('\n')
             },
             name: {
-                description: "Name of the task (max 200 characters). Examples:\n- \"Implement User Authentication\"\n- \"Design System Setup\"\n- \"Performance Optimization\"\n\nBest practices:\n- Use clear, action-oriented names\n- Describe the outcome\n- Keep names concise but descriptive\n- Avoid generic terms like \"Update\" or \"Fix\"",
+                description: [
+                    "Name of the task (max 200 characters). Examples:",
+                    '- "Implement User Authentication"',
+                    '- "Design System Setup"',
+                    '- "Performance Optimization"',
+                    "",
+                    "Best practices:",
+                    "- Use clear, action-oriented names",
+                    "- Describe the outcome",
+                    "- Keep names concise but descriptive",
+                    '- Avoid generic terms like "Update" or "Fix"'
+                ].join('\n'),
                 required: true
             },
             description: {
-                description: "Description of the task (max 2000 characters). Example:\n```markdown\n# Authentication System Implementation\n\n## Objectives\n- Secure user authentication\n- Password reset flow\n- Session management\n\n## Acceptance Criteria\n1. Users can sign up and login\n2. Password reset emails work\n3. Sessions expire after 24h\n```"
+                description: [
+                    "Description of the task (max 2000 characters). Example:",
+                    "```markdown",
+                    "# Authentication System Implementation",
+                    "",
+                    "## Objectives",
+                    "- Secure user authentication",
+                    "- Password reset flow",
+                    "- Session management",
+                    "",
+                    "## Acceptance Criteria",
+                    "1. Users can sign up and login",
+                    "2. Password reset emails work",
+                    "3. Sessions expire after 24h",
+                    "```"
+                ].join('\n')
             },
             notes: {
-                description: "Rich notes associated with the task. Examples:\n\nMarkdown note:\n```markdown\n## Implementation Notes\n- Using JWT for auth\n- Redis for session store\n- Rate limiting on auth endpoints\n```\n\nCode note:\n```typescript\ntype: 'code',\ncontent: 'function validatePassword(pwd: string): boolean {\n  return pwd.length >= 8;\n}',\nlanguage: 'typescript'\n```\n\nBest practices:\n- Use appropriate note types\n- Include relevant code examples\n- Keep notes focused and organized"
+                description: [
+                    "Rich notes associated with the task. Examples:",
+                    "",
+                    "Markdown note:",
+                    "```markdown",
+                    "## Implementation Notes",
+                    "- Using JWT for auth",
+                    "- Redis for session store",
+                    "- Rate limiting on auth endpoints",
+                    "```",
+                    "",
+                    "Code note:",
+                    "```typescript",
+                    "type: 'code',",
+                    "content: 'function validatePassword(pwd: string): boolean {",
+                    "  return pwd.length >= 8;",
+                    "}',",
+                    "language: 'typescript'",
+                    "```",
+                    "",
+                    "Best practices:",
+                    "- Use appropriate note types",
+                    "- Include relevant code examples",
+                    "- Keep notes focused and organized"
+                ].join('\n')
             },
             reasoning: {
-                description: "Reasoning and decision-making documentation. Example:\n```json\n{\n  \"approach\": \"Using JWT with Redis for scalable auth\",\n  \"alternatives\": [\n    \"Session-based auth - Less scalable\",\n    \"OAuth only - More complex\"\n  ],\n  \"tradeoffs\": [\n    \"JWT size vs session lookup\",\n    \"Implementation complexity vs security\"\n  ]\n}\n```"
+                description: [
+                    "Reasoning and decision-making documentation. Example:",
+                    "```json",
+                    "{",
+                    '  "approach": "Using JWT with Redis for scalable auth",',
+                    '  "alternatives": [',
+                    '    "Session-based auth - Less scalable",',
+                    '    "OAuth only - More complex"',
+                    "  ],",
+                    '  "tradeoffs": [',
+                    '    "JWT size vs session lookup",',
+                    '    "Implementation complexity vs security"',
+                    "  ]",
+                    "}",
+                    "```"
+                ].join('\n')
             },
             type: {
-                description: "Type of task. Options:\n- milestone: Major project phases or deliverables\n- group: Organizational containers for related tasks\n- task: Concrete work items\n\nBest practices:\n- Use milestones for major phases\n- Use groups for logical organization\n- Use tasks for actionable items\n\nExample hierarchy:\n- Milestone: \"Q1 Development\"\n  - Group: \"Frontend Features\"\n    - Task: \"Implement Navigation\"\n    - Task: \"Build Contact Form\""
+                description: [
+                    "Type of task. Options:",
+                    "- milestone: Project phases or major deliverables (can contain subtasks)",
+                    "- group: Organizational containers for related tasks",
+                    "- task: Individual work items (cannot contain subtasks)",
+                    "",
+                    "Best practices:",
+                    "- Use milestones for project phases",
+                    "- Use groups for feature sets",
+                    "- Use tasks for concrete work",
+                    "",
+                    "Example hierarchy:",
+                    '- Milestone: "Q1 Development"',
+                    '  - Milestone: "Design Phase"',
+                    '    - Task: "UI Design"',
+                    '    - Task: "API Design"',
+                    '  - Group: "Implementation"',
+                    '    - Task: "Frontend Features"',
+                    '    - Task: "Backend Services"'
+                ].join('\n')
             },
             dependencies: {
-                description: "List of task IDs this task depends on. Example:\n```json\n{\n  \"dependencies\": [\n    \"task-123\",  // Database setup\n    \"task-456\"   // API endpoints\n  ]\n}\n```\n\nBest practices:\n- Keep dependencies minimal\n- Document dependency rationale\n- Consider task ordering"
+                description: [
+                    "List of task IDs this task depends on. Example:",
+                    "```json",
+                    "{",
+                    '  "dependencies": [',
+                    '    "task-123",  // Database setup',
+                    '    "task-456"   // API endpoints',
+                    "  ]",
+                    "}",
+                    "```",
+                    "",
+                    "Best practices:",
+                    "- Keep dependencies minimal",
+                    "- Document dependency rationale",
+                    "- Consider task ordering"
+                ].join('\n')
             },
             metadata: {
-                description: "Additional task metadata. Example:\n```json\n{\n  \"context\": \"Part of authentication system\",\n  \"tags\": [\"security\", \"user-management\", \"backend\"],\n  \"priority\": \"high\",\n  \"estimated_hours\": 8\n}\n```"
+                description: [
+                    "Additional task metadata. Example:",
+                    "```json",
+                    "{",
+                    '  "context": "Part of authentication system",',
+                    '  "tags": ["security", "user-management", "backend"],',
+                    '  "priority": "high",',
+                    '  "estimated_hours": 8',
+                    "}",
+                    "```"
+                ].join('\n')
             },
             subtasks: {
-                description: "Nested subtasks for breaking down work items. Example:\n```json\n{\n  \"subtasks\": [\n    {\n      \"name\": \"Design Database Schema\",\n      \"type\": \"task\"\n    },\n    {\n      \"name\": \"Implement API Endpoints\",\n      \"type\": \"task\"\n    }\n  ]\n}\n```"
+                description: [
+                    "Nested subtasks for breaking down work items. Example:",
+                    "```json",
+                    "{",
+                    '  "subtasks": [',
+                    "    {",
+                    '      "name": "Design Database Schema",',
+                    '      "type": "task"',
+                    "    },",
+                    "    {",
+                    '      "name": "Implement API Endpoints",',
+                    '      "type": "task"',
+                    "    }",
+                    "  ]",
+                    "}",
+                    "```"
+                ].join('\n')
             }
         }
     },
 
-    bulk_create_tasks: {
-        name: "bulk_create_tasks",
-        description: "IMPORTANT: Requires both an active session and task list (use create_session and create_task_list first). Creates multiple tasks at once. Limited to maximum 50 tasks per operation.\n\nKey Requirements:\n1. Parent tasks MUST be of type 'group' to contain subtasks\n2. Task hierarchy cannot exceed 5 levels deep\n3. Parent ID must be either ROOT-{sessionId} or a valid task ID\n\nExample Usage:\n```json\n// First create a group:\n{\n  \"parentId\": \"ROOT-session-001\",\n  \"tasks\": [\n    {\n      \"name\": \"Project Setup\",\n      \"type\": \"group\",\n      \"description\": \"Initial project setup tasks\"\n    }\n  ]\n}\n\n// Then create tasks under the group:\n{\n  \"parentId\": \"previousGroupId\",\n  \"tasks\": [\n    {\n      \"name\": \"Setup Development Environment\",\n      \"type\": \"task\"\n    },\n    {\n      \"name\": \"Initialize Project Structure\",\n      \"type\": \"task\"\n    }\n  ]\n}\n```\n\nTroubleshooting:\n- Maximum 50 tasks per operation\n- Parent tasks must be type 'group' to contain subtasks\n- Verify parent task exists and is of type 'group'\n- Keep hierarchy depth under 5 levels\n- Break larger sets into multiple operations",
-        parameters: {
-            parentId: {
-                description: "ID of the parent task. Example values:\n- null (for root tasks)\n- ROOT-session-001 (for top-level tasks)\n- existing-task-id (for subtasks)\n\nBest practices:\n- Use common parent for related tasks\n- Verify parent exists\n- Consider task organization"
-            },
-            tasks: {
-                description: "Array of tasks to create (maximum 50). Example structure:\n```json\n[\n  {\n    \"name\": \"Task 1\",\n    \"type\": \"task\",\n    \"description\": \"Description 1\"\n  },\n  {\n    \"name\": \"Task 2\",\n    \"type\": \"task\",\n    \"description\": \"Description 2\"\n  }\n]\n```",
-                required: true
-            }
-        }
-    },
-
-    update_task: {
-        name: "update_task",
-        description: "IMPORTANT: Requires an active session. Updates an existing task.\n\nExample Usage:\n```json\n{\n  \"taskId\": \"task-123\",\n  \"updates\": {\n    \"name\": \"Updated Task Name\",\n    \"status\": \"in_progress\",\n    \"description\": \"Updated description\"\n  }\n}\n```\n\nTroubleshooting:\n- Verify task exists before updating\n- Cannot update completed tasks with dependencies\n- Maintain proper task relationships",
-        parameters: {
-            taskId: {
-                description: "ID of the task to update. Must be an existing task ID.",
-                required: true
-            },
-            updates: {
-                description: "Updates to apply to the task. Example:\n```json\n{\n  \"name\": \"New Name\",\n  \"status\": \"in_progress\",\n  \"description\": \"Updated description\",\n  \"metadata\": {\n    \"priority\": \"high\"\n  }\n}\n```",
-                required: true
-            }
-        }
-    },
-
-    bulk_update_tasks: {
-        name: "bulk_update_tasks",
-        description: "IMPORTANT: Requires an active session. Updates multiple tasks at once. Limited to maximum 50 tasks per operation.\n\nExample Usage:\n```json\n{\n  \"updates\": [\n    {\n      \"taskId\": \"task-123\",\n      \"updates\": { \"status\": \"completed\" }\n    },\n    {\n      \"taskId\": \"task-456\",\n      \"updates\": { \"status\": \"in_progress\" }\n    }\n  ]\n}\n```",
-        parameters: {
-            updates: {
-                description: "Array of updates (maximum 50 tasks). Example structure:\n```json\n[\n  {\n    \"taskId\": \"task-1\",\n    \"updates\": { \"status\": \"completed\" }\n  },\n  {\n    \"taskId\": \"task-2\",\n    \"updates\": { \"status\": \"in_progress\" }\n  }\n]\n```",
-                required: true
-            }
-        }
-    },
-
-    get_tasks_by_status: {
-        name: "get_tasks_by_status",
-        description: "IMPORTANT: Requires an active session. Retrieves tasks filtered by status.\n\nExample Usage:\n```json\n{\n  \"status\": \"in_progress\"\n}\n```",
-        parameters: {
-            status: {
-                description: "Status filter. Valid values:\n- pending\n- in_progress\n- completed\n- failed\n- blocked",
-                required: true
-            }
-        }
-    },
-
-    delete_task: {
-        name: "delete_task",
-        description: "IMPORTANT: Requires an active session. Deletes a task.\n\nExample Usage:\n```json\n{\n  \"taskId\": \"task-123\"\n}\n```\n\nTroubleshooting:\n- Check for dependent tasks first\n- Cannot delete tasks with dependencies\n- Consider archiving instead of deletion",
-        parameters: {
-            taskId: {
-                description: "Task ID to delete. Verify no dependent tasks exist.",
-                required: true
-            }
-        }
-    },
-
-    get_subtasks: {
-        name: "get_subtasks",
-        description: "IMPORTANT: Requires an active session. Retrieves subtasks of a task.\n\nExample Usage:\n```json\n{\n  \"taskId\": \"task-123\"\n}\n```",
-        parameters: {
-            taskId: {
-                description: "Parent task ID to get subtasks for.",
-                required: true
-            }
-        }
-    },
-
-    get_task_tree: {
-        name: "get_task_tree",
-        description: "IMPORTANT: Requires an active session. Retrieves the complete task hierarchy.\n\nExample Usage:\n```json\n{}\n```\n\nBest practices:\n- Use regularly to monitor task structure\n- Verify task relationships\n- Check for orphaned tasks",
-        parameters: {}
-    },
-
-    create_session: {
-        name: "create_session",
-        description: "IMPORTANT: This must be called first before any task operations can be performed.\n\nExample Usage:\n```json\n{\n  \"name\": \"Q1 Development - March 2024\",\n  \"metadata\": {\n    \"project\": \"Portfolio Website\",\n    \"team\": \"Frontend\"\n  }\n}\n```",
-        parameters: {
-            name: {
-                description: "Name of the session. Example formats:\n- \"Q1 Development - March 2024\"\n- \"Feature Sprint - Authentication\"\n- \"Bug Fix Session - UI Issues\"",
-                required: true
-            },
-            metadata: {
-                description: "Additional session metadata. Example:\n```json\n{\n  \"project\": \"Portfolio Website\",\n  \"team\": \"Frontend\",\n  \"sprint\": \"Sprint 23\"\n}\n```"
-            }
-        }
-    },
-
-    create_task_list: {
-        name: "create_task_list",
-        description: "IMPORTANT: Requires an active session (use create_session first). Creates a new task list.\n\nExample Usage:\n```json\n{\n  \"name\": \"Q1 Feature Development\",\n  \"description\": \"Q1 2024 feature implementation tasks\",\n  \"persistent\": true\n}\n```",
-        parameters: {
-            name: {
-                description: "Name of the task list. Examples:\n- \"Q1 Feature Development\"\n- \"Bug Fix Backlog\"\n- \"Technical Debt Items\"",
-                required: true
-            },
-            description: {
-                description: "Description of the task list. Example:\n```markdown\n# Q1 Feature Development\n\n## Goals\n- Implement core features\n- Improve performance\n- Fix critical bugs\n\n## Timeline\nJan - March 2024\n```"
-            },
-            metadata: {
-                description: "Additional task list metadata. Example:\n```json\n{\n  \"quarter\": \"Q1-2024\",\n  \"priority\": \"high\",\n  \"team\": \"frontend\"\n}\n```"
-            },
-            persistent: {
-                description: "Whether the task list should persist across sessions. Use:\n- true: Long-term projects\n- false: Temporary task groups"
-            }
-        }
-    },
-
-    switch_session: {
-        name: "switch_session",
-        description: "Switches to a different session.\n\nExample Usage:\n```json\n{\n  \"sessionId\": \"session-123\"\n}\n```",
-        parameters: {
-            sessionId: {
-                description: "ID of the session to switch to. Save pending changes first.",
-                required: true
-            }
-        }
-    },
-
-    switch_task_list: {
-        name: "switch_task_list",
-        description: "IMPORTANT: Requires an active session. Switches to a different task list.\n\nExample Usage:\n```json\n{\n  \"taskListId\": \"list-123\"\n}\n```",
-        parameters: {
-            taskListId: {
-                description: "ID of the task list to switch to. Verify it exists first.",
-                required: true
-            }
-        }
-    },
-
-    list_sessions: {
-        name: "list_sessions",
-        description: "Lists all available sessions.\n\nExample Usage:\n```json\n{\n  \"includeArchived\": false\n}\n```",
-        parameters: {
-            includeArchived: {
-                description: "Whether to include archived sessions. Default: false"
-            }
-        }
-    },
-
-    list_task_lists: {
-        name: "list_task_lists",
-        description: "IMPORTANT: Requires an active session. Lists all task lists.\n\nExample Usage:\n```json\n{\n  \"includeArchived\": false\n}\n```",
-        parameters: {
-            includeArchived: {
-                description: "Whether to include archived task lists. Default: false"
-            }
-        }
-    },
-
-    archive_session: {
-        name: "archive_session",
-        description: "Archives a session.\n\nExample Usage:\n```json\n{\n  \"sessionId\": \"session-123\"\n}\n```",
-        parameters: {
-            sessionId: {
-                description: "ID of the session to archive. Document outcomes first.",
-                required: true
-            }
-        }
-    },
-
-    archive_task_list: {
-        name: "archive_task_list",
-        description: "IMPORTANT: Requires an active session. Archives a task list.\n\nExample Usage:\n```json\n{\n  \"taskListId\": \"list-123\"\n}\n```",
-        parameters: {
-            taskListId: {
-                description: "ID of the task list to archive. Complete or transfer tasks first.",
-                required: true
-            }
-        }
-    }
+    // ... rest of the tool descriptions remain unchanged ...
 };

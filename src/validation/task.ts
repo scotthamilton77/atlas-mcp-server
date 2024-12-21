@@ -290,18 +290,6 @@ const baseTaskSchema = z.object({
         invalid_type_error: "Invalid task type. Must be one of: task, milestone, group"
     })
     .default(TaskType.TASK)
-    .superRefine((type, ctx) => {
-        const parentId = (ctx.path[0] as any)?.parentId;
-        const subtasks = (ctx.path[0] as any)?.subtasks;
-        
-        if (subtasks?.length > 0 && type !== TaskType.GROUP) {
-            ctx.addIssue({
-                code: z.ZodIssueCode.custom,
-                message: "Tasks with subtasks must be of type 'group'",
-                path: ['type']
-            });
-        }
-    })
 });
 
 /**

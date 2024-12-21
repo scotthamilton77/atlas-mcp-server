@@ -39,8 +39,8 @@ import { RequestTracer } from './server/request-tracer.js';
 export class AtlasMcpServer {
     private server: Server;
     private storage: UnifiedSqliteStorage;
-    private taskManager: TaskManager;
-    private toolHandler: ToolHandler;
+    private taskManager!: TaskManager;
+    private toolHandler!: ToolHandler;
     private sessionSystem: SessionSystem;
     private logger: Logger;
     private rateLimiter: RateLimiter;
@@ -91,10 +91,6 @@ export class AtlasMcpServer {
         this.storage = new UnifiedSqliteStorage(config.storage);
         this.sessionSystem = new SessionSystem(config.storage);
         
-        // Initialize task manager without session manager for now
-        this.taskManager = new TaskManager(this.storage);
-        this.toolHandler = new ToolHandler(this.taskManager);
-        
         // Initialize server components
         this.rateLimiter = new RateLimiter(600); // 600 requests per minute
         this.healthMonitor = new HealthMonitor();
@@ -127,12 +123,12 @@ export class AtlasMcpServer {
             await this.storage.initialize();
             await this.sessionSystem.initialize();
 
-            // Now that session system is initialized, update task manager with session manager
+            // Initialize task manager with session manager
             this.taskManager = new TaskManager(this.storage, this.sessionSystem.getSessionManager());
-            this.toolHandler = new ToolHandler(this.taskManager);
-            
-            // Initialize task manager
             await this.taskManager.initialize();
+            
+            // Initialize tool handler
+            this.toolHandler = new ToolHandler(this.taskManager);
 
             // Add session tools to tool handler with their handler
             const sessionToolHandler = await this.sessionSystem.getToolHandler();

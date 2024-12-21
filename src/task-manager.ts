@@ -18,6 +18,12 @@ import {
     TaskWithSubtasks,
     TaskMetadata
 } from './types/task.js';
+import {
+    Session,
+    TaskList,
+    CreateSessionInput,
+    CreateTaskListInput
+} from './types/session.js';
 import { UnifiedStorageManager } from './storage/unified-storage.js';
 import { Logger } from './logging/index.js';
 import { z } from 'zod';
@@ -52,12 +58,210 @@ export class TaskManager {
 
     constructor(
         private storage: UnifiedStorageManager,
-        private sessionManager?: DefaultSessionManager
+        private sessionManager: DefaultSessionManager
     ) {
         this.logger = Logger.getInstance().child({ component: 'TaskManager' });
         this.taskStore = new TaskStore(storage);
         this.dependencyValidator = new DependencyValidator();
         this.statusManager = new StatusManager();
+    }
+
+    /**
+     * Creates a new session
+     */
+    async createSession(input: CreateSessionInput): Promise<TaskResponse<Session>> {
+        try {
+            const session = await this.sessionManager.createSession(input);
+            return {
+                success: true,
+                data: session,
+                metadata: {
+                    timestamp: new Date().toISOString(),
+                    requestId: generateShortId(),
+                    sessionId: session.id
+                }
+            };
+        } catch (error) {
+            this.logger.error('Failed to create session', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Switches to a different session
+     */
+    async switchSession(sessionId: string): Promise<TaskResponse<void>> {
+        try {
+            await this.sessionManager.switchSession(sessionId);
+            return {
+                success: true,
+                metadata: {
+                    timestamp: new Date().toISOString(),
+                    requestId: generateShortId(),
+                    sessionId
+                }
+            };
+        } catch (error) {
+            this.logger.error('Failed to switch session', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Lists all available sessions
+     */
+    async listSessions(includeArchived = false): Promise<TaskResponse<Session[]>> {
+        try {
+            const sessions = await this.sessionManager.listSessions(includeArchived);
+            const activeSession = await this.sessionManager.getActiveSession();
+            
+            return {
+                success: true,
+                data: sessions,
+                metadata: {
+                    timestamp: new Date().toISOString(),
+                    requestId: generateShortId(),
+                    sessionId: activeSession?.id || generateShortId()
+                }
+            };
+        } catch (error) {
+            this.logger.error('Failed to list sessions', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Archives a session
+     */
+    async archiveSession(sessionId: string): Promise<TaskResponse<void>> {
+        try {
+            await this.sessionManager.archiveSession(sessionId);
+            return {
+                success: true,
+                metadata: {
+                    timestamp: new Date().toISOString(),
+                    requestId: generateShortId(),
+                    sessionId
+                }
+            };
+        } catch (error) {
+            this.logger.error('Failed to archive session', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Switches to a different task list
+     */
+    async switchTaskList(taskListId: string): Promise<TaskResponse<void>> {
+        try {
+            await this.sessionManager.switchTaskList(taskListId);
+            const session = await this.sessionManager.getActiveSession();
+            if (!session) {
+                throw createError(
+                    ErrorCodes.VALIDATION_ERROR,
+                    'No active session'
+                );
+            }
+            return {
+                success: true,
+                metadata: {
+                    timestamp: new Date().toISOString(),
+                    requestId: generateShortId(),
+                    sessionId: session.id,
+                    taskListId
+                }
+            };
+        } catch (error) {
+            this.logger.error('Failed to switch task list', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Lists all task lists in the current session
+     */
+    async listTaskLists(includeArchived = false): Promise<TaskResponse<TaskList[]>> {
+        try {
+            const taskLists = await this.sessionManager.listTaskLists(includeArchived);
+            const session = await this.sessionManager.getActiveSession();
+            if (!session) {
+                throw createError(
+                    ErrorCodes.VALIDATION_ERROR,
+                    'No active session'
+                );
+            }
+            return {
+                success: true,
+                data: taskLists,
+                metadata: {
+                    timestamp: new Date().toISOString(),
+                    requestId: generateShortId(),
+                    sessionId: session.id
+                }
+            };
+        } catch (error) {
+            this.logger.error('Failed to list task lists', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Archives a task list
+     */
+    async archiveTaskList(taskListId: string): Promise<TaskResponse<void>> {
+        try {
+            await this.sessionManager.archiveTaskList(taskListId);
+            const session = await this.sessionManager.getActiveSession();
+            if (!session) {
+                throw createError(
+                    ErrorCodes.VALIDATION_ERROR,
+                    'No active session'
+                );
+            }
+            return {
+                success: true,
+                metadata: {
+                    timestamp: new Date().toISOString(),
+                    requestId: generateShortId(),
+                    sessionId: session.id,
+                    taskListId
+                }
+            };
+        } catch (error) {
+            this.logger.error('Failed to archive task list', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Creates a new task list
+     */
+    async createTaskList(input: CreateTaskListInput): Promise<TaskResponse<TaskList>> {
+        try {
+            const session = await this.sessionManager.getActiveSession();
+            if (!session) {
+                throw createError(
+                    ErrorCodes.VALIDATION_ERROR,
+                    'No active session. Create or switch to a session first.'
+                );
+            }
+
+            const taskList = await this.sessionManager.createTaskList(input);
+
+            return {
+                success: true,
+                data: taskList,
+                metadata: {
+                    timestamp: new Date().toISOString(),
+                    requestId: generateShortId(),
+                    sessionId: session.id
+                }
+            };
+        } catch (error) {
+            this.logger.error('Failed to create task list', error);
+            throw error;
+        }
     }
 
     /**
