@@ -296,39 +296,44 @@ The health monitoring system provides comprehensive monitoring of server health 
 #### Core Features
 
 1. **Health Metrics Tracking**
-   - Memory usage monitoring
-   - CPU usage tracking
-   - Active request counting
-   - Error rate calculation
-   - Response time monitoring
-   - Rate limiter status
+   - Memory usage monitoring with heap analysis
+   - CPU utilization tracking (user/system time)
+   - Active request counting and tracking
+   - Error rate calculation with thresholds
+   - Response time monitoring with latency analysis
+   - Rate limiter status and effectiveness
 
 2. **Threshold Management**
-   - Memory threshold (90% capacity)
-   - Error rate threshold (10%)
-   - Response time threshold (5 seconds)
-   - Rate limiter thresholds
+   - Memory threshold (90% of heap total)
+   - Error rate threshold (10% of total requests)
+   - Response time threshold (5 seconds max)
+   - Rate limiter thresholds (600 req/min)
+   - Component health thresholds
 
 3. **Health Status Components**
    - Server health status
-     * Memory metrics
-     * CPU metrics
-     * Active requests
+     * Memory metrics (used, total, percentage)
+     * CPU metrics (user time, system time)
+     * Active requests count
+     * Overall server health indicator
    - Rate limiter status
-     * Current usage
-     * Limits
-     * Time windows
+     * Current request rate
+     * Rate limit compliance
+     * Window-based monitoring
+     * Throttling effectiveness
    - Performance metrics
-     * Request counts
-     * Error rates
+     * Request counts (total/active)
+     * Error rates with thresholds
      * Average response times
+     * Resource utilization stats
 
 4. **Monitoring Capabilities**
-   - Real-time health checks
-   - Component-specific monitoring
-   - Threshold-based alerts
-   - Resource usage tracking
-   - Performance monitoring
+   - Real-time health checks (continuous monitoring)
+   - Component-level health status tracking
+   - Threshold-based alerts and warnings
+   - Resource usage tracking and analysis
+   - Performance monitoring with statistics
+   - Early warning system for degradation
 
 #### Health Check Features
 - Comprehensive system status
@@ -466,55 +471,62 @@ The request tracing system provides comprehensive request lifecycle tracking and
 #### Core Features
 
 1. **Request Lifecycle Tracking**
-   - Request start/end timing
-   - Duration calculation
-   - Error tracking
-   - Event recording
-   - Metadata management
+   - Request start/end timestamps with microsecond precision
+   - Duration measurement and analysis
+   - Event sequence recording with ordering
+   - Rich metadata enrichment capabilities
+   - Real-time trace updates and monitoring
+   - Cross-component correlation
 
 2. **Trace Management**
-   - Maximum trace limit (1000)
-   - Time-based cleanup (1-hour TTL)
-   - Automatic maintenance
-   - Memory optimization
-   - Trace filtering
+   - Maximum trace limit enforcement (1000 traces)
+   - Time-based cleanup with 1-hour TTL
+   - Automatic trace pruning for memory efficiency
+   - Memory-optimized trace storage
+   - Trace persistence and recovery
+   - Trace integrity verification
 
 3. **Event Recording**
-   - Start events
-   - End events
-   - Error events
-   - Event metadata
-   - Timestamp tracking
+   - Start/end event correlation
+   - Error event capture with context
+   - Custom event type support
+   - Metadata enrichment per event
+   - Timestamp synchronization
+   - Event ordering guarantees
 
 4. **Analysis Capabilities**
-   - Trace summaries
-   - Error analysis
-   - Duration statistics
-   - Active request tracking
-   - Historical data
+   - Comprehensive trace summaries
+   - Error pattern analysis
+   - Duration statistics and trends
+   - Active request monitoring
+   - Historical data analysis
+   - Performance bottleneck detection
 
 #### Key Components
 
 1. **Trace Data Structures**
-   - Request traces
-   - Trace events
-   - Metadata storage
-   - Error tracking
-   - Timing information
+   - Request trace objects with full context
+   - Hierarchical event storage
+   - Extensible metadata system
+   - Error correlation tracking
+   - High-precision timing data
+   - Resource usage metrics
 
 2. **Management Features**
-   - Automatic cleanup
-   - Size limiting
-   - TTL enforcement
-   - Memory management
-   - Data pruning
+   - Automatic trace lifecycle management
+   - Configurable trace limits
+   - TTL-based cleanup scheduling
+   - Memory usage optimization
+   - Efficient data pruning
+   - Trace data compression
 
 3. **Analysis Tools**
-   - Time range filtering
-   - Error trace isolation
-   - Summary generation
-   - Active trace monitoring
-   - Completion tracking
+   - Time-range based filtering
+   - Error trace pattern detection
+   - Statistical summary generation
+   - Real-time trace monitoring
+   - Completion rate tracking
+   - Performance trend analysis
 
 #### Integration Points
 - Request processing pipeline
