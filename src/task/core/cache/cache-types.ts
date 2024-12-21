@@ -23,11 +23,11 @@ export interface CacheStats {
 }
 
 export interface CacheManager {
-    get(taskId: string): Task | null;
-    set(taskId: string, task: Task): void;
-    delete(taskId: string): void;
-    clear(): void;
-    cleanup(): void;
-    destroy(): void;
-    getStats(): CacheStats;
+    get(path: string): Promise<Task | null>;
+    set(path: string, task: Task): Promise<void>;
+    delete(path: string): Promise<void>;
+    clear(): Promise<void>;
+    cleanup(): Promise<void>;
+    destroy(): Promise<void>;
+    getStats(): Promise<CacheStats>;
 }

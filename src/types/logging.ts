@@ -4,14 +4,16 @@
 
 /**
  * Log levels enumeration
- * @description Defines the possible log levels in order of severity
+ * @description Defines the possible log levels using Winston's standard levels
  */
 export const LogLevels = {
-    DEBUG: 'DEBUG',
-    INFO: 'INFO',
-    WARN: 'WARN',
-    ERROR: 'ERROR',
-    FATAL: 'FATAL'
+    ERROR: 'error',   // 0
+    WARN: 'warn',     // 1
+    INFO: 'info',     // 2
+    HTTP: 'http',     // 3
+    VERBOSE: 'verbose', // 4
+    DEBUG: 'debug',   // 5
+    SILLY: 'silly'    // 6
 } as const;
 
 export type LogLevel = typeof LogLevels[keyof typeof LogLevels];
@@ -61,6 +63,8 @@ export interface LoggerConfig {
     maxFiles?: number;
     /** Maximum size of each log file in bytes */
     maxFileSize?: number;
+    /** Whether to disable colored console output */
+    noColors?: boolean;
 }
 
 /**
@@ -115,7 +119,7 @@ export interface Logger {
     warn(message: string, context?: Record<string, unknown>): void;
     /** Log at ERROR level */
     error(message: string, error?: Error | unknown, context?: Record<string, unknown>): void;
-    /** Log at FATAL level */
+    /** Log at ERROR level (alias for error, maintains backward compatibility) */
     fatal(message: string, error?: Error | unknown, context?: Record<string, unknown>): void;
     /** Create a child logger with additional context */
     child(context: ChildLoggerContext): Logger;

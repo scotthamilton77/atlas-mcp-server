@@ -1,109 +1,90 @@
 /**
- * SQLite connection manager to handle connection pooling and lifecycle
+ * Database connection manager
  */
-import sqlite3 from 'sqlite3';
-import { Database, open } from 'sqlite';
-import path from 'path';
 import { Logger } from '../logging/index.js';
-import { UnifiedStorageError } from './unified-storage.js';
+import { StorageError, StorageErrorType } from '../types/storage.js';
 
 export class ConnectionManager {
-    private static instance: ConnectionManager;
-    private connections: Map<string, Database> = new Map();
-    private logger: Logger;
+    private readonly logger: Logger;
+    private readonly maxRetries: number;
+    private readonly retryDelay: number;
+    private readonly busyTimeout: number;
 
-    private constructor() {
+    constructor(options: {
+        maxRetries?: number;
+        retryDelay?: number;
+        busyTimeout?: number;
+    } = {}) {
         this.logger = Logger.getInstance().child({ component: 'ConnectionManager' });
-    }
-
-    static getInstance(): ConnectionManager {
-        if (!ConnectionManager.instance) {
-            ConnectionManager.instance = new ConnectionManager();
-        }
-        return ConnectionManager.instance;
+        this.maxRetries = options.maxRetries || 3;
+        this.retryDelay = options.retryDelay || 1000;
+        this.busyTimeout = options.busyTimeout || 5000;
     }
 
     /**
-     * Gets or creates a database connection with retry logic
+     * Executes a database operation with retries
      */
-    async getConnection(dbPath: string, retries = 3, delay = 1000): Promise<Database> {
-        if (this.connections.has(dbPath)) {
-            return this.connections.get(dbPath)!;
-        }
+    async executeWithRetry<T>(
+        operation: () => Promise<T>,
+        context: string
+    ): Promise<T> {
+        let lastError: Error | undefined;
+        let retryCount = 0;
 
-        let lastError: Error | null = null;
-        for (let attempt = 1; attempt <= retries; attempt++) {
+        while (retryCount < this.maxRetries) {
             try {
-                const db = await open({
-                    filename: dbPath,
-                    driver: sqlite3.Database,
-                    mode: sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE,
-                });
-
-                // Enable WAL mode and other optimizations
-                await Promise.all([
-                    db.exec('PRAGMA journal_mode = WAL'),
-                    db.exec('PRAGMA synchronous = NORMAL'),
-                    db.exec('PRAGMA temp_store = MEMORY'),
-                    db.exec('PRAGMA mmap_size = 30000000000'),
-                    db.exec('PRAGMA page_size = 4096'),
-                    db.exec('PRAGMA busy_timeout = 5000'), // 5 second timeout for busy connections
-                ]);
-
-                this.connections.set(dbPath, db);
-                this.logger.info('Database connection established', { path: dbPath, attempt });
-                return db;
+                return await operation();
             } catch (error) {
-                lastError = error as Error;
-                this.logger.warn('Database connection attempt failed', { 
-                    path: dbPath, 
-                    attempt,
-                    error,
-                    willRetry: attempt < retries
-                });
+                lastError = error instanceof Error ? error : new Error(String(error));
+                retryCount++;
 
-                if (attempt < retries) {
-                    await new Promise(resolve => setTimeout(resolve, delay));
+                if (retryCount < this.maxRetries) {
+                    this.logger.warn(`Operation failed, retrying (${retryCount}/${this.maxRetries})`, {
+                        error: lastError,
+                        context
+                    });
+                    await new Promise(resolve => setTimeout(resolve, this.retryDelay));
                 }
             }
         }
 
-        throw new UnifiedStorageError(
-            'Failed to establish database connection',
-            'CONNECTION_ERROR',
+        throw new StorageError(
+            StorageErrorType.CONNECTION,
+            `Operation failed after ${this.maxRetries} retries: ${lastError?.message}`,
             lastError
         );
     }
 
     /**
-     * Closes all database connections
+     * Handles database busy state
      */
-    async closeAll(): Promise<void> {
-        for (const [path, db] of this.connections) {
-            try {
-                await db.close();
-                this.connections.delete(path);
-            } catch (error) {
-                this.logger.error('Error closing database connection', { path, error });
-            }
-        }
-    }
+    async handleBusy(
+        operation: () => Promise<void>,
+        context: string
+    ): Promise<void> {
+        const startTime = Date.now();
 
-    /**
-     * Closes a specific database connection
-     */
-    async closeConnection(dbPath: string): Promise<void> {
-        const db = this.connections.get(dbPath);
-        if (db) {
+        while (true) {
             try {
-                await db.close();
-                this.connections.delete(dbPath);
+                await operation();
+                return;
             } catch (error) {
-                throw new UnifiedStorageError(
-                    'Failed to close database connection',
-                    'CONNECTION_CLOSE_ERROR',
-                    error
-                );
+                const elapsed = Date.now() - startTime;
+                if (elapsed >= this.busyTimeout) {
+                    throw new StorageError(
+                        StorageErrorType.CONNECTION,
+                        `Operation timed out after ${elapsed}ms: ${error instanceof Error ? error.message : String(error)}`,
+                        error
+                    );
+                }
+
+                this.logger.warn('Database busy, waiting...', {
+                    elapsed,
+                    timeout: this.busyTimeout,
+                    context
+                });
+
+                await new Promise(resolve => setTimeout(resolve, 100));
             }
         }
     }

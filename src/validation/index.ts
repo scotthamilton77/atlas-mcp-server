@@ -15,12 +15,32 @@ import { ValidationResult } from '../types/index.js';
  */
 export function formatZodError(error: z.ZodError): ValidationResult {
     return {
-        valid: false,
+        success: false,
         errors: error.errors.map(err => ({
-            path: err.path.join('.'),
-            message: err.message
+            path: err.path.map(String),
+            message: err.message,
+            received: err instanceof z.ZodError ? err.code : undefined,
+            expected: getExpectedValue(err)
         }))
     };
+}
+
+/**
+ * Get expected value from Zod error
+ */
+function getExpectedValue(error: z.ZodIssue): string | undefined {
+    switch (error.code) {
+        case z.ZodIssueCode.invalid_type:
+            return error.expected;
+        case z.ZodIssueCode.invalid_enum_value:
+            return error.options.join(' | ');
+        case z.ZodIssueCode.too_small:
+            return `${error.type === 'string' ? 'length' : 'value'} >= ${error.minimum}`;
+        case z.ZodIssueCode.too_big:
+            return `${error.type === 'string' ? 'length' : 'value'} <= ${error.maximum}`;
+        default:
+            return undefined;
+    }
 }
 
 /**
@@ -31,8 +51,8 @@ export function createSafeValidator<T>(schema: z.ZodType<T>) {
         const result = schema.safeParse(value);
         if (result.success) {
             return {
-                valid: true,
-                value: result.data
+                success: true,
+                data: result.data
             };
         } else {
             return formatZodError(result.error);

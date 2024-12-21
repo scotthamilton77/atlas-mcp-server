@@ -3,52 +3,10 @@
  * Provides centralized logging functionality with structured output
  */
 
-import { createLogger, format, transports, Logger as WinstonLogger } from 'winston';
+import { createLogger, format, transports, Logger as WinstonLogger, config as winstonConfig } from 'winston';
 import path from 'path';
 import { BaseError, ErrorCodes } from '../errors/index.js';
-
-/**
- * Log levels
- */
-export const LogLevels = {
-    DEBUG: 'debug',
-    INFO: 'info',
-    WARN: 'warn',
-    ERROR: 'error',
-    FATAL: 'fatal'
-} as const;
-
-export type LogLevel = typeof LogLevels[keyof typeof LogLevels];
-
-/**
- * Log entry interface
- */
-export interface LogEntry {
-    timestamp: string;
-    level: LogLevel;
-    message: string;
-    context?: Record<string, unknown>;
-    error?: {
-        name: string;
-        message: string;
-        code?: string;
-        details?: unknown;
-        stack?: string;
-    };
-}
-
-/**
- * Logger configuration interface
- */
-export interface LoggerConfig {
-    minLevel: LogLevel;
-    logDir?: string;
-    console?: boolean;
-    file?: boolean;
-    maxFiles?: number;
-    maxFileSize?: number;
-    noColors?: boolean;  // Whether to disable colored console output
-}
+import { LogLevel, LogLevels, LoggerConfig } from '../types/logging.js';
 
 /**
  * Logger class
@@ -130,11 +88,11 @@ export class Logger {
     }
 
     /**
-     * Logs a fatal error message
+     * Logs a fatal error message (maps to error level for Winston compatibility)
      */
     fatal(message: string, error?: unknown, context?: Record<string, unknown>): void {
         const errorInfo = this.formatError(error);
-        this.log(LogLevels.FATAL, message, { ...context, error: errorInfo });
+        this.log(LogLevels.ERROR, message, { ...context, error: errorInfo });
     }
 
     /**
@@ -161,7 +119,7 @@ export class Logger {
             loggerTransports.push(
                 new transports.File({
                     filename: path.join(config.logDir, 'error.log'),
-                    level: 'error',
+                    level: LogLevels.ERROR,
                     maxsize: config.maxFileSize,
                     maxFiles: config.maxFiles
                 }),
@@ -179,7 +137,8 @@ export class Logger {
                 format.timestamp(),
                 format.json()
             ),
-            transports: loggerTransports
+            transports: loggerTransports,
+            levels: winstonConfig.npm.levels // Use standard npm levels
         });
     }
 
@@ -239,3 +198,9 @@ export function createDefaultLogger(): Logger {
         );
     }
 }
+
+/**
+ * Re-export types
+ */
+export type { LogLevel, LoggerConfig } from '../types/logging.js';
+export { LogLevels } from '../types/logging.js';

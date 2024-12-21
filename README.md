@@ -112,7 +112,7 @@ ATLAS is built on several robust core components organized into specialized subs
 - **ValidationSystem**: Ensures data integrity with Zod schema integration
 
 #### Performance & Monitoring
-- **RateLimiter**: Controls request rates (600 req/min)
+- **RateLimiter**: Controls request rates (100 req/min)
 - **HealthMonitor**: Tracks system health with comprehensive metrics
 - **MetricsCollector**: Gathers detailed performance statistics
 - **RequestTracer**: Traces request flow with debugging capabilities
@@ -139,13 +139,13 @@ Through the MCP protocol, ATLAS empowers LLMs to break down complex projects int
 - Version tracking for content changes
 
 ### System Features
-- Rate limiting (600 requests/minute) with sliding window
+- Rate limiting (100 requests/minute) with sliding window
 - Health monitoring (In Progress)
-  * Basic metrics tracking implemented
-  * Error rate calculation
+  * Memory usage tracking
+  * Error rate monitoring (10% threshold)
   * Response time monitoring
-  * TODO: Advanced memory and CPU analysis
-  * TODO: Component-level health indicators
+  * Component-level health status
+  * Real-time health indicators with 60-second checks
 - Request tracing (In Progress)
   * Basic request lifecycle tracking
   * Error context capture
@@ -218,7 +218,15 @@ ATLAS requires configuration in your MCP client settings:
       "command": "node",
       "args": ["/path/to/atlas-mcp-server/build/index.js"],
       "env": {
-        "TASK_STORAGE_DIR": "/path/to/storage/directory"
+        "ATLAS_STORAGE_DIR": "/path/to/storage/directory",
+        "ATLAS_STORAGE_NAME": "atlas-tasks",
+        "ATLAS_MAX_RETRIES": "3",
+        "ATLAS_RETRY_DELAY": "1000",
+        "ATLAS_BUSY_TIMEOUT": "5000",
+        "ATLAS_CHECKPOINT_INTERVAL": "300000",
+        "ATLAS_CACHE_SIZE": "2000",
+        "ATLAS_MMAP_SIZE": "30000000000",
+        "ATLAS_PAGE_SIZE": "4096"
       }
     }
   }
@@ -227,9 +235,17 @@ ATLAS requires configuration in your MCP client settings:
 
 ### Environment Variables
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| TASK_STORAGE_DIR | Directory for task data storage | Yes |
+| Variable | Description | Default |
+|----------|-------------|---------|
+| ATLAS_STORAGE_DIR | Directory for task data storage | ./data |
+| ATLAS_STORAGE_NAME | Database file name | atlas-tasks |
+| ATLAS_MAX_RETRIES | Maximum retry attempts | 3 |
+| ATLAS_RETRY_DELAY | Delay between retries (ms) | 1000 |
+| ATLAS_BUSY_TIMEOUT | SQLite busy timeout (ms) | 5000 |
+| ATLAS_CHECKPOINT_INTERVAL | WAL checkpoint interval (ms) | 300000 |
+| ATLAS_CACHE_SIZE | SQLite cache size | 2000 |
+| ATLAS_MMAP_SIZE | SQLite mmap size | 30000000000 |
+| ATLAS_PAGE_SIZE | SQLite page size | 4096 |
 
 ## Task Structure
 
@@ -1216,7 +1232,7 @@ Features:
 ### System Features
 
 #### Rate Limiting
-- 600 requests per minute limit
+- 100 requests per minute limit
 - Automatic request throttling
 - Queue management
 - Error handling

@@ -1,205 +1,114 @@
 /**
- * Metrics collector for monitoring and analytics
+ * Metrics collection for monitoring and analysis
  */
+import { Logger } from '../logging/index.js';
 
-interface MetricWindow {
+export interface MetricEvent {
+    type: string;
+    tool?: string;
     timestamp: number;
-    value: number;
+    duration?: number;
+    success?: boolean;
+    error?: string;
+    [key: string]: unknown;
 }
 
-interface MetricSummary {
-    count: number;
-    min: number;
-    max: number;
-    avg: number;
-    p95: number;
-    p99: number;
+export interface Metrics {
+    requests: {
+        total: number;
+        success: number;
+        failed: number;
+        avgDuration: number;
+    };
+    tools: Record<string, {
+        total: number;
+        success: number;
+        failed: number;
+        avgDuration: number;
+        errors: Record<string, number>;
+    }>;
 }
 
 export class MetricsCollector {
-    private requestCount: number = 0;
-    private errorCount: number = 0;
-    private responseTimes: MetricWindow[] = [];
-    private readonly windowSize = 3600000; // 1 hour window for metrics
+    private events: MetricEvent[] = [];
+    private logger: Logger;
 
     constructor() {
-        // Clean up old metrics periodically
-        setInterval(() => this.cleanup(), 60000); // Every minute
+        this.logger = Logger.getInstance().child({ component: 'MetricsCollector' });
     }
 
-    /**
-     * Records response time for a request
-     */
-    recordResponseTime(ms: number): void {
-        this.requestCount++;
-        this.responseTimes.push({
-            timestamp: Date.now(),
-            value: ms
+    recordSuccess(event: MetricEvent): void {
+        this.events.push({
+            ...event,
+            success: true,
+            timestamp: event.timestamp || Date.now()
         });
+        this.logger.debug('Recorded success metric', { event });
     }
 
-    /**
-     * Increments error count
-     */
-    incrementErrorCount(): void {
-        this.errorCount++;
+    recordError(event: MetricEvent): void {
+        this.events.push({
+            ...event,
+            success: false,
+            timestamp: event.timestamp || Date.now()
+        });
+        this.logger.debug('Recorded error metric', { event });
     }
 
-    /**
-     * Gets total request count
-     */
-    getRequestCount(): number {
-        return this.requestCount;
-    }
+    getMetrics(): Metrics {
+        const now = Date.now();
+        const recentEvents = this.events.filter(e => now - e.timestamp < 3600000); // Last hour
 
-    /**
-     * Gets total error count
-     */
-    getErrorCount(): number {
-        return this.errorCount;
-    }
-
-    /**
-     * Gets average response time over the window
-     */
-    getAverageResponseTime(): number {
-        const current = this.getCurrentWindow();
-        if (current.length === 0) return 0;
-
-        const sum = current.reduce((acc, metric) => acc + metric.value, 0);
-        return sum / current.length;
-    }
-
-    /**
-     * Gets detailed response time metrics
-     */
-    getResponseTimeMetrics(): MetricSummary {
-        const current = this.getCurrentWindow();
-        if (current.length === 0) {
-            return {
-                count: 0,
-                min: 0,
-                max: 0,
-                avg: 0,
-                p95: 0,
-                p99: 0
-            };
-        }
-
-        const values = current.map(m => m.value).sort((a, b) => a - b);
-        const sum = values.reduce((acc, val) => acc + val, 0);
-
-        return {
-            count: values.length,
-            min: values[0],
-            max: values[values.length - 1],
-            avg: sum / values.length,
-            p95: this.getPercentile(values, 0.95),
-            p99: this.getPercentile(values, 0.99)
-        };
-    }
-
-    /**
-     * Gets error rate over the window
-     */
-    getErrorRate(): number {
-        return this.requestCount > 0 ? this.errorCount / this.requestCount : 0;
-    }
-
-    /**
-     * Gets all metrics
-     */
-    getAllMetrics(): {
-        requests: { total: number; errors: number; errorRate: number };
-        responseTimes: MetricSummary;
-    } {
-        return {
+        const metrics: Metrics = {
             requests: {
-                total: this.requestCount,
-                errors: this.errorCount,
-                errorRate: this.getErrorRate()
+                total: recentEvents.length,
+                success: recentEvents.filter(e => e.success).length,
+                failed: recentEvents.filter(e => !e.success).length,
+                avgDuration: this.calculateAvgDuration(recentEvents)
             },
-            responseTimes: this.getResponseTimeMetrics()
+            tools: {}
         };
-    }
 
-    /**
-     * Resets all metrics
-     */
-    reset(): void {
-        this.requestCount = 0;
-        this.errorCount = 0;
-        this.responseTimes = [];
-    }
+        // Calculate per-tool metrics
+        const toolEvents = recentEvents.filter(e => e.tool);
+        const tools = new Set(toolEvents.map(e => e.tool!));
 
-    /**
-     * Gets metrics within the current window
-     */
-    private getCurrentWindow(): MetricWindow[] {
-        const cutoff = Date.now() - this.windowSize;
-        return this.responseTimes.filter(m => m.timestamp >= cutoff);
-    }
-
-    /**
-     * Cleans up metrics outside the window
-     */
-    private cleanup(): void {
-        const cutoff = Date.now() - this.windowSize;
-        this.responseTimes = this.responseTimes.filter(m => m.timestamp >= cutoff);
-    }
-
-    /**
-     * Calculates percentile value
-     */
-    private getPercentile(sortedValues: number[], percentile: number): number {
-        if (sortedValues.length === 0) return 0;
-        
-        const index = Math.ceil(sortedValues.length * percentile) - 1;
-        return sortedValues[index];
-    }
-
-    /**
-     * Gets metrics for a specific time range
-     */
-    getMetricsInRange(start: number, end: number): MetricWindow[] {
-        return this.responseTimes.filter(m => 
-            m.timestamp >= start && m.timestamp <= end
-        );
-    }
-
-    /**
-     * Gets metrics summary for a specific time range
-     */
-    getMetricsSummary(start: number, end: number): MetricSummary {
-        const metrics = this.getMetricsInRange(start, end);
-        if (metrics.length === 0) {
-            return {
-                count: 0,
-                min: 0,
-                max: 0,
-                avg: 0,
-                p95: 0,
-                p99: 0
+        for (const tool of tools) {
+            const toolMetrics = toolEvents.filter(e => e.tool === tool);
+            metrics.tools[tool] = {
+                total: toolMetrics.length,
+                success: toolMetrics.filter(e => e.success).length,
+                failed: toolMetrics.filter(e => !e.success).length,
+                avgDuration: this.calculateAvgDuration(toolMetrics),
+                errors: this.calculateErrorFrequency(toolMetrics)
             };
         }
 
-        const values = metrics.map(m => m.value).sort((a, b) => a - b);
-        const sum = values.reduce((acc, val) => acc + val, 0);
-
-        return {
-            count: values.length,
-            min: values[0],
-            max: values[values.length - 1],
-            avg: sum / values.length,
-            p95: this.getPercentile(values, 0.95),
-            p99: this.getPercentile(values, 0.99)
-        };
+        return metrics;
     }
 
-    /**
-     * Gets current metrics window size
-     */
-    getWindowSize(): number {
-        return this.windowSize;
+    private calculateAvgDuration(events: MetricEvent[]): number {
+        const eventsWithDuration = events.filter(e => e.duration);
+        if (eventsWithDuration.length === 0) return 0;
+        
+        const total = eventsWithDuration.reduce((sum, e) => sum + (e.duration || 0), 0);
+        return total / eventsWithDuration.length;
+    }
+
+    private calculateErrorFrequency(events: MetricEvent[]): Record<string, number> {
+        const errors: Record<string, number> = {};
+        
+        for (const event of events) {
+            if (!event.success && event.error) {
+                errors[event.error] = (errors[event.error] || 0) + 1;
+            }
+        }
+        
+        return errors;
+    }
+
+    clearMetrics(): void {
+        this.events = [];
+        this.logger.debug('Cleared metrics');
     }
 }

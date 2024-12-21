@@ -1,183 +1,250 @@
+/**
+ * Path-based task status batch processor
+ */
 import { Task, TaskStatus } from '../../../types/task.js';
-import { StatusManager } from '../status-manager.js';
-import { TaskBatchProcessor } from './batch-processor.js';
-import { BatchResult, BatchProgressCallback } from './batch-types.js';
+import { ErrorCodes, createError } from '../../../errors/index.js';
 import { Logger } from '../../../logging/index.js';
-import { TaskError, ErrorCodes } from '../../../errors/index.js';
+import { BatchProcessor, BatchResult } from './batch-types.js';
 
-interface TaskStatusUpdate {
-    taskId: string;
+interface StatusUpdate {
+    taskPath: string;
     newStatus: TaskStatus;
 }
 
-/**
- * Specialized batch processor for task status updates that ensures proper validation
- * and maintains status transition rules across batch operations.
- */
-export class TaskStatusBatchProcessor {
-    private statusManager: StatusManager;
-    private batchProcessor: TaskBatchProcessor;
+export class TaskStatusBatchProcessor implements BatchProcessor {
     private logger: Logger;
 
     constructor() {
-        this.statusManager = new StatusManager();
-        this.batchProcessor = new TaskBatchProcessor();
         this.logger = Logger.getInstance().child({ component: 'TaskStatusBatchProcessor' });
     }
 
     /**
-     * Updates status for multiple tasks with proper validation
+     * Processes a batch of task status updates
      */
-    async updateTaskStatuses(
-        updates: TaskStatusUpdate[],
-        getTaskById: (id: string) => Task | null,
-        updateTask: (taskId: string, updates: { status: TaskStatus }) => Promise<void>,
-        progressCallback?: BatchProgressCallback
-    ): Promise<BatchResult> {
-        // Create operation that includes validation
-        const operation = async (update: TaskStatusUpdate) => {
-            const task = getTaskById(update.taskId);
-            if (!task) {
-                throw new TaskError(
-                    ErrorCodes.TASK_NOT_FOUND,
-                    'Task not found',
-                    { taskId: update.taskId }
+    async processBatch<T>(tasks: T[], operation: (item: T) => Promise<void>): Promise<BatchResult> {
+        if (!tasks.length) {
+            return {
+                success: true,
+                processedCount: 0,
+                failedCount: 0,
+                errors: []
+            };
+        }
+
+        try {
+            if (!this.isTaskArray(tasks)) {
+                throw createError(
+                    ErrorCodes.INVALID_INPUT,
+                    'Invalid batch input: expected Task array'
                 );
             }
 
-            // Validate and process the status change
-            await this.statusManager.validateAndProcessStatusChange(
-                task,
-                update.newStatus,
-                getTaskById,
-                updateTask
-            );
-        };
+            // Build dependency graph
+            const graph = this.buildDependencyGraph(tasks);
 
-        // Process updates in small batches to maintain consistency
-        return this.batchProcessor.processInBatches(
-            updates,
-            10, // Small batch size for better control
-            operation,
-            progressCallback
+            // Check for cycles
+            this.checkForCycles(graph, tasks);
+
+            // Calculate status updates
+            const updates = this.calculateStatusUpdates(tasks, graph);
+
+            // Apply updates
+            let processedCount = 0;
+            const errors: BatchResult['errors'] = [];
+
+            for (const update of updates) {
+                try {
+                    await operation(update as T);
+                    processedCount++;
+                } catch (error) {
+                    errors.push({
+                        item: update,
+                        error: error instanceof Error ? error : new Error(String(error)),
+                        context: {
+                            batchSize: updates.length,
+                            currentIndex: processedCount,
+                            processedCount,
+                            failureReason: 'Status update failed'
+                        }
+                    });
+                }
+            }
+
+            this.logger.debug('Batch status updates processed', {
+                taskCount: tasks.length,
+                updateCount: updates.length,
+                processedCount,
+                errorCount: errors.length
+            });
+
+            return {
+                success: errors.length === 0,
+                processedCount,
+                failedCount: errors.length,
+                errors
+            };
+        } catch (error) {
+            this.logger.error('Failed to process task status batch', { error });
+            return {
+                success: false,
+                processedCount: 0,
+                failedCount: tasks.length,
+                errors: [{
+                    item: tasks,
+                    error: error instanceof Error ? error : new Error(String(error)),
+                    context: {
+                        batchSize: tasks.length,
+                        currentIndex: 0,
+                        processedCount: 0,
+                        failureReason: 'Batch processing failed'
+                    }
+                }]
+            };
+        }
+    }
+
+    /**
+     * Process items in batches
+     */
+    async processInBatches<T>(
+        items: T[],
+        batchSize: number,
+        operation: (item: T) => Promise<void>
+    ): Promise<BatchResult> {
+        const results: BatchResult[] = [];
+        
+        for (let i = 0; i < items.length; i += batchSize) {
+            const batch = items.slice(i, i + batchSize);
+            const result = await this.processBatch(batch, operation);
+            results.push(result);
+        }
+
+        return {
+            success: results.every(r => r.success),
+            processedCount: results.reduce((sum, r) => sum + r.processedCount, 0),
+            failedCount: results.reduce((sum, r) => sum + r.failedCount, 0),
+            errors: results.flatMap(r => r.errors)
+        };
+    }
+
+    /**
+     * Type guard for Task array
+     */
+    private isTaskArray(items: unknown[]): items is Task[] {
+        return items.every(item => 
+            typeof item === 'object' && 
+            item !== null && 
+            'path' in item &&
+            'status' in item &&
+            'dependencies' in item
         );
     }
 
     /**
-     * Updates status for tasks in a hierarchy, maintaining parent-child relationships
+     * Builds a dependency graph from tasks
      */
-    async updateHierarchicalTaskStatuses(
-        rootTaskId: string,
-        newStatus: TaskStatus,
-        getTaskById: (id: string) => Task | null,
-        updateTask: (taskId: string, updates: { status: TaskStatus }) => Promise<void>,
-        progressCallback?: BatchProgressCallback
-    ): Promise<BatchResult> {
-        const rootTask = getTaskById(rootTaskId);
-        if (!rootTask) {
-            throw new TaskError(
-                ErrorCodes.TASK_NOT_FOUND,
-                'Root task not found',
-                { taskId: rootTaskId }
-            );
+    private buildDependencyGraph(tasks: Task[]): Map<string, Set<string>> {
+        const graph = new Map<string, Set<string>>();
+
+        for (const task of tasks) {
+            graph.set(task.path, new Set(task.dependencies));
         }
 
-        // Collect all tasks in the hierarchy
-        const updates: TaskStatusUpdate[] = [];
-        const collectTasks = (task: Task) => {
-            updates.push({ taskId: task.id, newStatus });
-            task.subtasks
-                .map(id => getTaskById(id))
-                .filter((t): t is Task => t !== null)
-                .forEach(collectTasks);
-        };
-        collectTasks(rootTask);
-
-        // Sort updates to process leaf nodes first
-        const taskDepths = new Map<string, number>();
-        const getTaskDepth = (taskId: string, depth = 0): number => {
-            if (taskDepths.has(taskId)) {
-                return taskDepths.get(taskId)!;
-            }
-            const task = getTaskById(taskId);
-            if (!task) {
-                return depth;
-            }
-            const maxSubtaskDepth = Math.max(
-                0,
-                ...task.subtasks.map(id => getTaskDepth(id, depth + 1))
-            );
-            taskDepths.set(taskId, maxSubtaskDepth);
-            return maxSubtaskDepth;
-        };
-
-        updates.sort((a, b) => {
-            const depthA = getTaskDepth(a.taskId);
-            const depthB = getTaskDepth(b.taskId);
-            return depthB - depthA; // Process deeper nodes first
-        });
-
-        return this.updateTaskStatuses(updates, getTaskById, updateTask, progressCallback);
+        return graph;
     }
 
     /**
-     * Updates status for tasks with dependencies, maintaining dependency order
+     * Checks for dependency cycles
      */
-    async updateDependentTaskStatuses(
-        taskIds: string[],
-        newStatus: TaskStatus,
-        getTaskById: (id: string) => Task | null,
-        updateTask: (taskId: string, updates: { status: TaskStatus }) => Promise<void>,
-        progressCallback?: BatchProgressCallback
-    ): Promise<BatchResult> {
-        // Build dependency graph
-        const graph = new Map<string, Set<string>>();
-        const tasks = taskIds
-            .map(id => getTaskById(id))
-            .filter((t): t is Task => t !== null);
-
-        tasks.forEach(task => {
-            graph.set(task.id, new Set(task.dependencies));
-        });
-
-        // Topologically sort tasks
-        const sorted: string[] = [];
+    private checkForCycles(graph: Map<string, Set<string>>, tasks: Task[]): void {
         const visited = new Set<string>();
-        const temp = new Set<string>();
+        const recursionStack = new Set<string>();
 
-        const visit = (taskId: string) => {
-            if (temp.has(taskId)) {
-                throw new TaskError(
+        const visit = (taskPath: string, path: string[] = []): void => {
+            if (recursionStack.has(taskPath)) {
+                throw createError(
                     ErrorCodes.TASK_CYCLE,
-                    'Circular dependency detected',
-                    { taskId, suggestion: 'Review task dependencies to remove cycles' }
+                    `Dependency cycle detected: ${[...path.slice(path.indexOf(taskPath)), taskPath].join(' -> ')}`
                 );
             }
-            if (visited.has(taskId)) {
+
+            if (visited.has(taskPath)) {
                 return;
             }
-            temp.add(taskId);
-            const dependencies = graph.get(taskId) || new Set();
-            for (const depId of dependencies) {
-                visit(depId);
+
+            visited.add(taskPath);
+            recursionStack.add(taskPath);
+
+            const dependencies = graph.get(taskPath) || new Set();
+            for (const dep of dependencies) {
+                visit(dep, [...path, taskPath]);
             }
-            temp.delete(taskId);
-            visited.add(taskId);
-            sorted.unshift(taskId);
+
+            recursionStack.delete(taskPath);
         };
 
         for (const task of tasks) {
-            if (!visited.has(task.id)) {
-                visit(task.id);
+            if (!visited.has(task.path)) {
+                visit(task.path);
+            }
+        }
+    }
+
+    /**
+     * Calculates required status updates
+     */
+    private calculateStatusUpdates(
+        tasks: Task[],
+        graph: Map<string, Set<string>>
+    ): StatusUpdate[] {
+        const updates: StatusUpdate[] = [];
+        const taskMap = new Map(tasks.map(t => [t.path, t]));
+
+        for (const task of tasks) {
+            const newStatus = this.calculateTaskStatus(task, taskMap, graph);
+            if (newStatus !== task.status) {
+                updates.push({ taskPath: task.path, newStatus });
             }
         }
 
-        // Create updates in dependency order
-        const updates = sorted.map(taskId => ({
-            taskId,
-            newStatus
-        }));
+        return updates;
+    }
 
-        return this.updateTaskStatuses(updates, getTaskById, updateTask, progressCallback);
+    /**
+     * Calculates status for a single task
+     */
+    private calculateTaskStatus(
+        task: Task,
+        taskMap: Map<string, Task>,
+        graph: Map<string, Set<string>>
+    ): TaskStatus {
+        // Check dependencies
+        const dependencies = graph.get(task.path) || new Set();
+        if (dependencies.size === 0) {
+            return task.status;
+        }
+
+        // Check if any dependencies are blocked or failed
+        for (const depPath of dependencies) {
+            const depTask = taskMap.get(depPath);
+            if (!depTask) continue;
+
+            if (depTask.status === TaskStatus.BLOCKED || 
+                depTask.status === TaskStatus.FAILED) {
+                return TaskStatus.BLOCKED;
+            }
+        }
+
+        // Check if all dependencies are completed
+        const allCompleted = Array.from(dependencies).every(depPath => {
+            const depTask = taskMap.get(depPath);
+            return depTask?.status === TaskStatus.COMPLETED;
+        });
+
+        if (!allCompleted) {
+            return TaskStatus.BLOCKED;
+        }
+
+        return task.status;
     }
 }

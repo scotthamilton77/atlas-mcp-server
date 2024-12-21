@@ -1,153 +1,90 @@
 /**
- * Health monitor for system health checks
+ * Health monitoring for system components
  */
+import { Logger } from '../logging/index.js';
+import { StorageMetrics } from '../types/storage.js';
+import { Metrics } from './metrics-collector.js';
 
 export interface HealthStatus {
     healthy: boolean;
-    status: {
-        server: {
-            healthy: boolean;
-            activeRequests: number;
-            memory: {
-                used: number;
-                total: number;
-                percentage: number;
-            };
-            cpu: {
-                usage: number;
-            };
-        };
-        rateLimiter: {
-            healthy: boolean;
-            current: number;
-            limit: number;
-            windowMs: number;
-        };
-        metrics: {
-            requestCount: number;
-            errorCount: number;
-            avgResponseTime: number;
-            errorRate: number;
-        };
+    components: {
+        storage: boolean;
+        rateLimiter: boolean;
+        metrics: boolean;
     };
-    timestamp: string;
-    [key: string]: unknown; // Add index signature for Record<string, unknown>
+    details?: Record<string, unknown>;
+    timestamp: number;
+    [key: string]: unknown;
 }
 
-interface HealthCheckParams {
-    activeRequests: number;
-    metrics: {
-        requestCount: number;
-        errorCount: number;
-        avgResponseTime: number;
-    };
+export interface ComponentStatus {
+    storage: StorageMetrics;
     rateLimiter: {
         current: number;
         limit: number;
         windowMs: number;
     };
+    metrics: Metrics;
 }
 
 export class HealthMonitor {
-    private readonly memoryThreshold = 0.9; // 90%
-    private readonly errorRateThreshold = 0.1; // 10%
-    private readonly responseTimeThreshold = 5000; // 5 seconds
+    private logger: Logger;
 
-    /**
-     * Performs health check
-     */
-    check(params: HealthCheckParams): HealthStatus {
-        const memoryUsage = process.memoryUsage();
-        const memoryUsed = memoryUsage.heapUsed;
-        const memoryTotal = memoryUsage.heapTotal;
-        const memoryPercentage = memoryUsed / memoryTotal;
+    constructor() {
+        this.logger = Logger.getInstance().child({ component: 'HealthMonitor' });
+    }
 
-        // Calculate error rate
-        const errorRate = params.metrics.requestCount > 0
-            ? params.metrics.errorCount / params.metrics.requestCount
-            : 0;
-
-        // Check individual components
-        const memoryHealthy = memoryPercentage < this.memoryThreshold;
-        const errorRateHealthy = errorRate < this.errorRateThreshold;
-        const responseTimeHealthy = params.metrics.avgResponseTime < this.responseTimeThreshold;
-        const rateLimiterHealthy = params.rateLimiter.current < params.rateLimiter.limit;
-
-        // Overall health status
-        const serverHealthy = memoryHealthy && errorRateHealthy && responseTimeHealthy;
-        const overallHealthy = serverHealthy && rateLimiterHealthy;
-
-        return {
-            healthy: overallHealthy,
-            status: {
-                server: {
-                    healthy: serverHealthy,
-                    activeRequests: params.activeRequests,
-                    memory: {
-                        used: memoryUsed,
-                        total: memoryTotal,
-                        percentage: memoryPercentage
-                    },
-                    cpu: {
-                        usage: process.cpuUsage().user / 1000000 // Convert to seconds
-                    }
-                },
-                rateLimiter: {
-                    healthy: rateLimiterHealthy,
-                    ...params.rateLimiter
-                },
-                metrics: {
-                    ...params.metrics,
-                    errorRate
-                }
+    async check(status: ComponentStatus): Promise<HealthStatus> {
+        const health: HealthStatus = {
+            healthy: true,
+            components: {
+                storage: true,
+                rateLimiter: true,
+                metrics: true
             },
-            timestamp: new Date().toISOString()
+            details: {},
+            timestamp: Date.now()
         };
-    }
 
-    /**
-     * Gets current memory usage
-     */
-    getMemoryUsage(): { used: number; total: number; percentage: number } {
-        const memoryUsage = process.memoryUsage();
-        return {
-            used: memoryUsage.heapUsed,
-            total: memoryUsage.heapTotal,
-            percentage: memoryUsage.heapUsed / memoryUsage.heapTotal
-        };
-    }
+        try {
+            // Check storage health
+            if (status.storage.tasks.total === 0 && status.storage.storage.totalSize === 0) {
+                health.components.storage = false;
+                health.healthy = false;
+                health.details!.storage = 'Storage appears empty';
+            }
 
-    /**
-     * Gets current CPU usage
-     */
-    getCpuUsage(): { user: number; system: number } {
-        const usage = process.cpuUsage();
-        return {
-            user: usage.user / 1000000, // Convert to seconds
-            system: usage.system / 1000000
-        };
-    }
+            // Check rate limiter
+            if (status.rateLimiter.current >= status.rateLimiter.limit) {
+                health.components.rateLimiter = false;
+                health.healthy = false;
+                health.details!.rateLimiter = 'Rate limit reached';
+            }
 
-    /**
-     * Checks if memory usage is healthy
-     */
-    isMemoryHealthy(): boolean {
-        const { percentage } = this.getMemoryUsage();
-        return percentage < this.memoryThreshold;
-    }
+            // Check metrics
+            const errorRate = status.metrics.requests.failed / status.metrics.requests.total;
+            if (errorRate > 0.1) { // More than 10% error rate
+                health.components.metrics = false;
+                health.healthy = false;
+                health.details!.metrics = `High error rate: ${(errorRate * 100).toFixed(2)}%`;
+            }
 
-    /**
-     * Checks if error rate is healthy
-     */
-    isErrorRateHealthy(requestCount: number, errorCount: number): boolean {
-        if (requestCount === 0) return true;
-        return (errorCount / requestCount) < this.errorRateThreshold;
-    }
-
-    /**
-     * Checks if response time is healthy
-     */
-    isResponseTimeHealthy(avgResponseTime: number): boolean {
-        return avgResponseTime < this.responseTimeThreshold;
+            this.logger.debug('Health check completed', { health });
+            return health;
+        } catch (error) {
+            this.logger.error('Health check failed', { error });
+            return {
+                healthy: false,
+                components: {
+                    storage: false,
+                    rateLimiter: false,
+                    metrics: false
+                },
+                details: {
+                    error: error instanceof Error ? error.message : String(error)
+                },
+                timestamp: Date.now()
+            };
+        }
     }
 }

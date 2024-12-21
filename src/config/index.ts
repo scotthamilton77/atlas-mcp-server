@@ -3,13 +3,8 @@
  * Handles application configuration management
  */
 
-import { z } from 'zod';
 import { ConfigError, ErrorCodes } from '../errors/index.js';
-import { LogLevels } from '../logging/index.js';
-import { UnifiedStorageConfig } from '../storage/unified-storage.js';
-import { sessionIdSchema } from '../validation/id-schema.js';
-import { generateShortId } from '../utils/id-generator.js';
-import path from 'path';
+import { LogLevel, LogLevels } from '../types/logging.js';
 
 /**
  * Environment variable names
@@ -17,8 +12,7 @@ import path from 'path';
 export const EnvVars = {
     NODE_ENV: 'NODE_ENV',
     LOG_LEVEL: 'LOG_LEVEL',
-    TASK_STORAGE_DIR: 'TASK_STORAGE_DIR',
-    SESSION_ID: 'SESSION_ID'
+    TASK_STORAGE_DIR: 'TASK_STORAGE_DIR'
 } as const;
 
 /**
@@ -34,7 +28,7 @@ export const Environments = {
  * Logging configuration type
  */
 export interface LoggingConfig {
-    level: typeof LogLevels[keyof typeof LogLevels];
+    level: LogLevel;
     console: boolean;
     file: boolean;
     dir?: string;
@@ -45,43 +39,117 @@ export interface LoggingConfig {
 /**
  * Configuration schema
  */
-export const configSchema = z.object({
-    env: z.enum([
-        Environments.DEVELOPMENT,
-        Environments.PRODUCTION,
-        Environments.TEST
-    ]).default(Environments.DEVELOPMENT),
-    logging: z.object({
-        level: z.enum([
-            LogLevels.DEBUG,
-            LogLevels.INFO,
-            LogLevels.WARN,
-            LogLevels.ERROR,
-            LogLevels.FATAL
-        ]).default(LogLevels.INFO),
-        console: z.boolean().default(true),
-        file: z.boolean().default(false),
-        dir: z.string().optional(),
-        maxFiles: z.number().positive().default(5),
-        maxSize: z.number().positive().default(5242880) // 5MB
-    }),
-    storage: z.object({
-        baseDir: z.string(),
-        sessionId: sessionIdSchema,
-        maxSessions: z.number().positive().optional(),
-        maxTaskLists: z.number().positive().optional(),
-        maxBackups: z.number().positive().optional(),
-        maxRetries: z.number().positive().optional(),
-        retryDelay: z.number().positive().optional(),
-        backup: z.object({
-            enabled: z.boolean(),
-            interval: z.number().positive(),
-            directory: z.string().optional()
-        }).optional()
-    })
-});
-
-export type Config = z.infer<typeof configSchema>;
+export const configSchema = {
+    env: {
+        type: 'string',
+        enum: [
+            Environments.DEVELOPMENT,
+            Environments.PRODUCTION,
+            Environments.TEST
+        ],
+        default: Environments.DEVELOPMENT
+    },
+    logging: {
+        type: 'object',
+        properties: {
+            level: {
+                type: 'string',
+                enum: [
+                    LogLevels.ERROR,
+                    LogLevels.WARN,
+                    LogLevels.INFO,
+                    LogLevels.HTTP,
+                    LogLevels.VERBOSE,
+                    LogLevels.DEBUG,
+                    LogLevels.SILLY
+                ],
+                default: LogLevels.INFO
+            },
+            console: {
+                type: 'boolean',
+                default: true
+            },
+            file: {
+                type: 'boolean',
+                default: false
+            },
+            dir: {
+                type: 'string',
+                optional: true
+            },
+            maxFiles: {
+                type: 'number',
+                minimum: 1,
+                default: 5
+            },
+            maxSize: {
+                type: 'number',
+                minimum: 1024,
+                default: 5242880 // 5MB
+            }
+        },
+        required: ['level']
+    },
+    storage: {
+        type: 'object',
+        properties: {
+            baseDir: {
+                type: 'string'
+            },
+            name: {
+                type: 'string'
+            },
+            connection: {
+                type: 'object',
+                properties: {
+                    maxRetries: {
+                        type: 'number',
+                        minimum: 1,
+                        optional: true
+                    },
+                    retryDelay: {
+                        type: 'number',
+                        minimum: 0,
+                        optional: true
+                    },
+                    busyTimeout: {
+                        type: 'number',
+                        minimum: 0,
+                        optional: true
+                    }
+                },
+                optional: true
+            },
+            performance: {
+                type: 'object',
+                properties: {
+                    checkpointInterval: {
+                        type: 'number',
+                        minimum: 0,
+                        optional: true
+                    },
+                    cacheSize: {
+                        type: 'number',
+                        minimum: 0,
+                        optional: true
+                    },
+                    mmapSize: {
+                        type: 'number',
+                        minimum: 0,
+                        optional: true
+                    },
+                    pageSize: {
+                        type: 'number',
+                        minimum: 0,
+                        optional: true
+                    }
+                },
+                optional: true
+            }
+        },
+        required: ['baseDir', 'name']
+    }
+};
 
 /**
  * Default logging configuration
@@ -97,7 +165,7 @@ const defaultLoggingConfig: LoggingConfig = {
 /**
  * Default configuration values
  */
-export const defaultConfig: Partial<Config> = {
+export const defaultConfig = {
     env: Environments.DEVELOPMENT,
     logging: defaultLoggingConfig
 };
@@ -107,9 +175,9 @@ export const defaultConfig: Partial<Config> = {
  */
 export class ConfigManager {
     private static instance: ConfigManager;
-    private config: Config;
+    private config: any;
 
-    private constructor(initialConfig: Partial<Config> = {}) {
+    private constructor(initialConfig: any = {}) {
         this.config = this.loadConfig(initialConfig);
     }
 
@@ -126,7 +194,7 @@ export class ConfigManager {
     /**
      * Initializes the configuration manager with custom config
      */
-    static initialize(config: Partial<Config>): void {
+    static initialize(config: any): void {
         if (ConfigManager.instance) {
             throw new ConfigError(
                 ErrorCodes.CONFIG_INVALID,
@@ -139,14 +207,14 @@ export class ConfigManager {
     /**
      * Gets the current configuration
      */
-    getConfig(): Config {
+    getConfig(): any {
         return { ...this.config };
     }
 
     /**
      * Updates the configuration
      */
-    updateConfig(updates: Partial<Config>): void {
+    updateConfig(updates: any): void {
         const newConfig = {
             ...this.config,
             ...updates,
@@ -160,22 +228,14 @@ export class ConfigManager {
             }
         };
 
-        const result = configSchema.safeParse(newConfig);
-        if (!result.success) {
-            throw new ConfigError(
-                ErrorCodes.CONFIG_INVALID,
-                'Invalid configuration update',
-                result.error
-            );
-        }
-
-        this.config = result.data;
+        this.validateConfig(newConfig);
+        this.config = newConfig;
     }
 
     /**
      * Loads and validates configuration
      */
-    private loadConfig(customConfig: Partial<Config>): Config {
+    private loadConfig(customConfig: any): any {
         try {
             // Load from environment
             const envConfig = this.loadEnvConfig(customConfig);
@@ -198,16 +258,9 @@ export class ConfigManager {
             };
 
             // Validate final configuration
-            const result = configSchema.safeParse(mergedConfig);
-            if (!result.success) {
-                throw new ConfigError(
-                    ErrorCodes.CONFIG_INVALID,
-                    'Invalid configuration',
-                    result.error
-                );
-            }
+            this.validateConfig(mergedConfig);
 
-            return result.data;
+            return mergedConfig;
         } catch (error) {
             if (error instanceof ConfigError) {
                 throw error;
@@ -223,11 +276,10 @@ export class ConfigManager {
     /**
      * Loads configuration from environment variables
      */
-    private loadEnvConfig(customConfig: Partial<Config>): Partial<Config> {
+    private loadEnvConfig(customConfig: any): any {
         const env = process.env[EnvVars.NODE_ENV];
         const logLevel = process.env[EnvVars.LOG_LEVEL];
         const storageDir = customConfig.storage?.baseDir || process.env[EnvVars.TASK_STORAGE_DIR];
-        const sessionId = customConfig.storage?.sessionId || process.env[EnvVars.SESSION_ID];
 
         if (!storageDir) {
             throw new ConfigError(
@@ -236,61 +288,67 @@ export class ConfigManager {
             );
         }
 
-        const config: Partial<Config> = {
+        const config: any = {
             storage: {
                 baseDir: storageDir,
-                sessionId: sessionId || generateShortId(),
-                maxSessions: 100,
-                maxTaskLists: 100,
-                maxRetries: 3,
-                retryDelay: 1000,
-                maxBackups: 5,
-                backup: {
-                    enabled: true,
-                    interval: 300000, // 5 minutes
-                    directory: path.join(storageDir, 'backups')
+                name: 'atlas-tasks',
+                connection: {
+                    maxRetries: 3,
+                    retryDelay: 1000,
+                    busyTimeout: 5000
+                },
+                performance: {
+                    checkpointInterval: 300000, // 5 minutes
+                    cacheSize: 2000,
+                    mmapSize: 30000000000, // 30GB
+                    pageSize: 4096
                 }
             },
             logging: { ...defaultLoggingConfig }
         };
 
         if (env) {
-            const result = z.enum([
-                Environments.DEVELOPMENT,
-                Environments.PRODUCTION,
-                Environments.TEST
-            ]).safeParse(env);
-
-            if (!result.success) {
+            if (!Object.values(Environments).includes(env as any)) {
                 throw new ConfigError(
                     ErrorCodes.CONFIG_INVALID,
                     'Invalid environment'
                 );
             }
-
-            config.env = result.data;
+            config.env = env;
         }
 
         if (logLevel) {
-            const result = z.enum([
-                LogLevels.DEBUG,
-                LogLevels.INFO,
-                LogLevels.WARN,
-                LogLevels.ERROR,
-                LogLevels.FATAL
-            ]).safeParse(logLevel);
-
-            if (!result.success) {
+            const level = logLevel.toLowerCase();
+            if (!Object.values(LogLevels).includes(level as any)) {
                 throw new ConfigError(
                     ErrorCodes.CONFIG_INVALID,
                     'Invalid log level'
                 );
             }
-
-            config.logging!.level = result.data;
+            config.logging!.level = level;
         }
 
         return config;
+    }
+
+    /**
+     * Validates configuration against schema
+     */
+    private validateConfig(config: any): void {
+        // Basic validation - could be expanded
+        if (!config.storage?.baseDir) {
+            throw new ConfigError(
+                ErrorCodes.CONFIG_MISSING,
+                'Storage directory must be provided'
+            );
+        }
+
+        if (config.logging?.level && !Object.values(LogLevels).includes(config.logging.level)) {
+            throw new ConfigError(
+                ErrorCodes.CONFIG_INVALID,
+                'Invalid log level'
+            );
+        }
     }
 }
 

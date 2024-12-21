@@ -1,33 +1,67 @@
 /**
- * Unified storage configuration and metrics types
+ * Path-based task storage types
  */
+import { Task, TaskStatus } from './task.js';
 
-export interface UnifiedStorageConfig {
+/**
+ * Storage configuration
+ */
+export interface StorageConfig {
     /** Base directory for storage */
     baseDir: string;
-    /** Session ID */
-    sessionId: string;
-    /** Maximum number of sessions */
-    maxSessions?: number;
-    /** Maximum number of task lists per session */
-    maxTaskLists?: number;
-    /** Maximum number of backups to keep */
-    maxBackups?: number;
-    /** Maximum retries for operations */
-    maxRetries?: number;
-    /** Retry delay in milliseconds */
-    retryDelay?: number;
-    /** Backup configuration */
-    backup?: {
-        /** Whether automatic backups are enabled */
-        enabled: boolean;
-        /** Backup interval in milliseconds */
-        interval: number;
-        /** Custom backup directory (defaults to baseDir/backups) */
-        directory?: string;
+    /** Storage name */
+    name: string;
+    /** Connection settings */
+    connection?: {
+        /** Maximum retries for operations */
+        maxRetries?: number;
+        /** Retry delay in milliseconds */
+        retryDelay?: number;
+        /** Busy timeout in milliseconds */
+        busyTimeout?: number;
+    };
+    /** Performance settings */
+    performance?: {
+        /** WAL mode checkpoint interval */
+        checkpointInterval?: number;
+        /** Cache size in pages */
+        cacheSize?: number;
+        /** Memory map size */
+        mmapSize?: number;
+        /** Page size */
+        pageSize?: number;
     };
 }
 
+/**
+ * Storage interface for task operations
+ */
+export interface TaskStorage {
+    // Lifecycle
+    initialize(): Promise<void>;
+    close(): Promise<void>;
+    
+    // Task operations
+    saveTask(task: Task): Promise<void>;
+    saveTasks(tasks: Task[]): Promise<void>;
+    getTask(path: string): Promise<Task | null>;
+    getTasks(paths: string[]): Promise<Task[]>;
+    getTasksByPattern(pattern: string): Promise<Task[]>;
+    getTasksByStatus(status: TaskStatus): Promise<Task[]>;
+    getSubtasks(parentPath: string): Promise<Task[]>;
+    deleteTask(path: string): Promise<void>;
+    deleteTasks(paths: string[]): Promise<void>;
+    
+    // Maintenance
+    vacuum(): Promise<void>;
+    analyze(): Promise<void>;
+    checkpoint(): Promise<void>;
+    getMetrics(): Promise<StorageMetrics>;
+}
+
+/**
+ * Storage metrics
+ */
 export interface StorageMetrics {
     /** Task metrics */
     tasks: {
@@ -39,15 +73,15 @@ export interface StorageMetrics {
         noteCount: number;
         /** Number of task dependencies */
         dependencyCount: number;
-    };
-    /** Session metrics */
-    sessions: {
-        /** Total number of sessions */
-        total: number;
-        /** Number of active sessions */
-        active: number;
-        /** Number of task lists */
-        taskListCount: number;
+        /** Path depth metrics */
+        pathMetrics?: {
+            /** Average path depth */
+            averageDepth: number;
+            /** Maximum path depth */
+            maxDepth: number;
+            /** Tasks by depth level */
+            byDepth: Record<number, number>;
+        };
     };
     /** Storage metrics */
     storage: {
@@ -55,10 +89,6 @@ export interface StorageMetrics {
         totalSize: number;
         /** WAL file size in bytes */
         walSize: number;
-        /** Number of backups */
-        backupCount: number;
-        /** Last backup timestamp */
-        lastBackup?: string;
         /** Database page size */
         pageSize: number;
         /** Number of database pages */
@@ -66,37 +96,92 @@ export interface StorageMetrics {
     };
 }
 
-export interface StorageStatus {
-    /** Whether storage is initialized */
-    initialized: boolean;
-    /** Whether storage is healthy */
-    healthy: boolean;
-    /** Current storage metrics */
-    metrics: StorageMetrics;
-    /** Connection status */
-    connection: {
-        /** Whether connection is active */
-        active: boolean;
-        /** Connection mode (e.g., 'wal') */
-        mode: string;
-        /** Number of active transactions */
-        transactions: number;
-    };
-    /** Any error information */
-    error?: {
-        code: string;
-        message: string;
-        details?: unknown;
-        timestamp: string;
-    };
+/**
+ * Storage error types
+ */
+export enum StorageErrorType {
+    INITIALIZATION = 'STORAGE_INIT',
+    CONNECTION = 'CONNECTION',
+    QUERY = 'QUERY',
+    TRANSACTION = 'TRANSACTION',
+    CONSTRAINT = 'CONSTRAINT',
+    MAINTENANCE = 'MAINTENANCE',
+    IO = 'IO'
 }
 
 /**
- * @deprecated Use UnifiedStorageConfig instead
+ * Storage error class
  */
-export type StorageConfig = UnifiedStorageConfig;
+export class StorageError extends Error {
+    constructor(
+        public readonly type: StorageErrorType,
+        message: string,
+        public readonly cause?: unknown
+    ) {
+        super(message);
+        this.name = 'StorageError';
+    }
+
+    /**
+     * Creates a storage error with appropriate type based on the error
+     */
+    static from(error: unknown, operation: string): StorageError {
+        if (error instanceof StorageError) {
+            return error;
+        }
+
+        const message = error instanceof Error ? error.message : String(error);
+
+        // Determine error type from message/operation
+        if (message.includes('SQLITE_BUSY') || message.includes('SQLITE_LOCKED')) {
+            return new StorageError(
+                StorageErrorType.CONNECTION,
+                `Database busy during ${operation}: ${message}`,
+                error
+            );
+        }
+
+        if (message.includes('SQLITE_CONSTRAINT')) {
+            return new StorageError(
+                StorageErrorType.CONSTRAINT,
+                `Constraint violation during ${operation}: ${message}`,
+                error
+            );
+        }
+
+        if (message.includes('SQLITE_IOERR')) {
+            return new StorageError(
+                StorageErrorType.IO,
+                `I/O error during ${operation}: ${message}`,
+                error
+            );
+        }
+
+        return new StorageError(
+            StorageErrorType.QUERY,
+            `Error during ${operation}: ${message}`,
+            error
+        );
+    }
+}
 
 /**
- * @deprecated Use UnifiedStorageConfig instead
+ * Storage transaction interface
  */
-export type StorageManagerConfig = UnifiedStorageConfig;
+export interface Transaction {
+    execute<T>(operation: () => Promise<T>): Promise<T>;
+    commit(): Promise<void>;
+    rollback(): Promise<void>;
+}
+
+/**
+ * Storage transaction options
+ */
+export interface TransactionOptions {
+    /** Maximum retries for the transaction */
+    maxRetries?: number;
+    /** Delay between retries in milliseconds */
+    retryDelay?: number;
+    /** Transaction timeout in milliseconds */
+    timeout?: number;
+}

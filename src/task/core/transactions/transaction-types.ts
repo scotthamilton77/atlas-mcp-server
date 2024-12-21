@@ -24,7 +24,7 @@ export interface TransactionResult {
 
 export interface TransactionManager {
     startTransaction(): string;
-    addOperation(transactionId: string, operation: TaskOperation): void;
+    addOperation(transactionId: string, operation: TaskOperation): Promise<void>;
     commitTransaction(transactionId: string): Promise<TransactionResult>;
     rollbackTransaction(transactionId: string): Promise<TransactionResult>;
     getTransaction(transactionId: string): Transaction | null;
@@ -41,5 +41,5 @@ export interface TransactionConfig {
 export interface TransactionError extends Error {
     transactionId: string;
     operationType?: OperationType;
-    taskId?: string;
+    path?: string;
 }

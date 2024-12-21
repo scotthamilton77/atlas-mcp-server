@@ -1,6 +1,6 @@
 import { Task } from '../../../types/task.js';
 import { Logger } from '../../../logging/index.js';
-import { CacheEntry, CacheConfig, CacheManager } from './cache-types.js';
+import { CacheEntry, CacheConfig, CacheManager, CacheStats } from './cache-types.js';
 
 const DEFAULT_CONFIG: CacheConfig = {
     maxSize: 1000, // Maximum number of entries
@@ -52,17 +52,17 @@ export class EnhancedCacheManager implements CacheManager {
     /**
      * Gets a task from cache with LRU update and adaptive TTL
      */
-    get(taskId: string): Task | null {
-        const node = this.cache.get(taskId);
+    async get(path: string): Promise<Task | null> {
+        const node = this.cache.get(path);
         if (!node) {
             this.misses++;
-            this.logger.debug('Cache miss', { taskId });
+            this.logger.debug('Cache miss', { path });
             return null;
         }
 
         const ttl = this.calculateAdaptiveTTL(node.entry);
         if (Date.now() - node.entry.timestamp > ttl) {
-            this.delete(taskId);
+            await this.delete(path);
             this.misses++;
             return null;
         }
@@ -76,7 +76,7 @@ export class EnhancedCacheManager implements CacheManager {
         this.hits++;
 
         this.logger.debug('Cache hit', {
-            taskId,
+            path,
             accessCount: node.entry.accessCount,
             ttl
         });
@@ -87,8 +87,8 @@ export class EnhancedCacheManager implements CacheManager {
     /**
      * Sets a task in cache with LRU eviction
      */
-    set(taskId: string, task: Task): void {
-        const existingNode = this.cache.get(taskId);
+    async set(path: string, task: Task): Promise<void> {
+        const existingNode = this.cache.get(path);
         const timestamp = Date.now();
 
         if (existingNode) {
@@ -103,7 +103,7 @@ export class EnhancedCacheManager implements CacheManager {
         } else {
             // Create new entry
             const newNode: LRUNode = {
-                key: taskId,
+                key: path,
                 entry: {
                     task,
                     timestamp,
@@ -116,48 +116,63 @@ export class EnhancedCacheManager implements CacheManager {
 
             // Evict if at capacity
             if (this.cache.size >= this.config.maxSize) {
-                this.evictLRU();
+                await this.evictLRU();
             }
 
-            this.cache.set(taskId, newNode);
+            this.cache.set(path, newNode);
             this.addToFront(newNode);
         }
 
         this.logger.debug('Cache set', {
-            taskId,
+            path,
             cacheSize: this.cache.size,
             maxSize: this.config.maxSize
         });
+
+        // Persist cache if configured
+        if (this.config.persistPath) {
+            await this.persistCache();
+        }
     }
 
     /**
      * Removes a task from cache
      */
-    delete(taskId: string): void {
-        const node = this.cache.get(taskId);
+    async delete(path: string): Promise<void> {
+        const node = this.cache.get(path);
         if (node) {
             this.removeFromList(node);
-            this.cache.delete(taskId);
-            this.logger.debug('Cache delete', { taskId });
+            this.cache.delete(path);
+            this.logger.debug('Cache delete', { path });
+
+            // Persist cache if configured
+            if (this.config.persistPath) {
+                await this.persistCache();
+            }
         }
     }
 
     /**
      * Clears all entries from cache
      */
-    clear(): void {
+    async clear(): Promise<void> {
         this.cache.clear();
         this.head = null;
         this.tail = null;
         this.hits = 0;
         this.misses = 0;
         this.logger.debug('Cache cleared');
+
+        // Persist empty cache if configured
+        if (this.config.persistPath) {
+            await this.persistCache();
+        }
     }
 
     /**
      * Cleans up expired cache entries
      */
-    cleanup(): void {
+    async cleanup(): Promise<void> {
         const now = Date.now();
         let expiredCount = 0;
         let node = this.tail;
@@ -166,7 +181,7 @@ export class EnhancedCacheManager implements CacheManager {
             const ttl = this.calculateAdaptiveTTL(node.entry);
             if (now - node.entry.timestamp > ttl) {
                 const prevNode = node.prev;
-                this.delete(node.key);
+                await this.delete(node.key);
                 expiredCount++;
                 node = prevNode;
             } else {
@@ -185,10 +200,10 @@ export class EnhancedCacheManager implements CacheManager {
     /**
      * Stops the cleanup timer and persists cache if configured
      */
-    destroy(): void {
+    async destroy(): Promise<void> {
         clearInterval(this.cleanupTimer);
         if (this.config.persistPath) {
-            this.persistCache();
+            await this.persistCache();
         }
         this.logger.debug('Cache manager destroyed');
     }
@@ -196,12 +211,7 @@ export class EnhancedCacheManager implements CacheManager {
     /**
      * Gets detailed cache statistics
      */
-    getStats(): {
-        size: number;
-        hitRate: number;
-        averageAccessCount: number;
-        memoryUsage: number;
-    } {
+    async getStats(): Promise<CacheStats> {
         const entries = Array.from(this.cache.values());
         const totalAccessCount = entries.reduce((sum, node) => sum + node.entry.accessCount, 0);
         const totalHits = this.hits + this.misses;
@@ -264,21 +274,21 @@ export class EnhancedCacheManager implements CacheManager {
     /**
      * Evicts the least recently used entry
      */
-    private evictLRU(): void {
+    private async evictLRU(): Promise<void> {
         if (this.tail) {
             this.logger.debug('Cache eviction', {
-                taskId: this.tail.key,
+                path: this.tail.key,
                 accessCount: this.tail.entry.accessCount,
                 lastAccessed: new Date(this.tail.entry.lastAccessed).toISOString()
             });
-            this.delete(this.tail.key);
+            await this.delete(this.tail.key);
         }
     }
 
     /**
      * Persists cache to disk if configured
      */
-    private persistCache(): void {
+    private async persistCache(): Promise<void> {
         if (!this.config.persistPath) return;
 
         const persistData = {
@@ -293,11 +303,18 @@ export class EnhancedCacheManager implements CacheManager {
         };
 
         try {
-            require('fs').writeFileSync(
-                this.config.persistPath,
-                JSON.stringify(persistData),
-                'utf8'
-            );
+            await new Promise<void>((resolve, reject) => {
+                require('fs').writeFile(
+                    this.config.persistPath!,
+                    JSON.stringify(persistData),
+                    'utf8',
+                    (err: Error | null) => {
+                        if (err) reject(err);
+                        else resolve();
+                    }
+                );
+            });
+
             this.logger.debug('Cache persisted', {
                 path: this.config.persistPath,
                 entries: persistData.entries.length
@@ -310,17 +327,27 @@ export class EnhancedCacheManager implements CacheManager {
     /**
      * Loads persisted cache from disk
      */
-    private loadPersistedCache(): void {
+    private async loadPersistedCache(): Promise<void> {
         if (!this.config.persistPath) return;
 
         try {
-            const data = require('fs').readFileSync(this.config.persistPath, 'utf8');
+            const data = await new Promise<string>((resolve, reject) => {
+                require('fs').readFile(
+                    this.config.persistPath!,
+                    'utf8',
+                    (err: Error | null, data: string) => {
+                        if (err) reject(err);
+                        else resolve(data);
+                    }
+                );
+            });
+
             const persistData = JSON.parse(data);
 
-            this.clear();
+            await this.clear();
             for (const { key, entry } of persistData.entries) {
                 if (Date.now() - entry.timestamp <= this.config.maxTTL) {
-                    this.set(key, entry.task);
+                    await this.set(key, entry.task);
                 }
             }
 

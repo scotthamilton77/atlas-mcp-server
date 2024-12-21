@@ -11,11 +11,10 @@ import {
     McpError,
 } from '@modelcontextprotocol/sdk/types.js';
 import { Logger } from '../logging/index.js';
-import { ConfigManager } from '../config/index.js';
 import { RateLimiter } from './rate-limiter.js';
-import { HealthMonitor } from './health-monitor.js';
-import { MetricsCollector } from './metrics-collector.js';
-import { RequestTracer } from './request-tracer.js';
+import { HealthMonitor, ComponentStatus } from './health-monitor.js';
+import { MetricsCollector, MetricEvent } from './metrics-collector.js';
+import { RequestTracer, TraceEvent } from './request-tracer.js';
 
 export interface ServerConfig {
     name: string;
@@ -25,25 +24,19 @@ export interface ServerConfig {
     shutdownTimeout?: number;
 }
 
-interface ServerMetrics {
-    requestCount: number;
-    errorCount: number;
-    avgResponseTime: number;
-}
-
 /**
  * AtlasServer class encapsulates MCP server functionality
  * Handles server lifecycle, transport, and error management
  */
 export class AtlasServer {
-    private server: Server;
-    private logger: Logger;
-    private rateLimiter: RateLimiter;
-    private healthMonitor: HealthMonitor;
-    private metricsCollector: MetricsCollector;
-    private requestTracer: RequestTracer;
+    private readonly server: Server;
+    private readonly logger: Logger;
+    private readonly rateLimiter: RateLimiter;
+    private readonly healthMonitor: HealthMonitor;
+    private readonly metricsCollector: MetricsCollector;
+    private readonly requestTracer: RequestTracer;
     private isShuttingDown: boolean = false;
-    private activeRequests: Set<string> = new Set();
+    private readonly activeRequests: Set<string> = new Set();
 
     /**
      * Creates a new AtlasServer instance
@@ -86,7 +79,12 @@ export class AtlasServer {
      */
     private setupErrorHandling(): void {
         this.server.onerror = (error) => {
-            this.metricsCollector.incrementErrorCount();
+            const metricEvent: MetricEvent = {
+                type: 'error',
+                timestamp: Date.now(),
+                error: error instanceof Error ? error.message : String(error)
+            };
+            this.metricsCollector.recordError(metricEvent);
             
             const errorContext = {
                 timestamp: new Date().toISOString(),
@@ -95,7 +93,7 @@ export class AtlasServer {
                     message: error.message,
                     stack: error.stack
                 } : error,
-                metrics: this.getMetrics()
+                metrics: this.metricsCollector.getMetrics()
             };
 
             this.logger.error('[MCP Error]', errorContext);
@@ -113,14 +111,14 @@ export class AtlasServer {
             this.logger.error('Unhandled Rejection:', {
                 reason,
                 promise,
-                metrics: this.getMetrics()
+                metrics: this.metricsCollector.getMetrics()
             });
         });
 
         process.on('uncaughtException', (error) => {
             this.logger.error('Uncaught Exception:', {
                 error,
-                metrics: this.getMetrics()
+                metrics: this.metricsCollector.getMetrics()
             });
             this.shutdown().finally(() => process.exit(1));
         });
@@ -131,29 +129,48 @@ export class AtlasServer {
      */
     private setupToolHandlers(): void {
         // Handler for listing available tools
-        this.server.setRequestHandler(ListToolsRequestSchema, async (request) => {
-            const requestId = this.requestTracer.startRequest();
+        this.server.setRequestHandler(ListToolsRequestSchema, async () => {
+            const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            const traceEvent: TraceEvent = {
+                type: 'list_tools',
+                timestamp: Date.now()
+            };
             
             try {
                 await this.rateLimiter.checkLimit();
                 this.activeRequests.add(requestId);
                 
-                const startTime = Date.now();
+                this.requestTracer.startTrace(requestId, traceEvent);
                 const response = await this.toolHandler.listTools();
                 
-                this.metricsCollector.recordResponseTime(Date.now() - startTime);
+                const metricEvent: MetricEvent = {
+                    type: 'list_tools',
+                    timestamp: Date.now(),
+                    duration: Date.now() - traceEvent.timestamp
+                };
+                this.metricsCollector.recordSuccess(metricEvent);
+
                 return response;
             } catch (error) {
                 this.handleToolError(error);
+                throw error; // Ensure error propagation
             } finally {
                 this.activeRequests.delete(requestId);
-                this.requestTracer.endRequest(requestId);
+                this.requestTracer.endTrace(requestId, {
+                    ...traceEvent,
+                    timestamp: Date.now()
+                });
             }
         });
 
         // Handler for tool execution requests
         this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-            const requestId = this.requestTracer.startRequest();
+            const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            const traceEvent: TraceEvent = {
+                type: 'tool_execution',
+                tool: request.params.name,
+                timestamp: Date.now()
+            };
             
             try {
                 if (this.isShuttingDown) {
@@ -166,19 +183,30 @@ export class AtlasServer {
                 await this.rateLimiter.checkLimit();
                 this.activeRequests.add(requestId);
                 
-                const startTime = Date.now();
+                this.requestTracer.startTrace(requestId, traceEvent);
                 const response = await Promise.race([
                     this.toolHandler.handleToolCall(request),
                     this.createTimeout(this.config.requestTimeout || 30000)
                 ]);
                 
-                this.metricsCollector.recordResponseTime(Date.now() - startTime);
+                const metricEvent: MetricEvent = {
+                    type: 'tool_execution',
+                    tool: request.params.name,
+                    timestamp: Date.now(),
+                    duration: Date.now() - traceEvent.timestamp
+                };
+                this.metricsCollector.recordSuccess(metricEvent);
+
                 return response;
             } catch (error) {
                 this.handleToolError(error);
+                throw error; // Ensure error propagation
             } finally {
                 this.activeRequests.delete(requestId);
-                this.requestTracer.endRequest(requestId);
+                this.requestTracer.endTrace(requestId, {
+                    ...traceEvent,
+                    timestamp: Date.now()
+                });
             }
         });
     }
@@ -187,15 +215,21 @@ export class AtlasServer {
      * Sets up health check endpoint
      */
     private setupHealthCheck(): void {
-        setInterval(() => {
-            const health = this.healthMonitor.check({
-                activeRequests: this.activeRequests.size,
-                metrics: this.getMetrics(),
-                rateLimiter: this.rateLimiter.getStatus()
-            });
+        setInterval(async () => {
+            try {
+                const status: ComponentStatus = {
+                    storage: { tasks: { total: 0, byStatus: {}, noteCount: 0, dependencyCount: 0 }, storage: { totalSize: 0, walSize: 0, pageSize: 0, pageCount: 0 } },
+                    rateLimiter: this.rateLimiter.getStatus(),
+                    metrics: this.metricsCollector.getMetrics()
+                };
 
-            if (!health.healthy) {
-                this.logger.warn('Health check failed:', health);
+                const health = await this.healthMonitor.check(status);
+
+                if (!health.healthy) {
+                    this.logger.warn('Health check failed:', { health, status });
+                }
+            } catch (error) {
+                this.logger.error('Health check error:', { error });
             }
         }, 30000);
     }
@@ -217,16 +251,21 @@ export class AtlasServer {
     /**
      * Transforms errors into McpErrors
      */
-    private handleToolError(error: unknown): never {
-        this.metricsCollector.incrementErrorCount();
+    private handleToolError(error: unknown): void {
+        const metricEvent: MetricEvent = {
+            type: 'error',
+            timestamp: Date.now(),
+            error: error instanceof Error ? error.message : String(error)
+        };
+        this.metricsCollector.recordError(metricEvent);
 
         if (error instanceof McpError) {
-            throw error;
+            return;
         }
 
         this.logger.error('Unexpected error in tool handler:', {
             error,
-            metrics: this.getMetrics()
+            metrics: this.metricsCollector.getMetrics()
         });
         
         throw new McpError(
@@ -234,17 +273,6 @@ export class AtlasServer {
             error instanceof Error ? error.message : 'An unexpected error occurred',
             error instanceof Error ? error.stack : undefined
         );
-    }
-
-    /**
-     * Gets current server metrics
-     */
-    private getMetrics(): ServerMetrics {
-        return {
-            requestCount: this.metricsCollector.getRequestCount(),
-            errorCount: this.metricsCollector.getErrorCount(),
-            avgResponseTime: this.metricsCollector.getAverageResponseTime()
-        };
     }
 
     /**
@@ -256,12 +284,12 @@ export class AtlasServer {
             await this.server.connect(transport);
             
             this.logger.info(`${this.config.name} v${this.config.version} running on stdio`, {
-                metrics: this.getMetrics()
+                metrics: this.metricsCollector.getMetrics()
             });
         } catch (error) {
             this.logger.error('Failed to start server:', {
                 error,
-                metrics: this.getMetrics()
+                metrics: this.metricsCollector.getMetrics()
             });
             throw error;
         }
@@ -295,16 +323,14 @@ export class AtlasServer {
 
             await this.server.close();
             this.logger.info('Server closed successfully', {
-                metrics: this.getMetrics()
+                metrics: this.metricsCollector.getMetrics()
             });
         } catch (error) {
             this.logger.error('Error during shutdown:', {
                 error,
-                metrics: this.getMetrics()
+                metrics: this.metricsCollector.getMetrics()
             });
             throw error;
         }
     }
 }
-
-

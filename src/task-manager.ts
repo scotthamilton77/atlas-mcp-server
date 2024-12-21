@@ -1,557 +1,163 @@
 /**
- * Task Manager Module
- * 
- * Main integration point for task management functionality.
- * Coordinates between task store, dependency validation, and status management.
+ * Path-based task manager implementation
  */
-
-import { generateShortId } from './utils/id-generator.js';
-import {
-    Task,
-    CreateTaskInput,
-    UpdateTaskInput,
-    TaskResponse,
-    TaskType,
-    TaskStatus,
-    BulkCreateTaskInput,
-    BulkUpdateTasksInput,
-    TaskWithSubtasks,
-    TaskMetadata
-} from './types/task.js';
-import {
-    Session,
-    TaskList,
-    CreateSessionInput,
-    CreateTaskListInput
-} from './types/session.js';
-import { UnifiedStorageManager } from './storage/unified-storage.js';
+import { Task, TaskStatus, TaskType, CreateTaskInput, UpdateTaskInput, TaskResponse } from './types/task.js';
+import { TaskStorage } from './types/storage.js';
 import { Logger } from './logging/index.js';
-import { z } from 'zod';
-import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
-import { 
-    TaskError, 
-    ErrorCodes, 
-    createError, 
-    BaseError, 
-    ValidationError,
-    wrapError,
-    getUserErrorMessage 
-} from './errors/index.js';
-import { DefaultSessionManager } from './task/core/session/session-manager.js';
-import { TaskStore, DependencyValidator, StatusManager } from './task/core/index.js';
-import { 
-    validateCreateTask, 
-    validateUpdateTask, 
-    validateBulkCreateTask,
-    validateBulkUpdateTask,
-    safeValidateCreateTask
-} from './validation/task.js';
+import { ErrorCodes, createError } from './errors/index.js';
+import { validateTaskPath, isValidTaskHierarchy } from './types/task.js';
 
-/**
- * Task Manager class responsible for coordinating task operations
- */
 export class TaskManager {
     private logger: Logger;
-    private taskStore: TaskStore;
-    private dependencyValidator: DependencyValidator;
-    private statusManager: StatusManager;
+    private storage: TaskStorage;
 
-    constructor(
-        private storage: UnifiedStorageManager,
-        private sessionManager: DefaultSessionManager
-    ) {
+    constructor(storage: TaskStorage) {
         this.logger = Logger.getInstance().child({ component: 'TaskManager' });
-        this.taskStore = new TaskStore(storage);
-        this.dependencyValidator = new DependencyValidator();
-        this.statusManager = new StatusManager();
+        this.storage = storage;
     }
 
     /**
-     * Creates a new session
+     * Creates a new task with path-based hierarchy
      */
-    async createSession(input: CreateSessionInput): Promise<TaskResponse<Session>> {
+    async createTask(input: CreateTaskInput): Promise<TaskResponse<Task>> {
         try {
-            const session = await this.sessionManager.createSession(input);
-            return {
-                success: true,
-                data: session,
-                metadata: {
-                    timestamp: new Date().toISOString(),
-                    requestId: generateShortId(),
-                    sessionId: session.id
-                }
-            };
-        } catch (error) {
-            this.logger.error('Failed to create session', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Switches to a different session
-     */
-    async switchSession(sessionId: string): Promise<TaskResponse<void>> {
-        try {
-            await this.sessionManager.switchSession(sessionId);
-            return {
-                success: true,
-                metadata: {
-                    timestamp: new Date().toISOString(),
-                    requestId: generateShortId(),
-                    sessionId
-                }
-            };
-        } catch (error) {
-            this.logger.error('Failed to switch session', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Lists all available sessions
-     */
-    async listSessions(includeArchived = false): Promise<TaskResponse<Session[]>> {
-        try {
-            const sessions = await this.sessionManager.listSessions(includeArchived);
-            const activeSession = await this.sessionManager.getActiveSession();
+            // Generate path if not provided
+            const path = input.path || this.generateTaskPath(input);
             
-            return {
-                success: true,
-                data: sessions,
-                metadata: {
-                    timestamp: new Date().toISOString(),
-                    requestId: generateShortId(),
-                    sessionId: activeSession?.id || generateShortId()
-                }
-            };
-        } catch (error) {
-            this.logger.error('Failed to list sessions', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Archives a session
-     */
-    async archiveSession(sessionId: string): Promise<TaskResponse<void>> {
-        try {
-            await this.sessionManager.archiveSession(sessionId);
-            return {
-                success: true,
-                metadata: {
-                    timestamp: new Date().toISOString(),
-                    requestId: generateShortId(),
-                    sessionId
-                }
-            };
-        } catch (error) {
-            this.logger.error('Failed to archive session', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Switches to a different task list
-     */
-    async switchTaskList(taskListId: string): Promise<TaskResponse<void>> {
-        try {
-            await this.sessionManager.switchTaskList(taskListId);
-            const session = await this.sessionManager.getActiveSession();
-            if (!session) {
+            // Validate path
+            if (!validateTaskPath(path)) {
                 throw createError(
-                    ErrorCodes.VALIDATION_ERROR,
-                    'No active session'
-                );
-            }
-            return {
-                success: true,
-                metadata: {
-                    timestamp: new Date().toISOString(),
-                    requestId: generateShortId(),
-                    sessionId: session.id,
-                    taskListId
-                }
-            };
-        } catch (error) {
-            this.logger.error('Failed to switch task list', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Lists all task lists in the current session
-     */
-    async listTaskLists(includeArchived = false): Promise<TaskResponse<TaskList[]>> {
-        try {
-            const taskLists = await this.sessionManager.listTaskLists(includeArchived);
-            const session = await this.sessionManager.getActiveSession();
-            if (!session) {
-                throw createError(
-                    ErrorCodes.VALIDATION_ERROR,
-                    'No active session'
-                );
-            }
-            return {
-                success: true,
-                data: taskLists,
-                metadata: {
-                    timestamp: new Date().toISOString(),
-                    requestId: generateShortId(),
-                    sessionId: session.id
-                }
-            };
-        } catch (error) {
-            this.logger.error('Failed to list task lists', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Archives a task list
-     */
-    async archiveTaskList(taskListId: string): Promise<TaskResponse<void>> {
-        try {
-            await this.sessionManager.archiveTaskList(taskListId);
-            const session = await this.sessionManager.getActiveSession();
-            if (!session) {
-                throw createError(
-                    ErrorCodes.VALIDATION_ERROR,
-                    'No active session'
-                );
-            }
-            return {
-                success: true,
-                metadata: {
-                    timestamp: new Date().toISOString(),
-                    requestId: generateShortId(),
-                    sessionId: session.id,
-                    taskListId
-                }
-            };
-        } catch (error) {
-            this.logger.error('Failed to archive task list', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Creates a new task list
-     */
-    async createTaskList(input: CreateTaskListInput): Promise<TaskResponse<TaskList>> {
-        try {
-            const session = await this.sessionManager.getActiveSession();
-            if (!session) {
-                throw createError(
-                    ErrorCodes.VALIDATION_ERROR,
-                    'No active session. Create or switch to a session first.'
+                    ErrorCodes.INVALID_INPUT,
+                    'Invalid task path format'
                 );
             }
 
-            const taskList = await this.sessionManager.createTaskList(input);
-
-            return {
-                success: true,
-                data: taskList,
-                metadata: {
-                    timestamp: new Date().toISOString(),
-                    requestId: generateShortId(),
-                    sessionId: session.id
-                }
-            };
-        } catch (error) {
-            this.logger.error('Failed to create task list', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Gets the current session ID from the session manager or generates a new one
-     */
-    private async getCurrentSessionId(): Promise<string> {
-        if (this.sessionManager) {
-            const activeSession = await this.sessionManager.getActiveSession();
-            if (activeSession) {
-                return activeSession.id;
-            }
-        }
-        return generateShortId();
-    }
-
-    /**
-     * Initializes the task manager
-     */
-    async initialize(): Promise<void> {
-        try {
-            // Initialize storage first
-            await this.storage.initialize();
-            // Then initialize task store
-            await this.taskStore.initialize();
-            this.logger.info('Task manager initialized successfully');
-        } catch (error) {
-            this.logger.error('Failed to initialize task manager', error);
-            throw new McpError(
-                ErrorCode.InternalError,
-                'Failed to initialize task manager'
-            );
-        }
-    }
-
-    /**
-     * Validates task hierarchy depth
-     */
-    private validateHierarchyDepth(task: CreateTaskInput, depth: number = 1): void {
-        const MAX_DEPTH = 5;
-        if (depth > MAX_DEPTH) {
-            throw createError(
-                ErrorCodes.VALIDATION_ERROR,
-                { message: `Task hierarchy cannot exceed ${MAX_DEPTH} levels deep` }
-            );
-        }
-        if (task.subtasks) {
-            task.subtasks.forEach(subtask => this.validateHierarchyDepth(subtask, depth + 1));
-        }
-    }
-
-    /**
-     * Creates a new task
-     */
-    async createTask(
-        parentId: string | null, 
-        input: CreateTaskInput, 
-        newSession: boolean = false,
-        transactionId?: string
-    ): Promise<TaskResponse<Task>> {
-        try {
-            // Validate input data first
-            const validationResult = safeValidateCreateTask(input);
-            if (!validationResult.success) {
-                const validationError = ValidationError.fromZodError(validationResult.error);
-                throw new McpError(
-                    ErrorCode.InvalidRequest,
-                    validationError.getUserMessage(),
-                    { validationErrors: validationError.validationErrors }
-                );
-            }
-            const validatedInput = validationResult.data;
-
-            // Get session ID from session manager or generate a new one
-            const sessionId = await this.getCurrentSessionId();
-
-            // Determine effective parentId (input.parentId takes precedence)
-            const effectiveParentId = input.parentId || parentId;
-
-            // Check parent task and duplicate names
-            if (effectiveParentId) {
-                const parentTask = this.taskStore.getTaskById(effectiveParentId);
-                if (!parentTask) {
+            // Check parent path if provided
+            if (input.parentPath) {
+                const parent = await this.getTaskByPath(input.parentPath);
+                if (!parent) {
                     throw createError(
-                        ErrorCodes.TASK_NOT_FOUND,
-                        { taskId: effectiveParentId }
+                        ErrorCodes.INVALID_INPUT,
+                        'Parent task not found'
                     );
                 }
-                if (parentTask.type !== TaskType.GROUP) {
+
+                // Validate hierarchy
+                if (!isValidTaskHierarchy(parent.type, input.type || TaskType.TASK)) {
                     throw createError(
                         ErrorCodes.TASK_INVALID_PARENT,
-                        { taskId: effectiveParentId }
-                    );
-                }
-
-                // Check for duplicate task names under the same parent
-                const siblingTasks = this.taskStore.getTasksByParent(effectiveParentId);
-                const hasDuplicate = siblingTasks.some(
-                    t => t.name === validatedInput.name && t.status !== TaskStatus.FAILED
-                );
-                if (hasDuplicate) {
-                    throw createError(
-                        ErrorCodes.TASK_DUPLICATE,
-                        { 
-                            taskName: validatedInput.name,
-                            parentId: effectiveParentId 
-                        },
-                        `A task named "${validatedInput.name}" already exists under the same parent`,
-                        'Use a different name for the task or update the existing task'
-                    );
-                }
-            } else {
-                // Check for duplicate root tasks
-                const rootTasks = this.taskStore.getRootTasks(sessionId);
-                const hasDuplicate = rootTasks.some(
-                    t => t.name === validatedInput.name && t.status !== TaskStatus.FAILED
-                );
-                if (hasDuplicate) {
-                    throw createError(
-                        ErrorCodes.TASK_DUPLICATE,
-                        { 
-                            taskName: validatedInput.name,
-                            parentId: `ROOT-${sessionId}`
-                        },
-                        `A root task named "${validatedInput.name}" already exists`,
-                        'Use a different name for the task or update the existing task'
+                        'Invalid parent-child task type combination'
                     );
                 }
             }
 
-            // Generate task ID and metadata
-            const taskId = generateShortId();
-            const now = new Date().toISOString();
-            // Get active task list ID from session manager or use default
-            const activeTaskList = await this.sessionManager?.getActiveTaskList() || null;
-            const taskListId = activeTaskList?.id || 'default';
-
-            // Create metadata with required fields first
-            const metadata: TaskMetadata = {
-                created: now,
-                updated: now,
-                sessionId: sessionId,
-                taskListId: taskListId,
-                // Add optional fields from input.metadata if they exist
-                ...(input.metadata ? {
-                    context: input.metadata.context,
-                    tags: input.metadata.tags
-                } : {})
-            };
-
-            // Process subtasks
-            const subtaskIds: string[] = [];
-            if (input.subtasks && input.subtasks.length > 0) {
-                const subtaskResults = await Promise.all(
-                    input.subtasks.map(subtaskInput => 
-                        this.createTask(taskId, {
-                            ...subtaskInput,
-                            metadata: { 
-                                ...subtaskInput.metadata, 
-                                sessionId: sessionId 
-                            }
-                        })
-                    )
-                );
-                subtaskIds.push(...subtaskResults.map(result => result.data!.id));
-            }
-
-            // Create task object
             const task: Task = {
-                id: taskId,
-                name: validatedInput.name,
-                description: validatedInput.description || '',
-                notes: validatedInput.notes || [],
-                reasoning: validatedInput.reasoning,
-                type: validatedInput.type || TaskType.TASK,
+                path,
+                name: input.name,
+                description: input.description,
+                type: input.type || TaskType.TASK,
                 status: TaskStatus.PENDING,
-                dependencies: validatedInput.dependencies || [],
-                subtasks: subtaskIds,
-                metadata,
-                parentId: effectiveParentId || `ROOT-${sessionId}`
+                parentPath: input.parentPath,
+                notes: input.notes,
+                reasoning: input.reasoning,
+                dependencies: input.dependencies || [],
+                subtasks: [],
+                metadata: {
+                    ...input.metadata,
+                    created: Date.now(),
+                    updated: Date.now(),
+                    projectPath: path.split('/')[0],
+                    version: 1
+                }
             };
 
-            // Add task to store
-            await this.taskStore.addTask(task, transactionId);
-
-            // Validate dependencies if any
-            if (task.dependencies.length > 0) {
-                await this.dependencyValidator.validateDependencies(
-                    task,
-                    id => this.taskStore.getTaskById(id)
-                );
-            }
+            await this.storage.saveTask(task);
 
             return {
                 success: true,
                 data: task,
                 metadata: {
-                    timestamp: new Date().toISOString(),
-                    requestId: generateShortId(),
-                    sessionId
+                    timestamp: Date.now(),
+                    requestId: Math.random().toString(36).substring(7),
+                    projectPath: task.metadata.projectPath,
+                    affectedPaths: [task.path]
                 }
             };
         } catch (error) {
-            this.logger.error('Failed to create task', error);
+            this.logger.error('Failed to create task', { error, input });
             throw error;
         }
     }
 
     /**
      * Updates an existing task
-     * @param taskId ID of the task to update
-     * @param updates Updates to apply to the task
-     * @param isBulkOperation Whether this update is part of a bulk operation
      */
-    async updateTask(taskId: string, updates: UpdateTaskInput, isBulkOperation: boolean = false): Promise<TaskResponse<Task>> {
+    async updateTask(path: string, updates: UpdateTaskInput): Promise<TaskResponse<Task>> {
         try {
-            const validatedUpdates = validateUpdateTask(updates);
-            const task = this.taskStore.getTaskById(taskId);
+            const task = await this.getTaskByPath(path);
             if (!task) {
-                throw createError(ErrorCodes.TASK_NOT_FOUND, { taskId });
-            }
-
-            if (updates.status) {
-                await this.statusManager.validateAndProcessStatusChange(
-                    task,
-                    updates.status,
-                    id => this.taskStore.getTaskById(id),
-                    async (id, statusUpdate) => {
-                        const taskToUpdate = this.taskStore.getTaskById(id);
-                        if (taskToUpdate) {
-                            await this.taskStore.updateTask(id, statusUpdate);
-                        }
-                    },
-                    isBulkOperation
+                throw createError(
+                    ErrorCodes.TASK_NOT_FOUND,
+                    'Task not found'
                 );
             }
 
-            // Check for duplicate names if name is being updated
-            if (updates.name && updates.name !== task.name) {
-                const siblings = task.parentId 
-                    ? this.taskStore.getTasksByParent(task.parentId)
-                    : this.taskStore.getRootTasks(task.metadata.sessionId);
-                
-                const hasDuplicate = siblings.some(
-                    t => t.id !== taskId && // Exclude current task
-                        t.name === updates.name && 
-                        t.status !== TaskStatus.FAILED
-                );
-                
-                if (hasDuplicate) {
-                    throw createError(
-                        ErrorCodes.TASK_DUPLICATE,
-                        { 
-                            taskName: updates.name,
-                            parentId: task.parentId || `ROOT-${task.metadata.sessionId}`
-                        },
-                        `A task named "${updates.name}" already exists at this level`,
-                        'Use a different name for the task'
-                    );
-                }
-            }
-
-            if (updates.dependencies) {
-                await this.dependencyValidator.validateDependencies(
-                    { ...task, dependencies: updates.dependencies },
-                    id => this.taskStore.getTaskById(id)
-                );
-            }
-
-            await this.taskStore.updateTask(taskId, {
-                ...validatedUpdates,
+            // Update task fields
+            const updatedTask: Task = {
+                ...task,
+                name: updates.name || task.name,
+                description: updates.description !== undefined ? updates.description : task.description,
+                type: updates.type || task.type,
+                status: updates.status || task.status,
+                notes: updates.notes || task.notes,
+                reasoning: updates.reasoning || task.reasoning,
+                dependencies: updates.dependencies || task.dependencies,
                 metadata: {
                     ...task.metadata,
                     ...updates.metadata,
-                    updated: new Date().toISOString()
+                    updated: Date.now(),
+                    version: task.metadata.version + 1
                 }
-            });
+            };
 
-            const updatedTask = this.taskStore.getTaskById(taskId)!;
+            await this.storage.saveTask(updatedTask);
 
             return {
                 success: true,
                 data: updatedTask,
                 metadata: {
-                    timestamp: new Date().toISOString(),
-                    requestId: generateShortId(),
-                    sessionId: updatedTask.metadata.sessionId
+                    timestamp: Date.now(),
+                    requestId: Math.random().toString(36).substring(7),
+                    projectPath: updatedTask.metadata.projectPath,
+                    affectedPaths: [updatedTask.path]
                 }
             };
         } catch (error) {
-            this.logger.error('Failed to update task', error);
+            this.logger.error('Failed to update task', { error, path, updates });
+            throw error;
+        }
+    }
+
+    /**
+     * Retrieves a task by its path
+     */
+    async getTaskByPath(path: string): Promise<Task | null> {
+        try {
+            return await this.storage.getTask(path);
+        } catch (error) {
+            this.logger.error('Failed to get task by path', { error, path });
+            throw error;
+        }
+    }
+
+    /**
+     * Lists tasks matching a path pattern
+     */
+    async listTasks(pathPattern: string): Promise<Task[]> {
+        try {
+            return await this.storage.getTasksByPattern(pathPattern);
+        } catch (error) {
+            this.logger.error('Failed to list tasks', { error, pathPattern });
             throw error;
         }
     }
@@ -559,23 +165,11 @@ export class TaskManager {
     /**
      * Gets tasks by status
      */
-    async getTasksByStatus(status: TaskStatus, sessionId?: string, taskListId?: string): Promise<TaskResponse<Task[]>> {
+    async getTasksByStatus(status: TaskStatus): Promise<Task[]> {
         try {
-            const effectiveSessionId = sessionId || (await this.getCurrentSessionId());
-            const tasks = this.taskStore.getTasksByStatus(status, effectiveSessionId, taskListId);
-            
-            return {
-                success: true,
-                data: tasks,
-                metadata: {
-                    timestamp: new Date().toISOString(),
-                    requestId: generateShortId(),
-                    sessionId: effectiveSessionId,
-                    taskListId: taskListId
-                }
-            };
+            return await this.storage.getTasksByStatus(status);
         } catch (error) {
-            this.logger.error('Failed to get tasks by status', error);
+            this.logger.error('Failed to get tasks by status', { error, status });
             throw error;
         }
     }
@@ -583,117 +177,11 @@ export class TaskManager {
     /**
      * Gets subtasks of a task
      */
-    async getSubtasks(taskId: string, sessionId?: string, taskListId?: string): Promise<TaskResponse<Task[]>> {
+    async getSubtasks(parentPath: string): Promise<Task[]> {
         try {
-            const task = this.taskStore.getTaskById(taskId);
-            if (!task) {
-                throw createError(ErrorCodes.TASK_NOT_FOUND, { taskId });
-            }
-
-            const effectiveSessionId = sessionId || task.metadata.sessionId;
-            const effectiveTaskListId = taskListId || task.metadata.taskListId;
-
-            const subtasks = task.subtasks
-                .map(id => this.taskStore.getTaskById(id))
-                .filter((t): t is Task => t !== null)
-                .filter(t => 
-                    (!sessionId || t.metadata.sessionId === effectiveSessionId) &&
-                    (!taskListId || t.metadata.taskListId === effectiveTaskListId)
-                );
-
-            return {
-                success: true,
-                data: subtasks,
-                metadata: {
-                    timestamp: new Date().toISOString(),
-                    requestId: generateShortId(),
-                    sessionId: effectiveSessionId,
-                    taskListId: effectiveTaskListId
-                }
-            };
+            return await this.storage.getSubtasks(parentPath);
         } catch (error) {
-            this.logger.error('Failed to get subtasks', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Gets the complete task tree
-     */
-    private buildTaskTreeRecursive(task: Task): Task {
-        const subtaskObjects = task.subtasks
-            .map(subtaskId => this.taskStore.getTaskById(subtaskId))
-            .filter((t): t is Task => t !== null)
-            .map(subtask => this.buildTaskTreeRecursive(subtask));
-
-        return {
-            ...task,
-            metadata: {
-                ...task.metadata,
-                resolvedSubtasks: subtaskObjects
-            }
-        };
-    }
-
-    async getTaskTree(sessionId?: string, taskListId?: string): Promise<TaskResponse<Task[]>> {
-        try {
-            // Get the effective session ID
-            const effectiveSessionId = sessionId || (await this.getCurrentSessionId());
-            
-            // Get root tasks with filtering
-            const rootTasks = this.taskStore.getRootTasks(effectiveSessionId, taskListId);
-            
-            // Build tree for each root task
-            const fullTree = rootTasks.map(task => this.buildTaskTreeRecursive(task));
-            
-            return {
-                success: true,
-                data: fullTree,
-                metadata: {
-                    timestamp: new Date().toISOString(),
-                    requestId: generateShortId(),
-                    sessionId: effectiveSessionId,
-                    taskListId: taskListId
-                }
-            };
-        } catch (error) {
-            this.logger.error('Failed to get task tree', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Creates multiple tasks in bulk
-     */
-    async bulkCreateTasks(input: BulkCreateTaskInput): Promise<TaskResponse<Task[]>> {
-        const transactionId = this.taskStore.startTransaction();
-        
-        try {
-            validateBulkCreateTask(input);
-            const createdTasks: TaskResponse<Task>[] = [];
-            
-            for (const taskInput of input.tasks) {
-                const effectiveParentId = taskInput.parentId || input.parentId || null;
-                const task = await this.createTask(effectiveParentId, taskInput, false, transactionId);
-                createdTasks.push(task);
-            }
-
-            await this.taskStore.commitTransaction(transactionId);
-
-            return {
-                success: true,
-                data: createdTasks.map(response => response.data!),
-                metadata: {
-                    timestamp: new Date().toISOString(),
-                    requestId: generateShortId(),
-                    sessionId: createdTasks[0]?.data?.metadata.sessionId || generateShortId(),
-                    affectedTasks: createdTasks.map(response => response.data!.id),
-                    transactionId
-                }
-            };
-        } catch (error) {
-            await this.taskStore.rollbackTransaction(transactionId);
-            this.logger.error('Failed to create tasks in bulk', error);
+            this.logger.error('Failed to get subtasks', { error, parentPath });
             throw error;
         }
     }
@@ -701,66 +189,42 @@ export class TaskManager {
     /**
      * Deletes a task and its subtasks
      */
-    async deleteTask(taskId: string): Promise<TaskResponse<void>> {
+    async deleteTask(path: string): Promise<TaskResponse<void>> {
         try {
-            const task = this.taskStore.getTaskById(taskId);
-            if (!task) {
-                throw createError(ErrorCodes.TASK_NOT_FOUND, { taskId });
-            }
-
-            // Delete subtasks recursively
-            for (const subtaskId of task.subtasks) {
-                await this.deleteTask(subtaskId);
-            }
-
-            // Remove the task
-            await this.taskStore.removeTask(taskId);
-
+            await this.storage.deleteTask(path);
             return {
                 success: true,
                 metadata: {
-                    timestamp: new Date().toISOString(),
-                    requestId: generateShortId(),
-                    sessionId: task.metadata.sessionId
+                    timestamp: Date.now(),
+                    requestId: Math.random().toString(36).substring(7),
+                    projectPath: path.split('/')[0],
+                    affectedPaths: [path]
                 }
             };
         } catch (error) {
-            this.logger.error('Failed to delete task', error);
+            this.logger.error('Failed to delete task', { error, path });
             throw error;
         }
     }
 
     /**
-     * Updates multiple tasks in bulk
+     * Generates a task path based on input
      */
-    async bulkUpdateTasks(input: BulkUpdateTasksInput): Promise<TaskResponse<Task[]>> {
-        const transactionId = this.taskStore.startTransaction();
-        try {
-            const updatedTasks = [];
-            
-            // Process updates sequentially within the transaction
-            for (const { taskId, updates } of input.updates) {
-                const result = await this.updateTask(taskId, updates, true);
-                updatedTasks.push(result);
-            }
+    private generateTaskPath(input: CreateTaskInput): string {
+        const segments: string[] = [];
 
-            await this.taskStore.commitTransaction(transactionId);
-
-            return {
-                success: true,
-                data: updatedTasks.map(response => response.data!),
-                metadata: {
-                    timestamp: new Date().toISOString(),
-                    requestId: generateShortId(),
-                    sessionId: updatedTasks[0]?.data?.metadata.sessionId || generateShortId(),
-                    affectedTasks: updatedTasks.map(response => response.data!.id),
-                    transactionId
-                }
-            };
-        } catch (error) {
-            await this.taskStore.rollbackTransaction(transactionId);
-            this.logger.error('Failed to update tasks in bulk', error);
-            throw error;
+        // Add parent path if provided
+        if (input.parentPath) {
+            segments.push(input.parentPath);
         }
+
+        // Add task name as final segment
+        segments.push(input.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'));
+
+        return segments.join('/');
+    }
+
+    async close(): Promise<void> {
+        await this.storage.close();
     }
 }

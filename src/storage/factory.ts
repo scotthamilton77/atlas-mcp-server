@@ -1,58 +1,54 @@
-import { UnifiedStorageError } from './unified-storage.js';
-import { UnifiedStorageConfig, UnifiedStorageManager } from './unified-storage.js';
-import { UnifiedSqliteStorage } from './unified-sqlite-storage.js';
+/**
+ * Storage factory for creating task storage instances
+ */
+import { StorageConfig, TaskStorage, StorageError, StorageErrorType } from '../types/storage.js';
+import { SqliteStorage } from './sqlite-storage.js';
 import { promises as fs } from 'fs';
 import path from 'path';
 
 /**
- * Creates a storage manager instance based on configuration
- * @param config Storage configuration options
- * @returns Promise resolving to a UnifiedStorageManager instance
- * @throws UnifiedStorageError if initialization fails
+ * Creates a storage instance based on configuration
  */
-export async function createStorageManager(config: UnifiedStorageConfig): Promise<UnifiedStorageManager> {
+export async function createStorage(config: StorageConfig): Promise<TaskStorage> {
     try {
         // Ensure base directory exists with proper permissions
         await fs.mkdir(config.baseDir, { recursive: true, mode: 0o750 });
 
-        // Create SQLite storage (we no longer support JSON storage)
-        const sqliteConfig: UnifiedStorageConfig = {
-            ...config,
-            baseDir: path.join(config.baseDir, 'sqlite')
-        };
-        const manager = new UnifiedSqliteStorage(sqliteConfig);
+        // Create SQLite storage
+        const storage = new SqliteStorage(config);
+        await storage.initialize();
 
-        // Initialize storage
-        await manager.initialize();
-
-        return manager;
+        return storage;
     } catch (error) {
-        throw new UnifiedStorageError(
-            'Failed to create storage manager',
-            'STORAGE_INIT_ERROR',
-            error instanceof Error ? error : new Error(String(error))
+        throw new StorageError(
+            StorageErrorType.INITIALIZATION,
+            'Failed to create storage',
+            error
         );
     }
 }
 
 /**
- * Creates a storage manager with default configuration from environment variables
- * @returns Promise resolving to a UnifiedStorageManager instance
- * @throws UnifiedStorageError if initialization fails
+ * Creates a storage instance with default configuration
  */
-export async function createDefaultStorageManager(): Promise<UnifiedStorageManager> {
+export async function createDefaultStorage(): Promise<TaskStorage> {
     const baseDir = process.env.ATLAS_STORAGE_DIR || path.join(process.cwd(), 'data');
-    const sessionId = process.env.ATLAS_SESSION_ID || 'default';
-    const useSqlite = process.env.ATLAS_USE_SQLITE === 'true';
 
-    const config: UnifiedStorageConfig = {
+    const config: StorageConfig = {
         baseDir,
-        sessionId,
-        maxRetries: Number(process.env.ATLAS_MAX_RETRIES) || 3,
-        retryDelay: Number(process.env.ATLAS_RETRY_DELAY) || 1000,
-        maxBackups: Number(process.env.ATLAS_MAX_BACKUPS) || 5,
-        useSqlite: true // Always use SQLite for better reliability
+        name: process.env.ATLAS_STORAGE_NAME || 'atlas-tasks',
+        connection: {
+            maxRetries: Number(process.env.ATLAS_MAX_RETRIES) || 3,
+            retryDelay: Number(process.env.ATLAS_RETRY_DELAY) || 1000,
+            busyTimeout: Number(process.env.ATLAS_BUSY_TIMEOUT) || 5000
+        },
+        performance: {
+            checkpointInterval: Number(process.env.ATLAS_CHECKPOINT_INTERVAL) || 300000, // 5 minutes
+            cacheSize: Number(process.env.ATLAS_CACHE_SIZE) || 2000,
+            mmapSize: Number(process.env.ATLAS_MMAP_SIZE) || 30000000000, // 30GB
+            pageSize: Number(process.env.ATLAS_PAGE_SIZE) || 4096
+        }
     };
 
-    return createStorageManager(config);
+    return createStorage(config);
 }

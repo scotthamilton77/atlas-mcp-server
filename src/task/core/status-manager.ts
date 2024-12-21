@@ -16,7 +16,7 @@ import { Logger } from '../../logging/index.js';
 import { generateShortId } from '../../utils/id-generator.js';
 
 interface StatusUpdate {
-    taskId: string;
+    taskPath: string;
     oldStatus: TaskStatus;
     newStatus: TaskStatus;
     timestamp: number;
@@ -30,6 +30,7 @@ interface StatusTransaction {
 
 type CompletedOrFailed = TaskStatus.COMPLETED | TaskStatus.FAILED;
 type PendingOrInProgress = TaskStatus.PENDING | TaskStatus.IN_PROGRESS;
+type GetTaskByPath = (path: string) => Promise<Task | null>;
 
 // Status transition guidance for error messages
 const STATUS_TRANSITION_GUIDE: Record<TaskStatus, Partial<Record<TaskStatus, string>>> = {
@@ -90,7 +91,7 @@ export class StatusManager {
      * Determines if a task should be blocked based on dependencies
      * Updated to allow parallel work and only block completion
      */
-    isBlocked(task: Task, getTaskById: (id: string) => Task | null): boolean {
+    async isBlocked(task: Task, getTaskByPath: GetTaskByPath): Promise<boolean> {
         // Don't block completed or failed tasks
         if (task.status === TaskStatus.COMPLETED || task.status === TaskStatus.FAILED) {
             return false;
@@ -99,10 +100,8 @@ export class StatusManager {
         // Only enforce strict dependency checking for completion
         if (task.status === TaskStatus.IN_PROGRESS && task.dependencies.length > 0) {
             // Allow parallel work unless dependencies have failed
-            return task.dependencies.some(depId => {
-                const depTask = getTaskById(depId);
-                return !depTask || depTask.status === TaskStatus.FAILED;
-            });
+            const depTasks = await Promise.all(task.dependencies.map(depPath => getTaskByPath(depPath)));
+            return depTasks.some(depTask => !depTask || depTask.status === TaskStatus.FAILED);
         }
 
         // For all other cases, no blocking
@@ -116,8 +115,8 @@ export class StatusManager {
     async validateAndProcessStatusChange(
         task: Task,
         newStatus: TaskStatus,
-        getTaskById: (id: string) => Task | null,
-        updateTask: (taskId: string, updates: { status: TaskStatus }) => Promise<void>,
+        getTaskByPath: GetTaskByPath,
+        updateTask: (path: string, updates: { status: TaskStatus }) => Promise<void>,
         isBulkOperation: boolean = false
     ): Promise<void> {
         const transactionId = generateShortId();
@@ -129,15 +128,15 @@ export class StatusManager {
 
         try {
             // Try to acquire lock with retries
-            await this.acquireLockWithRetry(task.id);
+            await this.acquireLockWithRetry(task.path);
 
             // Check if task should be automatically blocked
-            if (this.isBlocked(task, getTaskById) && newStatus !== TaskStatus.BLOCKED) {
+            if (await this.isBlocked(task, getTaskByPath) && newStatus !== TaskStatus.BLOCKED) {
                 throw new TaskError(
                     ErrorCodes.TASK_STATUS,
                     'Task is blocked by incomplete dependencies',
                     {
-                        taskId: task.id,
+                        path: task.path,
                         currentStatus: task.status,
                         requestedStatus: newStatus,
                         suggestion: 'Complete all dependencies before proceeding'
@@ -146,13 +145,13 @@ export class StatusManager {
             }
 
             // Validate the transition with bulk operation context
-            await this.validateStatusTransition(task, newStatus, getTaskById, { isBulkOperation });
+            await this.validateStatusTransition(task, newStatus, getTaskByPath, { isBulkOperation });
 
             // Process status change effects
             await this.propagateStatusChange(
                 task,
                 newStatus,
-                getTaskById,
+                getTaskByPath,
                 updateTask,
                 transactionId
             );
@@ -165,7 +164,7 @@ export class StatusManager {
             throw error;
         } finally {
             // Release lock
-            this.releaseLock(task.id);
+            this.releaseLock(task.path);
             this.transactions.delete(transactionId);
         }
     }
@@ -173,11 +172,11 @@ export class StatusManager {
     /**
      * Acquires a lock for a task with retries
      */
-    private async acquireLockWithRetry(taskId: string): Promise<void> {
+    private async acquireLockWithRetry(taskPath: string): Promise<void> {
         let retryCount = 0;
         while (retryCount < this.MAX_RETRIES) {
             try {
-                await this.acquireLock(taskId);
+                await this.acquireLock(taskPath);
                 return;
             } catch (error) {
                 retryCount++;
@@ -192,8 +191,8 @@ export class StatusManager {
     /**
      * Acquires a lock for a task
      */
-    private async acquireLock(taskId: string): Promise<void> {
-        const taskLock = this.processingTasks.get(taskId);
+    private async acquireLock(taskPath: string): Promise<void> {
+        const taskLock = this.processingTasks.get(taskPath);
         if (taskLock) {
             const timeSinceLock = Date.now() - taskLock.timestamp;
             if (timeSinceLock < this.LOCK_TIMEOUT) {
@@ -201,7 +200,7 @@ export class StatusManager {
                     ErrorCodes.OPERATION_FAILED,
                     'Task is currently being updated by another operation. Please try again shortly.',
                     {
-                        taskId,
+                        path: taskPath,
                         timeout: this.LOCK_TIMEOUT - timeSinceLock,
                         retryAfter: Math.ceil((this.LOCK_TIMEOUT - timeSinceLock) / 1000),
                         suggestion: 'Wait a moment and retry the operation'
@@ -209,16 +208,16 @@ export class StatusManager {
                 );
             }
             // Lock has expired, clean it up
-            this.processingTasks.delete(taskId);
+            this.processingTasks.delete(taskPath);
         }
-        this.processingTasks.set(taskId, { timestamp: Date.now(), retryCount: 0 });
+        this.processingTasks.set(taskPath, { timestamp: Date.now(), retryCount: 0 });
     }
 
     /**
      * Releases a lock for a task
      */
-    private releaseLock(taskId: string): void {
-        this.processingTasks.delete(taskId);
+    private releaseLock(taskPath: string): void {
+        this.processingTasks.delete(taskPath);
     }
 
     /**
@@ -227,7 +226,7 @@ export class StatusManager {
     private async validateStatusTransition(
         task: Task,
         newStatus: TaskStatus,
-        getTaskById: (id: string) => Task | null,
+        getTaskByPath: GetTaskByPath,
         context: { isBulkOperation?: boolean } = {}
     ): Promise<void> {
         const isCompletedOrFailed = (status: TaskStatus): status is CompletedOrFailed => 
@@ -240,10 +239,8 @@ export class StatusManager {
         if (context.isBulkOperation) {
             // Allow direct completion in bulk operations when dependencies are satisfied
             if (newStatus === TaskStatus.COMPLETED) {
-                const dependenciesSatisfied = task.dependencies.every(depId => {
-                    const depTask = getTaskById(depId);
-                    return depTask && depTask.status === TaskStatus.COMPLETED;
-                });
+                const depTasks = await Promise.all(task.dependencies.map(depPath => getTaskByPath(depPath)));
+                const dependenciesSatisfied = depTasks.every(depTask => depTask && depTask.status === TaskStatus.COMPLETED);
 
                 if (dependenciesSatisfied) {
                     // Skip normal transition rules for bulk completion
@@ -263,7 +260,7 @@ export class StatusManager {
                 ErrorCodes.TASK_STATUS,
                 'Invalid status transition: Cannot revert completed or failed tasks to pending or in_progress state',
                 { 
-                    taskId: task.id, 
+                    path: task.path, 
                     currentStatus: task.status, 
                     newStatus,
                     suggestion: 'Create a new task instead of reverting a completed/failed task'
@@ -273,27 +270,26 @@ export class StatusManager {
 
         // Validate dependencies for status transition
         if (!context.isBulkOperation) {
-            await this.dependencyValidator.validateDependenciesForStatus(task, newStatus, getTaskById);
+            await this.dependencyValidator.validateDependenciesForStatus(task, newStatus, getTaskByPath);
         }
 
         // Check dependencies and subtasks for completion
         if (newStatus === TaskStatus.COMPLETED && !context.isBulkOperation) {
             // Validate dependencies
-            await this.dependencyValidator.validateDependenciesForCompletion(task, getTaskById);
+            await this.dependencyValidator.validateDependenciesForCompletion(task, getTaskByPath);
 
             // Check subtasks for completion
-            const incompleteSubtasks = task.subtasks
-                .map(id => getTaskById(id))
-                .filter(subtask => !subtask || subtask.status !== TaskStatus.COMPLETED);
+            const subtasks = await Promise.all(task.subtasks.map(path => getTaskByPath(path)));
+            const incompleteSubtasks = subtasks.filter(subtask => !subtask || subtask.status !== TaskStatus.COMPLETED);
 
             if (incompleteSubtasks.length > 0) {
                 throw new TaskError(
                     ErrorCodes.TASK_STATUS,
                     'Cannot complete task: Some subtasks are still incomplete',
                     { 
-                        taskId: task.id,
+                        path: task.path,
                         incompleteSubtasks: incompleteSubtasks.map(t => ({
-                            id: t?.id,
+                            path: t?.path,
                             status: t?.status,
                             name: t?.name
                         })),
@@ -305,7 +301,7 @@ export class StatusManager {
 
         // Validate status transition based on current status
         this.validateStatusTransitionRules(task.status, newStatus, { 
-            taskId: task.id,
+            path: task.path,
             hasSubtasks: task.subtasks.length > 0,
             hasDependencies: task.dependencies.length > 0,
             isBulkOperation: context.isBulkOperation
@@ -313,16 +309,13 @@ export class StatusManager {
     }
 
     /**
-     * Validates status transition rules with more flexible transitions
-     */
-    /**
      * Validates status transition rules with enhanced flexibility for bulk operations
      */
     private validateStatusTransitionRules(
         currentStatus: TaskStatus,
         newStatus: TaskStatus,
-        context: { taskId: string; hasSubtasks: boolean; hasDependencies: boolean; isBulkOperation?: boolean } = { 
-            taskId: 'unknown',
+        context: { path: string; hasSubtasks: boolean; hasDependencies: boolean; isBulkOperation?: boolean } = { 
+            path: 'unknown',
             hasSubtasks: false,
             hasDependencies: false,
             isBulkOperation: false
@@ -417,7 +410,7 @@ export class StatusManager {
                 ErrorCodes.TASK_STATUS,
                 'Invalid status transition',
                 {
-                    taskId: context.taskId,
+                    path: context.path,
                     currentStatus,
                     newStatus,
                     allowedTransitions: allowedStates,
@@ -435,7 +428,7 @@ export class StatusManager {
                     ErrorCodes.TASK_STATUS,
                     'Status transition condition failed',
                     {
-                        taskId: context.taskId,
+                        path: context.path,
                         currentStatus,
                         newStatus,
                         reason,
@@ -452,15 +445,15 @@ export class StatusManager {
     private async propagateStatusChange(
         task: Task,
         newStatus: TaskStatus,
-        getTaskById: (id: string) => Task | null,
-        updateTask: (taskId: string, updates: { status: TaskStatus }) => Promise<void>,
+        getTaskByPath: GetTaskByPath,
+        updateTask: (path: string, updates: { status: TaskStatus }) => Promise<void>,
         transactionId: string
     ): Promise<void> {
         const transaction = this.transactions.get(transactionId)!;
 
         // Record status update
         transaction.updates.push({
-            taskId: task.id,
+            taskPath: task.path,
             oldStatus: task.status,
             newStatus,
             timestamp: Date.now()
@@ -468,67 +461,66 @@ export class StatusManager {
 
         // Update dependent tasks if task is being deleted or failed
         if (newStatus === TaskStatus.FAILED || task.status === TaskStatus.COMPLETED) {
-            const dependentTasks = this.getDependentTasks(task.id, getTaskById);
+            const dependentTasks = await this.getDependentTasks(task.path, getTaskByPath);
             await Promise.all(dependentTasks.map(async depTask => {
                 if (depTask.status !== TaskStatus.BLOCKED && depTask.status !== TaskStatus.FAILED) {
                     try {
-                        await this.acquireLockWithRetry(depTask.id);
+                        await this.acquireLockWithRetry(depTask.path);
                         await this.propagateStatusChange(
                             depTask,
                             TaskStatus.BLOCKED,
-                            getTaskById,
+                            getTaskByPath,
                             updateTask,
                             transactionId
                         );
                     } finally {
-                        this.releaseLock(depTask.id);
+                        this.releaseLock(depTask.path);
                     }
                 }
             }));
         }
 
         // Update parent status if needed
-        if (task.parentId && !task.parentId.startsWith('ROOT-')) {
-            const parent = getTaskById(task.parentId);
+        if (task.parentPath) {
+            const parent = await getTaskByPath(task.parentPath);
             if (parent) {
                 try {
-                    await this.acquireLockWithRetry(parent.id);
-                    const siblings = parent.subtasks
-                        .map(id => getTaskById(id))
-                        .filter((t): t is Task => t !== null);
+                    await this.acquireLockWithRetry(parent.path);
+                    const siblingTasks = await Promise.all(parent.subtasks.map(path => getTaskByPath(path)));
+                    const siblings = siblingTasks.filter((t): t is Task => t !== null);
 
                     const newParentStatus = this.computeParentStatus(siblings, newStatus);
                     if (newParentStatus && newParentStatus !== parent.status) {
                         await this.propagateStatusChange(
                             parent,
                             newParentStatus,
-                            getTaskById,
+                            getTaskByPath,
                             updateTask,
                             transactionId
                         );
                     }
                 } finally {
-                    this.releaseLock(parent.id);
+                    this.releaseLock(parent.path);
                 }
             }
         }
 
         // Update subtask status if needed
         if (newStatus === TaskStatus.BLOCKED) {
-            await Promise.all(task.subtasks.map(async subtaskId => {
-                const subtask = getTaskById(subtaskId);
+            await Promise.all(task.subtasks.map(async subtaskPath => {
+                const subtask = await getTaskByPath(subtaskPath);
                 if (subtask && subtask.status !== TaskStatus.BLOCKED) {
                     try {
-                        await this.acquireLockWithRetry(subtaskId);
+                        await this.acquireLockWithRetry(subtaskPath);
                         await this.propagateStatusChange(
                             subtask,
                             TaskStatus.BLOCKED,
-                            getTaskById,
+                            getTaskByPath,
                             updateTask,
                             transactionId
                         );
                     } finally {
-                        this.releaseLock(subtaskId);
+                        this.releaseLock(subtaskPath);
                     }
                 }
             }));
@@ -538,12 +530,12 @@ export class StatusManager {
     /**
      * Gets tasks that depend on a given task
      */
-    private getDependentTasks(taskId: string, getTaskById: (id: string) => Task | null): Task[] {
-        const allTasks = Array.from(this.processingTasks.keys())
-            .map(id => getTaskById(id))
-            .filter((t): t is Task => t !== null);
+    private async getDependentTasks(taskPath: string, getTaskByPath: GetTaskByPath): Promise<Task[]> {
+        const taskPaths = Array.from(this.processingTasks.keys());
+        const tasks = await Promise.all(taskPaths.map(path => getTaskByPath(path)));
+        const validTasks = tasks.filter((t): t is Task => t !== null);
             
-        return allTasks.filter(task => task.dependencies.includes(taskId));
+        return validTasks.filter(task => task.dependencies.includes(taskPath));
     }
 
     /**
@@ -583,7 +575,7 @@ export class StatusManager {
      */
     private async commitTransaction(
         transactionId: string,
-        updateTask: (taskId: string, updates: { status: TaskStatus }) => Promise<void>
+        updateTask: (path: string, updates: { status: TaskStatus }) => Promise<void>
     ): Promise<void> {
         const transaction = this.transactions.get(transactionId);
         if (!transaction) {
@@ -599,7 +591,7 @@ export class StatusManager {
 
         // Apply all updates in order
         for (const update of transaction.updates) {
-            await updateTask(update.taskId, { status: update.newStatus });
+            await updateTask(update.taskPath, { status: update.newStatus });
         }
     }
 
@@ -608,7 +600,7 @@ export class StatusManager {
      */
     private async rollbackTransaction(
         transactionId: string,
-        updateTask: (taskId: string, updates: { status: TaskStatus }) => Promise<void>
+        updateTask: (path: string, updates: { status: TaskStatus }) => Promise<void>
     ): Promise<void> {
         const transaction = this.transactions.get(transactionId);
         if (!transaction) {
@@ -618,11 +610,11 @@ export class StatusManager {
         // Rollback updates in reverse order
         for (const update of transaction.updates.reverse()) {
             try {
-                await updateTask(update.taskId, { status: update.oldStatus });
+                await updateTask(update.taskPath, { status: update.oldStatus });
             } catch (error) {
                 this.logger.error('Failed to rollback status update', {
                     transactionId,
-                    taskId: update.taskId,
+                    path: update.taskPath,
                     error,
                     suggestion: 'Manual intervention may be required to restore task status'
                 });
@@ -633,10 +625,9 @@ export class StatusManager {
     /**
      * Gets the computed status for a task based on its subtasks
      */
-    computeStatus(task: Task, getTaskById: (id: string) => Task | null): TaskStatus {
-        const subtasks = task.subtasks
-            .map(id => getTaskById(id))
-            .filter((t): t is Task => t !== null);
+    async computeStatus(task: Task, getTaskByPath: GetTaskByPath): Promise<TaskStatus> {
+        const subtaskTasks = await Promise.all(task.subtasks.map(path => getTaskByPath(path)));
+        const subtasks = subtaskTasks.filter((t): t is Task => t !== null);
 
         if (subtasks.length === 0) {
             return task.status;

@@ -1,199 +1,135 @@
 /**
- * Task-related type definitions
+ * Task type definitions
  */
 
-/**
- * Task status enumeration
- */
-export enum TaskStatus {
-  PENDING = 'pending',
-  IN_PROGRESS = 'in_progress',
-  COMPLETED = 'completed',
-  FAILED = 'failed',
-  BLOCKED = 'blocked'
-}
-
-/**
- * Task type enumeration
- */
 export enum TaskType {
-  TASK = 'task',
-  MILESTONE = 'milestone',
-  GROUP = 'group'
+    TASK = 'task',
+    MILESTONE = 'milestone',
+    GROUP = 'group'
 }
 
-/**
- * Note type enumeration
- */
-export enum NoteType {
-  TEXT = 'text',
-  CODE = 'code',
-  JSON = 'json',
-  MARKDOWN = 'markdown'
+export enum TaskStatus {
+    PENDING = 'pending',
+    IN_PROGRESS = 'in_progress',
+    COMPLETED = 'completed',
+    FAILED = 'failed',
+    BLOCKED = 'blocked'
 }
 
-/**
- * Task note interface
- */
-export interface TaskNote {
-  type: NoteType;
-  content: string;
-  language?: string;
-  metadata?: Record<string, unknown>;
-}
-
-/**
- * Task reasoning interface
- */
-export interface TaskReasoning {
-  approach?: string;
-  assumptions?: string[];
-  alternatives?: string[];
-  risks?: string[];
-  tradeoffs?: string[];
-  constraints?: string[];
-  dependencies_rationale?: string[];
-  impact_analysis?: string[];
-}
-
-/**
- * Task metadata interface
- */
 export interface TaskMetadata {
-  context?: string;
-  tags?: string[];
-  created: string;
-  updated: string;
-  sessionId: string;
-  taskListId: string;  // Required for task list organization
-  version?: string;  // Added for storage versioning
-  resolvedSubtasks?: Task[];  // Added for task tree resolution
+    priority?: 'low' | 'medium' | 'high';
+    tags?: string[];
+    reasoning?: string;  // LLM's reasoning about task decisions
+    toolsUsed?: string[];  // Tools used by LLM to accomplish task
+    resourcesAccessed?: string[];  // Resources accessed by LLM
+    contextUsed?: string[];  // Key context pieces used in decision making
+    created: number;
+    updated: number;
+    projectPath: string;
+    version: number;
+    [key: string]: unknown;
 }
 
-/**
- * Task interface
- */
 export interface Task {
-  id: string;
-  parentId: string | null;
-  name: string;
-  description?: string;
-  type: TaskType;
-  status: TaskStatus;
-  notes?: TaskNote[];
-  reasoning?: TaskReasoning;
-  dependencies: string[];
-  subtasks: string[]; // Store IDs instead of Task objects
-  metadata: TaskMetadata;
-  error?: {
-    code: string;
-    message: string;
-    details?: unknown;
-  };
+    path: string;  // Max depth of 8 levels
+    name: string;  // Max 200 chars
+    description?: string;  // Max 2000 chars
+    type: TaskType;
+    status: TaskStatus;
+    parentPath?: string;
+    notes?: string[];  // Each note max 1000 chars
+    reasoning?: string;  // Max 2000 chars - LLM's reasoning about the task
+    dependencies: string[];  // Max 50 dependencies
+    subtasks: string[];  // Max 100 subtasks
+    metadata: TaskMetadata;  // Each string field max 1000 chars, arrays max 100 items
 }
 
-/**
- * Task with resolved subtasks
- */
-export interface TaskWithSubtasks extends Omit<Task, 'subtasks'> {
-  subtasks: Task[];
-}
-
-/**
- * Task creation input
- */
 export interface CreateTaskInput {
-  name: string;
-  parentId?: string | null;
-  description?: string;
-  notes?: TaskNote[];
-  reasoning?: TaskReasoning;
-  type?: TaskType;
-  dependencies?: string[];
-  metadata?: {
-    context?: string;
-    tags?: string[];
-    [key: string]: unknown;
-  };
-  subtasks?: CreateTaskInput[];
+    path?: string;
+    name: string;
+    parentPath?: string;
+    description?: string;
+    type?: TaskType;
+    notes?: string[];
+    reasoning?: string;
+    dependencies?: string[];
+    metadata?: Partial<TaskMetadata>;
 }
 
-/**
- * Bulk task creation input
- */
-export interface BulkCreateTaskInput {
-  parentId: string | null;
-  tasks: CreateTaskInput[];
-}
-
-/**
- * Task update input
- */
 export interface UpdateTaskInput {
-  name?: string;
-  description?: string;
-  notes?: TaskNote[];
-  reasoning?: TaskReasoning;
-  type?: TaskType;
-  status?: TaskStatus;
-  dependencies?: string[];
-  metadata?: {
-    context?: string;
-    tags?: string[];
-    [key: string]: unknown;
-  };
+    name?: string;
+    description?: string;
+    type?: TaskType;
+    status?: TaskStatus;
+    notes?: string[];
+    reasoning?: string;
+    dependencies?: string[];
+    metadata?: Partial<TaskMetadata>;
 }
 
-/**
- * Bulk task update input
- */
-export interface BulkUpdateTasksInput {
-  updates: {
-    taskId: string;
-    updates: UpdateTaskInput;
-  }[];
-}
-
-/**
- * Task operation logging context
- */
-export interface TaskOperationContext {
-  taskId: string;
-  operation: 'create' | 'update' | 'delete' | 'status_change' | 'dependency_check';
-  status?: TaskStatus;
-  parentId?: string | null;
-  dependencies?: string[];
-  metadata?: Record<string, unknown>;
-}
-
-/**
- * Task operation response
- */
 export interface TaskResponse<T> {
-  success: boolean;
-  data?: T;
-  error?: {
-    code: string;
-    message: string;
-    details?: unknown;
-  };
-  metadata?: {
-    timestamp: string;
-    requestId: string;
-    sessionId: string;
-    taskListId?: string;
-    affectedTasks?: string[];
-    transactionId?: string;
-  };
+    success: boolean;
+    data?: T;
+    error?: {
+        code: string;
+        message: string;
+    };
+    metadata: {
+        timestamp: number;
+        requestId: string;
+        projectPath: string;
+        affectedPaths: string[];
+    };
 }
 
 /**
- * Root task utilities
+ * Validates a task path format and depth
  */
-export function getRootId(sessionId: string): string {
-  return `ROOT-${sessionId}`;
+export function validateTaskPath(path: string): boolean {
+    // Path must be non-empty and contain only alphanumeric characters, hyphens, and forward slashes
+    if (!path.match(/^[a-z0-9-]+(?:\/[a-z0-9-]+)*$/)) {
+        return false;
+    }
+    
+    // Check path depth (max 8 levels)
+    if (path.split('/').length > 8) {
+        return false;
+    }
+
+    return true;
 }
 
-export function isRootTask(taskId: string): boolean {
-  return taskId.startsWith('ROOT-');
+/**
+ * Validates parent-child task type relationships
+ */
+export function isValidTaskHierarchy(parentType: TaskType, childType: TaskType): boolean {
+    switch (parentType) {
+        case TaskType.MILESTONE:
+            // Milestones can contain tasks and groups
+            return childType === TaskType.TASK || childType === TaskType.GROUP;
+        case TaskType.GROUP:
+            // Groups can contain tasks
+            return childType === TaskType.TASK;
+        case TaskType.TASK:
+            // Tasks cannot contain other tasks
+            return false;
+        default:
+            return false;
+    }
+}
+
+/**
+ * Gets the task name from a path
+ */
+export function getTaskName(path: string): string {
+    const segments = path.split('/');
+    return segments[segments.length - 1];
+}
+
+/**
+ * Gets the parent path from a task path
+ */
+export function getParentPath(path: string): string | undefined {
+    const segments = path.split('/');
+    return segments.length > 1 ? segments.slice(0, -1).join('/') : undefined;
 }

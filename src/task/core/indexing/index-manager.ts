@@ -1,378 +1,318 @@
+/**
+ * Task index manager
+ * Maintains in-memory indexes for efficient task lookups
+ */
+import { ErrorCodes, createError } from '../../../errors/index.js';
 import { Task, TaskStatus } from '../../../types/task.js';
 import { Logger } from '../../../logging/index.js';
-import { TaskIndex, IndexManager, IndexConfig, IndexOperationResult } from './index-types.js';
-import { TaskError, ErrorCodes, createError } from '../../../errors/index.js';
 
-const DEFAULT_CONFIG: IndexConfig = {
-    batchSize: 50,
-    parallelOperations: true
-};
+interface TaskIndex extends Task {
+    path: string;
+    status: TaskStatus;
+    parentPath?: string;
+    dependencies: string[];
+    subtasks: string[];
+}
 
-export class TaskIndexManager implements IndexManager {
-    private indexes: TaskIndex;
-    private logger: Logger;
-    private config: IndexConfig;
+interface IndexStats {
+    totalTasks: number;
+    byStatus: Record<TaskStatus, number>;
+    byDepth: Record<number, number>;
+    averageDepth: number;
+}
 
-    constructor(config: Partial<IndexConfig> = {}) {
-        this.indexes = this.createEmptyIndex();
+export class TaskIndexManager {
+    private readonly logger: Logger;
+    private readonly taskIndexes: Map<string, TaskIndex>;
+    private readonly pathIndex: Map<string, Set<string>>;
+    private readonly statusIndex: Map<TaskStatus, Set<string>>;
+    private readonly parentIndex: Map<string, Set<string>>;
+    private readonly dependencyIndex: Map<string, Set<string>>;
+
+    constructor() {
         this.logger = Logger.getInstance().child({ component: 'TaskIndexManager' });
-        this.config = { ...DEFAULT_CONFIG, ...config };
+        this.taskIndexes = new Map();
+        this.pathIndex = new Map();
+        this.statusIndex = new Map();
+        this.parentIndex = new Map();
+        this.dependencyIndex = new Map();
     }
 
     /**
-     * Creates an empty task index
+     * Indexes a task
      */
-    private createEmptyIndex(): TaskIndex {
-        return {
-            byId: new Map(),
-            byStatus: new Map(),
-            byParent: new Map(),
-            bySession: new Map(),
-            byTaskList: new Map(),
-            byDependency: new Map()
-        };
-    }
-
-    /**
-     * Indexes a task in all relevant indexes
-     */
-    indexTask(task: Task): void {
+    async indexTask(task: Task): Promise<void> {
         try {
-            // Validate task data
-            if (!task.id || !task.status || !task.metadata?.sessionId || !task.metadata?.taskListId) {
-                throw new Error('Invalid task data: missing required fields (id, status, sessionId, taskListId)');
-            }
-
-            // Log task details before indexing
-            this.logger.debug('Indexing task', {
-                taskId: task.id,
+            // Create task index
+            const taskIndex: TaskIndex = {
+                ...task,
+                path: task.path,
                 status: task.status,
-                parentId: task.parentId,
-                sessionId: task.metadata.sessionId,
-                taskListId: task.metadata.taskListId,
-                currentIndexSizes: {
-                    byId: this.indexes.byId.size,
-                    byStatus: this.indexes.byStatus.size,
-                    byParent: this.indexes.byParent.size,
-                    bySession: this.indexes.bySession.size,
-                    byTaskList: this.indexes.byTaskList.size
+                parentPath: task.parentPath,
+                dependencies: task.dependencies,
+                subtasks: task.subtasks
+            };
+
+            // Update task indexes
+            this.taskIndexes.set(task.path, taskIndex);
+
+            // Update path index
+            const pathSegments = task.path.split('/');
+            for (let i = 1; i <= pathSegments.length; i++) {
+                const prefix = pathSegments.slice(0, i).join('/');
+                let paths = this.pathIndex.get(prefix);
+                if (!paths) {
+                    paths = new Set();
+                    this.pathIndex.set(prefix, paths);
                 }
-            });
-
-            // Index by ID
-            this.indexes.byId.set(task.id, task);
-
-            // Index by status
-            if (!this.indexes.byStatus.has(task.status)) {
-                this.indexes.byStatus.set(task.status, new Set());
+                paths.add(task.path);
             }
-            this.indexes.byStatus.get(task.status)!.add(task.id);
 
-            // Index by parent
-            if (!this.indexes.byParent.has(task.parentId)) {
-                this.indexes.byParent.set(task.parentId, new Set());
+            // Update status index
+            let statusPaths = this.statusIndex.get(task.status);
+            if (!statusPaths) {
+                statusPaths = new Set();
+                this.statusIndex.set(task.status, statusPaths);
             }
-            this.indexes.byParent.get(task.parentId)!.add(task.id);
+            statusPaths.add(task.path);
 
-            // Index by session
-            if (!this.indexes.bySession.has(task.metadata.sessionId)) {
-                this.indexes.bySession.set(task.metadata.sessionId, new Set());
-            }
-            this.indexes.bySession.get(task.metadata.sessionId)!.add(task.id);
-
-            // Index by task list
-            if (!this.indexes.byTaskList.has(task.metadata.taskListId)) {
-                this.indexes.byTaskList.set(task.metadata.taskListId, new Set());
-            }
-            this.indexes.byTaskList.get(task.metadata.taskListId)!.add(task.id);
-
-            // Log successful indexing
-            this.logger.debug('Task indexed successfully', {
-                taskId: task.id,
-                status: task.status,
-                parentId: task.parentId,
-                sessionId: task.metadata.sessionId,
-                taskListId: task.metadata.taskListId,
-                updatedIndexSizes: {
-                    byId: this.indexes.byId.size,
-                    byStatus: this.indexes.byStatus.size,
-                    byParent: this.indexes.byParent.size,
-                    bySession: this.indexes.bySession.size,
-                    byTaskList: this.indexes.byTaskList.size
+            // Update parent index
+            if (task.parentPath) {
+                let children = this.parentIndex.get(task.parentPath);
+                if (!children) {
+                    children = new Set();
+                    this.parentIndex.set(task.parentPath, children);
                 }
-            });
+                children.add(task.path);
+            }
+
+            // Update dependency index
+            for (const depPath of task.dependencies) {
+                let dependents = this.dependencyIndex.get(depPath);
+                if (!dependents) {
+                    dependents = new Set();
+                    this.dependencyIndex.set(depPath, dependents);
+                }
+                dependents.add(task.path);
+            }
+
+            this.logger.debug('Indexed task', { path: task.path });
         } catch (error) {
-            this.logger.error('Failed to index task', {
-                taskId: task.id,
-                error
-            });
-            throw createError(ErrorCodes.OPERATION_FAILED, error);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error('Failed to index task', { error: errorMessage, task });
+            throw createError(
+                ErrorCodes.OPERATION_FAILED,
+                'Failed to index task',
+                errorMessage
+            );
         }
     }
 
     /**
-     * Removes a task from all indexes
-     */
-    unindexTask(task: Task): void {
-        try {
-            this.indexes.byId.delete(task.id);
-            this.indexes.byStatus.get(task.status)?.delete(task.id);
-            this.indexes.byParent.get(task.parentId)?.delete(task.id);
-            this.indexes.bySession.get(task.metadata.sessionId)?.delete(task.id);
-            this.indexes.byTaskList.get(task.metadata.taskListId)?.delete(task.id);
-
-            this.logger.debug('Task unindexed', {
-                taskId: task.id,
-                sessionId: task.metadata.sessionId,
-                taskListId: task.metadata.taskListId
-            });
-        } catch (error) {
-            this.logger.error('Failed to unindex task', {
-                taskId: task.id,
-                error
-            });
-            throw createError(ErrorCodes.OPERATION_FAILED, error);
-        }
-    }
-
-    /**
-     * Indexes task dependencies with parallel processing
+     * Indexes task dependencies
      */
     async indexDependencies(task: Task): Promise<void> {
         try {
-            if (this.config.parallelOperations) {
-                await Promise.all(task.dependencies.map(async depId => {
-                    if (!this.indexes.byDependency.has(depId)) {
-                        this.indexes.byDependency.set(depId, new Set());
+            // Clear existing dependency entries
+            const existingTask = this.taskIndexes.get(task.path);
+            if (existingTask) {
+                for (const depPath of existingTask.dependencies) {
+                    const dependents = this.dependencyIndex.get(depPath);
+                    if (dependents) {
+                        dependents.delete(task.path);
+                        if (dependents.size === 0) {
+                            this.dependencyIndex.delete(depPath);
+                        }
                     }
-                    this.indexes.byDependency.get(depId)!.add(task.id);
-                }));
-            } else {
-                for (const depId of task.dependencies) {
-                    if (!this.indexes.byDependency.has(depId)) {
-                        this.indexes.byDependency.set(depId, new Set());
-                    }
-                    this.indexes.byDependency.get(depId)!.add(task.id);
                 }
             }
 
-            this.logger.debug('Dependencies indexed', {
-                taskId: task.id,
-                dependencyCount: task.dependencies.length
-            });
+            // Add new dependency entries
+            for (const depPath of task.dependencies) {
+                let dependents = this.dependencyIndex.get(depPath);
+                if (!dependents) {
+                    dependents = new Set();
+                    this.dependencyIndex.set(depPath, dependents);
+                }
+                dependents.add(task.path);
+            }
+
+            // Update task index
+            if (existingTask) {
+                existingTask.dependencies = [...task.dependencies];
+            }
+
+            this.logger.debug('Indexed task dependencies', { path: task.path });
         } catch (error) {
-            this.logger.error('Failed to index dependencies', {
-                taskId: task.id,
-                error
-            });
-            throw createError(ErrorCodes.OPERATION_FAILED, error);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error('Failed to index task dependencies', { error: errorMessage, task });
+            throw createError(
+                ErrorCodes.OPERATION_FAILED,
+                'Failed to index task dependencies',
+                errorMessage
+            );
         }
     }
 
     /**
-     * Removes task dependencies with parallel processing
+     * Gets project tasks by pattern
      */
-    async unindexDependencies(task: Task): Promise<void> {
+    async getProjectTasks(pattern: string): Promise<TaskIndex[]> {
+        return this.getTasksByPattern(pattern);
+    }
+
+    /**
+     * Unindexes a task
+     */
+    async unindexTask(task: Task): Promise<void> {
         try {
-            const operations = [];
+            // Remove from task indexes
+            this.taskIndexes.delete(task.path);
 
-            // Remove task as a dependency of other tasks
-            if (this.indexes.byDependency.has(task.id)) {
-                const dependentIds = Array.from(this.indexes.byDependency.get(task.id)!);
-                operations.push(...dependentIds.map(async dependentId => {
-                    const dependentTask = this.indexes.byId.get(dependentId);
-                    if (dependentTask) {
-                        const updatedTask = {
-                            ...dependentTask,
-                            dependencies: dependentTask.dependencies.filter(id => id !== task.id)
-                        };
-                        this.unindexTask(dependentTask);
-                        this.indexTask(updatedTask);
+            // Remove from path index
+            const pathSegments = task.path.split('/');
+            for (let i = 1; i <= pathSegments.length; i++) {
+                const prefix = pathSegments.slice(0, i).join('/');
+                const paths = this.pathIndex.get(prefix);
+                if (paths) {
+                    paths.delete(task.path);
+                    if (paths.size === 0) {
+                        this.pathIndex.delete(prefix);
                     }
-                }));
-            }
-
-            // Remove task's dependencies
-            operations.push(...task.dependencies.map(async depId => {
-                const depSet = this.indexes.byDependency.get(depId);
-                if (depSet) {
-                    depSet.delete(task.id);
-                    if (depSet.size === 0) {
-                        this.indexes.byDependency.delete(depId);
-                    }
-                }
-            }));
-
-            if (this.config.parallelOperations) {
-                await Promise.all(operations);
-            } else {
-                for (const operation of operations) {
-                    await operation;
                 }
             }
 
-            this.indexes.byDependency.delete(task.id);
+            // Remove from status index
+            const statusPaths = this.statusIndex.get(task.status);
+            if (statusPaths) {
+                statusPaths.delete(task.path);
+                if (statusPaths.size === 0) {
+                    this.statusIndex.delete(task.status);
+                }
+            }
 
-            this.logger.debug('Dependencies unindexed', {
-                taskId: task.id
-            });
+            // Remove from parent index
+            if (task.parentPath) {
+                const children = this.parentIndex.get(task.parentPath);
+                if (children) {
+                    children.delete(task.path);
+                    if (children.size === 0) {
+                        this.parentIndex.delete(task.parentPath);
+                    }
+                }
+            }
+
+            // Remove from dependency index
+            for (const depPath of task.dependencies) {
+                const dependents = this.dependencyIndex.get(depPath);
+                if (dependents) {
+                    dependents.delete(task.path);
+                    if (dependents.size === 0) {
+                        this.dependencyIndex.delete(depPath);
+                    }
+                }
+            }
+
+            this.logger.debug('Unindexed task', { path: task.path });
         } catch (error) {
-            this.logger.error('Failed to unindex dependencies', {
-                taskId: task.id,
-                error
-            });
-            throw createError(ErrorCodes.OPERATION_FAILED, error);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error('Failed to unindex task', { error: errorMessage, task });
+            throw createError(
+                ErrorCodes.OPERATION_FAILED,
+                'Failed to unindex task',
+                errorMessage
+            );
         }
     }
 
     /**
-     * Gets a task by ID
+     * Gets a task by path
      */
-    getTaskById(taskId: string): Task | null {
-        return this.indexes.byId.get(taskId) || null;
+    async getTaskByPath(path: string): Promise<TaskIndex | null> {
+        return this.taskIndexes.get(path) || null;
+    }
+
+    /**
+     * Gets tasks by path pattern
+     */
+    async getTasksByPattern(pattern: string): Promise<TaskIndex[]> {
+        const paths = this.pathIndex.get(pattern) || new Set<string>();
+        return Array.from(paths)
+            .map(path => this.taskIndexes.get(path))
+            .filter((task): task is TaskIndex => task !== undefined);
     }
 
     /**
      * Gets tasks by status
      */
-    getTasksByStatus(status: TaskStatus, sessionId?: string, taskListId?: string): Task[] {
-        let taskIds = this.indexes.byStatus.get(status) || new Set();
-        
-        if (sessionId) {
-            const sessionTasks = this.indexes.bySession.get(sessionId) || new Set();
-            taskIds = new Set([...taskIds].filter(id => sessionTasks.has(id)));
-        }
-        
-        if (taskListId) {
-            const taskListTasks = this.indexes.byTaskList.get(taskListId) || new Set();
-            taskIds = new Set([...taskIds].filter(id => taskListTasks.has(id)));
-        }
+    async getTasksByStatus(status: TaskStatus, pattern?: string): Promise<TaskIndex[]> {
+        const statusPaths = this.statusIndex.get(status) || new Set<string>();
+        const patternPaths = pattern ? (this.pathIndex.get(pattern) || new Set<string>()) : null;
 
-        return Array.from(taskIds)
-            .map(id => this.getTaskById(id))
-            .filter((t): t is Task => t !== null);
+        const paths = patternPaths
+            ? new Set([...statusPaths].filter(path => patternPaths.has(path)))
+            : statusPaths;
+
+        return Array.from(paths)
+            .map(path => this.taskIndexes.get(path))
+            .filter((task): task is TaskIndex => task !== undefined);
     }
 
     /**
-     * Gets tasks by parent ID
+     * Gets tasks by parent path
      */
-    getTasksByParent(parentId: string | null, sessionId?: string, taskListId?: string): Task[] {
-        let taskIds = this.indexes.byParent.get(parentId) || new Set();
-        
-        if (sessionId) {
-            const sessionTasks = this.indexes.bySession.get(sessionId) || new Set();
-            taskIds = new Set([...taskIds].filter(id => sessionTasks.has(id)));
-        }
-        
-        if (taskListId) {
-            const taskListTasks = this.indexes.byTaskList.get(taskListId) || new Set();
-            taskIds = new Set([...taskIds].filter(id => taskListTasks.has(id)));
-        }
-
-        return Array.from(taskIds)
-            .map(id => this.getTaskById(id))
-            .filter((t): t is Task => t !== null);
+    async getTasksByParent(parentPath: string): Promise<TaskIndex[]> {
+        const children = this.parentIndex.get(parentPath) || new Set<string>();
+        return Array.from(children)
+            .map(path => this.taskIndexes.get(path))
+            .filter((task): task is TaskIndex => task !== undefined);
     }
 
     /**
-     * Gets tasks by session ID
+     * Gets tasks that depend on a task
      */
-    getTasksBySession(sessionId: string, taskListId?: string): Task[] {
-        let taskIds = this.indexes.bySession.get(sessionId) || new Set();
-        
-        if (taskListId) {
-            const taskListTasks = this.indexes.byTaskList.get(taskListId) || new Set();
-            taskIds = new Set([...taskIds].filter(id => taskListTasks.has(id)));
-        }
-
-        return Array.from(taskIds)
-            .map(id => this.getTaskById(id))
-            .filter((t): t is Task => t !== null);
-    }
-
-    getTasksByTaskList(taskListId: string): Task[] {
-        const taskIds = this.indexes.byTaskList.get(taskListId) || new Set();
-        return Array.from(taskIds)
-            .map(id => this.getTaskById(id))
-            .filter((t): t is Task => t !== null);
+    async getDependentTasks(path: string): Promise<TaskIndex[]> {
+        const dependents = this.dependencyIndex.get(path) || new Set<string>();
+        return Array.from(dependents)
+            .map(path => this.taskIndexes.get(path))
+            .filter((task): task is TaskIndex => task !== undefined);
     }
 
     /**
-     * Gets tasks that depend on a given task
+     * Gets index statistics
      */
-    getDependentTasks(taskId: string): Task[] {
-        const dependentIds = this.indexes.byDependency.get(taskId) || new Set();
-        return Array.from(dependentIds)
-            .map(id => this.getTaskById(id))
-            .filter((t): t is Task => t !== null);
-    }
+    getStats(): IndexStats {
+        const byStatus = {} as Record<TaskStatus, number>;
+        const byDepth = {} as Record<number, number>;
+        let totalDepth = 0;
 
-    /**
-     * Gets root tasks
-     */
-    getRootTasks(sessionId?: string, taskListId?: string): Task[] {
-        let rootTasks = Array.from(this.indexes.byParent.entries())
-            .filter(([parentId]) => parentId && parentId.startsWith('ROOT-'))
-            .flatMap(([, taskIds]) => 
-                Array.from(taskIds)
-                    .map(id => this.getTaskById(id))
-                    .filter((t): t is Task => t !== null)
-            );
+        for (const task of this.taskIndexes.values()) {
+            // Count by status
+            byStatus[task.status] = (byStatus[task.status] || 0) + 1;
 
-        if (sessionId) {
-            rootTasks = rootTasks.filter(task => task.metadata.sessionId === sessionId);
+            // Count by depth
+            const depth = task.path.split('/').length - 1;
+            byDepth[depth] = (byDepth[depth] || 0) + 1;
+            totalDepth += depth;
         }
 
-        if (taskListId) {
-            rootTasks = rootTasks.filter(task => task.metadata.taskListId === taskListId);
-        }
-
-        return rootTasks;
-    }
-
-    /**
-     * Gets all tasks
-     */
-    getAllTasks(sessionId?: string, taskListId?: string): Task[] {
-        let tasks = Array.from(this.indexes.byId.values());
-
-        if (sessionId) {
-            tasks = tasks.filter(task => task.metadata.sessionId === sessionId);
-        }
-
-        if (taskListId) {
-            tasks = tasks.filter(task => task.metadata.taskListId === taskListId);
-        }
-
-        return tasks;
+        return {
+            totalTasks: this.taskIndexes.size,
+            byStatus,
+            byDepth,
+            averageDepth: this.taskIndexes.size > 0 ? totalDepth / this.taskIndexes.size : 0
+        };
     }
 
     /**
      * Clears all indexes
      */
     clear(): void {
-        this.indexes = this.createEmptyIndex();
-        this.logger.debug('Indexes cleared');
-    }
-
-    /**
-     * Gets index statistics
-     */
-    getStats(): {
-        totalTasks: number;
-        statusCounts: Record<TaskStatus, number>;
-        dependencyCount: number;
-    } {
-        const statusCounts: Partial<Record<TaskStatus, number>> = {};
-        for (const [status, tasks] of this.indexes.byStatus.entries()) {
-            statusCounts[status] = tasks.size;
-        }
-
-        return {
-            totalTasks: this.indexes.byId.size,
-            statusCounts: statusCounts as Record<TaskStatus, number>,
-            dependencyCount: Array.from(this.indexes.byDependency.values())
-                .reduce((sum, deps) => sum + deps.size, 0)
-        };
+        this.taskIndexes.clear();
+        this.pathIndex.clear();
+        this.statusIndex.clear();
+        this.parentIndex.clear();
+        this.dependencyIndex.clear();
+        this.logger.debug('Cleared all indexes');
     }
 }

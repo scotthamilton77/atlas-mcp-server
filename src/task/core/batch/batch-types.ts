@@ -49,7 +49,7 @@ export interface TaskBatchResult extends BatchResult {
     affectedTasks: string[];
     transactionId?: string;
     validationErrors?: Array<{
-        taskId: string;
+        path: string;
         error: Error;
     }>;
 }

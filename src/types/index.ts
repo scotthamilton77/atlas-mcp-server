@@ -1,174 +1,154 @@
 /**
- * Central type definitions export
- * Provides a single point of access for all type definitions
+ * Common type definitions
  */
 
-// Re-export all types
-export * from './task.js';
-export * from './error.js';
-export * from './config.js';
-export * from './logging.js';
-
-// Additional type utilities and helpers
-
 /**
- * Deep partial type
- * Makes all properties of T optional recursively
+ * Validation result interface
  */
-export type DeepPartial<T> = T extends object ? {
-    [P in keyof T]?: DeepPartial<T[P]>;
-} : T;
+export interface ValidationResult<T = unknown> {
+    /** Whether validation succeeded */
+    success: boolean;
+    /** Validated data if successful */
+    data?: T;
+    /** Validation errors if failed */
+    errors?: Array<{
+        /** Field path */
+        path: string[];
+        /** Error message */
+        message: string;
+        /** Received value */
+        received?: unknown;
+        /** Expected type/value */
+        expected?: string;
+    }>;
+}
 
 /**
- * Readonly deep type
- * Makes all properties of T readonly recursively
+ * Utility type for making all properties optional recursively
  */
-export type DeepReadonly<T> = T extends object ? {
-    readonly [P in keyof T]: DeepReadonly<T[P]>;
-} : T;
+export type DeepPartial<T> = {
+    [P in keyof T]?: T[P] extends object ? DeepPartial<T[P]> : T[P];
+};
 
 /**
- * Required deep type
- * Makes all properties of T required recursively
+ * Utility type for making all properties required recursively
  */
-export type DeepRequired<T> = T extends object ? {
-    [P in keyof T]-?: DeepRequired<T[P]>;
-} : T;
+export type DeepRequired<T> = {
+    [P in keyof T]-?: T[P] extends object ? DeepRequired<T[P]> : T[P];
+};
 
 /**
- * Mutable deep type
- * Removes readonly from all properties recursively
+ * Utility type for making all properties readonly recursively
  */
-export type DeepMutable<T> = T extends object ? {
-    -readonly [P in keyof T]: DeepMutable<T[P]>;
-} : T;
+export type DeepReadonly<T> = {
+    readonly [P in keyof T]: T[P] extends object ? DeepReadonly<T[P]> : T[P];
+};
 
 /**
- * NonNullable deep type
- * Removes null and undefined from all properties recursively
+ * Utility type for extracting keys of type from object
  */
-export type DeepNonNullable<T> = T extends object ? {
-    [P in keyof T]: DeepNonNullable<NonNullable<T[P]>>;
-} : NonNullable<T>;
+export type KeysOfType<T, U> = {
+    [K in keyof T]: T[K] extends U ? K : never;
+}[keyof T];
 
 /**
- * Async function type helper
+ * Utility type for omitting properties by type
+ */
+export type OmitByType<T, U> = {
+    [K in keyof T as T[K] extends U ? never : K]: T[K];
+};
+
+/**
+ * Utility type for picking properties by type
+ */
+export type PickByType<T, U> = {
+    [K in keyof T as T[K] extends U ? K : never]: T[K];
+};
+
+/**
+ * Utility type for making properties mutable
+ */
+export type Mutable<T> = {
+    -readonly [P in keyof T]: T[P];
+};
+
+/**
+ * Utility type for making properties immutable
+ */
+export type Immutable<T> = {
+    readonly [P in keyof T]: T[P];
+};
+
+/**
+ * Utility type for type predicate functions
+ */
+export type TypePredicate = (value: unknown) => boolean;
+
+/**
+ * Utility type for async functions
  */
 export type AsyncFunction<T = void> = () => Promise<T>;
 
 /**
- * Async method type helper
+ * Utility type for constructor functions
  */
-export type AsyncMethod<T = void, Args extends any[] = any[]> = (...args: Args) => Promise<T>;
+export type Constructor<T = object> = new (...args: any[]) => T;
 
 /**
- * Constructor type helper
+ * Utility type for function parameters
  */
-export type Constructor<T = {}, Args extends any[] = any[]> = new (...args: Args) => T;
+export type Parameters<T extends (...args: any[]) => any> = T extends (...args: infer P) => any ? P : never;
 
 /**
- * Primitive type helper
+ * Utility type for function return type
  */
-export type Primitive = string | number | boolean | null | undefined;
+export type ReturnType<T extends (...args: any[]) => any> = T extends (...args: any[]) => infer R ? R : never;
 
 /**
- * JSON value type helper
+ * Utility type for promise value type
  */
-export type JsonValue = Primitive | JsonArray | JsonObject;
-export interface JsonArray extends Array<JsonValue> {}
-export interface JsonObject extends Record<string, JsonValue> {}
+export type PromiseType<T extends Promise<any>> = T extends Promise<infer U> ? U : never;
 
 /**
- * Validation result type
+ * Utility type for array element type
  */
-export interface ValidationResult {
-    valid: boolean;
-    errors?: {
-        path: string;
-        message: string;
-        value?: unknown;
-    }[];
-}
+export type ArrayElement<T extends readonly any[]> = T extends readonly (infer U)[] ? U : never;
 
 /**
- * Type guard helper
+ * Utility type for object values
  */
-export type TypeGuard<T> = (value: unknown) => value is T;
+export type ObjectValues<T> = T[keyof T];
 
 /**
- * Type predicate helper
+ * Utility type for object keys
  */
-export type TypePredicate<T> = (value: unknown) => boolean;
+export type ObjectKeys<T> = keyof T;
 
 /**
- * Validator type
+ * Utility type for non-undefined values
  */
-export type Validator<T> = (value: unknown) => ValidationResult & { value: T };
+export type NonUndefined<T> = T extends undefined ? never : T;
 
 /**
- * Transform function type
+ * Utility type for non-null values
  */
-export type Transform<T, U> = (value: T) => U;
+export type NonNull<T> = T extends null ? never : T;
 
 /**
- * Error handler type
+ * Utility type for non-nullable values
  */
-export type ErrorHandler<T = unknown> = (error: T) => void;
+export type NonNullable<T> = T extends null | undefined ? never : T;
 
 /**
- * Middleware type
+ * Utility type for required keys
  */
-export type Middleware<T = unknown, U = unknown> = (
-    context: T,
-    next: () => Promise<U>
-) => Promise<U>;
-
-/**
- * Plugin type
- */
-export type Plugin<T = unknown> = {
-    name: string;
-    version: string;
-    install: (context: T) => Promise<void> | void;
-};
-
-/**
- * Record with required keys
- */
-export type RequiredRecord<K extends keyof any, T> = {
-    [P in K]: T;
-};
-
-/**
- * Awaited type helper (for pre-TypeScript 4.5)
- */
-export type Awaited<T> = T extends Promise<infer U> ? U : T;
-
-/**
- * Function parameters type helper
- */
-export type Parameters<T extends (...args: any) => any> = T extends (...args: infer P) => any ? P : never;
-
-/**
- * Function return type helper
- */
-export type ReturnType<T extends (...args: any) => any> = T extends (...args: any) => infer R ? R : never;
-
-/**
- * Instance type helper
- */
-export type InstanceType<T extends new (...args: any) => any> = T extends new (...args: any) => infer R ? R : never;
-
-/**
- * Mutable keys of type
- */
-export type MutableKeys<T> = {
-    [P in keyof T]: Equal<{ -readonly [K in P]: T[K] }, { [K in P]: T[K] }> extends true ? P : never;
+export type RequiredKeys<T> = {
+    [K in keyof T]-?: {} extends Pick<T, K> ? never : K;
 }[keyof T];
 
 /**
- * Equal type helper
+ * Utility type for optional keys
  */
-type Equal<X, Y> =
-    (<T>() => T extends X ? 1 : 2) extends
-    (<T>() => T extends Y ? 1 : 2) ? true : false;
+export type OptionalKeys<T> = {
+    [K in keyof T]-?: {} extends Pick<T, K> ? K : never;
+}[keyof T];
