@@ -1,7 +1,7 @@
 /**
  * Path-based task storage with caching, indexing, and transaction support
  */
-import { Task, TaskStatus, TaskType, validateTaskPath, isValidTaskHierarchy, getParentPath } from '../../types/task.js';
+import { Task, TaskStatus, validateTaskPath, isValidTaskHierarchy, getParentPath } from '../../types/task.js';
 import { TaskStorage } from '../../types/storage.js';
 import { Logger } from '../../logging/index.js';
 import { TaskIndexManager } from './indexing/index-manager.js';
@@ -135,68 +135,62 @@ export class TaskStore {
         const transaction = await this.transactionManager.begin();
 
         try {
-            // First pass: collect and validate parent-child relationships
-            const parentUpdates = new Map<string, Task>();
+            // First pass: validate all tasks and collect parent paths
+            const parentPaths = new Set<string>();
             const tasksToSave = new Map<string, Task>();
 
             for (const task of tasks) {
-                // Ensure task has subtasks array
-                if (!task.subtasks) {
-                    task.subtasks = [];
-                }
+                // Ensure task has required arrays
+                if (!task.subtasks) task.subtasks = [];
+                if (!task.dependencies) task.dependencies = [];
 
+                // Get and validate parent path
                 const parentPath = task.parentPath || getParentPath(task.path);
                 if (parentPath) {
                     task.parentPath = parentPath;
-                    let parent = parentUpdates.get(parentPath) || await this.getTaskByPath(parentPath);
-                    
-                    if (parent) {
-                        // Validate task type hierarchy
-                        if (!isValidTaskHierarchy(parent.type, task.type)) {
-                            throw createError(
-                                ErrorCodes.TASK_PARENT_TYPE,
-                                `Invalid parent-child relationship: ${parent.type} cannot contain ${task.type}`
-                            );
-                        }
-
-                        // Ensure parent's subtasks array exists
-                        if (!parent.subtasks) {
-                            parent.subtasks = [];
-                        }
-
-                        // Update parent's subtasks if needed
-                        if (!parent.subtasks.includes(task.path)) {
-                            parent.subtasks = [...parent.subtasks, task.path];
-                            parentUpdates.set(parentPath, parent);
-                        }
-                    } else {
-                        // Create a new parent task if it doesn't exist
-                        this.logger.debug('Parent task not found, creating placeholder', {
-                            childPath: task.path,
-                            parentPath
-                        });
-                        parent = {
-                            path: parentPath,
-                            name: parentPath.split('/').pop() || '',
-                            type: TaskType.MILESTONE,  // Default to milestone to allow containing groups
-                            status: TaskStatus.PENDING,
-                            dependencies: [],
-                            subtasks: [task.path],
-                            metadata: {
-                                created: Date.now(),
-                                updated: Date.now(),
-                                projectPath: parentPath.split('/')[0],
-                                version: 1
-                            }
-                        };
-                        parentUpdates.set(parentPath, parent);
-                    }
+                    parentPaths.add(parentPath);
                 }
+
                 tasksToSave.set(task.path, task);
             }
 
-            // Save all tasks in a single transaction
-            const allTasks = [...Array.from(parentUpdates.values()), ...Array.from(tasksToSave.values())];
+            // Second pass: load and validate all parents
+            const parentUpdates = new Map<string, Task>();
+            for (const parentPath of parentPaths) {
+                const parent = await this.getTaskByPath(parentPath);
+                if (!parent) {
+                    throw createError(
+                        ErrorCodes.TASK_PARENT_NOT_FOUND,
+                        `Parent task not found: ${parentPath}. Parent tasks must be created before their children.`
+                    );
+                }
+                parentUpdates.set(parentPath, parent);
+            }
+
+            // Third pass: validate relationships and update parent subtasks
+            for (const task of tasksToSave.values()) {
+                if (task.parentPath) {
+                    const parent = parentUpdates.get(task.parentPath);
+                    if (!parent) continue; // Already handled in second pass
+
+                    // Validate task type hierarchy
+                    if (!isValidTaskHierarchy(parent.type, task.type)) {
+                        throw createError(
+                            ErrorCodes.TASK_PARENT_TYPE,
+                            `Invalid parent-child relationship: ${parent.type} cannot contain ${task.type}`
+                        );
+                    }
+
+                    // Update parent's subtasks if needed
+                    if (!parent.subtasks.includes(task.path)) {
+                        parent.subtasks = [...parent.subtasks, task.path];
+                        parentUpdates.set(parent.path, parent);
+                    }
+                }
+            }
+
+            // Prepare final task list with updated relationships
+            const allTasks = [...parentUpdates.values(), ...tasksToSave.values()];
             await this.storage.saveTasks(allTasks);
 
             // Clear cache for all affected tasks

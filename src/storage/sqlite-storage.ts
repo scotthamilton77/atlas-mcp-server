@@ -170,6 +170,44 @@ export class SqliteStorage implements TaskStorage {
         try {
             await this.db.run('BEGIN TRANSACTION');
 
+            // First pass: collect all parent paths to load existing parents
+            const parentPaths = new Set<string>();
+            for (const task of tasks) {
+                if (task.parentPath) {
+                    parentPaths.add(task.parentPath);
+                }
+            }
+
+            // Load existing parents
+            const existingParents = new Map<string, Task>();
+            if (parentPaths.size > 0) {
+                const placeholders = Array(parentPaths.size).fill('?').join(',');
+                const rows = await this.db.all<Record<string, unknown>[]>(
+                    `SELECT * FROM tasks WHERE path IN (${placeholders})`,
+                    Array.from(parentPaths)
+                );
+                for (const row of rows) {
+                    const parent = this.rowToTask(row);
+                    existingParents.set(parent.path, parent);
+                }
+            }
+
+            // Second pass: update parent-child relationships
+            for (const task of tasks) {
+                if (task.parentPath) {
+                    let parent = existingParents.get(task.parentPath);
+                    if (parent) {
+                        // Update parent's subtasks array if needed
+                        if (!parent.subtasks.includes(task.path)) {
+                            parent.subtasks = [...parent.subtasks, task.path];
+                            existingParents.set(parent.path, parent);
+                            tasks.push(parent); // Add parent to tasks to be saved
+                        }
+                    }
+                }
+            }
+
+            // Save all tasks with updated relationships
             for (const task of tasks) {
                 await this.db.run(
                     `INSERT OR REPLACE INTO tasks (
@@ -339,13 +377,44 @@ export class SqliteStorage implements TaskStorage {
         }
 
         try {
-            // Get tasks that have this parent path
+            // Get the parent task first
+            const parent = await this.getTask(parentPath);
+            if (!parent) {
+                return [];
+            }
+
+            // Get all tasks that are either:
+            // 1. Listed in parent's subtasks array
+            // 2. Have this parent_path set
+            const subtaskPaths = parent.subtasks;
+            const placeholders = subtaskPaths.map(() => '?').join(',');
+            
             const rows = await this.db.all<Record<string, unknown>[]>(
-                'SELECT * FROM tasks WHERE parent_path = ?',
+                `SELECT * FROM tasks WHERE 
+                 path IN (${placeholders || "''"}) OR 
+                 parent_path = ?`,
+                ...subtaskPaths,
                 parentPath
             );
 
-            return rows.map(row => this.rowToTask(row));
+            // Convert rows to tasks
+            const tasks = rows.map(row => this.rowToTask(row));
+
+            // Ensure consistency - update any tasks that have this parent
+            // but aren't in the parent's subtasks array
+            const needsUpdate = tasks.some(task => 
+                task.parentPath === parentPath && !parent.subtasks.includes(task.path)
+            );
+
+            if (needsUpdate) {
+                parent.subtasks = Array.from(new Set([
+                    ...parent.subtasks,
+                    ...tasks.filter(t => t.parentPath === parentPath).map(t => t.path)
+                ]));
+                await this.saveTask(parent);
+            }
+
+            return tasks;
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
             this.logger.error('Failed to get subtasks', { error: errorMessage, parentPath });
