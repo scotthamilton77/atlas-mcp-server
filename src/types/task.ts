@@ -86,8 +86,8 @@ export interface TaskResponse<T> {
  * Validates a task path format and depth
  */
 export function validateTaskPath(path: string): boolean {
-    // Path must be non-empty and contain only alphanumeric characters, hyphens, and forward slashes
-    if (!path.match(/^[a-z0-9-]+(?:\/[a-z0-9-]+)*$/)) {
+    // Path must be non-empty and contain only allowed characters
+    if (!path.match(/^[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*$/)) {
         return false;
     }
     

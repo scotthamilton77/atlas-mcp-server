@@ -7,6 +7,7 @@ import { StorageConfig, TaskStorage, StorageMetrics } from '../types/storage.js'
 import { Logger } from '../logging/index.js';
 import { ErrorCodes, createError } from '../errors/index.js';
 import { ConnectionManager } from './connection-manager.js';
+import { globToSqlPattern } from '../utils/pattern-matcher.js';
 
 export class SqliteStorage implements TaskStorage {
     private db: Database | null = null;
@@ -271,24 +272,24 @@ export class SqliteStorage implements TaskStorage {
         }
 
         try {
-            // Convert glob pattern to SQL LIKE pattern
-            const sqlPattern = pattern
-                .replace(/\*/g, '%') // * becomes %
-                .replace(/\?/g, '_') // ? becomes _
-                .replace(/\[!/g, '[^') // [!a-z] becomes [^a-z]
-                .replace(/\[([^\]]+)]/g, (_match, chars) => 
-                    // Handle character classes [a-z] -> [a-z]
-                    `[${chars.replace(/\\([*?[])/g, '$1')}]`
-                );
+            // Convert glob pattern to SQL pattern
+            const sqlPattern = globToSqlPattern(pattern);
 
             this.logger.debug('Converting glob pattern to SQL', {
                 original: pattern,
                 sql: sqlPattern
             });
 
+            // Use both GLOB and LIKE for better pattern matching
             const rows = await this.db.all<Record<string, unknown>[]>(
-                'SELECT * FROM tasks WHERE path GLOB ?',
-                sqlPattern
+                `SELECT * FROM tasks WHERE 
+                 path GLOB ? OR 
+                 path LIKE ? OR
+                 path LIKE ?`,
+                sqlPattern,
+                sqlPattern,
+                // Add recursive matching for **
+                pattern.includes('**') ? `${sqlPattern}/%` : sqlPattern
             );
 
             return rows.map(row => this.rowToTask(row));
@@ -338,6 +339,7 @@ export class SqliteStorage implements TaskStorage {
         }
 
         try {
+            // Get tasks that have this parent path
             const rows = await this.db.all<Record<string, unknown>[]>(
                 'SELECT * FROM tasks WHERE parent_path = ?',
                 parentPath
@@ -370,11 +372,77 @@ export class SqliteStorage implements TaskStorage {
         try {
             await this.db.run('BEGIN TRANSACTION');
 
-            for (const path of paths) {
-                await this.db.run('DELETE FROM tasks WHERE path = ?', path);
+            // Get all tasks that need to be deleted using recursive CTE
+            const placeholders = paths.map(() => '?').join(',');
+            const rows = await this.db.all<Record<string, unknown>[]>(
+                `WITH RECURSIVE task_tree AS (
+                    -- Base case: tasks with paths in the input list
+                    SELECT path, parent_path, json_extract(subtasks, '$') as subtasks
+                    FROM tasks 
+                    WHERE path IN (${placeholders})
+                    
+                    UNION ALL
+                    
+                    -- Recursive case 1: tasks with parent_path matching any task in tree
+                    SELECT t.path, t.parent_path, json_extract(t.subtasks, '$')
+                    FROM tasks t
+                    JOIN task_tree tt ON t.parent_path = tt.path
+                    
+                    UNION ALL
+                    
+                    -- Recursive case 2: tasks listed in subtasks array of any task in tree
+                    SELECT t.path, t.parent_path, json_extract(t.subtasks, '$')
+                    FROM tasks t
+                    JOIN task_tree tt ON json_each.value = t.path
+                    JOIN json_each(tt.subtasks)
+                )
+                SELECT DISTINCT path FROM task_tree`,
+                ...paths
+            );
+
+            const allPaths = rows.map(row => String(row.path));
+            this.logger.debug('Found tasks to delete', { 
+                inputPaths: paths,
+                foundPaths: allPaths 
+            });
+
+            // Get all tasks before deletion for proper cleanup
+            const tasksToDelete = await Promise.all(
+                allPaths.map(path => this.getTask(path))
+            );
+            const validTasksToDelete = tasksToDelete.filter((t): t is Task => t !== null);
+
+            // Find all parent paths that need updating
+            const parentsToUpdate = new Set(
+                validTasksToDelete
+                    .filter(t => t.parentPath)
+                    .map(t => t.parentPath as string)
+            );
+
+            // Update parent tasks' subtasks arrays
+            for (const parentPath of parentsToUpdate) {
+                const parent = await this.getTask(parentPath);
+                if (parent && !allPaths.includes(parent.path)) {
+                    parent.subtasks = parent.subtasks.filter(p => !allPaths.includes(p));
+                    await this.saveTask(parent);
+                }
+            }
+
+            // Delete all tasks and their descendants
+            if (allPaths.length > 0) {
+                const deletePlaceholders = allPaths.map(() => '?').join(',');
+                await this.db.run(
+                    `DELETE FROM tasks WHERE path IN (${deletePlaceholders})`,
+                    ...allPaths
+                );
             }
 
             await this.db.run('COMMIT');
+
+            this.logger.debug('Tasks deleted with descendants', {
+                inputPaths: paths,
+                deletedPaths: allPaths
+            });
         } catch (error) {
             await this.db.run('ROLLBACK');
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
