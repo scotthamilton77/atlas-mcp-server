@@ -1,45 +1,42 @@
+/**
+ * Transaction types for atomic task operations
+ */
+
 import { Task } from '../../../types/task.js';
-
-export type OperationType = 'add' | 'update' | 'remove';
-
-export interface TaskOperation {
-    type: OperationType;
-    task: Task;
-    previousState?: Task;
-}
 
 export interface Transaction {
     id: string;
-    operations: TaskOperation[];
-    timestamp: string;
-    metadata?: Record<string, unknown>;
+    operations: Operation[];
+    timestamp: number;
+    status: TransactionStatus;
+}
+
+export type TransactionStatus = 'pending' | 'committed' | 'rolled_back';
+
+export type Operation = 
+    | DeleteOperation
+    | UpdateOperation
+    | CreateOperation;
+
+export interface DeleteOperation {
+    type: 'delete';
+    paths: string[];
+    tasks: Task[];
+}
+
+export interface UpdateOperation {
+    type: 'update';
+    path: string;
+    task: Task;
+}
+
+export interface CreateOperation {
+    type: 'create';
+    task: Task;
 }
 
 export interface TransactionResult {
     success: boolean;
     transactionId: string;
     error?: Error;
-    affectedTasks: string[];
-}
-
-export interface TransactionManager {
-    startTransaction(): string;
-    addOperation(transactionId: string, operation: TaskOperation): Promise<void>;
-    commitTransaction(transactionId: string): Promise<TransactionResult>;
-    rollbackTransaction(transactionId: string): Promise<TransactionResult>;
-    getTransaction(transactionId: string): Transaction | null;
-    isActive(transactionId: string): boolean;
-    clear(): void;
-}
-
-export interface TransactionConfig {
-    timeout: number;
-    maxOperationsPerTransaction: number;
-    enableRollback: boolean;
-}
-
-export interface TransactionError extends Error {
-    transactionId: string;
-    operationType?: OperationType;
-    path?: string;
 }

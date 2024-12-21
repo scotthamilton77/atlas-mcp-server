@@ -15,6 +15,7 @@ export const ErrorCodes = {
     TASK_DEPENDENCY: 'TASK_1003',
     TASK_STATUS: 'TASK_1004',
     TASK_DUPLICATE: 'TASK_1005',
+    TASK_INVALID_PATH: 'TASK_1014',
     TASK_INVALID_TYPE: 'TASK_1006',
     TASK_INVALID_STATUS: 'TASK_1007',
     TASK_INVALID_PARENT: 'TASK_1008',
@@ -116,6 +117,14 @@ export const ErrorMessages: Record<ErrorCode, { message: string; suggestion: str
                    '2. Break the cycle by removing one of the dependencies\n' +
                    '3. Consider using task ordering or parent-child relationships instead\n' +
                    '4. Ensure dependencies flow in one direction'
+    },
+    [ErrorCodes.TASK_INVALID_PATH]: {
+        message: 'Invalid task path format',
+        suggestion: 'Task paths must:\n' +
+                   '1. Contain only alphanumeric characters, hyphens, and forward slashes\n' +
+                   '2. Not exceed 8 levels of depth\n' +
+                   '3. Not start or end with a slash\n' +
+                   '4. Use lowercase characters'
     },
 
     // Storage errors

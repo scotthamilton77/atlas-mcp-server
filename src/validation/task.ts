@@ -21,7 +21,7 @@ const taskMetadataSchema = z.object({
 // Base task schema
 const baseTaskSchema = z.object({
     path: z.string()
-        .regex(/^[a-z0-9-]+(?:\/[a-z0-9-]+)*$/)
+        .regex(/^[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*$/)
         .refine(
             (path) => path.split('/').length <= 8,
             'Path depth cannot exceed 8 levels'
@@ -41,7 +41,7 @@ const baseTaskSchema = z.object({
 // Create task input schema
 export const createTaskSchema = z.object({
     path: z.string()
-        .regex(/^[a-z0-9-]+(?:\/[a-z0-9-]+)*$/)
+        .regex(/^[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*$/)
         .refine(
             (path) => !path || path.split('/').length <= 8,
             'Path depth cannot exceed 8 levels'
@@ -49,7 +49,7 @@ export const createTaskSchema = z.object({
         .optional(),
     name: z.string().min(1).max(200),
     parentPath: z.string()
-        .regex(/^[a-z0-9-]+(?:\/[a-z0-9-]+)*$/)
+        .regex(/^[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*$/)
         .refine(
             (path) => path.split('/').length <= 7, // One less than max to allow for child
             'Parent path depth cannot exceed 7 levels'

@@ -4,27 +4,16 @@
  */
 import { ErrorCodes, createError } from '../../../errors/index.js';
 import { Task, TaskStatus } from '../../../types/task.js';
+import { TaskIndex, IndexStats } from '../../../types/indexing.js';
 import { Logger } from '../../../logging/index.js';
+import { globToRegex, generatePathPatterns, matchesPattern } from '../../../utils/pattern-matcher.js';
 
-interface TaskIndex extends Task {
-    path: string;
-    status: TaskStatus;
-    parentPath?: string;
-    dependencies: string[];
-    subtasks: string[];
-}
-
-interface IndexStats {
-    totalTasks: number;
-    byStatus: Record<TaskStatus, number>;
-    byDepth: Record<number, number>;
-    averageDepth: number;
-}
 
 export class TaskIndexManager {
     private readonly logger: Logger;
     private readonly taskIndexes: Map<string, TaskIndex>;
     private readonly pathIndex: Map<string, Set<string>>;
+    private readonly patternIndex: Map<string, Set<string>>;
     private readonly statusIndex: Map<TaskStatus, Set<string>>;
     private readonly parentIndex: Map<string, Set<string>>;
     private readonly dependencyIndex: Map<string, Set<string>>;
@@ -33,9 +22,26 @@ export class TaskIndexManager {
         this.logger = Logger.getInstance().child({ component: 'TaskIndexManager' });
         this.taskIndexes = new Map();
         this.pathIndex = new Map();
+        this.patternIndex = new Map();
         this.statusIndex = new Map();
         this.parentIndex = new Map();
         this.dependencyIndex = new Map();
+    }
+
+    /**
+     * Indexes path patterns for efficient pattern matching
+     */
+    private indexPathPatterns(path: string): void {
+        const patterns = generatePathPatterns(path);
+        
+        for (const pattern of patterns) {
+            let paths = this.patternIndex.get(pattern);
+            if (!paths) {
+                paths = new Set();
+                this.patternIndex.set(pattern, paths);
+            }
+            paths.add(path);
+        }
     }
 
     /**
@@ -56,7 +62,7 @@ export class TaskIndexManager {
             // Update task indexes
             this.taskIndexes.set(task.path, taskIndex);
 
-            // Update path index
+            // Update path index and patterns
             const pathSegments = task.path.split('/');
             for (let i = 1; i <= pathSegments.length; i++) {
                 const prefix = pathSegments.slice(0, i).join('/');
@@ -67,6 +73,7 @@ export class TaskIndexManager {
                 }
                 paths.add(task.path);
             }
+            this.indexPathPatterns(task.path);
 
             // Update status index
             let statusPaths = this.statusIndex.get(task.status);
@@ -109,49 +116,54 @@ export class TaskIndexManager {
     }
 
     /**
-     * Indexes task dependencies
+     * Gets tasks by path pattern
      */
-    async indexDependencies(task: Task): Promise<void> {
-        try {
-            // Clear existing dependency entries
-            const existingTask = this.taskIndexes.get(task.path);
-            if (existingTask) {
-                for (const depPath of existingTask.dependencies) {
-                    const dependents = this.dependencyIndex.get(depPath);
-                    if (dependents) {
-                        dependents.delete(task.path);
-                        if (dependents.size === 0) {
-                            this.dependencyIndex.delete(depPath);
-                        }
-                    }
-                }
-            }
-
-            // Add new dependency entries
-            for (const depPath of task.dependencies) {
-                let dependents = this.dependencyIndex.get(depPath);
-                if (!dependents) {
-                    dependents = new Set();
-                    this.dependencyIndex.set(depPath, dependents);
-                }
-                dependents.add(task.path);
-            }
-
-            // Update task index
-            if (existingTask) {
-                existingTask.dependencies = [...task.dependencies];
-            }
-
-            this.logger.debug('Indexed task dependencies', { path: task.path });
-        } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            this.logger.error('Failed to index task dependencies', { error: errorMessage, task });
-            throw createError(
-                ErrorCodes.OPERATION_FAILED,
-                'Failed to index task dependencies',
-                errorMessage
-            );
+    async getTasksByPattern(pattern: string): Promise<TaskIndex[]> {
+        // First try exact pattern match from pattern index
+        const exactMatches = this.patternIndex.get(pattern);
+        if (exactMatches) {
+            return Array.from(exactMatches)
+                .map(path => this.taskIndexes.get(path))
+                .filter((task): task is TaskIndex => task !== undefined);
         }
+
+        // Try prefix match from path index
+        const prefixMatches = this.pathIndex.get(pattern);
+        if (prefixMatches) {
+            return Array.from(prefixMatches)
+                .map(path => this.taskIndexes.get(path))
+                .filter((task): task is TaskIndex => task !== undefined);
+        }
+
+        // Fall back to regex matching
+        const regex = globToRegex(pattern);
+        const matchingPaths = Array.from(this.taskIndexes.keys())
+            .filter(path => regex.test(path));
+
+        return matchingPaths
+            .map(path => this.taskIndexes.get(path))
+            .filter((task): task is TaskIndex => task !== undefined);
+    }
+
+    /**
+     * Gets tasks by status with optional pattern filtering
+     */
+    async getTasksByStatus(status: TaskStatus, pattern?: string): Promise<TaskIndex[]> {
+        const statusPaths = this.statusIndex.get(status) || new Set<string>();
+        
+        if (!pattern) {
+            return Array.from(statusPaths)
+                .map(path => this.taskIndexes.get(path))
+                .filter((task): task is TaskIndex => task !== undefined);
+        }
+
+        // Filter by pattern if provided
+        const matchingPaths = Array.from(statusPaths)
+            .filter(path => matchesPattern(path, pattern));
+
+        return matchingPaths
+            .map(path => this.taskIndexes.get(path))
+            .filter((task): task is TaskIndex => task !== undefined);
     }
 
     /**
@@ -162,6 +174,33 @@ export class TaskIndexManager {
     }
 
     /**
+     * Gets tasks by parent path
+     */
+    async getTasksByParent(parentPath: string): Promise<TaskIndex[]> {
+        const children = this.parentIndex.get(parentPath) || new Set<string>();
+        return Array.from(children)
+            .map(path => this.taskIndexes.get(path))
+            .filter((task): task is TaskIndex => task !== undefined);
+    }
+
+    /**
+     * Gets tasks that depend on a task
+     */
+    async getDependentTasks(path: string): Promise<TaskIndex[]> {
+        const dependents = this.dependencyIndex.get(path) || new Set<string>();
+        return Array.from(dependents)
+            .map(path => this.taskIndexes.get(path))
+            .filter((task): task is TaskIndex => task !== undefined);
+    }
+
+    /**
+     * Gets a task by path
+     */
+    async getTaskByPath(path: string): Promise<TaskIndex | null> {
+        return this.taskIndexes.get(path) || null;
+    }
+
+    /**
      * Unindexes a task
      */
     async unindexTask(task: Task): Promise<void> {
@@ -169,7 +208,7 @@ export class TaskIndexManager {
             // Remove from task indexes
             this.taskIndexes.delete(task.path);
 
-            // Remove from path index
+            // Remove from path index and patterns
             const pathSegments = task.path.split('/');
             for (let i = 1; i <= pathSegments.length; i++) {
                 const prefix = pathSegments.slice(0, i).join('/');
@@ -178,6 +217,18 @@ export class TaskIndexManager {
                     paths.delete(task.path);
                     if (paths.size === 0) {
                         this.pathIndex.delete(prefix);
+                    }
+                }
+            }
+
+            // Remove from pattern index
+            const patterns = generatePathPatterns(task.path);
+            for (const pattern of patterns) {
+                const paths = this.patternIndex.get(pattern);
+                if (paths) {
+                    paths.delete(task.path);
+                    if (paths.size === 0) {
+                        this.patternIndex.delete(pattern);
                     }
                 }
             }
@@ -226,59 +277,6 @@ export class TaskIndexManager {
     }
 
     /**
-     * Gets a task by path
-     */
-    async getTaskByPath(path: string): Promise<TaskIndex | null> {
-        return this.taskIndexes.get(path) || null;
-    }
-
-    /**
-     * Gets tasks by path pattern
-     */
-    async getTasksByPattern(pattern: string): Promise<TaskIndex[]> {
-        const paths = this.pathIndex.get(pattern) || new Set<string>();
-        return Array.from(paths)
-            .map(path => this.taskIndexes.get(path))
-            .filter((task): task is TaskIndex => task !== undefined);
-    }
-
-    /**
-     * Gets tasks by status
-     */
-    async getTasksByStatus(status: TaskStatus, pattern?: string): Promise<TaskIndex[]> {
-        const statusPaths = this.statusIndex.get(status) || new Set<string>();
-        const patternPaths = pattern ? (this.pathIndex.get(pattern) || new Set<string>()) : null;
-
-        const paths = patternPaths
-            ? new Set([...statusPaths].filter(path => patternPaths.has(path)))
-            : statusPaths;
-
-        return Array.from(paths)
-            .map(path => this.taskIndexes.get(path))
-            .filter((task): task is TaskIndex => task !== undefined);
-    }
-
-    /**
-     * Gets tasks by parent path
-     */
-    async getTasksByParent(parentPath: string): Promise<TaskIndex[]> {
-        const children = this.parentIndex.get(parentPath) || new Set<string>();
-        return Array.from(children)
-            .map(path => this.taskIndexes.get(path))
-            .filter((task): task is TaskIndex => task !== undefined);
-    }
-
-    /**
-     * Gets tasks that depend on a task
-     */
-    async getDependentTasks(path: string): Promise<TaskIndex[]> {
-        const dependents = this.dependencyIndex.get(path) || new Set<string>();
-        return Array.from(dependents)
-            .map(path => this.taskIndexes.get(path))
-            .filter((task): task is TaskIndex => task !== undefined);
-    }
-
-    /**
      * Gets index statistics
      */
     getStats(): IndexStats {
@@ -310,6 +308,7 @@ export class TaskIndexManager {
     clear(): void {
         this.taskIndexes.clear();
         this.pathIndex.clear();
+        this.patternIndex.clear();
         this.statusIndex.clear();
         this.parentIndex.clear();
         this.dependencyIndex.clear();

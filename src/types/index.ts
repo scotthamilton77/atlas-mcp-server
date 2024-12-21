@@ -1,6 +1,7 @@
 /**
  * Common type definitions
  */
+export * from './indexing.js';
 
 /**
  * Validation result interface
