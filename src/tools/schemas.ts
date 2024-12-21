@@ -39,7 +39,10 @@ export const createTaskSchema = {
         },
         parentPath: {
             type: 'string',
-            description: 'Path of the parent task. Use to build hierarchical workflows and break down complex tasks.',
+            description: 'Path of the parent task. Parent must be MILESTONE or GROUP type.\n' +
+                        'Examples:\n' +
+                        '- "project/backend" (under project backend milestone)\n' +
+                        '- "project/backend/auth" (under auth group)',
         },
         description: {
             type: 'string',
@@ -54,10 +57,28 @@ export const createTaskSchema = {
         type: {
             type: 'string',
             enum: ['TASK', 'MILESTONE', 'GROUP'],
-            description: 'Task categorization (MUST BE UPPERCASE):\n' +
-                        '- MILESTONE: Major completion point requiring all subtasks to be done\n' +
-                        '- GROUP: Collection of related tasks that can be partially completed\n' +
-                        '- TASK: Individual actionable item',
+            description: '⚠️ Task Type Hierarchy Rules (MUST BE UPPERCASE):\n\n' +
+                        '1. MILESTONE (Top Level Container):\n' +
+                        '   • CAN contain: TASK and GROUP types\n' +
+                        '   • Purpose: Project phases, major deliverables\n' +
+                        '   • Example: "Backend Development", "Security Hardening"\n' +
+                        '   • Status: Completed when all subtasks done\n\n' +
+                        '2. GROUP (Middle Level Container):\n' +
+                        '   • CAN contain: Only TASK types\n' +
+                        '   • CANNOT contain: Other GROUPs or MILESTONEs\n' +
+                        '   • Purpose: Feature sets, related task collections\n' +
+                        '   • Example: "Authentication Features", "API Endpoints"\n' +
+                        '   • Status: Reflects aggregate of subtask states\n\n' +
+                        '3. TASK (Leaf Level):\n' +
+                        '   • CANNOT contain any subtasks\n' +
+                        '   • Purpose: Atomic units of work\n' +
+                        '   • Example: "Implement JWT", "Add Rate Limiting"\n' +
+                        '   • Status: Independently managed\n\n' +
+                        'Common Errors to Avoid:\n' +
+                        '- Adding subtasks to TASK type\n' +
+                        '- Adding non-TASK items under GROUP\n' +
+                        '- Creating circular dependencies\n' +
+                        '- Exceeding path depth limits',
         },
         dependencies: {
             type: 'array',
@@ -145,17 +166,25 @@ export const updateTaskSchema = {
                 type: {
                     type: 'string',
                     enum: ['TASK', 'MILESTONE', 'GROUP'],
-                    description: 'Updated task categorization (MUST BE UPPERCASE) based on current understanding.',
+                    description: '⚠️ Task Type Rules (MUST BE UPPERCASE):\n' +
+                                '- MILESTONE can contain TASK and GROUP\n' +
+                                '- GROUP can only contain TASK\n' +
+                                '- TASK cannot contain subtasks\n' +
+                                'Changing type may require restructuring subtasks.',
                 },
                 status: {
                     type: 'string',
-                    enum: ['pending', 'in_progress', 'completed', 'failed', 'blocked'],
+                    enum: ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'BLOCKED'],
                     description: 'Current execution state:\n' +
-                               '- pending: Not yet started\n' +
-                               '- in_progress: Currently being processed\n' +
-                               '- completed: Successfully finished\n' +
-                               '- failed: Encountered unresolvable issues\n' +
-                               '- blocked: Waiting on dependencies or external factors',
+                               '- PENDING: Not yet started\n' +
+                               '- IN_PROGRESS: Currently being processed\n' +
+                               '- COMPLETED: Successfully finished\n' +
+                               '- FAILED: Encountered unresolvable issues\n' +
+                               '- BLOCKED: Waiting on dependencies or external factors\n\n' +
+                               'Status Propagation Rules:\n' +
+                               '- MILESTONE: Completed when all subtasks done\n' +
+                               '- GROUP: Status based on subtask states\n' +
+                               '- TASK: Independent status management',
                 },
                 dependencies: {
                     type: 'array',
@@ -236,7 +265,7 @@ export const getTasksByStatusSchema = {
     properties: {
         status: {
             type: 'string',
-            enum: ['pending', 'in_progress', 'completed', 'failed', 'blocked'] as TaskStatus[],
+            enum: ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'BLOCKED'] as TaskStatus[],
             description: 'Filter tasks by their execution state. Use to find tasks needing attention or verify completion.',
         },
         pathPattern: {
@@ -283,7 +312,6 @@ export const deleteTaskSchema = {
     required: ['path'],
 };
 
-/** Bulk task operations */
 /** Clears all tasks from the database */
 export const clearAllTasksSchema = {
     type: 'object',
@@ -324,45 +352,6 @@ export const repairRelationshipsSchema = {
         }
     },
     required: [],
-};
-
-/** Exports tasks to a backup file */
-export const exportTasksSchema = {
-    type: 'object',
-    properties: {
-        pathPattern: {
-            type: 'string',
-            description: 'Optional glob pattern to export specific tasks (e.g., "project/*").'
-        },
-        format: {
-            type: 'string',
-            enum: ['json', 'csv'],
-            description: 'Export format',
-            default: 'json'
-        }
-    },
-    required: [],
-};
-
-/** Imports tasks from a backup file */
-export const importTasksSchema = {
-    type: 'object',
-    properties: {
-        filePath: {
-            type: 'string',
-            description: 'Path to the backup file to import.'
-        },
-        strategy: {
-            type: 'string',
-            enum: ['replace', 'merge', 'skip'],
-            description: 'How to handle existing tasks:\n' +
-                        '- replace: Overwrite existing tasks\n' +
-                        '- merge: Update existing tasks, preserving some fields\n' +
-                        '- skip: Keep existing tasks unchanged',
-            default: 'skip'
-        }
-    },
-    required: ['filePath'],
 };
 
 /** Bulk task operations with validation */

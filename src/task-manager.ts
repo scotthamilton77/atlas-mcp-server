@@ -37,86 +37,133 @@ export class TaskManager {
                 );
             }
 
-            // Check parent path if provided
-            if (input.parentPath) {
-                const parent = await this.getTaskByPath(input.parentPath);
-                if (!parent) {
-                    throw createError(
-                        ErrorCodes.INVALID_INPUT,
-                        'Parent task not found'
-                    );
-                }
-
-                // Validate hierarchy
-                const hierarchyValidation = isValidTaskHierarchy(parent.type, input.type || TaskType.TASK);
-                if (!hierarchyValidation.valid) {
-                    throw createError(
-                        ErrorCodes.TASK_INVALID_PARENT,
-                        { parentType: parent.type, childType: input.type || TaskType.TASK },
-                        hierarchyValidation.reason || 'Invalid parent-child task type combination',
-                        'Ensure the parent task type can contain the requested child type:\n' +
-                        '- MILESTONE can contain TASK and GROUP\n' +
-                        '- GROUP can only contain TASK\n' +
-                        '- TASK cannot contain any subtasks'
-                    );
-                }
+            // Check for duplicate path
+            const existingTask = await this.getTaskByPath(path);
+            if (existingTask) {
+                throw createError(
+                    ErrorCodes.TASK_DUPLICATE,
+                    {
+                        path,
+                        existingTask: {
+                            name: existingTask.name,
+                            type: existingTask.type,
+                            status: existingTask.status
+                        }
+                    },
+                    `Task with path '${path}' already exists. Use a different path or update the existing task.`
+                );
             }
 
-            // Validate dependencies if provided
-            if (input.dependencies?.length) {
-                for (const depPath of input.dependencies) {
-                    const depTask = await this.getTaskByPath(depPath);
-                    if (!depTask) {
+            // Start transaction for task creation
+            await this.storage.beginTransaction();
+
+            try {
+                // Check parent path if provided
+                if (input.parentPath) {
+                    const parent = await this.getTaskByPath(input.parentPath);
+                    if (!parent) {
                         throw createError(
                             ErrorCodes.INVALID_INPUT,
-                            `Dependency task not found: ${depPath}`
+                            `Parent task '${input.parentPath}' not found. Ensure the parent task exists before creating child tasks.`
+                        );
+                    }
+
+                    // Validate hierarchy with detailed error message
+                    const hierarchyValidation = isValidTaskHierarchy(parent.type, input.type || TaskType.TASK);
+                    if (!hierarchyValidation.valid) {
+                        const typeRules = [
+                            'MILESTONE: Can contain TASK and GROUP types',
+                            'GROUP: Can only contain TASK type',
+                            'TASK: Cannot contain any subtasks'
+                        ].join('\n');
+
+                        throw createError(
+                            ErrorCodes.TASK_INVALID_PARENT,
+                            {
+                                parentType: parent.type,
+                                childType: input.type || TaskType.TASK,
+                                parentPath: parent.path
+                            },
+                            hierarchyValidation.reason || 'Invalid parent-child task type combination',
+                            `Task type hierarchy rules:\n${typeRules}\n\nAttempted to add ${input.type || TaskType.TASK} under ${parent.type}`
                         );
                     }
                 }
+
+                // Validate dependencies if provided
+                if (input.dependencies?.length) {
+                    const missingDeps = [];
+                    for (const depPath of input.dependencies) {
+                        const depTask = await this.getTaskByPath(depPath);
+                        if (!depTask) {
+                            missingDeps.push(depPath);
+                        }
+                    }
+                    if (missingDeps.length > 0) {
+                        throw createError(
+                            ErrorCodes.INVALID_INPUT,
+                            `Missing dependency tasks: ${missingDeps.join(', ')}. All dependencies must exist before creating a task that depends on them.`
+                        );
+                    }
+                }
+
+                // Extract dependencies from metadata if present
+                const metadataDeps = input.metadata?.dependencies as string[] | undefined;
+                const dependencies = input.dependencies || metadataDeps || [];
+                
+                // Remove dependencies from metadata to avoid duplication
+                const metadata = { ...input.metadata };
+                delete metadata.dependencies;
+
+                const task: Task = {
+                    path,
+                    name: input.name,
+                    description: input.description,
+                    type: input.type || TaskType.TASK,
+                    status: TaskStatus.PENDING,
+                    parentPath: input.parentPath,
+                    notes: input.notes,
+                    reasoning: input.reasoning,
+                    dependencies,
+                    subtasks: [],
+                    metadata: {
+                        ...metadata,
+                        created: Date.now(),
+                        updated: Date.now(),
+                        projectPath: path.split('/')[0],
+                        version: 1
+                    }
+                };
+
+                await this.storage.saveTask(task);
+                await this.storage.commitTransaction();
+
+                return {
+                    success: true,
+                    data: task,
+                    metadata: {
+                        timestamp: Date.now(),
+                        requestId: Math.random().toString(36).substring(7),
+                        projectPath: task.metadata.projectPath,
+                        affectedPaths: [task.path]
+                    }
+                };
+            } catch (error) {
+                // Rollback transaction on error
+                await this.storage.rollbackTransaction();
+                throw error;
             }
-
-            // Extract dependencies from metadata if present
-            const metadataDeps = input.metadata?.dependencies as string[] | undefined;
-            const dependencies = input.dependencies || metadataDeps || [];
-            
-            // Remove dependencies from metadata to avoid duplication
-            const metadata = { ...input.metadata };
-            delete metadata.dependencies;
-
-            const task: Task = {
-                path,
-                name: input.name,
-                description: input.description,
-                type: input.type || TaskType.TASK,
-                status: TaskStatus.PENDING,
-                parentPath: input.parentPath,
-                notes: input.notes,
-                reasoning: input.reasoning,
-                dependencies,
-                subtasks: [],
-                metadata: {
-                    ...metadata,
-                    created: Date.now(),
-                    updated: Date.now(),
-                    projectPath: path.split('/')[0],
-                    version: 1
-                }
-            };
-
-            await this.storage.saveTask(task);
-
-            return {
-                success: true,
-                data: task,
-                metadata: {
-                    timestamp: Date.now(),
-                    requestId: Math.random().toString(36).substring(7),
-                    projectPath: task.metadata.projectPath,
-                    affectedPaths: [task.path]
-                }
-            };
         } catch (error) {
-            this.logger.error('Failed to create task', { error, input });
+            this.logger.error('Failed to create task', {
+                error,
+                input,
+                context: {
+                    path: input.path,
+                    parentPath: input.parentPath,
+                    type: input.type,
+                    dependencies: input.dependencies
+                }
+            });
             throw error;
         }
     }
@@ -130,63 +177,107 @@ export class TaskManager {
             if (!task) {
                 throw createError(
                     ErrorCodes.TASK_NOT_FOUND,
-                    'Task not found'
+                    {
+                        path,
+                        context: 'Task update'
+                    },
+                    `Task with path '${path}' not found. Verify the task exists before attempting to update.`
                 );
             }
 
-            // Extract dependencies from metadata if present
-            const metadataDeps = updates.metadata?.dependencies as string[] | undefined;
-            const dependencies = updates.dependencies || metadataDeps || task.dependencies;
+            // Start transaction for task update
+            await this.storage.beginTransaction();
 
-            // Validate new dependencies if changed
-            if (dependencies !== task.dependencies) {
-                for (const depPath of dependencies) {
-                    const depTask = await this.getTaskByPath(depPath);
-                    if (!depTask) {
+            try {
+                // Extract dependencies from metadata if present
+                const metadataDeps = updates.metadata?.dependencies as string[] | undefined;
+                const dependencies = updates.dependencies || metadataDeps || task.dependencies;
+
+                // Validate new dependencies if changed
+                if (dependencies !== task.dependencies) {
+                    const missingDeps = [];
+                    for (const depPath of dependencies) {
+                        const depTask = await this.getTaskByPath(depPath);
+                        if (!depTask) {
+                            missingDeps.push(depPath);
+                        }
+                    }
+                    if (missingDeps.length > 0) {
                         throw createError(
                             ErrorCodes.INVALID_INPUT,
-                            `Dependency task not found: ${depPath}`
+                            {
+                                path,
+                                missingDependencies: missingDeps
+                            },
+                            `Missing dependency tasks: ${missingDeps.join(', ')}. All dependencies must exist before updating task dependencies.`
                         );
                     }
                 }
+
+                // Remove dependencies from metadata to avoid duplication
+                const metadata = { ...updates.metadata };
+                delete metadata?.dependencies;
+
+                // Update task fields
+                const updatedTask: Task = {
+                    ...task,
+                    name: updates.name || task.name,
+                    description: updates.description !== undefined ? updates.description : task.description,
+                    type: updates.type || task.type,
+                    status: updates.status || task.status,
+                    notes: updates.notes || task.notes,
+                    reasoning: updates.reasoning || task.reasoning,
+                    dependencies,
+                    metadata: {
+                        ...task.metadata,
+                        ...metadata,
+                        updated: Date.now(),
+                        version: task.metadata.version + 1
+                    }
+                };
+
+                await this.storage.saveTask(updatedTask);
+                await this.storage.commitTransaction();
+
+                return {
+                    success: true,
+                    data: updatedTask,
+                    metadata: {
+                        timestamp: Date.now(),
+                        requestId: Math.random().toString(36).substring(7),
+                        projectPath: updatedTask.metadata.projectPath,
+                        affectedPaths: [updatedTask.path]
+                    }
+                };
+            } catch (error) {
+                // Rollback transaction on error
+                await this.storage.rollbackTransaction();
+                throw error;
+            }
+        } catch (error) {
+            // Ensure rollback if transaction was started
+            try {
+                await this.storage.rollbackTransaction();
+            } catch (rollbackError) {
+                // Log rollback error but throw original error
+                this.logger.error('Failed to rollback transaction', {
+                    error: rollbackError,
+                    originalError: error,
+                    context: {
+                        path,
+                        operation: 'updateTask'
+                    }
+                });
             }
 
-            // Remove dependencies from metadata to avoid duplication
-            const metadata = { ...updates.metadata };
-            delete metadata?.dependencies;
-
-            // Update task fields
-            const updatedTask: Task = {
-                ...task,
-                name: updates.name || task.name,
-                description: updates.description !== undefined ? updates.description : task.description,
-                type: updates.type || task.type,
-                status: updates.status || task.status,
-                notes: updates.notes || task.notes,
-                reasoning: updates.reasoning || task.reasoning,
-                dependencies,
-                metadata: {
-                    ...task.metadata,
-                    ...metadata,
-                    updated: Date.now(),
-                    version: task.metadata.version + 1
+            this.logger.error('Failed to update task', {
+                error,
+                context: {
+                    path,
+                    updates,
+                    operation: 'updateTask'
                 }
-            };
-
-            await this.storage.saveTask(updatedTask);
-
-            return {
-                success: true,
-                data: updatedTask,
-                metadata: {
-                    timestamp: Date.now(),
-                    requestId: Math.random().toString(36).substring(7),
-                    projectPath: updatedTask.metadata.projectPath,
-                    affectedPaths: [updatedTask.path]
-                }
-            };
-        } catch (error) {
-            this.logger.error('Failed to update task', { error, path, updates });
+            });
             throw error;
         }
     }
@@ -244,18 +335,53 @@ export class TaskManager {
      */
     async deleteTask(path: string): Promise<TaskResponse<void>> {
         try {
-            await this.storage.deleteTask(path);
-            return {
-                success: true,
-                metadata: {
-                    timestamp: Date.now(),
-                    requestId: Math.random().toString(36).substring(7),
-                    projectPath: path.split('/')[0],
-                    affectedPaths: [path]
+            // Start transaction for task deletion
+            await this.storage.beginTransaction();
+
+            try {
+                // Verify task exists before attempting deletion
+                const task = await this.getTaskByPath(path);
+                if (!task) {
+                    throw createError(
+                        ErrorCodes.TASK_NOT_FOUND,
+                        {
+                            path,
+                            context: 'Task deletion'
+                        },
+                        `Task with path '${path}' not found. Verify the task exists before attempting to delete.`
+                    );
                 }
-            };
+
+                // Get subtasks to include in affected paths
+                const subtasks = await this.storage.getSubtasks(path);
+                const affectedPaths = [path, ...subtasks.map(t => t.path)];
+
+                // Delete the task and its subtasks
+                await this.storage.deleteTask(path);
+                await this.storage.commitTransaction();
+
+                return {
+                    success: true,
+                    metadata: {
+                        timestamp: Date.now(),
+                        requestId: Math.random().toString(36).substring(7),
+                        projectPath: path.split('/')[0],
+                        affectedPaths
+                    }
+                };
+            } catch (error) {
+                // Rollback transaction on error
+                await this.storage.rollbackTransaction();
+                throw error;
+            }
         } catch (error) {
-            this.logger.error('Failed to delete task', { error, path });
+            this.logger.error('Failed to delete task', {
+                error,
+                context: {
+                    path,
+                    operation: 'deleteTask'
+                }
+            });
             throw error;
         }
     }
@@ -267,15 +393,45 @@ export class TaskManager {
         if (!confirm) {
             throw createError(
                 ErrorCodes.INVALID_INPUT,
-                'Must explicitly confirm task deletion'
+                {
+                    context: 'Clear all tasks',
+                    required: 'explicit confirmation'
+                },
+                'Must explicitly confirm task deletion',
+                'Set confirm parameter to true to proceed with clearing all tasks. This operation cannot be undone.'
             );
         }
 
         try {
-            await this.storage.clearAllTasks();
-            this.logger.info('All tasks cleared from database');
+            // Start transaction for clearing all tasks
+            await this.storage.beginTransaction();
+
+            try {
+                // Get count of tasks before deletion for logging
+                const tasks = await this.storage.getTasksByPattern('*');
+                const taskCount = tasks.length;
+
+                // Clear all tasks
+                await this.storage.clearAllTasks();
+                await this.storage.commitTransaction();
+
+                this.logger.info('All tasks cleared from database', {
+                    tasksCleared: taskCount,
+                    operation: 'clearAllTasks'
+                });
+            } catch (error) {
+                // Rollback transaction on error
+                await this.storage.rollbackTransaction();
+                throw error;
+            }
         } catch (error) {
-            this.logger.error('Failed to clear tasks', { error });
+            this.logger.error('Failed to clear tasks', {
+                error,
+                context: {
+                    operation: 'clearAllTasks',
+                    confirm
+                }
+            });
             throw error;
         }
     }

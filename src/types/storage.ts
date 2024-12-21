@@ -65,6 +65,11 @@ export interface TaskStorage extends CacheManager {
     initialize(): Promise<void>;
     close(): Promise<void>;
     
+    // Transaction management
+    beginTransaction(): Promise<void>;
+    commitTransaction(): Promise<void>;
+    rollbackTransaction(): Promise<void>;
+    
     // Task operations
     saveTask(task: Task): Promise<void>;
     saveTasks(tasks: Task[]): Promise<void>;

@@ -9,11 +9,11 @@ export enum TaskType {
 }
 
 export enum TaskStatus {
-    PENDING = 'pending',
-    IN_PROGRESS = 'in_progress',
-    COMPLETED = 'completed',
-    FAILED = 'failed',
-    BLOCKED = 'blocked'
+    PENDING = 'PENDING',
+    IN_PROGRESS = 'IN_PROGRESS',
+    COMPLETED = 'COMPLETED',
+    FAILED = 'FAILED',
+    BLOCKED = 'BLOCKED'
 }
 
 export interface TaskMetadata {
@@ -44,7 +44,7 @@ export interface Task {
     metadata: TaskMetadata;  // Each string field max 1000 chars, arrays max 100 items
 }
 
-export interface CreateTaskInput {
+export interface CreateTaskInput extends Record<string, unknown> {
     path?: string;
     name: string;
     parentPath?: string;
@@ -56,7 +56,7 @@ export interface CreateTaskInput {
     metadata?: Partial<TaskMetadata>;
 }
 
-export interface UpdateTaskInput {
+export interface UpdateTaskInput extends Record<string, unknown> {
     name?: string;
     description?: string;
     type?: TaskType;

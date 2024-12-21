@@ -1,27 +1,23 @@
-/**
- * Path-based task status batch processor
- */
 import { Task, TaskStatus } from '../../../types/task.js';
 import { ErrorCodes, createError } from '../../../errors/index.js';
-import { Logger } from '../../../logging/index.js';
-import { BatchProcessor, BatchResult } from './batch-types.js';
+import { BatchProgressCallback, BatchResult } from '../../../types/batch.js';
+import { DependencyAwareBatchProcessor } from './dependency-aware-batch-processor.js';
 
-interface StatusUpdate {
-    taskPath: string;
-    newStatus: TaskStatus;
-}
-
-export class TaskStatusBatchProcessor implements BatchProcessor {
-    private logger: Logger;
-
-    constructor() {
-        this.logger = Logger.getInstance().child({ component: 'TaskStatusBatchProcessor' });
-    }
-
+/**
+ * Specialized batch processor for handling task status updates.
+ * Extends DependencyAwareBatchProcessor to handle task-specific dependencies.
+ * Uses types defined in src/types/batch.ts and src/types/task.ts.
+ */
+export class TaskStatusBatchProcessor extends DependencyAwareBatchProcessor<Task> {
     /**
-     * Processes a batch of task status updates
+     * Process a batch of task status updates
+     * @see BatchProcessor in src/types/batch.ts
      */
-    async processBatch<T>(tasks: T[], operation: (item: T) => Promise<void>): Promise<BatchResult> {
+    override async processBatch(
+        tasks: Task[],
+        operation: (item: Task) => Promise<void>,
+        progressCallback?: BatchProgressCallback
+    ): Promise<BatchResult> {
         if (!tasks.length) {
             return {
                 success: true,
@@ -32,21 +28,8 @@ export class TaskStatusBatchProcessor implements BatchProcessor {
         }
 
         try {
-            if (!this.isTaskArray(tasks)) {
-                throw createError(
-                    ErrorCodes.INVALID_INPUT,
-                    'Invalid batch input: expected Task array'
-                );
-            }
-
-            // Build dependency graph
-            const graph = this.buildDependencyGraph(tasks);
-
-            // Check for cycles
-            this.checkForCycles(graph, tasks);
-
             // Calculate status updates
-            const updates = this.calculateStatusUpdates(tasks, graph);
+            const updates = this.calculateStatusUpdates(tasks);
 
             // Apply updates
             let processedCount = 0;
@@ -54,8 +37,12 @@ export class TaskStatusBatchProcessor implements BatchProcessor {
 
             for (const update of updates) {
                 try {
-                    await operation(update as T);
+                    await operation(update);
                     processedCount++;
+
+                    if (progressCallback?.onOperationComplete) {
+                        progressCallback.onOperationComplete(processedCount, updates.length);
+                    }
                 } catch (error) {
                     errors.push({
                         item: update,
@@ -104,106 +91,19 @@ export class TaskStatusBatchProcessor implements BatchProcessor {
     }
 
     /**
-     * Process items in batches
+     * Calculates required status updates based on task dependencies
      */
-    async processInBatches<T>(
-        items: T[],
-        batchSize: number,
-        operation: (item: T) => Promise<void>
-    ): Promise<BatchResult> {
-        const results: BatchResult[] = [];
-        
-        for (let i = 0; i < items.length; i += batchSize) {
-            const batch = items.slice(i, i + batchSize);
-            const result = await this.processBatch(batch, operation);
-            results.push(result);
-        }
-
-        return {
-            success: results.every(r => r.success),
-            processedCount: results.reduce((sum, r) => sum + r.processedCount, 0),
-            failedCount: results.reduce((sum, r) => sum + r.failedCount, 0),
-            errors: results.flatMap(r => r.errors)
-        };
-    }
-
-    /**
-     * Type guard for Task array
-     */
-    private isTaskArray(items: unknown[]): items is Task[] {
-        return items.every(item => 
-            typeof item === 'object' && 
-            item !== null && 
-            'path' in item &&
-            'status' in item &&
-            'dependencies' in item
-        );
-    }
-
-    /**
-     * Builds a dependency graph from tasks
-     */
-    private buildDependencyGraph(tasks: Task[]): Map<string, Set<string>> {
-        const graph = new Map<string, Set<string>>();
-
-        for (const task of tasks) {
-            graph.set(task.path, new Set(task.dependencies));
-        }
-
-        return graph;
-    }
-
-    /**
-     * Checks for dependency cycles
-     */
-    private checkForCycles(graph: Map<string, Set<string>>, tasks: Task[]): void {
-        const visited = new Set<string>();
-        const recursionStack = new Set<string>();
-
-        const visit = (taskPath: string, path: string[] = []): void => {
-            if (recursionStack.has(taskPath)) {
-                throw createError(
-                    ErrorCodes.TASK_CYCLE,
-                    `Dependency cycle detected: ${[...path.slice(path.indexOf(taskPath)), taskPath].join(' -> ')}`
-                );
-            }
-
-            if (visited.has(taskPath)) {
-                return;
-            }
-
-            visited.add(taskPath);
-            recursionStack.add(taskPath);
-
-            const dependencies = graph.get(taskPath) || new Set();
-            for (const dep of dependencies) {
-                visit(dep, [...path, taskPath]);
-            }
-
-            recursionStack.delete(taskPath);
-        };
-
-        for (const task of tasks) {
-            if (!visited.has(task.path)) {
-                visit(task.path);
-            }
-        }
-    }
-
-    /**
-     * Calculates required status updates
-     */
-    private calculateStatusUpdates(
-        tasks: Task[],
-        graph: Map<string, Set<string>>
-    ): StatusUpdate[] {
-        const updates: StatusUpdate[] = [];
+    private calculateStatusUpdates(tasks: Task[]): Task[] {
+        const updates: Task[] = [];
         const taskMap = new Map(tasks.map(t => [t.path, t]));
 
         for (const task of tasks) {
-            const newStatus = this.calculateTaskStatus(task, taskMap, graph);
+            const newStatus = this.calculateTaskStatus(task, taskMap);
             if (newStatus !== task.status) {
-                updates.push({ taskPath: task.path, newStatus });
+                updates.push({
+                    ...task,
+                    status: newStatus
+                });
             }
         }
 
@@ -211,21 +111,19 @@ export class TaskStatusBatchProcessor implements BatchProcessor {
     }
 
     /**
-     * Calculates status for a single task
+     * Calculates status for a single task based on its dependencies
      */
     private calculateTaskStatus(
         task: Task,
-        taskMap: Map<string, Task>,
-        graph: Map<string, Set<string>>
+        taskMap: Map<string, Task>
     ): TaskStatus {
         // Check dependencies
-        const dependencies = graph.get(task.path) || new Set();
-        if (dependencies.size === 0) {
+        if (!task.dependencies?.length) {
             return task.status;
         }
 
         // Check if any dependencies are blocked or failed
-        for (const depPath of dependencies) {
+        for (const depPath of task.dependencies) {
             const depTask = taskMap.get(depPath);
             if (!depTask) continue;
 
@@ -236,7 +134,7 @@ export class TaskStatusBatchProcessor implements BatchProcessor {
         }
 
         // Check if all dependencies are completed
-        const allCompleted = Array.from(dependencies).every(depPath => {
+        const allCompleted = task.dependencies.every(depPath => {
             const depTask = taskMap.get(depPath);
             return depTask?.status === TaskStatus.COMPLETED;
         });
@@ -246,5 +144,29 @@ export class TaskStatusBatchProcessor implements BatchProcessor {
         }
 
         return task.status;
+    }
+
+    /**
+     * Pre-validate batch items
+     * @see DependencyAwareBatchProcessor in src/task/core/batch/dependency-aware-batch-processor.ts
+     */
+    protected override async preValidateBatch(batch: Task[]): Promise<void> {
+        await super.preValidateBatch(batch);
+
+        // Validate task statuses
+        const invalidTasks = batch.filter(task => 
+            !Object.values(TaskStatus).includes(task.status)
+        );
+
+        if (invalidTasks.length > 0) {
+            throw createError(
+                ErrorCodes.INVALID_INPUT,
+                {
+                    message: 'Tasks have invalid status values',
+                    context: { tasks: invalidTasks }
+                },
+                'All tasks must have valid status values'
+            );
+        }
     }
 }

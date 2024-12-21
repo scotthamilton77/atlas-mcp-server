@@ -33,6 +33,9 @@ export class DependencyValidator {
         getTaskByPath: GetTaskByPath
     ): Promise<void> {
         try {
+            // Pre-validate dependencies exist
+            await this.preValidateDependencies(dependencies, getTaskByPath);
+
             // Reset validation state
             this.nodes.clear();
 
@@ -47,7 +50,13 @@ export class DependencyValidator {
 
             this.logger.debug('Dependencies validated successfully', {
                 taskPath,
-                dependencies
+                dependencies,
+                validationSteps: [
+                    'pre-validation',
+                    'graph-building',
+                    'cycle-detection',
+                    'status-validation'
+                ]
             });
         } catch (error) {
             this.logger.error('Dependency validation failed', {
@@ -143,36 +152,85 @@ export class DependencyValidator {
     /**
      * Builds the dependency graph
      */
+    /**
+     * Pre-validates all dependencies exist before building the graph
+     */
+    private async preValidateDependencies(
+        dependencies: string[],
+        getTaskByPath: GetTaskByPath
+    ): Promise<void> {
+        const missingDeps: string[] = [];
+        
+        for (const depPath of dependencies) {
+            const depTask = await getTaskByPath(depPath);
+            if (!depTask) {
+                missingDeps.push(depPath);
+            }
+        }
+
+        if (missingDeps.length > 0) {
+            throw createError(
+                ErrorCodes.TASK_NOT_FOUND,
+                {
+                    message: 'One or more dependency tasks not found',
+                    context: {
+                        missingDependencies: missingDeps,
+                        totalDependencies: dependencies.length
+                    }
+                },
+                `Missing dependencies: ${missingDeps.join(', ')}`,
+                'Ensure all dependency tasks exist before creating relationships'
+            );
+        }
+    }
+
     private async buildDependencyGraph(
         taskPath: string,
         dependencies: string[],
         getTaskByPath: GetTaskByPath
     ): Promise<void> {
-        // Create node for current task
-        const node = this.getOrCreateNode(taskPath);
+        try {
+            // Create node for current task
+            const node = this.getOrCreateNode(taskPath);
 
-        // Process each dependency
-        for (const depPath of dependencies) {
-            // Validate dependency exists
-            const depTask = await getTaskByPath(depPath);
-            if (!depTask) {
-                throw createError(
-                    ErrorCodes.TASK_NOT_FOUND,
-                    `Dependency task not found: ${depPath}`
+            // Process each dependency
+            for (const depPath of dependencies) {
+                const depTask = await getTaskByPath(depPath);
+                if (!depTask) {
+                    // This shouldn't happen due to pre-validation, but handle just in case
+                    throw createError(
+                        ErrorCodes.TASK_NOT_FOUND,
+                        {
+                            message: 'Dependency task not found during graph building',
+                            context: {
+                                taskPath,
+                                dependencyPath: depPath,
+                                graphState: this.getGraphState()
+                            }
+                        }
+                    );
+                }
+
+                // Add dependency relationship
+                node.dependencies.add(depPath);
+                const depNode = this.getOrCreateNode(depPath);
+                depNode.dependents.add(taskPath);
+
+                // Process transitive dependencies
+                await this.buildDependencyGraph(
+                    depPath,
+                    depTask.dependencies,
+                    getTaskByPath
                 );
             }
-
-            // Add dependency relationship
-            node.dependencies.add(depPath);
-            const depNode = this.getOrCreateNode(depPath);
-            depNode.dependents.add(taskPath);
-
-            // Process transitive dependencies
-            await this.buildDependencyGraph(
-                depPath,
-                depTask.dependencies,
-                getTaskByPath
-            );
+        } catch (error) {
+            this.logger.error('Error building dependency graph', {
+                taskPath,
+                dependencies,
+                error,
+                graphState: this.getGraphState()
+            });
+            throw error;
         }
     }
 
@@ -197,9 +255,20 @@ export class DependencyValidator {
             if (!depNode.visited) {
                 this.detectCycles(depPath);
             } else if (depNode.inPath) {
+                const cyclePath = this.getCyclePath(depPath);
                 throw createError(
                     ErrorCodes.TASK_CYCLE,
-                    `Circular dependency detected: ${this.getCyclePath(depPath)}`
+                    {
+                        message: 'Circular dependency detected in task graph',
+                        context: {
+                            cyclePath,
+                            startPath,
+                            affectedTasks: Array.from(this.nodes.keys()),
+                            graphState: this.getGraphState()
+                        }
+                    },
+                    `Circular dependency: ${cyclePath}`,
+                    'Remove one of the dependencies to break the cycle'
                 );
             }
         }
@@ -242,6 +311,8 @@ export class DependencyValidator {
     private async validateDependencyStatuses(
         getTaskByPath: GetTaskByPath
     ): Promise<void> {
+        const statusIssues: Array<{ path: string; status: TaskStatus; issue: string }> = [];
+
         for (const [path] of this.nodes) {
             const task = await getTaskByPath(path);
             if (!task) {
@@ -249,18 +320,35 @@ export class DependencyValidator {
             }
 
             if (task.status === TaskStatus.FAILED) {
-                throw createError(
-                    ErrorCodes.TASK_DEPENDENCY,
-                    `Dependency task failed: ${path}`
-                );
+                statusIssues.push({
+                    path,
+                    status: task.status,
+                    issue: 'Task has failed'
+                });
             }
 
             if (task.status === TaskStatus.BLOCKED) {
-                throw createError(
-                    ErrorCodes.TASK_DEPENDENCY,
-                    `Dependency task is blocked: ${path}`
-                );
+                statusIssues.push({
+                    path,
+                    status: task.status,
+                    issue: 'Task is blocked'
+                });
             }
+        }
+
+        if (statusIssues.length > 0) {
+            throw createError(
+                ErrorCodes.TASK_DEPENDENCY,
+                {
+                    message: 'Dependency status validation failed',
+                    context: {
+                        statusIssues,
+                        graphState: this.getGraphState()
+                    }
+                },
+                `Invalid dependency statuses: ${statusIssues.map(i => `${i.path} (${i.status})`).join(', ')}`,
+                'Ensure all dependencies are in a valid state before proceeding'
+            );
         }
     }
 
@@ -280,5 +368,21 @@ export class DependencyValidator {
             this.nodes.set(path, node);
         }
         return node;
+    }
+
+    /**
+     * Gets the current state of the dependency graph for debugging
+     */
+    private getGraphState(): Record<string, unknown> {
+        const graphState: Record<string, unknown> = {};
+        for (const [path, node] of this.nodes) {
+            graphState[path] = {
+                dependencies: Array.from(node.dependencies),
+                dependents: Array.from(node.dependents),
+                visited: node.visited,
+                inPath: node.inPath
+            };
+        }
+        return graphState;
     }
 }

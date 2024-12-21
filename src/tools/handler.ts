@@ -4,6 +4,7 @@
 import { TaskManager } from '../task-manager.js';
 import { Logger } from '../logging/index.js';
 import { ErrorCodes, createError } from '../errors/index.js';
+import { TaskType, TaskStatus, CreateTaskInput, UpdateTaskInput } from '../types/task.js';
 import {
     createTaskSchema,
     updateTaskSchema,
@@ -16,13 +17,15 @@ import {
     vacuumDatabaseSchema,
     repairRelationshipsSchema
 } from './schemas.js';
-import { TaskBatchProcessor } from '../task/core/batch/batch-processor.js';
-import { BatchResult } from '../task/core/batch/batch-types.js';
+import { DependencyAwareBatchProcessor } from '../task/core/batch/dependency-aware-batch-processor.js';
+import { BatchResult } from '../types/batch.js';
 
 interface BulkOperation {
     type: 'create' | 'update' | 'delete';
     path: string;
     data?: Record<string, unknown>;
+    id?: string;
+    dependencies?: string[];
 }
 
 export interface Tool {
@@ -53,101 +56,143 @@ export class ToolHandler {
         this.registerDefaultTools();
     }
 
+    /**
+     * Validates task hierarchy rules
+     */
+    private async validateTaskHierarchy(args: Record<string, unknown>, operation: 'create' | 'update'): Promise<void> {
+        const taskType = (args.type || 'TASK').toString().toUpperCase();
+        const parentPath = args.parentPath as string | undefined;
+
+        // Validate task type is uppercase
+        if (taskType !== taskType.toUpperCase()) {
+            throw createError(
+                ErrorCodes.INVALID_INPUT,
+                'Task type must be uppercase (TASK, GROUP, or MILESTONE)'
+            );
+        }
+
+        // Validate task type is valid
+        if (!['TASK', 'GROUP', 'MILESTONE'].includes(taskType)) {
+            throw createError(
+                ErrorCodes.INVALID_INPUT,
+                'Invalid task type. Must be TASK, GROUP, or MILESTONE'
+            );
+        }
+
+        // If parent path is provided, validate parent type compatibility
+        if (parentPath) {
+            const parent = await this.taskManager.getTaskByPath(parentPath);
+            if (!parent) {
+                throw createError(
+                    ErrorCodes.INVALID_INPUT,
+                    `Parent task '${parentPath}' not found`
+                );
+            }
+
+            // Validate parent-child type relationships
+            switch (parent.type) {
+                case TaskType.MILESTONE:
+                    if (!['TASK', 'GROUP'].includes(taskType)) {
+                        throw createError(
+                            ErrorCodes.INVALID_INPUT,
+                            'MILESTONE can only contain TASK or GROUP types'
+                        );
+                    }
+                    break;
+                case TaskType.GROUP:
+                    if (taskType !== 'TASK') {
+                        throw createError(
+                            ErrorCodes.INVALID_INPUT,
+                            'GROUP can only contain TASK types'
+                        );
+                    }
+                    break;
+                case TaskType.TASK:
+                    throw createError(
+                        ErrorCodes.INVALID_INPUT,
+                        'TASK type cannot contain subtasks'
+                    );
+            }
+        }
+
+        // For updates, validate type changes don't break hierarchy
+        if (operation === 'update' && taskType) {
+            const path = args.path as string;
+            const task = await this.taskManager.getTaskByPath(path);
+            if (!task) {
+                throw createError(
+                    ErrorCodes.INVALID_INPUT,
+                    `Task '${path}' not found`
+                );
+            }
+
+            // Check if task has subtasks and is being changed to TASK type
+            if (taskType === 'TASK') {
+                const subtasks = await this.taskManager.getSubtasks(path);
+                if (subtasks.length > 0) {
+                    throw createError(
+                        ErrorCodes.INVALID_INPUT,
+                        'Cannot change to TASK type while having subtasks'
+                    );
+                }
+            }
+
+            // Check if changing to GROUP with non-TASK subtasks
+            if (taskType === 'GROUP') {
+                const subtasks = await this.taskManager.getSubtasks(path);
+                const invalidSubtasks = subtasks.filter(s => s.type !== TaskType.TASK);
+                if (invalidSubtasks.length > 0) {
+                    throw createError(
+                        ErrorCodes.INVALID_INPUT,
+                        'GROUP can only contain TASK type subtasks'
+                    );
+                }
+            }
+        }
+    }
+
     private registerDefaultTools(): void {
-        // Define tools according to MCP specification
         const defaultTools: Array<Tool & { handler: (args: Record<string, unknown>) => Promise<ToolResponse> }> = [
             {
                 name: 'create_task',
-                description: 'Creates a new task with path-based hierarchy and dependency management. Examples:\n' +
-                    '- Create a simple task:\n' +
-                    '  {\n' +
-                    '    "name": "Validate API inputs",\n' +
-                    '    "path": "server/api/validation",\n' +
-                    '    "description": "Implement input validation for all API endpoints",\n' +
-                    '    "type": "task",\n' +
-                    '    "metadata": {\n' +
-                    '      "priority": "high",\n' +
-                    '      "tags": ["security", "api"],\n' +
-                    '      "reasoning": "Critical for preventing injection attacks"\n' +
-                    '    }\n' +
-                    '  }\n\n' +
-                    '- Create with dependencies:\n' +
-                    '  {\n' +
-                    '    "name": "Deploy API",\n' +
-                    '    "path": "server/deployment",\n' +
-                    '    "dependencies": ["server/auth/jwt", "server/api/validation"],\n' +
-                    '    "type": "task",\n' +
-                    '    "metadata": {\n' +
-                    '      "priority": "high",\n' +
-                    '      "reasoning": "Deploy after security features are complete"\n' +
-                    '    }\n' +
-                    '  }\n\n' +
-                    '- Create milestone with subtasks:\n' +
-                    '  {\n' +
-                    '    "name": "Security Hardening",\n' +
-                    '    "path": "server/security",\n' +
-                    '    "type": "milestone",\n' +
-                    '    "metadata": {\n' +
-                    '      "priority": "high",\n' +
-                    '      "tags": ["security"],\n' +
-                    '      "reasoning": "Required before production deployment"\n' +
-                    '    }\n' +
-                    '  }\n\n' +
-                    'Dependencies can be specified in two ways:\n' +
-                    '1. Using the dependencies array (recommended)\n' +
-                    '2. In metadata.dependencies (legacy, will be migrated)\n\n' +
-                    'Tasks will be automatically blocked if their dependencies are not met.',
+                description: createTaskSchema.properties.type.description,
                 inputSchema: {
                     type: "object",
                     properties: createTaskSchema.properties,
                     required: createTaskSchema.required
                 },
                 handler: async (args: Record<string, unknown>) => {
-                    const result = await this.taskManager.createTask(args as any);
+                    // Validate hierarchy rules
+                    await this.validateTaskHierarchy(args, 'create');
+                    
+                    // Validate required fields
+                    if (!args.name || typeof args.name !== 'string') {
+                        throw createError(
+                            ErrorCodes.INVALID_INPUT,
+                            'Task name is required and must be a string'
+                        );
+                    }
+
+                    // Create task input with proper type casting
+                    const taskInput: CreateTaskInput = {
+                        name: args.name,
+                        path: args.path as string | undefined,
+                        type: args.type ? (args.type as string).toUpperCase() as TaskType : TaskType.TASK,
+                        description: args.description as string | undefined,
+                        parentPath: args.parentPath as string | undefined,
+                        dependencies: Array.isArray(args.dependencies) ? args.dependencies as string[] : [],
+                        notes: Array.isArray(args.notes) ? args.notes as string[] : undefined,
+                        reasoning: args.reasoning as string | undefined,
+                        metadata: args.metadata as Record<string, unknown> || {}
+                    };
+                    
+                    const result = await this.taskManager.createTask(taskInput);
                     return this.formatResponse(result);
                 }
             },
             {
                 name: 'update_task',
-                description: 'Updates an existing task by path with dependency and status management. Examples:\n' +
-                    '- Update status with progress:\n' +
-                    '  {\n' +
-                    '    "path": "server/auth/jwt",\n' +
-                    '    "updates": {\n' +
-                    '      "status": "in_progress",\n' +
-                    '      "metadata": {\n' +
-                    '        "notes": ["Implemented token generation", "Working on validation"],\n' +
-                    '        "reasoning": "Dependencies resolved, starting implementation"\n' +
-                    '      }\n' +
-                    '    }\n' +
-                    '  }\n\n' +
-                    '- Update task details:\n' +
-                    '  {\n' +
-                    '    "path": "server/api/validation",\n' +
-                    '    "updates": {\n' +
-                    '      "description": "Implement comprehensive input validation with rate limiting",\n' +
-                    '      "metadata": {\n' +
-                    '        "notes": ["Input sanitization complete", "Need to add rate limiting"],\n' +
-                    '        "reasoning": "Scope increased to include rate limiting"\n' +
-                    '      }\n' +
-                    '    }\n' +
-                    '  }\n\n' +
-                    '- Add dependencies with context:\n' +
-                    '  {\n' +
-                    '    "path": "server/deployment",\n' +
-                    '    "updates": {\n' +
-                    '      "dependencies": ["server/auth", "server/api"],\n' +
-                    '      "metadata": {\n' +
-                    '        "reasoning": "Authentication and API validation must be complete before deployment",\n' +
-                    '        "notes": ["Added security dependencies", "Will be blocked until auth is ready"]\n' +
-                    '      }\n' +
-                    '    }\n' +
-                    '  }\n\n' +
-                    'Status Transitions:\n' +
-                    '- Tasks are automatically blocked if dependencies are not met\n' +
-                    '- Parent tasks inherit status from children in specific cases\n' +
-                    '- Status changes propagate through task hierarchy\n' +
-                    '- Failed dependencies block dependent tasks',
+                description: updateTaskSchema.properties.updates.properties.type.description,
                 inputSchema: {
                     type: "object",
                     properties: updateTaskSchema.properties,
@@ -155,44 +200,44 @@ export class ToolHandler {
                 },
                 handler: async (args: Record<string, unknown>) => {
                     const { path, updates } = args as { path: string; updates: Record<string, unknown> };
-                    const result = await this.taskManager.updateTask(path, updates as any);
+                    
+                    // Validate hierarchy rules if type is being updated
+                    if (updates.type) {
+                        await this.validateTaskHierarchy({ ...updates, path }, 'update');
+                    }
+                    
+                    // Create update input with proper type casting
+                    const updateInput: UpdateTaskInput = {
+                        name: updates.name as string | undefined,
+                        type: updates.type ? (updates.type as string).toUpperCase() as TaskType : undefined,
+                        description: updates.description as string | undefined,
+                        status: updates.status as TaskStatus | undefined,
+                        dependencies: Array.isArray(updates.dependencies) ? updates.dependencies as string[] : undefined,
+                        notes: Array.isArray(updates.notes) ? updates.notes as string[] : undefined,
+                        reasoning: updates.reasoning as string | undefined,
+                        metadata: updates.metadata as Record<string, unknown> | undefined
+                    };
+                    
+                    const result = await this.taskManager.updateTask(path, updateInput);
                     return this.formatResponse(result);
                 }
             },
             {
                 name: 'get_tasks_by_status',
-                description: 'Gets tasks filtered by status. Examples:\n' +
-                    '- Get in-progress tasks:\n' +
-                    '  { "status": "in_progress" }\n\n' +
-                    '- Get blocked tasks in API:\n' +
-                    '  {\n' +
-                    '    "status": "blocked",\n' +
-                    '    "pathPattern": "server/api/*"\n' +
-                    '  }\n\n' +
-                    '- Get completed security tasks:\n' +
-                    '  {\n' +
-                    '    "status": "completed",\n' +
-                    '    "pathPattern": "*/security/*"\n' +
-                    '  }',
+                description: getTasksByStatusSchema.properties.status.description,
                 inputSchema: {
                     type: "object",
                     properties: getTasksByStatusSchema.properties,
                     required: getTasksByStatusSchema.required
                 },
                 handler: async (args: Record<string, unknown>) => {
-                    const result = await this.taskManager.getTasksByStatus(args.status as any);
+                    const result = await this.taskManager.getTasksByStatus(args.status as unknown as TaskStatus);
                     return this.formatResponse(result);
                 }
             },
             {
                 name: 'get_tasks_by_path',
-                description: 'Gets tasks matching a path pattern. Examples:\n' +
-                    '- Get all auth tasks:\n' +
-                    '  { "pathPattern": "server/auth/*" }\n\n' +
-                    '- Get all API tasks:\n' +
-                    '  { "pathPattern": "server/api/*" }\n\n' +
-                    '- Get all security tasks:\n' +
-                    '  { "pathPattern": "*/security/*" }',
+                description: getTasksByPathSchema.properties.pathPattern.description,
                 inputSchema: {
                     type: "object",
                     properties: getTasksByPathSchema.properties,
@@ -205,13 +250,7 @@ export class ToolHandler {
             },
             {
                 name: 'get_subtasks',
-                description: 'Gets subtasks of a task by path. Examples:\n' +
-                    '- Get auth subtasks:\n' +
-                    '  { "path": "server/auth" }\n\n' +
-                    '- Get API subtasks:\n' +
-                    '  { "path": "server/api" }\n\n' +
-                    '- Get validation subtasks:\n' +
-                    '  { "path": "server/api/validation" }',
+                description: getSubtasksSchema.properties.path.description,
                 inputSchema: {
                     type: "object",
                     properties: getSubtasksSchema.properties,
@@ -224,11 +263,7 @@ export class ToolHandler {
             },
             {
                 name: 'delete_task',
-                description: 'Deletes a task by path. Will also delete all subtasks. Example:\n' +
-                    '- Delete single task:\n' +
-                    '  { "path": "server/auth/jwt" }\n\n' +
-                    '- Delete task group:\n' +
-                    '  { "path": "server/api" }',
+                description: deleteTaskSchema.properties.path.description,
                 inputSchema: {
                     type: "object",
                     properties: deleteTaskSchema.properties,
@@ -241,21 +276,7 @@ export class ToolHandler {
             },
             {
                 name: 'bulk_task_operations',
-                description: 'Performs multiple task operations in a single atomic transaction with dependency validation. Example:\n' +
-                    '{\n' +
-                    '  "operations": [\n' +
-                    '    { "type": "create", "path": "server/auth", "data": { "name": "Authentication System", "type": "group", "metadata": { "priority": "high", "tags": ["security"] } } },\n' +
-                    '    { "type": "create", "path": "server/auth/jwt", "data": { "name": "JWT Implementation", "type": "task", "metadata": { "priority": "high" } } },\n' +
-                    '    { "type": "create", "path": "server/auth/validation", "data": { "name": "Token Validation", "type": "task", "metadata": { "notes": ["Implement refresh token logic"] } } },\n' +
-                    '    { "type": "update", "path": "server/auth", "data": { "status": "in_progress", "metadata": { "reasoning": "Starting authentication implementation" } } }\n' +
-                    '  ]\n' +
-                    '}\n\n' +
-                    'Features:\n' +
-                    '- Atomic transactions (all operations succeed or none do)\n' +
-                    '- Dependency validation across operations\n' +
-                    '- Status propagation through task hierarchy\n' +
-                    '- Automatic dependency-based blocking\n' +
-                    '- Rollback on failure',
+                description: bulkTaskSchema.properties.operations.description,
                 inputSchema: {
                     type: "object",
                     properties: bulkTaskSchema.properties,
@@ -264,25 +285,85 @@ export class ToolHandler {
                 handler: async (args: Record<string, unknown>) => {
                     const { operations } = args as { operations: BulkOperation[] };
 
-                    const batchProcessor = new TaskBatchProcessor();
+                    // Add dependencies based on operation order
+                    const operationsWithDeps = operations.map((op, index) => ({
+                        ...op,
+                        id: op.path,
+                        // Each operation depends on the previous one
+                        dependencies: index > 0 ? [operations[index - 1].path] : []
+                    }));
+
+                    const batchProcessor = new DependencyAwareBatchProcessor<BulkOperation>({
+                        batchSize: 1,
+                        concurrentBatches: 1,
+                        retryCount: 3,
+                        retryDelay: 1000
+                    });
                     
-                    // Process operations in sequence to maintain consistency
-                    const result = await batchProcessor.processBatch(operations, async (operation: BulkOperation) => {
-                        switch (operation.type) {
-                            case 'create':
-                                await this.taskManager.createTask(operation.data as any);
-                                break;
-                            case 'update':
-                                await this.taskManager.updateTask(operation.path, operation.data as any);
-                                break;
-                            case 'delete':
-                                await this.taskManager.deleteTask(operation.path);
-                                break;
-                            default:
-                                throw createError(
-                                    ErrorCodes.INVALID_INPUT,
-                                    `Invalid operation type: ${operation.type}`
-                                );
+                    // Process operations sequentially with dependency ordering
+                    const result = await batchProcessor.processInBatches(operationsWithDeps, 1, async (operation: BulkOperation) => {
+                        try {
+                            switch (operation.type) {
+                                case 'create': {
+                                    // Extract parent path from task path if not provided
+                                    const pathSegments = operation.path.split('/');
+                                    const parentPath = operation.data?.parentPath as string || 
+                                        (pathSegments.length > 1 ? pathSegments.slice(0, -1).join('/') : undefined);
+
+                                    const taskData: CreateTaskInput = {
+                                        path: operation.path,
+                                        name: operation.data?.name as string || pathSegments[pathSegments.length - 1] || 'Unnamed Task',
+                                        type: (operation.data?.type as string || 'TASK').toUpperCase() as TaskType,
+                                        description: operation.data?.description as string,
+                                        dependencies: operation.data?.dependencies as string[] || [],
+                                        parentPath,
+                                        metadata: {
+                                            ...(operation.data?.metadata || {}),
+                                            created: Date.now(),
+                                            updated: Date.now()
+                                        }
+                                    };
+
+                                    // Validate hierarchy rules
+                                    await this.validateTaskHierarchy(taskData, 'create');
+
+                                    await this.taskManager.createTask(taskData);
+                                    break;
+                                }
+                                case 'update': {
+                                    const updateData: UpdateTaskInput = {
+                                        status: operation.data?.status as TaskStatus,
+                                        metadata: operation.data?.metadata as Record<string, unknown>,
+                                        notes: operation.data?.notes as string[],
+                                        dependencies: operation.data?.dependencies as string[],
+                                        description: operation.data?.description as string,
+                                        name: operation.data?.name as string,
+                                        type: operation.data?.type ? (operation.data.type as string).toUpperCase() as TaskType : undefined
+                                    };
+
+                                    // Validate hierarchy rules if type is being updated
+                                    if (updateData.type) {
+                                        await this.validateTaskHierarchy({ ...updateData, path: operation.path }, 'update');
+                                    }
+
+                                    await this.taskManager.updateTask(operation.path, updateData);
+                                    break;
+                                }
+                                case 'delete':
+                                    await this.taskManager.deleteTask(operation.path);
+                                    break;
+                                default:
+                                    throw createError(
+                                        ErrorCodes.INVALID_INPUT,
+                                        `Invalid operation type: ${operation.type}`
+                                    );
+                            }
+                        } catch (error) {
+                            this.logger.error('Operation failed', {
+                                operation,
+                                error
+                            });
+                            throw error;
                         }
                     });
 
@@ -300,16 +381,7 @@ export class ToolHandler {
             },
             {
                 name: 'clear_all_tasks',
-                description: 'Clears all tasks from the database. Use with extreme caution. Examples:\n' +
-                    '- Clear all tasks:\n' +
-                    '  {\n' +
-                    '    "confirm": true\n' +
-                    '  }\n\n' +
-                    'Best Practices:\n' +
-                    '- Always backup important tasks before clearing\n' +
-                    '- Consider using delete_task for targeted removal\n' +
-                    '- Verify no critical tasks are present\n' +
-                    '- Run repair_relationships after partial clears',
+                description: clearAllTasksSchema.properties.confirm.description,
                 inputSchema: {
                     type: "object",
                     properties: clearAllTasksSchema.properties,
@@ -322,16 +394,7 @@ export class ToolHandler {
             },
             {
                 name: 'vacuum_database',
-                description: 'Optimizes database storage and performance. Examples:\n' +
-                    '- Basic optimization:\n' +
-                    '  {\n' +
-                    '    "analyze": true\n' +
-                    '  }\n\n' +
-                    'Best Practices:\n' +
-                    '- Run periodically after bulk operations\n' +
-                    '- Use after clearing large number of tasks\n' +
-                    '- Consider running during low activity\n' +
-                    '- Set analyze: true for query optimization',
+                description: vacuumDatabaseSchema.properties.analyze.description,
                 inputSchema: {
                     type: "object",
                     properties: vacuumDatabaseSchema.properties,
@@ -344,26 +407,7 @@ export class ToolHandler {
             },
             {
                 name: 'repair_relationships',
-                description: 'Repairs parent-child relationships and fixes inconsistencies. Examples:\n' +
-                    '- Check for issues (dry run):\n' +
-                    '  {\n' +
-                    '    "dryRun": true,\n' +
-                    '    "pathPattern": "project/*"\n' +
-                    '  }\n\n' +
-                    '- Fix all relationships:\n' +
-                    '  {\n' +
-                    '    "dryRun": false\n' +
-                    '  }\n\n' +
-                    '- Fix specific project:\n' +
-                    '  {\n' +
-                    '    "dryRun": false,\n' +
-                    '    "pathPattern": "project/backend/*"\n' +
-                    '  }\n\n' +
-                    'Best Practices:\n' +
-                    '- Always run with dryRun: true first\n' +
-                    '- Use pathPattern to limit scope\n' +
-                    '- Run after bulk operations\n' +
-                    '- Check subtasks after repairs',
+                description: repairRelationshipsSchema.properties.dryRun.description,
                 inputSchema: {
                     type: "object",
                     properties: repairRelationshipsSchema.properties,
@@ -428,35 +472,13 @@ export class ToolHandler {
         }
 
         try {
-            // Validate task type is uppercase for create/update operations
-            // Type guard for task operations
-            interface TaskArgs extends Record<string, unknown> {
-                type?: string;
-                metadata?: {
-                    dependencies?: string[];
-                    [key: string]: unknown;
-                };
-            }
-
-            if (name === 'create_task' || name === 'update_task') {
-                const taskArgs = args as TaskArgs;
-                
-                if (taskArgs.type && typeof taskArgs.type === 'string' && taskArgs.type !== taskArgs.type.toUpperCase()) {
-                    throw createError(
-                        ErrorCodes.INVALID_INPUT,
-                        { tool: name },
-                        'Task type must be uppercase (TASK, GROUP, or MILESTONE)'
-                    );
-                }
-                
-                // Validate dependencies are at root level
-                if (taskArgs.metadata?.dependencies) {
-                    throw createError(
-                        ErrorCodes.INVALID_INPUT,
-                        { tool: name },
-                        'Dependencies must be specified at root level, not in metadata'
-                    );
-                }
+            // Validate dependencies are at root level
+            if ((name === 'create_task' || name === 'update_task') && 
+                (args as any).metadata?.dependencies) {
+                throw createError(
+                    ErrorCodes.INVALID_INPUT,
+                    'Dependencies must be specified at root level, not in metadata'
+                );
             }
 
             this.logger.debug('Executing tool', { name, args });
