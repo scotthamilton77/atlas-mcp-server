@@ -18,8 +18,11 @@ export const ErrorCodes = {
     TASK_INVALID_TYPE: 'TASK_1006',
     TASK_INVALID_STATUS: 'TASK_1007',
     TASK_INVALID_PARENT: 'TASK_1008',
-    TASK_LOCKED: 'TASK_1009',
-    TASK_CYCLE: 'TASK_1010',
+    TASK_PARENT_NOT_FOUND: 'TASK_1009',
+    TASK_PARENT_TYPE: 'TASK_1010',
+    TASK_DUPLICATE_NAME: 'TASK_1011',
+    TASK_LOCKED: 'TASK_1012',
+    TASK_CYCLE: 'TASK_1013',
 
     // Storage errors (2000-2999)
     STORAGE_READ: 'STORAGE_2001',
@@ -83,8 +86,20 @@ export const ErrorMessages: Record<ErrorCode, { message: string; suggestion: str
         suggestion: 'Use one of: pending, in_progress, completed, failed, or blocked'
     },
     [ErrorCodes.TASK_INVALID_PARENT]: {
-        message: 'Invalid parent task',
-        suggestion: 'Ensure parent task exists and is of type "group"'
+        message: 'Invalid parent-child relationship',
+        suggestion: 'Check parent task existence and type compatibility'
+    },
+    [ErrorCodes.TASK_PARENT_NOT_FOUND]: {
+        message: 'Parent task not found',
+        suggestion: 'Verify the parent task ID exists in the system'
+    },
+    [ErrorCodes.TASK_PARENT_TYPE]: {
+        message: 'Invalid parent task type',
+        suggestion: 'Parent tasks must be of type "group" or "milestone". Regular tasks cannot contain subtasks.'
+    },
+    [ErrorCodes.TASK_DUPLICATE_NAME]: {
+        message: 'Duplicate task name in scope',
+        suggestion: 'Task names must be unique within the same level (either as root tasks or under the same parent)'
     },
     [ErrorCodes.TASK_LOCKED]: {
         message: 'Task is locked by another operation',

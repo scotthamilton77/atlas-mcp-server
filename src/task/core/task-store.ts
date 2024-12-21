@@ -342,18 +342,30 @@ export class TaskStore {
             if (taskToAdd.parentId && !taskToAdd.parentId.startsWith('ROOT-')) {
                 const parent = this.getTaskById(taskToAdd.parentId);
                 if (parent) {
-                    if (parent.type === TaskType.TASK) {
-                        throw createError(
-                            ErrorCodes.TASK_INVALID_PARENT,
-                            { 
-                                taskId: taskToAdd.id,
-                                parentId: parent.id,
-                                parentType: parent.type
-                            },
-                            `Regular tasks cannot contain subtasks. Parent must be type "group" or "milestone" (got "${parent.type}")`,
-                            'Change parent to a group or milestone task'
-                        );
-                    }
+                if (!parent) {
+                    throw createError(
+                        ErrorCodes.TASK_PARENT_NOT_FOUND,
+                        { 
+                            taskId: taskToAdd.id,
+                            parentId: taskToAdd.parentId
+                        },
+                        `Parent task with ID ${taskToAdd.parentId} not found`,
+                        'Verify the parent task ID exists in the system'
+                    );
+                }
+
+                if (parent.type === TaskType.TASK) {
+                    throw createError(
+                        ErrorCodes.TASK_PARENT_TYPE,
+                        { 
+                            taskId: taskToAdd.id,
+                            parentId: parent.id,
+                            parentType: parent.type
+                        },
+                        `Regular tasks cannot contain subtasks. Parent must be type "group" or "milestone" (got "${parent.type}")`,
+                        'Change parent to a group or milestone task'
+                    );
+                }
                     parentUpdates.push({
                         parentId: taskToAdd.parentId,
                         childId: taskToAdd.id
@@ -447,13 +459,19 @@ export class TaskStore {
                 
                 if (hasDuplicate) {
                     throw createError(
-                        ErrorCodes.TASK_DUPLICATE,
+                        ErrorCodes.TASK_DUPLICATE_NAME,
                         { 
                             taskName: task.name,
-                            parentId: parent.id 
+                            parentId: parent.id,
+                            scope: 'parent',
+                            existingTasks: siblings.map(t => ({
+                                id: t.id,
+                                name: t.name,
+                                status: t.status
+                            }))
                         },
-                        `A task named "${task.name}" already exists under the same parent`,
-                        'Use a different name for the task or update the existing task'
+                        `A task named "${task.name}" already exists under parent "${parent.name}"`,
+                        'Task names must be unique within the same parent. Choose a different name or update the existing task.'
                     );
                 }
 
@@ -664,13 +682,19 @@ export class TaskStore {
                 
                 if (hasDuplicate) {
                     throw createError(
-                        ErrorCodes.TASK_DUPLICATE,
+                        ErrorCodes.TASK_DUPLICATE_NAME,
                         { 
                             taskName: updates.name,
-                            parentId: existingTask.parentId || `ROOT-${existingTask.metadata.sessionId}`
+                            parentId: existingTask.parentId || `ROOT-${existingTask.metadata.sessionId}`,
+                            scope: existingTask.parentId ? 'parent' : 'root',
+                            existingTasks: siblings.map(t => ({
+                                id: t.id,
+                                name: t.name,
+                                status: t.status
+                            }))
                         },
-                        `A task named "${updates.name}" already exists at this level`,
-                        'Use a different name for the task'
+                        `A task named "${updates.name}" already exists at the ${existingTask.parentId ? 'parent' : 'root'} level`,
+                        'Task names must be unique within the same level. Choose a different name or update the existing task.'
                     );
                 }
             }
