@@ -3,9 +3,9 @@
  */
 
 export enum TaskType {
-    TASK = 'task',
-    MILESTONE = 'milestone',
-    GROUP = 'group'
+    TASK = 'TASK',
+    MILESTONE = 'MILESTONE',
+    GROUP = 'GROUP'
 }
 
 export enum TaskStatus {
@@ -231,19 +231,33 @@ export function validateTask(task: Task): { valid: boolean; errors: string[] } {
 /**
  * Validates parent-child task type relationships
  */
-export function isValidTaskHierarchy(parentType: TaskType, childType: TaskType): boolean {
+export function isValidTaskHierarchy(parentType: TaskType, childType: TaskType): { valid: boolean; reason?: string } {
     switch (parentType) {
         case TaskType.MILESTONE:
             // Milestones can contain tasks and groups
-            return childType === TaskType.TASK || childType === TaskType.GROUP;
+            return {
+                valid: childType === TaskType.TASK || childType === TaskType.GROUP,
+                reason: childType !== TaskType.TASK && childType !== TaskType.GROUP ?
+                    `MILESTONE can only contain TASK or GROUP types, not ${childType}` : undefined
+            };
         case TaskType.GROUP:
             // Groups can contain tasks
-            return childType === TaskType.TASK;
+            return {
+                valid: childType === TaskType.TASK,
+                reason: childType !== TaskType.TASK ?
+                    `GROUP can only contain TASK type, not ${childType}` : undefined
+            };
         case TaskType.TASK:
             // Tasks cannot contain other tasks
-            return false;
+            return {
+                valid: false,
+                reason: `TASK type cannot contain any subtasks (attempted to add ${childType})`
+            };
         default:
-            return false;
+            return {
+                valid: false,
+                reason: `Unknown task type: ${parentType}`
+            };
     }
 }
 

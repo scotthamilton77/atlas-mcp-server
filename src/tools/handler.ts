@@ -428,6 +428,37 @@ export class ToolHandler {
         }
 
         try {
+            // Validate task type is uppercase for create/update operations
+            // Type guard for task operations
+            interface TaskArgs extends Record<string, unknown> {
+                type?: string;
+                metadata?: {
+                    dependencies?: string[];
+                    [key: string]: unknown;
+                };
+            }
+
+            if (name === 'create_task' || name === 'update_task') {
+                const taskArgs = args as TaskArgs;
+                
+                if (taskArgs.type && typeof taskArgs.type === 'string' && taskArgs.type !== taskArgs.type.toUpperCase()) {
+                    throw createError(
+                        ErrorCodes.INVALID_INPUT,
+                        { tool: name },
+                        'Task type must be uppercase (TASK, GROUP, or MILESTONE)'
+                    );
+                }
+                
+                // Validate dependencies are at root level
+                if (taskArgs.metadata?.dependencies) {
+                    throw createError(
+                        ErrorCodes.INVALID_INPUT,
+                        { tool: name },
+                        'Dependencies must be specified at root level, not in metadata'
+                    );
+                }
+            }
+
             this.logger.debug('Executing tool', { name, args });
             const result = await handler(args);
             this.logger.debug('Tool execution completed', { name });

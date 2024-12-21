@@ -53,11 +53,11 @@ export const createTaskSchema = {
         },
         type: {
             type: 'string',
-            enum: ['task', 'milestone', 'group'],
-            description: 'Task categorization:\n' +
-                        '- milestone: Major completion point requiring all subtasks to be done\n' +
-                        '- group: Collection of related tasks that can be partially completed\n' +
-                        '- task: Individual actionable item',
+            enum: ['TASK', 'MILESTONE', 'GROUP'],
+            description: 'Task categorization (MUST BE UPPERCASE):\n' +
+                        '- MILESTONE: Major completion point requiring all subtasks to be done\n' +
+                        '- GROUP: Collection of related tasks that can be partially completed\n' +
+                        '- TASK: Individual actionable item',
         },
         dependencies: {
             type: 'array',
@@ -144,8 +144,8 @@ export const updateTaskSchema = {
                 },
                 type: {
                     type: 'string',
-                    enum: ['task', 'milestone', 'group'],
-                    description: 'Updated task categorization based on current understanding.',
+                    enum: ['TASK', 'MILESTONE', 'GROUP'],
+                    description: 'Updated task categorization (MUST BE UPPERCASE) based on current understanding.',
                 },
                 status: {
                     type: 'string',

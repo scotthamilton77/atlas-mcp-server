@@ -29,10 +29,11 @@ export class TaskManager {
             const path = input.path || this.generateTaskPath(input);
             
             // Validate path
-            if (!validateTaskPath(path)) {
+            const pathValidation = validateTaskPath(path);
+            if (!pathValidation.valid) {
                 throw createError(
                     ErrorCodes.INVALID_INPUT,
-                    'Invalid task path format'
+                    pathValidation.error || 'Invalid task path format'
                 );
             }
 
@@ -47,10 +48,16 @@ export class TaskManager {
                 }
 
                 // Validate hierarchy
-                if (!isValidTaskHierarchy(parent.type, input.type || TaskType.TASK)) {
+                const hierarchyValidation = isValidTaskHierarchy(parent.type, input.type || TaskType.TASK);
+                if (!hierarchyValidation.valid) {
                     throw createError(
                         ErrorCodes.TASK_INVALID_PARENT,
-                        'Invalid parent-child task type combination'
+                        { parentType: parent.type, childType: input.type || TaskType.TASK },
+                        hierarchyValidation.reason || 'Invalid parent-child task type combination',
+                        'Ensure the parent task type can contain the requested child type:\n' +
+                        '- MILESTONE can contain TASK and GROUP\n' +
+                        '- GROUP can only contain TASK\n' +
+                        '- TASK cannot contain any subtasks'
                     );
                 }
             }
