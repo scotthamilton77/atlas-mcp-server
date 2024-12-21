@@ -47,11 +47,11 @@ export class HealthMonitor {
         };
 
         try {
-            // Check storage health
-            if (status.storage.tasks.total === 0 && status.storage.storage.totalSize === 0) {
+            // Check storage health - only fail if metrics are undefined/null
+            if (!status.storage || !status.storage.tasks || !status.storage.storage) {
                 health.components.storage = false;
                 health.healthy = false;
-                health.details!.storage = 'Storage appears empty';
+                health.details!.storage = 'Storage metrics unavailable';
             }
 
             // Check rate limiter

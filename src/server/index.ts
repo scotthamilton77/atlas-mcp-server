@@ -46,6 +46,7 @@ export class AtlasServer {
         private readonly toolHandler: {
             listTools: () => Promise<any>;
             handleToolCall: (request: any) => Promise<any>;
+            getStorageMetrics: () => Promise<any>;
         }
     ) {
         this.logger = Logger.getInstance().child({ component: 'AtlasServer' });
@@ -218,7 +219,7 @@ export class AtlasServer {
         setInterval(async () => {
             try {
                 const status: ComponentStatus = {
-                    storage: { tasks: { total: 0, byStatus: {}, noteCount: 0, dependencyCount: 0 }, storage: { totalSize: 0, walSize: 0, pageSize: 0, pageCount: 0 } },
+                    storage: await this.toolHandler.getStorageMetrics(),
                     rateLimiter: this.rateLimiter.getStatus(),
                     metrics: this.metricsCollector.getMetrics()
                 };

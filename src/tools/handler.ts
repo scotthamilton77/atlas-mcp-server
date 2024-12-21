@@ -11,7 +11,10 @@ import {
     getTasksByPathSchema,
     getSubtasksSchema,
     deleteTaskSchema,
-    bulkTaskSchema
+    bulkTaskSchema,
+    clearAllTasksSchema,
+    vacuumDatabaseSchema,
+    repairRelationshipsSchema
 } from './schemas.js';
 import { TaskBatchProcessor } from '../task/core/batch/batch-processor.js';
 import { BatchResult } from '../task/core/batch/batch-types.js';
@@ -294,6 +297,85 @@ export class ToolHandler {
                         }))
                     });
                 }
+            },
+            {
+                name: 'clear_all_tasks',
+                description: 'Clears all tasks from the database. Use with extreme caution. Examples:\n' +
+                    '- Clear all tasks:\n' +
+                    '  {\n' +
+                    '    "confirm": true\n' +
+                    '  }\n\n' +
+                    'Best Practices:\n' +
+                    '- Always backup important tasks before clearing\n' +
+                    '- Consider using delete_task for targeted removal\n' +
+                    '- Verify no critical tasks are present\n' +
+                    '- Run repair_relationships after partial clears',
+                inputSchema: {
+                    type: "object",
+                    properties: clearAllTasksSchema.properties,
+                    required: clearAllTasksSchema.required
+                },
+                handler: async (args: Record<string, unknown>) => {
+                    await this.taskManager.clearAllTasks(args.confirm as boolean);
+                    return this.formatResponse({ success: true, message: 'All tasks cleared' });
+                }
+            },
+            {
+                name: 'vacuum_database',
+                description: 'Optimizes database storage and performance. Examples:\n' +
+                    '- Basic optimization:\n' +
+                    '  {\n' +
+                    '    "analyze": true\n' +
+                    '  }\n\n' +
+                    'Best Practices:\n' +
+                    '- Run periodically after bulk operations\n' +
+                    '- Use after clearing large number of tasks\n' +
+                    '- Consider running during low activity\n' +
+                    '- Set analyze: true for query optimization',
+                inputSchema: {
+                    type: "object",
+                    properties: vacuumDatabaseSchema.properties,
+                    required: vacuumDatabaseSchema.required
+                },
+                handler: async (args: Record<string, unknown>) => {
+                    await this.taskManager.vacuumDatabase(args.analyze as boolean);
+                    return this.formatResponse({ success: true, message: 'Database optimized' });
+                }
+            },
+            {
+                name: 'repair_relationships',
+                description: 'Repairs parent-child relationships and fixes inconsistencies. Examples:\n' +
+                    '- Check for issues (dry run):\n' +
+                    '  {\n' +
+                    '    "dryRun": true,\n' +
+                    '    "pathPattern": "project/*"\n' +
+                    '  }\n\n' +
+                    '- Fix all relationships:\n' +
+                    '  {\n' +
+                    '    "dryRun": false\n' +
+                    '  }\n\n' +
+                    '- Fix specific project:\n' +
+                    '  {\n' +
+                    '    "dryRun": false,\n' +
+                    '    "pathPattern": "project/backend/*"\n' +
+                    '  }\n\n' +
+                    'Best Practices:\n' +
+                    '- Always run with dryRun: true first\n' +
+                    '- Use pathPattern to limit scope\n' +
+                    '- Run after bulk operations\n' +
+                    '- Check subtasks after repairs',
+                inputSchema: {
+                    type: "object",
+                    properties: repairRelationshipsSchema.properties,
+                    required: repairRelationshipsSchema.required
+                },
+                handler: async (args: Record<string, unknown>) => {
+                    const result = await this.taskManager.repairRelationships(
+                        args.dryRun as boolean,
+                        args.pathPattern as string | undefined
+                    );
+                    return this.formatResponse(result);
+                }
             }
         ];
 
@@ -360,6 +442,10 @@ export class ToolHandler {
             });
             throw error;
         }
+    }
+
+    async getStorageMetrics(): Promise<any> {
+        return await this.taskManager.storage.getMetrics();
     }
 
     private formatResponse(result: unknown): ToolResponse {

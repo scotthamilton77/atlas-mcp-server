@@ -57,6 +57,8 @@ export interface TaskStorage {
     analyze(): Promise<void>;
     checkpoint(): Promise<void>;
     getMetrics(): Promise<StorageMetrics>;
+    clearAllTasks(): Promise<void>;
+    repairRelationships(dryRun?: boolean): Promise<{ fixed: number, issues: string[] }>;
 }
 
 /**

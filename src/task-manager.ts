@@ -9,7 +9,7 @@ import { validateTaskPath, isValidTaskHierarchy } from './types/task.js';
 
 export class TaskManager {
     private logger: Logger;
-    private storage: TaskStorage;
+    readonly storage: TaskStorage;
 
     constructor(storage: TaskStorage) {
         this.logger = Logger.getInstance().child({ component: 'TaskManager' });
@@ -245,6 +245,62 @@ export class TaskManager {
             };
         } catch (error) {
             this.logger.error('Failed to delete task', { error, path });
+            throw error;
+        }
+    }
+
+    /**
+     * Clears all tasks from the database
+     */
+    async clearAllTasks(confirm: boolean): Promise<void> {
+        if (!confirm) {
+            throw createError(
+                ErrorCodes.INVALID_INPUT,
+                'Must explicitly confirm task deletion'
+            );
+        }
+
+        try {
+            await this.storage.clearAllTasks();
+            this.logger.info('All tasks cleared from database');
+        } catch (error) {
+            this.logger.error('Failed to clear tasks', { error });
+            throw error;
+        }
+    }
+
+    /**
+     * Optimizes database storage and performance
+     */
+    async vacuumDatabase(analyze: boolean = true): Promise<void> {
+        try {
+            await this.storage.vacuum();
+            if (analyze) {
+                await this.storage.analyze();
+            }
+            await this.storage.checkpoint();
+            this.logger.info('Database optimized', { analyzed: analyze });
+        } catch (error) {
+            this.logger.error('Failed to optimize database', { error });
+            throw error;
+        }
+    }
+
+    /**
+     * Repairs parent-child relationships and fixes inconsistencies
+     */
+    async repairRelationships(dryRun: boolean = false, pathPattern?: string): Promise<{ fixed: number, issues: string[] }> {
+        try {
+            const result = await this.storage.repairRelationships(dryRun);
+            this.logger.info('Relationship repair completed', { 
+                dryRun,
+                pathPattern,
+                fixed: result.fixed,
+                issueCount: result.issues.length
+            });
+            return result;
+        } catch (error) {
+            this.logger.error('Failed to repair relationships', { error });
             throw error;
         }
     }

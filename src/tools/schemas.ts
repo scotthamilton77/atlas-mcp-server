@@ -220,6 +220,87 @@ export const deleteTaskSchema = {
 };
 
 /** Bulk task operations */
+/** Clears all tasks from the database */
+export const clearAllTasksSchema = {
+    type: 'object',
+    properties: {
+        confirm: {
+            type: 'boolean',
+            description: 'Must be set to true to confirm deletion of all tasks. This operation cannot be undone.',
+        }
+    },
+    required: ['confirm'],
+};
+
+/** Optimizes database storage and performance */
+export const vacuumDatabaseSchema = {
+    type: 'object',
+    properties: {
+        analyze: {
+            type: 'boolean',
+            description: 'Whether to analyze tables for query optimization after vacuum.',
+            default: true
+        }
+    },
+    required: [],
+};
+
+/** Repairs parent-child relationships and fixes inconsistencies */
+export const repairRelationshipsSchema = {
+    type: 'object',
+    properties: {
+        dryRun: {
+            type: 'boolean',
+            description: 'If true, only reports issues without fixing them.',
+            default: false
+        },
+        pathPattern: {
+            type: 'string',
+            description: 'Optional glob pattern to limit repair scope (e.g., "project/*").'
+        }
+    },
+    required: [],
+};
+
+/** Exports tasks to a backup file */
+export const exportTasksSchema = {
+    type: 'object',
+    properties: {
+        pathPattern: {
+            type: 'string',
+            description: 'Optional glob pattern to export specific tasks (e.g., "project/*").'
+        },
+        format: {
+            type: 'string',
+            enum: ['json', 'csv'],
+            description: 'Export format',
+            default: 'json'
+        }
+    },
+    required: [],
+};
+
+/** Imports tasks from a backup file */
+export const importTasksSchema = {
+    type: 'object',
+    properties: {
+        filePath: {
+            type: 'string',
+            description: 'Path to the backup file to import.'
+        },
+        strategy: {
+            type: 'string',
+            enum: ['replace', 'merge', 'skip'],
+            description: 'How to handle existing tasks:\n' +
+                        '- replace: Overwrite existing tasks\n' +
+                        '- merge: Update existing tasks, preserving some fields\n' +
+                        '- skip: Keep existing tasks unchanged',
+            default: 'skip'
+        }
+    },
+    required: ['filePath'],
+};
+
 export const bulkTaskSchema = {
     type: 'object',
     properties: {

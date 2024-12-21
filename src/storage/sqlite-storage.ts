@@ -670,6 +670,122 @@ export class SqliteStorage implements TaskStorage {
         };
     }
 
+    /**
+     * Clears all tasks from the database
+     */
+    async clearAllTasks(): Promise<void> {
+        if (!this.db) {
+            throw createError(
+                ErrorCodes.STORAGE_ERROR,
+                'Database not initialized'
+            );
+        }
+
+        try {
+            await this.db.run('BEGIN TRANSACTION');
+            await this.db.run('DELETE FROM tasks');
+            await this.db.run('COMMIT');
+            this.logger.info('All tasks cleared from database');
+        } catch (error) {
+            await this.db.run('ROLLBACK');
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            this.logger.error('Failed to clear tasks', { error: errorMessage });
+            throw createError(
+                ErrorCodes.STORAGE_DELETE,
+                'Failed to clear tasks',
+                errorMessage
+            );
+        }
+    }
+
+    /**
+     * Repairs parent-child relationships
+     */
+    async repairRelationships(dryRun: boolean = false): Promise<{ fixed: number, issues: string[] }> {
+        if (!this.db) {
+            throw createError(
+                ErrorCodes.STORAGE_ERROR,
+                'Database not initialized'
+            );
+        }
+
+        const issues: string[] = [];
+        let fixCount = 0;
+
+        try {
+            // Start transaction if not dry run
+            if (!dryRun) {
+                await this.db.run('BEGIN TRANSACTION');
+            }
+
+            // Find tasks with invalid parent paths
+            const orphanedTasks = await this.db.all<Record<string, unknown>[]>(
+                `SELECT t1.path, t1.parent_path 
+                 FROM tasks t1 
+                 LEFT JOIN tasks t2 ON t1.parent_path = t2.path 
+                 WHERE t1.parent_path IS NOT NULL 
+                 AND t2.path IS NULL`
+            );
+
+            for (const task of orphanedTasks) {
+                issues.push(`Task ${task.path} has invalid parent_path: ${task.parent_path}`);
+                if (!dryRun) {
+                    await this.db.run(
+                        'UPDATE tasks SET parent_path = NULL WHERE path = ?',
+                        task.path
+                    );
+                    fixCount++;
+                }
+            }
+
+            // Find inconsistencies between parent_path and subtasks
+            const rows = await this.db.all<Record<string, unknown>[]>(
+                'SELECT * FROM tasks WHERE parent_path IS NOT NULL OR subtasks IS NOT NULL'
+            );
+
+            for (const row of rows) {
+                const task = this.rowToTask(row);
+                const subtaskRefs = new Set(task.subtasks);
+                
+                // Check if all subtasks exist and reference this task as parent
+                if (subtaskRefs.size > 0) {
+                    const subtasks = await this.db.all<Record<string, unknown>[]>(
+                        `SELECT * FROM tasks WHERE path IN (${Array(subtaskRefs.size).fill('?').join(',')})`,
+                        ...Array.from(subtaskRefs)
+                    );
+
+                    for (const subtask of subtasks.map(r => this.rowToTask(r))) {
+                        if (subtask.parentPath !== task.path) {
+                            issues.push(`Task ${task.path} lists ${subtask.path} as subtask but parent_path mismatch`);
+                            if (!dryRun) {
+                                subtask.parentPath = task.path;
+                                await this.saveTask(subtask);
+                                fixCount++;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (!dryRun) {
+                await this.db.run('COMMIT');
+            }
+
+            return { fixed: fixCount, issues };
+        } catch (error) {
+            if (!dryRun) {
+                await this.db.run('ROLLBACK');
+            }
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            this.logger.error('Failed to repair relationships', { error: errorMessage });
+            throw createError(
+                ErrorCodes.STORAGE_ERROR,
+                'Failed to repair relationships',
+                errorMessage
+            );
+        }
+    }
+
     async close(): Promise<void> {
         if (this.db) {
             await this.db.close();

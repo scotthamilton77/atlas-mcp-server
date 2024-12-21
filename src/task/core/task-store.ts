@@ -437,6 +437,90 @@ export class TaskStore {
     /**
      * Clears cache and indexes with transaction support
      */
+    /**
+     * Clears all tasks and resets indexes
+     */
+    async clearAllTasks(confirm: boolean): Promise<void> {
+        if (!confirm) {
+            throw createError(
+                ErrorCodes.OPERATION_FAILED,
+                'Must explicitly confirm task deletion'
+            );
+        }
+
+        const transaction = await this.transactionManager.begin();
+
+        try {
+            // Clear all tasks from storage
+            await this.storage.clearAllTasks();
+            
+            // Clear cache and indexes
+            await Promise.all([
+                this.indexManager.clear(),
+                this.cacheManager.clear()
+            ]);
+
+            await this.transactionManager.commit(transaction);
+            this.logger.info('All tasks and indexes cleared');
+        } catch (error) {
+            await this.transactionManager.rollback(transaction);
+            this.logger.error('Failed to clear tasks', { error });
+            throw error;
+        }
+    }
+
+    /**
+     * Optimizes database storage and performance
+     */
+    async vacuumDatabase(analyze: boolean = true): Promise<void> {
+        try {
+            await this.storage.vacuum();
+            if (analyze) {
+                await this.storage.analyze();
+            }
+            await this.storage.checkpoint();
+            this.logger.info('Database optimized', { analyzed: analyze });
+        } catch (error) {
+            this.logger.error('Failed to optimize database', { error });
+            throw error;
+        }
+    }
+
+    /**
+     * Repairs parent-child relationships and fixes inconsistencies
+     */
+    async repairRelationships(dryRun: boolean = false, pathPattern?: string): Promise<{ fixed: number, issues: string[] }> {
+        const transaction = await this.transactionManager.begin();
+
+        try {
+            // Get tasks to repair
+            const tasks = pathPattern ? 
+                await this.getTasksByPattern(pathPattern) :
+                await this.storage.getTasks([]);
+
+            // Clear cache for affected tasks
+            await Promise.all(tasks.map(task => this.cacheManager.delete(task.path)));
+
+            // Repair relationships
+            const result = await this.storage.repairRelationships(dryRun);
+
+            if (!dryRun) {
+                // Reindex all tasks after repair
+                await Promise.all(tasks.map(task => this.indexManager.indexTask(task)));
+            }
+
+            await this.transactionManager.commit(transaction);
+            return result;
+        } catch (error) {
+            await this.transactionManager.rollback(transaction);
+            this.logger.error('Failed to repair relationships', { error });
+            throw error;
+        }
+    }
+
+    /**
+     * Clears cache and indexes
+     */
     async clearCache(): Promise<void> {
         const transaction = await this.transactionManager.begin();
 
