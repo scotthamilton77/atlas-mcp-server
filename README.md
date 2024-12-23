@@ -83,17 +83,17 @@ ATLAS implements the Model Context Protocol (MCP), created by Anthropic, which e
 ## Installation
 
 1. Clone the repository:
-\`\`\`bash
+```bash
 git clone https://github.com/cyanheads/atlas-mcp-server.git
 cd atlas-mcp-server
 npm install
-\`\`\`
+```
 
 ## Configuration
 
 Add to your MCP client settings:
 
-\`\`\`json
+```json
 {
   "mcpServers": {
     "atlas": {
@@ -113,13 +113,13 @@ Add to your MCP client settings:
     }
   }
 }
-\`\`\`
+```
 
 ## Task Structure
 
 Tasks support rich content and metadata within a hierarchical structure:
 
-\`\`\`typescript
+```typescript
 {
   "name": "Implementation Task",
   "description": "Implement core functionality",
@@ -137,7 +137,7 @@ Tasks support rich content and metadata within a hierarchical structure:
     "version": 1
   }
 }
-\`\`\`
+```
 
 ## Tools
 
@@ -145,7 +145,7 @@ Tasks support rich content and metadata within a hierarchical structure:
 
 #### create_task
 Creates tasks with path-based hierarchy:
-\`\`\`typescript
+```typescript
 {
   "name": "Backend Development",
   "path": "project/backend",
@@ -156,11 +156,11 @@ Creates tasks with path-based hierarchy:
     "tags": ["backend", "api"]
   }
 }
-\`\`\`
+```
 
 #### bulk_task_operations
 Executes multiple task operations in sequence:
-\`\`\`typescript
+```typescript
 {
   "operations": [
     {
@@ -180,11 +180,11 @@ Executes multiple task operations in sequence:
     }
   ]
 }
-\`\`\`
+```
 
 #### update_task
 Updates existing tasks with validation:
-\`\`\`typescript
+```typescript
 {
   "path": "project/frontend/ui/button",
   "updates": {
@@ -192,7 +192,7 @@ Updates existing tasks with validation:
     "dependencies": ["project/frontend/ui/design-system"]
   }
 }
-\`\`\`
+```
 
 ### Task Retrieval
 
@@ -226,11 +226,11 @@ Updates existing tasks with validation:
 
 ## Development
 
-\`\`\`bash
+```bash
 npm run build    # Build project
 npm run watch    # Watch for changes
 npm run inspector # Run MCP inspector
-\`\`\`
+```
 
 ## Contributing
 
