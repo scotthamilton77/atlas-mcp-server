@@ -1,7 +1,7 @@
 /**
  * Path-based task manager implementation
  */
-import { Task, TaskStatus, TaskType, CreateTaskInput, UpdateTaskInput, TaskResponse } from './types/task.js';
+import { Task, TaskStatus, TaskType, CreateTaskInput, UpdateTaskInput, TaskResponse, TaskMetadata } from './types/task.js';
 import { TaskStorage } from './types/storage.js';
 import { Logger } from './logging/index.js';
 import { ErrorCodes, createError } from './errors/index.js';
@@ -112,18 +112,20 @@ export class TaskManager {
                 const dependencies = input.dependencies || metadataDeps || [];
                 
                 // Remove dependencies from metadata to avoid duplication
-                const metadata = { ...input.metadata };
-                delete metadata.dependencies;
+                const metadata: Partial<TaskMetadata> = input.metadata ? { ...input.metadata } : {};
+                if ('dependencies' in metadata) {
+                    delete metadata.dependencies;
+                }
 
                 const task: Task = {
                     path,
                     name: input.name,
-                    description: input.description,
+                    description: input.description || undefined,
                     type: input.type || TaskType.TASK,
                     status: TaskStatus.PENDING,
-                    parentPath: input.parentPath,
-                    notes: input.notes,
-                    reasoning: input.reasoning,
+                    parentPath: input.parentPath || undefined,
+                    notes: input.notes || [],
+                    reasoning: input.reasoning || undefined,
                     dependencies,
                     subtasks: [],
                     metadata: {
@@ -215,8 +217,10 @@ export class TaskManager {
                 }
 
                 // Remove dependencies from metadata to avoid duplication
-                const metadata = { ...updates.metadata };
-                delete metadata?.dependencies;
+                const metadata: Partial<TaskMetadata> = updates.metadata ? { ...updates.metadata } : {};
+                if ('dependencies' in metadata) {
+                    delete metadata.dependencies;
+                }
 
                 // Update task fields
                 const updatedTask: Task = {
@@ -225,6 +229,7 @@ export class TaskManager {
                     description: updates.description !== undefined ? updates.description : task.description,
                     type: updates.type || task.type,
                     status: updates.status || task.status,
+                    parentPath: updates.parentPath !== undefined ? (updates.parentPath || undefined) : task.parentPath,
                     notes: updates.notes || task.notes,
                     reasoning: updates.reasoning || task.reasoning,
                     dependencies,
@@ -387,7 +392,7 @@ export class TaskManager {
     }
 
     /**
-     * Clears all tasks from the database
+     * Clears all tasks from the database and resets all caches
      */
     async clearAllTasks(confirm: boolean): Promise<void> {
         if (!confirm) {
@@ -403,19 +408,33 @@ export class TaskManager {
         }
 
         try {
+            // Get count of tasks before deletion for logging
+            const tasks = await this.storage.getTasksByPattern('*');
+            const taskCount = tasks.length;
+
             // Start transaction for clearing all tasks
             await this.storage.beginTransaction();
 
             try {
-                // Get count of tasks before deletion for logging
-                const tasks = await this.storage.getTasksByPattern('*');
-                const taskCount = tasks.length;
-
-                // Clear all tasks
+                // Clear all tasks and reset database
                 await this.storage.clearAllTasks();
+
+                // Clear all caches and force cleanup
+                await this.clearCaches();
+
+                // Force garbage collection if available
+                if (global.gc) {
+                    global.gc();
+                }
+
                 await this.storage.commitTransaction();
 
-                this.logger.info('All tasks cleared from database', {
+                // After transaction is committed, optimize the database
+                await this.storage.vacuum();
+                await this.storage.analyze();
+                await this.storage.checkpoint();
+
+                this.logger.info('Database and caches reset', {
                     tasksCleared: taskCount,
                     operation: 'clearAllTasks'
                 });

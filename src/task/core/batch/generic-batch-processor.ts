@@ -1,150 +1,133 @@
-import { BatchProgressCallback, BatchResult } from '../../../types/batch.js';
-import { BaseBatchProcessor } from './base-batch-processor.js';
+import { BatchData, BatchResult, ValidationResult } from './common/batch-utils.js';
+import { BaseBatchProcessor, BatchDependencies, BatchOptions } from './base-batch-processor.js';
 
-/**
- * Generic batch processor for handling non-dependent items with concurrent processing.
- * Uses types defined in src/types/batch.ts for consistent type definitions.
- */
+export interface GenericBatchConfig extends BatchOptions {
+  validateItems?: boolean;
+  stopOnError?: boolean;
+  itemTimeout?: number;
+}
+
 export class GenericBatchProcessor<T> extends BaseBatchProcessor<T> {
-    /**
-     * Process a single batch of items
-     * @see BatchProcessor in src/types/batch.ts
-     */
-    async processBatch(
-        batch: T[],
-        operation: (item: T) => Promise<void>,
-        progressCallback?: BatchProgressCallback
-    ): Promise<BatchResult> {
-        const result: BatchResult = {
-            success: true,
-            processedCount: 0,
-            failedCount: 0,
-            errors: []
-        };
+  private readonly config: Required<GenericBatchConfig>;
+  private readonly defaultConfig: Required<GenericBatchConfig> = {
+    ...this.defaultOptions,
+    validateItems: true,
+    stopOnError: false,
+    itemTimeout: 5000
+  };
 
-        for (const [index, item] of batch.entries()) {
-            try {
-                await this.processWithRetry(item, operation);
-                result.processedCount++;
+  constructor(
+    dependencies: BatchDependencies,
+    config: GenericBatchConfig = {}
+  ) {
+    super(dependencies, config);
+    this.config = { ...this.defaultConfig, ...config };
+  }
 
-                if (progressCallback?.onOperationComplete) {
-                    progressCallback.onOperationComplete(index + 1, batch.length);
-                }
-            } catch (error) {
-                const errorContext = this.createErrorContext(error, {
-                    item,
-                    batchSize: batch.length,
-                    currentIndex: index,
-                    processedCount: result.processedCount
-                });
+  protected async validate(batch: BatchData[]): Promise<ValidationResult> {
+    const errors: string[] = [];
 
-                result.failedCount++;
-                result.errors.push(errorContext);
-                result.success = false;
-
-                if (progressCallback?.onOperationComplete) {
-                    progressCallback.onOperationComplete(index + 1, batch.length);
-                }
-
-                // Check if we should stop processing
-                if (this.shouldStopProcessing(result)) {
-                    this.logger.warn('Stopping batch processing due to errors', {
-                        processedCount: result.processedCount,
-                        failedCount: result.failedCount,
-                        errorTypes: result.errors.map(e => this.categorizeError(e.error))
-                    });
-                    break;
-                }
-            }
-        }
-
-        return result;
+    if (!Array.isArray(batch)) {
+      errors.push('Batch must be an array');
+      return { valid: false, errors };
     }
 
-    /**
-     * Process multiple batches of items with concurrent processing
-     * @see BatchProcessor in src/types/batch.ts
-     */
-    async processInBatches(
-        items: T[],
-        batchSize: number,
-        operation: (item: T) => Promise<void>,
-        progressCallback?: BatchProgressCallback
-    ): Promise<BatchResult> {
-        const batches = this.createBatches(items, batchSize);
-        const totalBatches = batches.length;
-        let currentBatch = 0;
-
-        const result: BatchResult = {
-            success: true,
-            processedCount: 0,
-            failedCount: 0,
-            errors: []
-        };
-
-        try {
-            while (currentBatch < totalBatches) {
-                const batchPromises: Promise<BatchResult>[] = [];
-
-                // Create concurrent batch operations up to the limit
-                for (
-                    let i = 0;
-                    i < this.config.concurrentBatches && currentBatch < totalBatches;
-                    i++, currentBatch++
-                ) {
-                    if (progressCallback?.onBatchStart) {
-                        progressCallback.onBatchStart(currentBatch + 1, totalBatches);
-                    }
-
-                    const batchPromise = this.processBatch(
-                        batches[currentBatch],
-                        operation,
-                        progressCallback
-                    ).then(batchResult => {
-                        if (progressCallback?.onBatchComplete) {
-                            progressCallback.onBatchComplete(currentBatch + 1, batchResult);
-                        }
-                        return batchResult;
-                    });
-
-                    batchPromises.push(batchPromise);
-                }
-
-                // Wait for current batch of promises to complete
-                const batchResults = await Promise.all(batchPromises);
-
-                // Aggregate results
-                for (const batchResult of batchResults) {
-                    result.processedCount += batchResult.processedCount;
-                    result.failedCount += batchResult.failedCount;
-                    result.errors.push(...batchResult.errors);
-                    if (!batchResult.success) {
-                        result.success = false;
-                    }
-                }
-
-                // Check if we should stop processing
-                if (this.shouldStopProcessing(result)) {
-                    this.logger.warn('Stopping batch processing due to errors', {
-                        processedCount: result.processedCount,
-                        failedCount: result.failedCount,
-                        remainingBatches: totalBatches - currentBatch
-                    });
-                    break;
-                }
-            }
-
-            this.logger.info('Batch processing completed', {
-                totalItems: items.length,
-                processedCount: result.processedCount,
-                failedCount: result.failedCount,
-                batchCount: totalBatches
-            });
-
-            return result;
-        } catch (error) {
-            this.logger.error('Batch processing failed', { error });
-            throw error;
-        }
+    if (batch.length === 0) {
+      errors.push('Batch cannot be empty');
+      return { valid: false, errors };
     }
+
+    if (this.config.validateItems) {
+      for (const [index, item] of batch.entries()) {
+        if (!item.id) {
+          errors.push(`Item at index ${index} is missing required 'id' field`);
+        }
+      }
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors
+    };
+  }
+
+  protected async process(batch: BatchData[]): Promise<BatchResult<T>> {
+    const results: T[] = [];
+    const errors: Error[] = [];
+    const startTime = Date.now();
+
+    for (const item of batch) {
+      try {
+        const result = await this.processWithTimeout(
+          item,
+          this.config.itemTimeout
+        );
+        results.push(result);
+
+        this.logger.debug('Processed batch item', {
+          itemId: item.id,
+          duration: Date.now() - startTime
+        });
+      } catch (error) {
+        this.logger.error('Failed to process batch item', {
+          error,
+          itemId: item.id
+        });
+        errors.push(error as Error);
+
+        if (this.config.stopOnError) {
+          this.logger.warn('Stopping batch processing due to error', {
+            itemId: item.id,
+            remainingItems: batch.length - results.length - 1
+          });
+          break;
+        }
+      }
+    }
+
+    const endTime = Date.now();
+    const result: BatchResult<T> = {
+      results,
+      errors,
+      metadata: {
+        processingTime: endTime - startTime,
+        successCount: results.length,
+        errorCount: errors.length
+      }
+    };
+
+    this.logMetrics(result);
+    return result;
+  }
+
+  private async processWithTimeout(
+    item: BatchData,
+    timeout: number
+  ): Promise<T> {
+    return new Promise((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        reject(new Error(`Processing timed out for item ${item.id}`));
+      }, timeout);
+
+      this.processItem(item)
+        .then(result => {
+          clearTimeout(timeoutId);
+          resolve(result);
+        })
+        .catch(error => {
+          clearTimeout(timeoutId);
+          reject(error);
+        });
+    });
+  }
+
+  private async processItem(item: BatchData): Promise<T> {
+    // This is where you would implement the actual processing logic
+    // For now, we'll just return the item as is
+    return item as unknown as T;
+  }
+
+  /**
+   * Helper method to categorize errors for better error handling
+   */
 }

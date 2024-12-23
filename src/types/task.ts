@@ -61,6 +61,7 @@ export interface UpdateTaskInput extends Record<string, unknown> {
     description?: string;
     type?: TaskType;
     status?: TaskStatus;
+    parentPath?: string;
     notes?: string[];
     reasoning?: string;
     dependencies?: string[];

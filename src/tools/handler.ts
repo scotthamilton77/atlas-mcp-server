@@ -18,7 +18,6 @@ import {
     repairRelationshipsSchema
 } from './schemas.js';
 import { DependencyAwareBatchProcessor } from '../task/core/batch/dependency-aware-batch-processor.js';
-import { BatchResult } from '../types/batch.js';
 
 interface BulkOperation {
     type: 'create' | 'update' | 'delete';
@@ -293,32 +292,40 @@ export class ToolHandler {
                         dependencies: index > 0 ? [operations[index - 1].path] : []
                     }));
 
-                    const batchProcessor = new DependencyAwareBatchProcessor<BulkOperation>({
-                        batchSize: 1,
+                    const batchProcessor = new DependencyAwareBatchProcessor({
+                        validator: null,
+                        logger: this.logger,
+                        storage: this.taskManager.storage
+                    }, {
+                        maxBatchSize: 1,
                         concurrentBatches: 1,
-                        retryCount: 3,
+                        maxRetries: 3,
                         retryDelay: 1000
                     });
                     
                     // Process operations sequentially with dependency ordering
-                    const result = await batchProcessor.processInBatches(operationsWithDeps, 1, async (operation: BulkOperation) => {
+                    const result = await batchProcessor.processInBatches(
+                        operationsWithDeps.map(op => ({ id: op.path, data: op })),
+                        1,
+                        async (operation) => {
+                            const op = operation.data as BulkOperation;
                         try {
-                            switch (operation.type) {
+                            switch (op.type) {
                                 case 'create': {
                                     // Extract parent path from task path if not provided
-                                    const pathSegments = operation.path.split('/');
-                                    const parentPath = operation.data?.parentPath as string || 
+                                    const pathSegments = op.path.split('/');
+                                    const parentPath = op.data?.parentPath as string || 
                                         (pathSegments.length > 1 ? pathSegments.slice(0, -1).join('/') : undefined);
 
                                     const taskData: CreateTaskInput = {
-                                        path: operation.path,
-                                        name: operation.data?.name as string || pathSegments[pathSegments.length - 1] || 'Unnamed Task',
-                                        type: (operation.data?.type as string || 'TASK').toUpperCase() as TaskType,
-                                        description: operation.data?.description as string,
-                                        dependencies: operation.data?.dependencies as string[] || [],
+                                        path: op.path,
+                                        name: op.data?.name as string || pathSegments[pathSegments.length - 1] || 'Unnamed Task',
+                                        type: (op.data?.type as string || 'TASK').toUpperCase() as TaskType,
+                                        description: op.data?.description as string,
+                                        dependencies: op.data?.dependencies as string[] || [],
                                         parentPath,
                                         metadata: {
-                                            ...(operation.data?.metadata || {}),
+                                            ...(op.data?.metadata || {}),
                                             created: Date.now(),
                                             updated: Date.now()
                                         }
@@ -332,35 +339,35 @@ export class ToolHandler {
                                 }
                                 case 'update': {
                                     const updateData: UpdateTaskInput = {
-                                        status: operation.data?.status as TaskStatus,
-                                        metadata: operation.data?.metadata as Record<string, unknown>,
-                                        notes: operation.data?.notes as string[],
-                                        dependencies: operation.data?.dependencies as string[],
-                                        description: operation.data?.description as string,
-                                        name: operation.data?.name as string,
-                                        type: operation.data?.type ? (operation.data.type as string).toUpperCase() as TaskType : undefined
+                                        status: op.data?.status as TaskStatus,
+                                        metadata: op.data?.metadata as Record<string, unknown>,
+                                        notes: op.data?.notes as string[],
+                                        dependencies: op.data?.dependencies as string[],
+                                        description: op.data?.description as string,
+                                        name: op.data?.name as string,
+                                        type: op.data?.type ? (op.data.type as string).toUpperCase() as TaskType : undefined
                                     };
 
                                     // Validate hierarchy rules if type is being updated
                                     if (updateData.type) {
-                                        await this.validateTaskHierarchy({ ...updateData, path: operation.path }, 'update');
+                                        await this.validateTaskHierarchy({ ...updateData, path: op.path }, 'update');
                                     }
 
-                                    await this.taskManager.updateTask(operation.path, updateData);
+                                    await this.taskManager.updateTask(op.path, updateData);
                                     break;
                                 }
                                 case 'delete':
-                                    await this.taskManager.deleteTask(operation.path);
+                                    await this.taskManager.deleteTask(op.path);
                                     break;
                                 default:
                                     throw createError(
                                         ErrorCodes.INVALID_INPUT,
-                                        `Invalid operation type: ${operation.type}`
+                                        `Invalid operation type: ${op.type}`
                                     );
                             }
                         } catch (error) {
                             this.logger.error('Operation failed', {
-                                operation,
+                                operation: op,
                                 error
                             });
                             throw error;
@@ -368,13 +375,13 @@ export class ToolHandler {
                     });
 
                     return this.formatResponse({
-                        success: result.success,
-                        processedCount: result.processedCount,
-                        failedCount: result.failedCount,
-                        errors: result.errors.map((err: BatchResult['errors'][0]) => ({
-                            operation: err.item,
-                            error: err.error.message,
-                            context: err.context
+                        success: result.metadata?.successCount === operationsWithDeps.length,
+                        processedCount: result.metadata?.successCount || 0,
+                        failedCount: result.metadata?.errorCount || 0,
+                        errors: result.errors.map(err => ({
+                            operation: err,
+                            error: err.message,
+                            context: undefined
                         }))
                     });
                 }

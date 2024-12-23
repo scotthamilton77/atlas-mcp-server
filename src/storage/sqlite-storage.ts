@@ -2,14 +2,19 @@
  * SQLite storage implementation
  */
 import { Database, open } from 'sqlite';
-import { Task, TaskStatus } from '../types/task.js';
-import { StorageConfig, TaskStorage, StorageMetrics, CacheStats } from '../types/storage.js';
+import { Task, TaskStatus, CreateTaskInput, UpdateTaskInput } from '../types/task.js';
+import { 
+    StorageConfig, 
+    TaskStorage, 
+    StorageMetrics, 
+    CacheStats
+} from '../types/storage.js';
 import { Logger } from '../logging/index.js';
 import { ErrorCodes, createError } from '../errors/index.js';
 import { ConnectionManager } from './connection-manager.js';
 import { globToSqlPattern } from '../utils/pattern-matcher.js';
 
-interface CacheEntry {
+interface TaskCacheEntry {
     task: Task;
     timestamp: number;
     hits: number;
@@ -20,7 +25,7 @@ export class SqliteStorage implements TaskStorage {
     private readonly logger: Logger;
     private readonly config: StorageConfig;
     private readonly connectionManager: ConnectionManager;
-    private readonly cache: Map<string, CacheEntry> = new Map();
+    private readonly cache: Map<string, TaskCacheEntry> = new Map();
     private readonly MAX_CACHE_SIZE = 1000;
     private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
     private cacheHits = 0;
@@ -34,7 +39,12 @@ export class SqliteStorage implements TaskStorage {
 
     async initialize(): Promise<void> {
         const dbPath = `${this.config.baseDir}/${this.config.name}.db`;
-        this.logger.debug('Opening SQLite database', { dbPath });
+        this.logger.info('Opening SQLite database', { 
+            dbPath,
+            baseDir: this.config.baseDir,
+            name: this.config.name,
+            fullPath: (await import('path')).resolve(dbPath)
+        });
 
         try {
             // Import required modules
@@ -42,12 +52,23 @@ export class SqliteStorage implements TaskStorage {
             const path = await import('path');
             
             // Ensure storage directory exists with proper permissions
-            await fs.mkdir(path.dirname(dbPath), { recursive: true, mode: 0o750 });
-            this.logger.debug('Storage directory created/verified', { path: path.dirname(dbPath) });
+            const dirPath = path.dirname(dbPath);
+            await fs.mkdir(dirPath, { recursive: true, mode: 0o750 });
+            
+            // Log directory contents before
+            try {
+                const dirContents = await fs.readdir(dirPath);
+                this.logger.info('Storage directory contents before:', { dirPath, contents: dirContents });
+            } catch (err) {
+                this.logger.error('Failed to read directory', { error: err });
+            }
 
             // Import sqlite3 with verbose mode for better error messages
-            const sqlite3 = (await import('sqlite3')).default;
-            this.logger.debug('SQLite3 module imported');
+            const sqlite3 = await import('sqlite3');
+            this.logger.info('SQLite3 module imported', {
+                sqlite3: typeof sqlite3.default,
+                modes: Object.keys(sqlite3.default)
+            });
 
             // Initialize database with retry support
             await this.connectionManager.executeWithRetry(async () => {
@@ -55,8 +76,8 @@ export class SqliteStorage implements TaskStorage {
                     // Initialize database with promise interface
                     this.db = await open({
                         filename: dbPath,
-                        driver: sqlite3.Database,
-                        mode: sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE
+                        driver: sqlite3.default.Database,
+                        mode: sqlite3.default.OPEN_READWRITE | sqlite3.default.OPEN_CREATE
                     });
                     this.logger.debug('Database opened successfully');
                 } catch (err) {
@@ -158,6 +179,93 @@ export class SqliteStorage implements TaskStorage {
                 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
                 CREATE INDEX IF NOT EXISTS idx_tasks_type ON tasks(type);
             `);
+        });
+    }
+
+    async createTask(input: CreateTaskInput): Promise<Task> {
+        if (!input.path) {
+            throw createError(
+                ErrorCodes.INVALID_INPUT,
+                'Task path is required',
+                'createTask'
+            );
+        }
+
+        if (!input.type) {
+            throw createError(
+                ErrorCodes.INVALID_INPUT,
+                'Task type is required',
+                'createTask'
+            );
+        }
+
+        const task: Task = {
+            path: input.path,
+            name: input.name,
+            type: input.type,
+            status: TaskStatus.PENDING,
+            description: input.description || undefined,
+            parentPath: input.parentPath || undefined,
+            notes: input.notes || [],
+            reasoning: input.reasoning || undefined,
+            dependencies: input.dependencies || [],
+            subtasks: [],
+            metadata: {
+                ...input.metadata,
+                created: Date.now(),
+                updated: Date.now(),
+                projectPath: input.path.split('/')[0],
+                version: 1
+            }
+        };
+
+        await this.saveTask(task);
+        return task;
+    }
+
+    async updateTask(path: string, updates: UpdateTaskInput): Promise<Task> {
+        const existingTask = await this.getTask(path);
+        if (!existingTask) {
+            throw createError(
+                ErrorCodes.TASK_NOT_FOUND,
+                'Task not found',
+                'updateTask',
+                path
+            );
+        }
+
+        const updatedTask: Task = {
+            ...existingTask,
+            ...updates,
+            metadata: {
+                ...existingTask.metadata,
+                ...updates.metadata,
+                updated: Date.now(),
+                version: existingTask.metadata.version + 1
+            }
+        };
+
+        await this.saveTask(updatedTask);
+        return updatedTask;
+    }
+
+    async hasChildren(path: string): Promise<boolean> {
+        return this.withDb(async (db) => {
+            const result = await db.get<{ count: number }>(
+                'SELECT COUNT(*) as count FROM tasks WHERE parent_path = ?',
+                path
+            );
+            return (result?.count || 0) > 0;
+        });
+    }
+
+    async getDependentTasks(path: string): Promise<Task[]> {
+        return this.withDb(async (db) => {
+            const rows = await db.all<Record<string, unknown>[]>(
+                `SELECT * FROM tasks WHERE json_array_length(dependencies) > 0 
+                 AND json_extract(dependencies, '$') LIKE '%${path}%'`
+            );
+            return rows.map(row => this.rowToTask(row));
         });
     }
 
@@ -267,6 +375,7 @@ export class SqliteStorage implements TaskStorage {
 
                 // Save all tasks with updated relationships
                 for (const task of tasks) {
+                    this.logger.info('Saving task:', { task });
                     await db.run(
                         `INSERT OR REPLACE INTO tasks (
                             path, name, description, type, status,
@@ -309,8 +418,11 @@ export class SqliteStorage implements TaskStorage {
         const totalRequests = this.cacheHits + this.cacheMisses;
         return {
             size: this.cache.size,
+            hits: this.cacheHits,
+            misses: this.cacheMisses,
             hitRate: totalRequests > 0 ? this.cacheHits / totalRequests : 0,
-            memoryUsage: process.memoryUsage().heapUsed
+            memoryUsage: process.memoryUsage().heapUsed,
+            lastCleanup: Date.now()
         };
     }
 
@@ -725,14 +837,39 @@ export class SqliteStorage implements TaskStorage {
     }
 
     /**
-     * Clears all tasks from the database
+     * Clears all tasks from the database and recreates tables
      */
     async clearAllTasks(): Promise<void> {
-        await this.inTransaction(async () => {
-            return this.withDb(async (db) => {
-                await db.run('DELETE FROM tasks');
-                this.logger.info('All tasks cleared from database');
-            });
+        return this.withDb(async (db) => {
+            try {
+                // Drop existing tables
+                await db.run('DROP TABLE IF EXISTS tasks');
+                
+                // Clear cache and indexes
+                await this.clearCache();
+                
+                // Recreate tables
+                await this.setupDatabase();
+                
+                // Vacuum database outside of transaction
+                await db.run('VACUUM');
+                
+                // Analyze the new empty tables
+                await db.run('ANALYZE');
+                
+                // Checkpoint WAL
+                await db.run('PRAGMA wal_checkpoint(TRUNCATE)');
+                
+                this.logger.info('Database reset: tables dropped, recreated, and optimized');
+            } catch (error) {
+                const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                this.logger.error('Failed to clear tasks', { error: errorMessage });
+                throw createError(
+                    ErrorCodes.STORAGE_ERROR,
+                    'Failed to clear tasks',
+                    errorMessage
+                );
+            }
         });
     }
 

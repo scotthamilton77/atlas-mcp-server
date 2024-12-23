@@ -2,7 +2,7 @@
  * Database connection manager
  */
 import { Logger } from '../logging/index.js';
-import { StorageError, StorageErrorType } from '../types/storage.js';
+import { ErrorCodes, createError } from '../errors/index.js';
 
 export class ConnectionManager {
     private readonly logger: Logger;
@@ -48,10 +48,10 @@ export class ConnectionManager {
             }
         }
 
-        throw new StorageError(
-            StorageErrorType.CONNECTION,
-            `Operation failed after ${this.maxRetries} retries: ${lastError?.message}`,
-            lastError
+        throw createError(
+            ErrorCodes.STORAGE_ERROR,
+            'Operation failed',
+            `Failed after ${this.maxRetries} retries: ${lastError?.message}`
         );
     }
 
@@ -71,10 +71,10 @@ export class ConnectionManager {
             } catch (error) {
                 const elapsed = Date.now() - startTime;
                 if (elapsed >= this.busyTimeout) {
-                    throw new StorageError(
-                        StorageErrorType.CONNECTION,
-                        `Operation timed out after ${elapsed}ms: ${error instanceof Error ? error.message : String(error)}`,
-                        error
+                    throw createError(
+                        ErrorCodes.STORAGE_ERROR,
+                        'Operation timed out',
+                        `Timed out after ${elapsed}ms: ${error instanceof Error ? error.message : String(error)}`
                     );
                 }
 

@@ -1,194 +1,245 @@
-import { 
-    BatchProgressCallback,
-    BatchResult,
-    DependentItem
-} from '../../../types/batch.js';
-import { ErrorCodes, createError } from '../../../errors/index.js';
-import { GenericBatchProcessor } from './generic-batch-processor.js';
+import { Task, TaskStatus } from '../../../types/task.js';
+import { BatchData, BatchResult, ValidationResult } from './common/batch-utils.js';
+import { BaseBatchProcessor, BatchDependencies, BatchOptions } from './base-batch-processor.js';
 
-/**
- * Batch processor for handling items with dependencies.
- * Extends GenericBatchProcessor to add dependency-aware processing.
- * Uses types defined in src/types/batch.ts for consistent type definitions.
- */
-export class DependencyAwareBatchProcessor<T extends DependentItem> extends GenericBatchProcessor<T> {
-    /**
-     * Process multiple batches of items with dependency ordering
-     * @see BatchProcessor in src/types/batch.ts
-     */
-    override async processInBatches(
-        items: T[],
-        batchSize: number,
-        operation: (item: T) => Promise<void>,
-        progressCallback?: BatchProgressCallback
-    ): Promise<BatchResult> {
+interface TaskBatchData extends BatchData {
+  task: Task;
+  dependencies: string[];
+}
+
+interface DependencyGraph {
+  [taskId: string]: Set<string>;
+}
+
+export class DependencyAwareBatchProcessor extends BaseBatchProcessor {
+  private dependencyGraph: DependencyGraph = {};
+
+  constructor(
+    dependencies: BatchDependencies,
+    options: BatchOptions = {}
+  ) {
+    super(dependencies, {
+      ...options,
+      validateBeforeProcess: true // Always validate dependencies
+    });
+  }
+
+  protected async validate(batch: BatchData[]): Promise<ValidationResult> {
+    const errors: string[] = [];
+    const tasks = batch as TaskBatchData[];
+
+    try {
+      // Build dependency graph
+      this.buildDependencyGraph(tasks);
+
+      // Check for circular dependencies
+      const circularDeps = this.findCircularDependencies();
+      if (circularDeps.length > 0) {
+        errors.push(`Circular dependencies detected: ${circularDeps.join(' -> ')}`);
+      }
+
+      // Validate each task's dependencies exist
+      for (const task of tasks) {
+        const missingDeps = await this.findMissingDependencies(task);
+        if (missingDeps.length > 0) {
+          errors.push(`Task ${task.id} has missing dependencies: ${missingDeps.join(', ')}`);
+        }
+      }
+
+      // Validate dependency status
+      for (const task of tasks) {
+        const blockedDeps = await this.findBlockedDependencies(task);
+        if (blockedDeps.length > 0) {
+          errors.push(
+            `Task ${task.id} has blocked dependencies: ${blockedDeps.join(', ')}`
+          );
+        }
+      }
+
+      return {
+        valid: errors.length === 0,
+        errors
+      };
+    } catch (error) {
+      this.logger.error('Dependency validation failed', { error });
+      errors.push(`Validation error: ${(error as Error).message}`);
+      return { valid: false, errors };
+    }
+  }
+
+  protected async process<T>(batch: BatchData[]): Promise<BatchResult<T>> {
+    const tasks = batch as TaskBatchData[];
+    const results: T[] = [];
+    const errors: Error[] = [];
+    const startTime = Date.now();
+
+    try {
+      // Process tasks in dependency order
+      const processingOrder = this.getProcessingOrder();
+      
+      for (const taskId of processingOrder) {
+        const task = tasks.find(t => t.id === taskId);
+        if (!task) continue;
+
         try {
-            // Sort items based on dependencies
-            const sortedItems = this.sortByDependencies(items);
-
-            const batches = this.createBatches(sortedItems, batchSize);
-            const totalBatches = batches.length;
-            let currentBatch = 0;
-
-            const result: BatchResult = {
-                success: true,
-                processedCount: 0,
-                failedCount: 0,
-                errors: []
-            };
-
-            // Process batches sequentially to maintain dependency order
-            for (const batch of batches) {
-                if (progressCallback?.onBatchStart) {
-                    progressCallback.onBatchStart(currentBatch + 1, totalBatches);
-                }
-
-                const batchResult = await this.processBatch(
-                    batch,
-                    operation,
-                    progressCallback
-                );
-
-                if (progressCallback?.onBatchComplete) {
-                    progressCallback.onBatchComplete(currentBatch + 1, batchResult);
-                }
-
-                result.processedCount += batchResult.processedCount;
-                result.failedCount += batchResult.failedCount;
-                result.errors.push(...batchResult.errors);
-
-                if (!batchResult.success) {
-                    result.success = false;
-                    // Stop processing on failure when dealing with dependencies
-                    break;
-                }
-
-                currentBatch++;
-            }
-
-            this.logger.info('Dependency-aware batch processing completed', {
-                totalItems: items.length,
-                processedCount: result.processedCount,
-                failedCount: result.failedCount,
-                batchCount: totalBatches
-            });
-
-            return result;
+          // Process the task
+          const result = await this.withRetry(
+            async () => this.processTask(task),
+            `Processing task ${task.id}`
+          );
+          
+          results.push(result as T);
+          
+          this.logger.debug('Task processed successfully', {
+            taskId: task.id,
+            dependencies: task.dependencies
+          });
         } catch (error) {
-            this.logger.error('Dependency-aware batch processing failed', { error });
-            throw error;
+          this.logger.error('Failed to process task', {
+            error,
+            taskId: task.id
+          });
+          errors.push(error as Error);
         }
+      }
+
+      const endTime = Date.now();
+      const result: BatchResult<T> = {
+        results,
+        errors,
+        metadata: {
+          processingTime: endTime - startTime,
+          successCount: results.length,
+          errorCount: errors.length
+        }
+      };
+
+      this.logMetrics(result);
+      return result;
+    } catch (error) {
+      this.logger.error('Batch processing failed', { error });
+      throw error;
+    } finally {
+      // Clear dependency graph
+      this.dependencyGraph = {};
+    }
+  }
+
+  private buildDependencyGraph(tasks: TaskBatchData[]): void {
+    this.dependencyGraph = {};
+    
+    for (const task of tasks) {
+      if (!this.dependencyGraph[task.id]) {
+        this.dependencyGraph[task.id] = new Set();
+      }
+      
+      for (const dep of task.dependencies) {
+        this.dependencyGraph[task.id].add(dep);
+      }
+    }
+  }
+
+  private findCircularDependencies(): string[] {
+    const visited = new Set<string>();
+    const recursionStack = new Set<string>();
+    const path: string[] = [];
+
+    const dfs = (taskId: string): boolean => {
+      visited.add(taskId);
+      recursionStack.add(taskId);
+      path.push(taskId);
+
+      const dependencies = this.dependencyGraph[taskId] || new Set();
+      for (const depId of dependencies) {
+        if (!visited.has(depId)) {
+          if (dfs(depId)) return true;
+        } else if (recursionStack.has(depId)) {
+          // Found circular dependency
+          path.push(depId); // Add the repeated dependency to show the cycle
+          return true;
+        }
+      }
+
+      path.pop();
+      recursionStack.delete(taskId);
+      return false;
+    };
+
+    for (const taskId of Object.keys(this.dependencyGraph)) {
+      if (!visited.has(taskId)) {
+        if (dfs(taskId)) {
+          return path;
+        }
+      }
     }
 
-    /**
-     * Sort items based on their dependencies using topological sort
-     */
-    private sortByDependencies(items: T[]): T[] {
-        const graph = new Map<string, Set<string>>();
-        const inDegree = new Map<string, number>();
-        const itemMap = new Map<string, T>();
+    return [];
+  }
 
-        // Build dependency graph
-        for (const item of items) {
-            const itemId = this.getItemId(item);
-            if (!itemId) {
-                throw createError(
-                    ErrorCodes.INVALID_INPUT,
-                    {
-                        message: 'Item missing required identifier',
-                        context: { item }
-                    },
-                    'Items must have either a path or id property'
-                );
-            }
+  private async findMissingDependencies(task: TaskBatchData): Promise<string[]> {
+    const missing: string[] = [];
+    
+    for (const depId of task.dependencies) {
+      const depTask = await this.dependencies.storage.getTask(depId);
+      if (!depTask) {
+        missing.push(depId);
+      }
+    }
+    
+    return missing;
+  }
 
-            itemMap.set(itemId, item);
-            if (!graph.has(itemId)) {
-                graph.set(itemId, new Set());
-            }
+  private async findBlockedDependencies(task: TaskBatchData): Promise<string[]> {
+    const blocked: string[] = [];
+    
+    for (const depId of task.dependencies) {
+      const depTask = await this.dependencies.storage.getTask(depId);
+      if (depTask && depTask.status === TaskStatus.BLOCKED) {
+        blocked.push(depId);
+      }
+    }
+    
+    return blocked;
+  }
 
-            if (item.dependencies) {
-                for (const dep of item.dependencies) {
-                    if (!graph.has(dep)) {
-                        graph.set(dep, new Set());
-                    }
-                    graph.get(dep)!.add(itemId);
-                    inDegree.set(itemId, (inDegree.get(itemId) || 0) + 1);
-                }
-            }
-        }
+  private getProcessingOrder(): string[] {
+    const visited = new Set<string>();
+    const order: string[] = [];
 
-        // Perform topological sort
-        const sorted: T[] = [];
-        const queue: string[] = [];
+    const visit = (taskId: string) => {
+      if (visited.has(taskId)) return;
+      visited.add(taskId);
 
-        // Find all nodes with no dependencies
-        for (const [node] of graph) {
-            if (!inDegree.has(node)) {
-                queue.push(node);
-            }
-        }
+      const dependencies = this.dependencyGraph[taskId] || new Set();
+      for (const depId of dependencies) {
+        visit(depId);
+      }
 
-        while (queue.length > 0) {
-            const node = queue.shift()!;
-            const item = itemMap.get(node);
-            if (item) {
-                sorted.push(item);
-            }
+      order.push(taskId);
+    };
 
-            for (const dependent of graph.get(node) || []) {
-                inDegree.set(dependent, inDegree.get(dependent)! - 1);
-                if (inDegree.get(dependent) === 0) {
-                    queue.push(dependent);
-                }
-            }
-        }
-
-        // Check for cycles
-        if (sorted.length !== items.length) {
-            throw createError(
-                ErrorCodes.TASK_CYCLE,
-                {
-                    message: 'Circular dependencies detected',
-                    context: {
-                        graph: Object.fromEntries(graph),
-                        inDegree: Object.fromEntries(inDegree),
-                        processedCount: sorted.length,
-                        totalItems: items.length
-                    }
-                },
-                'Cannot process items with circular dependencies',
-                'Review dependencies to ensure there are no cycles'
-            );
-        }
-
-        return sorted;
+    for (const taskId of Object.keys(this.dependencyGraph)) {
+      visit(taskId);
     }
 
-    /**
-     * Get unique identifier for an item
-     */
-    private getItemId(item: T): string | undefined {
-        return item.path || item.id;
+    return order;
+  }
+
+  private async processTask(task: TaskBatchData): Promise<Task> {
+    // Check dependencies are complete
+    for (const depId of task.dependencies) {
+      const depTask = await this.dependencies.storage.getTask(depId);
+      if (!depTask || depTask.status !== TaskStatus.COMPLETED) {
+        throw new Error(`Dependency ${depId} is not completed`);
+      }
     }
 
-    /**
-     * Pre-validate batch items
-     * @see BaseBatchProcessor in src/task/core/batch/base-batch-processor.ts
-     */
-    protected async preValidateBatch(batch: T[]): Promise<void> {
-        await super.preValidateBatch(batch);
+    // Process the task (implementation will vary based on task type)
+    const processedTask = await this.dependencies.storage.updateTask(
+      task.task.path,
+      { status: TaskStatus.COMPLETED }
+    );
 
-        const missingIds = batch.filter(item => !this.getItemId(item));
-        if (missingIds.length > 0) {
-            throw createError(
-                ErrorCodes.INVALID_INPUT,
-                {
-                    message: 'Items missing required identifiers',
-                    context: { items: missingIds }
-                },
-                'All items must have either a path or id property'
-            );
-        }
-    }
+    return processedTask;
+  }
 }

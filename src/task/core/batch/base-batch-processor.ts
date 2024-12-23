@@ -1,217 +1,229 @@
 import { Logger } from '../../../logging/index.js';
-import { ErrorCodes, createError } from '../../../errors/index.js';
-import {
-    BatchConfig,
-    BatchResult,
-    BatchProgressCallback,
-    BatchError
-} from '../../../types/batch.js';
+import { BatchData, BatchResult, ValidationResult } from './common/batch-utils.js';
 
-const DEFAULT_CONFIG: BatchConfig = {
-    batchSize: 50,
-    concurrentBatches: 3,
-    retryCount: 3,
-    retryDelay: 1000
-};
+export interface BatchDependencies {
+  validator: any;
+  logger: Logger;
+  storage: any;
+}
 
-/**
- * Base class for batch processors providing core functionality.
- * Uses types defined in src/types/batch.ts for consistent type definitions.
- */
+export interface BatchOptions {
+  maxBatchSize?: number;
+  maxRetries?: number;
+  retryDelay?: number;
+  timeout?: number;
+  validateBeforeProcess?: boolean;
+  concurrentBatches?: number;
+}
+
 export abstract class BaseBatchProcessor<T = unknown> {
-    protected readonly logger: Logger;
-    protected config: BatchConfig;
+  protected readonly logger: Logger;
+  protected readonly defaultOptions: Required<BatchOptions> = {
+    maxBatchSize: 100,
+    maxRetries: 3,
+    retryDelay: 1000,
+    timeout: 30000,
+    validateBeforeProcess: true,
+    concurrentBatches: 1
+  };
 
-    constructor(config: Partial<BatchConfig> = {}) {
-        this.logger = Logger.getInstance().child({ component: this.constructor.name });
-        this.config = { ...DEFAULT_CONFIG, ...config };
-    }
+  constructor(
+    protected readonly dependencies: BatchDependencies,
+    protected readonly options: BatchOptions = {}
+  ) {
+    this.logger = Logger.getInstance().child({ 
+      component: this.constructor.name 
+    });
+    this.options = { ...this.defaultOptions, ...options };
+  }
 
-    /**
-     * Process a single batch of items
-     * @see BatchProcessor in src/types/batch.ts
-     */
-    abstract processBatch(
-        batch: T[],
-        operation: (item: T) => Promise<void>,
-        progressCallback?: BatchProgressCallback
-    ): Promise<BatchResult>;
-
-    /**
-     * Process multiple batches of items
-     * @see BatchProcessor in src/types/batch.ts
-     */
-    abstract processInBatches(
-        items: T[],
-        batchSize: number,
-        operation: (item: T) => Promise<void>,
-        progressCallback?: BatchProgressCallback
-    ): Promise<BatchResult>;
-
-    /**
-     * Pre-validate batch items
-     */
-    protected async preValidateBatch(_batch: T[]): Promise<void> {
-        // Base validation - can be overridden by subclasses
-    }
-
-    /**
-     * Create batches from an array of items
-     */
-    protected createBatches(items: T[], batchSize: number): T[][] {
-        const batches: T[][] = [];
-        for (let i = 0; i < items.length; i += batchSize) {
-            batches.push(items.slice(i, i + batchSize));
+  /**
+   * Main execution method that orchestrates the batch processing flow
+   */
+  async execute(batch: BatchData[]): Promise<BatchResult<T>> {
+    try {
+      // Validate batch if enabled
+      if (this.options.validateBeforeProcess) {
+        const validation = await this.validate(batch);
+        if (!validation.valid) {
+          throw new Error(`Batch validation failed: ${validation.errors.join(', ')}`);
         }
-        return batches;
-    }
+      }
 
-    /**
-     * Process an item with retry logic
-     */
-    protected async processWithRetry(
-        item: T,
-        operation: (item: T) => Promise<void>
-    ): Promise<void> {
-        let lastError: Error | undefined;
-        let lastAttemptContext: Record<string, unknown> = {};
-
-        for (let attempt = 1; attempt <= this.config.retryCount; attempt++) {
-            try {
-                await operation(item);
-                if (attempt > 1) {
-                    this.logger.info('Operation succeeded after retry', {
-                        successfulAttempt: attempt,
-                        totalAttempts: this.config.retryCount
-                    });
-                }
-                return;
-            } catch (error) {
-                if (this.isCriticalError(error)) {
-                    throw error;
-                }
-
-                lastError = error instanceof Error ? error : new Error(String(error));
-                lastAttemptContext = {
-                    attempt,
-                    maxAttempts: this.config.retryCount,
-                    error: lastError,
-                    errorType: this.categorizeError(error),
-                    item: typeof item === 'object' ? JSON.stringify(item) : item,
-                    timestamp: new Date().toISOString()
-                };
-
-                this.logger.warn('Operation failed, retrying', lastAttemptContext);
-
-                if (attempt < this.config.retryCount) {
-                    await this.delay(this.config.retryDelay * Math.pow(2, attempt - 1));
-                }
-            }
+      // Set up timeout if specified
+      let timeoutId: NodeJS.Timeout | undefined;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        if (this.options.timeout) {
+          timeoutId = setTimeout(() => {
+            reject(new Error(`Batch processing timed out after ${this.options.timeout}ms`));
+          }, this.options.timeout);
         }
+      });
 
-        throw createError(
-            ErrorCodes.OPERATION_FAILED,
-            {
-                message: 'Operation failed after all retry attempts',
-                retryCount: this.config.retryCount,
-                error: lastError,
-                context: lastAttemptContext
-            },
-            `Operation failed after ${this.config.retryCount} attempts`,
-            'Check logs for detailed error history'
-        );
+      // Process the batch with timeout
+      const result = await Promise.race([
+        this.process(batch),
+        timeoutPromise
+      ]);
+
+      // Clear timeout if it was set
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+
+      return result as BatchResult<T>;
+    } catch (error) {
+      this.logger.error('Batch processing failed', { error });
+      throw error;
     }
+  }
 
-    /**
-     * Create error context for batch errors
-     */
-    protected createErrorContext(
-        error: unknown,
-        context: {
-            item: T;
-            batchSize: number;
-            currentIndex: number;
-            processedCount: number;
-        }
-    ): BatchError {
-        return {
-            item: context.item,
-            error: error instanceof Error ? error : new Error(String(error)),
-            context: {
-                ...context,
-                errorType: this.categorizeError(error),
-                timestamp: new Date().toISOString(),
-                failureReason: error instanceof Error ? error.message : String(error)
-            }
-        };
-    }
+  /**
+   * Process items in batches with configurable concurrency
+   */
+  async processInBatches(
+    items: BatchData[],
+    batchSize: number,
+    processor: (item: BatchData) => Promise<T>
+  ): Promise<BatchResult<T>> {
+    const batches = this.createBatches(items, batchSize);
+    const results: T[] = [];
+    const errors: Error[] = [];
+    const startTime = Date.now();
 
-    /**
-     * Categorize an error for better error handling
-     */
-    protected categorizeError(error: unknown): string {
-        if (error instanceof Error) {
-            if (error.message.includes('TASK_CYCLE')) return 'DEPENDENCY_CYCLE';
-            if (error.message.includes('TASK_DEPENDENCY')) return 'DEPENDENCY_VALIDATION';
-            if (error.message.includes('TASK_NOT_FOUND')) return 'MISSING_DEPENDENCY';
-            if (error.message.includes('VALIDATION')) return 'VALIDATION';
-        }
-        return 'UNKNOWN';
-    }
+    try {
+      const concurrentBatches = this.options.concurrentBatches || 1;
+      for (let i = 0; i < batches.length; i += concurrentBatches) {
+        const batchPromises = batches
+          .slice(i, i + concurrentBatches)
+          .map(batch => this.processBatch(batch, processor));
 
-    /**
-     * Check if an error is critical and should stop processing
-     */
-    protected isCriticalError(error: unknown): boolean {
-        const errorType = this.categorizeError(error);
-        return ['DEPENDENCY_CYCLE', 'DEPENDENCY_VALIDATION'].includes(errorType);
-    }
-
-    /**
-     * Check if batch processing should stop based on errors
-     */
-    protected shouldStopProcessing(result: BatchResult): boolean {
-        const criticalErrorCount = result.errors.filter(
-            e => this.isCriticalError(e.error)
-        ).length;
+        const batchResults = await Promise.all(batchPromises);
         
-        return criticalErrorCount > 0 || 
-               (result.failedCount / (result.processedCount + result.failedCount)) > 0.5;
+        for (const result of batchResults) {
+          results.push(...result.results);
+          errors.push(...result.errors);
+        }
+      }
+
+      const endTime = Date.now();
+      return {
+        results,
+        errors,
+        metadata: {
+          processingTime: endTime - startTime,
+          successCount: results.length,
+          errorCount: errors.length
+        }
+      };
+    } catch (error) {
+      this.logger.error('Batch processing failed', { error });
+      throw error;
+    }
+  }
+
+  /**
+   * Abstract method for batch validation
+   * Must be implemented by concrete classes
+   */
+  protected abstract validate(batch: BatchData[]): Promise<ValidationResult>;
+
+  /**
+   * Abstract method for batch processing
+   * Must be implemented by concrete classes
+   */
+  protected abstract process(batch: BatchData[]): Promise<BatchResult<T>>;
+
+  /**
+   * Helper method to split items into batches
+   */
+  protected createBatches(items: BatchData[], batchSize: number): BatchData[][] {
+    const batches: BatchData[][] = [];
+    for (let i = 0; i < items.length; i += batchSize) {
+      batches.push(items.slice(i, i + batchSize));
+    }
+    return batches;
+  }
+
+  /**
+   * Helper method to process a single batch
+   */
+  protected async processBatch(
+    batch: BatchData[],
+    processor: (item: BatchData) => Promise<T>
+  ): Promise<BatchResult<T>> {
+    const results: T[] = [];
+    const errors: Error[] = [];
+    const startTime = Date.now();
+
+    for (const item of batch) {
+      try {
+        const result = await this.withRetry(
+          () => processor(item),
+          `Processing item ${item.id}`
+        );
+        results.push(result);
+      } catch (error) {
+        errors.push(error as Error);
+        this.logger.error('Failed to process batch item', {
+          error,
+          itemId: item.id
+        });
+      }
     }
 
-    /**
-     * Delay execution
-     */
-    protected delay(ms: number): Promise<void> {
-        return new Promise(resolve => setTimeout(resolve, ms));
+    const endTime = Date.now();
+    return {
+      results,
+      errors,
+      metadata: {
+        processingTime: endTime - startTime,
+        successCount: results.length,
+        errorCount: errors.length
+      }
+    };
+  }
+
+  /**
+   * Helper method to handle retries
+   */
+  protected async withRetry<R>(
+    operation: () => Promise<R>,
+    context: string
+  ): Promise<R> {
+    const maxRetries = this.options.maxRetries || this.defaultOptions.maxRetries;
+    const delay = this.options.retryDelay || this.defaultOptions.retryDelay;
+    let lastError: Error | undefined;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await operation();
+      } catch (error) {
+        lastError = error as Error;
+        this.logger.warn(`${context} failed, attempt ${attempt}/${maxRetries}`, { 
+          error,
+          attempt,
+          maxRetries 
+        });
+
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
     }
 
-    /**
-     * Update batch processor configuration
-     */
-    updateConfig(config: Partial<BatchConfig>): void {
-        this.config = { ...this.config, ...config };
-        this.logger.debug('Batch processor configuration updated', { config: this.config });
-    }
+    throw lastError;
+  }
 
-    /**
-     * Get batch processor statistics
-     */
-    getStats(): {
-        config: BatchConfig;
-        performance: {
-            averageBatchSize: number;
-            concurrencyLevel: number;
-            retryRate: number;
-        };
-    } {
-        return {
-            config: { ...this.config },
-            performance: {
-                averageBatchSize: this.config.batchSize,
-                concurrencyLevel: this.config.concurrentBatches,
-                retryRate: 0 // Would need to track this during processing
-            }
-        };
-    }
+  /**
+   * Helper method to log batch processing metrics
+   */
+  protected logMetrics(result: BatchResult<any>): void {
+    this.logger.info('Batch processing completed', {
+      processingTime: result.metadata?.processingTime,
+      successCount: result.metadata?.successCount,
+      errorCount: result.metadata?.errorCount,
+      totalItems: result.results.length + result.errors.length
+    });
+  }
 }

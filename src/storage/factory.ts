@@ -1,10 +1,11 @@
 /**
  * Storage factory for creating task storage instances
  */
-import { StorageConfig, TaskStorage, StorageError, StorageErrorType } from '../types/storage.js';
+import { StorageConfig, TaskStorage } from '../types/storage.js';
+import { ErrorCodes, createError } from '../errors/index.js';
 import { SqliteStorage } from './sqlite-storage.js';
 import { promises as fs } from 'fs';
-import path from 'path';
+import { join } from 'path';
 
 /**
  * Creates a storage instance based on configuration
@@ -20,10 +21,10 @@ export async function createStorage(config: StorageConfig): Promise<TaskStorage>
 
         return storage;
     } catch (error) {
-        throw new StorageError(
-            StorageErrorType.INITIALIZATION,
+        throw createError(
+            ErrorCodes.STORAGE_INIT,
             'Failed to create storage',
-            error
+            error instanceof Error ? error.message : String(error)
         );
     }
 }
@@ -32,7 +33,7 @@ export async function createStorage(config: StorageConfig): Promise<TaskStorage>
  * Creates a storage instance with default configuration
  */
 export async function createDefaultStorage(): Promise<TaskStorage> {
-    const baseDir = process.env.ATLAS_STORAGE_DIR || path.join(process.cwd(), 'data');
+    const baseDir = process.env.ATLAS_STORAGE_DIR || join(process.cwd(), 'data');
 
     const config: StorageConfig = {
         baseDir,
