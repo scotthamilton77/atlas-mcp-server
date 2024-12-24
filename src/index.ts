@@ -25,13 +25,15 @@ async function main() {
         // Ignore error if .env file doesn't exist
     }
 
-    // Initialize logger first before any other operations
-    const logDir = process.env.ATLAS_STORAGE_DIR ? 
-        `${process.env.ATLAS_STORAGE_DIR}/logs` : 
-        join(process.env.HOME || '', 'Documents/Cline/mcp-workspace/ATLAS/logs');
+    // Get home directory in a cross-platform way
+    const homeDir = process.env.HOME || process.env.USERPROFILE || '';
 
-    // Create log directory with proper permissions
-    await fs.mkdir(logDir, { recursive: true, mode: 0o755 });
+    const logDir = process.env.ATLAS_STORAGE_DIR ? 
+        join(process.env.ATLAS_STORAGE_DIR, 'logs') : 
+        join(homeDir, 'Documents', 'Cline', 'mcp-workspace', 'ATLAS', 'logs');
+
+    // Create log directory with proper permissions (mode is ignored on Windows)
+    await fs.mkdir(logDir, { recursive: true, ...(process.platform !== 'win32' && { mode: 0o755 }) });
 
     // Initialize logger with explicit file permissions and await initialization
     const logger = await Logger.initialize({
@@ -57,7 +59,10 @@ async function main() {
         logging: {
             console: true,
             file: true,
-            level: 'debug'
+            level: 'debug',
+            maxFiles: 5,
+            maxSize: 5242880, // 5MB
+            dir: logDir
         },
         storage: {
             baseDir: process.env.ATLAS_STORAGE_DIR || 'atlas-tasks',
@@ -91,7 +96,7 @@ async function main() {
         });
 
         // Initialize storage with mutex
-        storage = await createStorage(config.storage);
+        storage = await createStorage(config.storage!);
         
         // Initialize task manager with existing storage instance
         taskManager = await TaskManager.getInstance(storage);
@@ -546,10 +551,27 @@ async function main() {
         }
     };
 
-    // Handle various shutdown signals
+    // Handle various shutdown signals with Windows compatibility
     process.on('SIGINT', () => shutdown('SIGINT'));
     process.on('SIGTERM', () => shutdown('SIGTERM'));
     process.on('beforeExit', () => shutdown('beforeExit'));
+    
+    // Windows-specific handling for CTRL+C and other termination signals
+    if (process.platform === 'win32') {
+        const readline = require('readline').createInterface({
+            input: process.stdin,
+            output: process.stdout
+        });
+        
+        readline.on('SIGINT', () => {
+            process.emit('SIGINT');
+        });
+
+        // Handle Windows-specific process termination
+        process.on('SIGHUP', () => shutdown('SIGHUP'));
+        process.on('SIGBREAK', () => shutdown('SIGBREAK'));
+    }
+
     process.on('exit', () => {
         try {
             // Synchronous cleanup for exit event

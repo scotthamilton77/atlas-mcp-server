@@ -58,8 +58,8 @@ const dbPath = path.join(this.config.baseDir, `${this.config.name}.db`);
                 // Create directory with proper permissions
                 await fs.mkdir(dirPath, { 
                     recursive: true, 
-                    // Use portable permissions
-                    mode: process.platform === 'win32' ? undefined : 0o755
+                    // Skip mode on Windows as it's ignored
+                    ...(process.platform !== 'win32' && { mode: 0o755 })
                 });
 
                 // Verify directory is writable
@@ -282,11 +282,13 @@ const dbPath = path.join(this.config.baseDir, `${this.config.name}.db`);
                 const walPath = `${dbPath}-wal`;
                 const shmPath = `${dbPath}-shm`;
                 
-                // Set permissions for WAL and SHM files if they exist
-                await Promise.all([
-                    fs.access(walPath).then(() => fs.chmod(walPath, 0o644)).catch(() => {}),
-                    fs.access(shmPath).then(() => fs.chmod(shmPath, 0o644)).catch(() => {})
-                ]);
+                // Set permissions for WAL and SHM files if they exist and not on Windows
+                if (process.platform !== 'win32') {
+                    await Promise.all([
+                        fs.access(walPath).then(() => fs.chmod(walPath, 0o644)).catch(() => {}),
+                        fs.access(shmPath).then(() => fs.chmod(shmPath, 0o644)).catch(() => {})
+                    ]);
+                }
             } catch (error) {
                 this.logger.warn('Failed to set WAL file permissions', { error });
                 // Don't throw - this is not critical

@@ -45,8 +45,12 @@ export class BackupManager {
      */
     async initialize(): Promise<void> {
         try {
-            // Create backup directory if it doesn't exist
-            await fs.mkdir(this.backupDir, { recursive: true });
+            // Create backup directory if it doesn't exist with platform-appropriate permissions
+            await fs.mkdir(this.backupDir, { 
+                recursive: true,
+                // Skip mode on Windows as it's ignored
+                ...(process.platform !== 'win32' && { mode: 0o755 })
+            });
 
             // Verify backup directory is writable
             await fs.access(this.backupDir, fs.constants.W_OK);
@@ -271,6 +275,16 @@ export class BackupManager {
     }
 
     private async copyDatabase(source: string, destination: string): Promise<void> {
+        // On Windows, ensure source file handle is closed before copying
+        if (process.platform === 'win32') {
+            try {
+                await fs.access(destination);
+                // If destination exists, ensure it's not locked
+                await fs.unlink(destination).catch(() => {});
+            } catch (error) {
+                // Ignore if destination doesn't exist
+            }
+        }
         await fs.copyFile(source, destination);
     }
 

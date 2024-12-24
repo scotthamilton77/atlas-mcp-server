@@ -634,12 +634,16 @@ export class TaskManager {
 
             const memUsage = process.memoryUsage();
             
-            // Log memory stats
-            TaskManager.logger.debug('Task manager memory usage:', {
+            // Log memory stats with Windows-specific handling
+            const stats = {
                 heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
                 heapTotal: `${Math.round(memUsage.heapTotal / 1024 / 1024)}MB`,
-                rss: `${Math.round(memUsage.rss / 1024 / 1024)}MB`
-            });
+                rss: `${Math.round(memUsage.rss / 1024 / 1024)}MB`,
+                // Windows can have different memory reporting
+                platform: process.platform
+            };
+            
+            TaskManager.logger.debug('Task manager memory usage:', stats);
 
             // Check if memory usage is approaching threshold
             const memoryUsageRatio = memUsage.heapUsed / instance.MAX_CACHE_MEMORY;

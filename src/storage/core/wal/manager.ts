@@ -243,7 +243,8 @@ export class WALManager {
      * Get WAL metrics
      */
     async getMetrics(): Promise<WALMetrics> {
-        const walPath = `${this.dbPath}-wal`;
+        const path = await import('path');
+        const walPath = path.join(path.dirname(this.dbPath), path.basename(this.dbPath) + '-wal');
         let walSize = 0;
 
         try {
@@ -267,8 +268,9 @@ export class WALManager {
      * Verify WAL file integrity
      */
     async verifyWALIntegrity(): Promise<boolean> {
-        const walPath = `${this.dbPath}-wal`;
-        const shmPath = `${this.dbPath}-shm`;
+        const path = await import('path');
+        const walPath = path.join(path.dirname(this.dbPath), path.basename(this.dbPath) + '-wal');
+        const shmPath = path.join(path.dirname(this.dbPath), path.basename(this.dbPath) + '-shm');
 
         try {
             // Check if WAL and SHM files exist
@@ -314,8 +316,9 @@ export class WALManager {
             return;
         }
 
-        const walPath = `${this.dbPath}-wal`;
-        const shmPath = `${this.dbPath}-shm`;
+        const path = await import('path');
+        const walPath = path.join(path.dirname(this.dbPath), path.basename(this.dbPath) + '-wal');
+        const shmPath = path.join(path.dirname(this.dbPath), path.basename(this.dbPath) + '-shm');
 
         try {
             // Check if files exist first to avoid unnecessary operations
