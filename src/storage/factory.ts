@@ -5,15 +5,19 @@ import { StorageConfig, TaskStorage } from '../types/storage.js';
 import { ErrorCodes, createError } from '../errors/index.js';
 import { SqliteStorage } from './sqlite-storage.js';
 import { promises as fs } from 'fs';
-import { join } from 'path';
+import { join, resolve } from 'path';
+import { homedir } from 'os';
 
 /**
  * Creates a storage instance based on configuration
  */
 export async function createStorage(config: StorageConfig): Promise<TaskStorage> {
     try {
-        // Ensure base directory exists with proper permissions
-        await fs.mkdir(config.baseDir, { recursive: true, mode: 0o750 });
+        // Ensure base directory exists with platform-appropriate permissions
+        await fs.mkdir(config.baseDir, { 
+            recursive: true, 
+            mode: process.platform === 'win32' ? undefined : 0o755 
+        });
 
         // Create SQLite storage
         const storage = new SqliteStorage(config);
@@ -33,10 +37,18 @@ export async function createStorage(config: StorageConfig): Promise<TaskStorage>
  * Creates a storage instance with default configuration
  */
 export async function createDefaultStorage(): Promise<TaskStorage> {
-    const baseDir = process.env.ATLAS_STORAGE_DIR || join(process.cwd(), 'data');
+    // Use platform-appropriate default storage location
+    const baseDir = process.env.ATLAS_STORAGE_DIR || (
+        process.platform === 'win32'
+            ? join(process.env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local'), 'AtlasMCP', 'storage')
+            : join(homedir(), '.atlas-mcp', 'storage')
+    );
+
+    // Ensure absolute path with platform-appropriate separators
+    const resolvedBaseDir = resolve(baseDir);
 
     const config: StorageConfig = {
-        baseDir,
+        baseDir: resolvedBaseDir,
         name: process.env.ATLAS_STORAGE_NAME || 'atlas-tasks',
         connection: {
             maxRetries: Number(process.env.ATLAS_MAX_RETRIES) || 3,

@@ -4,7 +4,8 @@
  */
 
 import { createLogger, format, transports, Logger as WinstonLogger, config as winstonConfig } from 'winston';
-import path from 'path';
+import { join } from 'path';
+import { mkdirSync } from 'fs';
 import { BaseError, ErrorCodes } from '../errors/index.js';
 import { LogLevel, LogLevels, LoggerConfig } from '../types/logging.js';
 
@@ -116,17 +117,25 @@ export class Logger {
 
         // File transport
         if (config.file && config.logDir) {
+            // Ensure log directory exists with platform-appropriate permissions
+            mkdirSync(config.logDir, { recursive: true, mode: process.platform === 'win32' ? undefined : 0o755 });
+
+            const errorLogPath = join(config.logDir, 'error.log');
+            const combinedLogPath = join(config.logDir, 'combined.log');
+
             loggerTransports.push(
                 new transports.File({
-                    filename: path.join(config.logDir, 'error.log'),
+                    filename: errorLogPath,
                     level: LogLevels.ERROR,
                     maxsize: config.maxFileSize,
-                    maxFiles: config.maxFiles
+                    maxFiles: config.maxFiles,
+                    tailable: true // Ensure logs can be read while being written
                 }),
                 new transports.File({
-                    filename: path.join(config.logDir, 'combined.log'),
+                    filename: combinedLogPath,
                     maxsize: config.maxFileSize,
-                    maxFiles: config.maxFiles
+                    maxFiles: config.maxFiles,
+                    tailable: true
                 })
             );
         }

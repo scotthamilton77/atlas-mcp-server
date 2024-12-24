@@ -38,7 +38,8 @@ export class SqliteStorage implements TaskStorage {
     }
 
     async initialize(): Promise<void> {
-        const dbPath = `${this.config.baseDir}/${this.config.name}.db`;
+        const path = await import('path');
+const dbPath = path.join(this.config.baseDir, `${this.config.name}.db`);
         this.logger.info('Opening SQLite database', { 
             dbPath,
             baseDir: this.config.baseDir,
@@ -53,7 +54,12 @@ export class SqliteStorage implements TaskStorage {
             
             // Ensure storage directory exists with proper permissions
             const dirPath = path.dirname(dbPath);
-            await fs.mkdir(dirPath, { recursive: true, mode: 0o750 });
+            // Use platform-agnostic directory creation
+            await fs.mkdir(dirPath, { 
+                recursive: true, 
+                // Use more portable permissions that work across platforms
+                mode: process.platform === 'win32' ? undefined : 0o755
+            });
             
             // Log directory contents before
             try {

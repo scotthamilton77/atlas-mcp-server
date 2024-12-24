@@ -5,6 +5,8 @@
 
 import { ConfigError, ErrorCodes } from '../errors/index.js';
 import { LogLevel, LogLevels } from '../types/logging.js';
+import { join, resolve } from 'path';
+import { homedir } from 'os';
 
 /**
  * Environment variable names
@@ -279,14 +281,17 @@ export class ConfigManager {
     private loadEnvConfig(customConfig: any): any {
         const env = process.env[EnvVars.NODE_ENV];
         const logLevel = process.env[EnvVars.LOG_LEVEL];
-        const storageDir = customConfig.storage?.baseDir || process.env[EnvVars.TASK_STORAGE_DIR];
-
+        
+        // Handle storage directory with platform-agnostic paths
+        let storageDir = customConfig.storage?.baseDir || process.env[EnvVars.TASK_STORAGE_DIR];
+        
         if (!storageDir) {
-            throw new ConfigError(
-                ErrorCodes.CONFIG_MISSING,
-                'Storage directory must be provided'
-            );
+            // Default to platform-appropriate user directory
+            storageDir = join(homedir(), '.atlas-mcp', 'storage');
         }
+
+        // Ensure absolute path
+        storageDir = resolve(storageDir);
 
         const config: any = {
             storage: {
