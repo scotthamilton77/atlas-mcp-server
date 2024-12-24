@@ -4,6 +4,7 @@ import { TaskStorage } from '../../types/storage.js';
 import { Task, TaskStatus, CreateTaskInput, UpdateTaskInput } from '../../types/task.js';
 import { Logger } from '../../logging/index.js';
 import { ErrorCodes, createError } from '../../errors/index.js';
+import { TransactionManager } from '../core/transactions/manager.js';
 
 // Constants
 export const DEFAULT_PAGE_SIZE = 4096;
@@ -39,10 +40,13 @@ export class SqliteStorage implements TaskStorage {
     private readonly logger: Logger;
     private readonly dbPath: string;
     private isInitialized = false;
+    private readonly transactionManager: TransactionManager;
+    private currentTransactionId: string | null = null;
 
     constructor(private readonly config: SqliteConfig) {
         this.logger = Logger.getInstance().child({ component: 'SqliteStorage' });
         this.dbPath = `${config.baseDir}/${config.name}.db`;
+        this.transactionManager = TransactionManager.getInstance();
     }
 
     async initialize(): Promise<void> {
@@ -62,60 +66,60 @@ export class SqliteStorage implements TaskStorage {
         // Start new initialization with mutex
         SqliteStorage.initializationPromise = (async () => {
             try {
-            // Initialize SQLite with WAL mode
-            this.db = await open({
-                filename: this.dbPath,
-                driver: sqlite3.Database,
-                mode: sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE
-            });
+                // Initialize SQLite with WAL mode
+                this.db = await open({
+                    filename: this.dbPath,
+                    driver: sqlite3.Database,
+                    mode: sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE
+                });
 
-            // Configure database with proper error handling
-            const pragmas = [
-                // Enable WAL mode first for better concurrency
-                `PRAGMA journal_mode=${this.config.sqlite?.journalMode || 'WAL'}`,
-                
-                // Enable foreign keys for referential integrity
-                'PRAGMA foreign_keys=ON',
-                
-                // Configure synchronization and durability
-                `PRAGMA synchronous=${this.config.sqlite?.synchronous || 'NORMAL'}`,
-                
-                // Memory and performance settings
-                `PRAGMA temp_store=${this.config.sqlite?.tempStore || 'MEMORY'}`,
-                `PRAGMA page_size=${this.config.performance?.pageSize || DEFAULT_PAGE_SIZE}`,
-                `PRAGMA cache_size=${this.config.performance?.cacheSize || DEFAULT_CACHE_SIZE}`,
-                `PRAGMA mmap_size=${this.config.performance?.mmapSize || 30000000000}`,
-                
-                // Concurrency settings
-                `PRAGMA locking_mode=${this.config.sqlite?.lockingMode || 'NORMAL'}`,
-                `PRAGMA busy_timeout=${this.config.connection?.busyTimeout || DEFAULT_BUSY_TIMEOUT}`,
-                
-                // Maintenance settings
-                `PRAGMA auto_vacuum=${this.config.sqlite?.autoVacuum || 'NONE'}`,
-                
-                // Query optimization
-                'PRAGMA optimize'
-            ];
+                // Configure database with proper error handling
+                const pragmas = [
+                    // Enable WAL mode first for better concurrency
+                    `PRAGMA journal_mode=${this.config.sqlite?.journalMode || 'WAL'}`,
+                    
+                    // Enable foreign keys for referential integrity
+                    'PRAGMA foreign_keys=ON',
+                    
+                    // Configure synchronization and durability
+                    `PRAGMA synchronous=${this.config.sqlite?.synchronous || 'NORMAL'}`,
+                    
+                    // Memory and performance settings
+                    `PRAGMA temp_store=${this.config.sqlite?.tempStore || 'MEMORY'}`,
+                    `PRAGMA page_size=${this.config.performance?.pageSize || DEFAULT_PAGE_SIZE}`,
+                    `PRAGMA cache_size=${this.config.performance?.cacheSize || DEFAULT_CACHE_SIZE}`,
+                    `PRAGMA mmap_size=${this.config.performance?.mmapSize || 30000000000}`,
+                    
+                    // Concurrency settings
+                    `PRAGMA locking_mode=${this.config.sqlite?.lockingMode || 'NORMAL'}`,
+                    `PRAGMA busy_timeout=${this.config.connection?.busyTimeout || DEFAULT_BUSY_TIMEOUT}`,
+                    
+                    // Maintenance settings
+                    `PRAGMA auto_vacuum=${this.config.sqlite?.autoVacuum || 'NONE'}`,
+                    
+                    // Query optimization
+                    'PRAGMA optimize'
+                ];
 
-            for (const pragma of pragmas) {
-                try {
-                    await this.db.exec(pragma);
-                } catch (error) {
-                    this.logger.error(`Failed to set pragma: ${pragma}`, {
-                        error: error instanceof Error ? error.message : String(error)
-                    });
-                    throw error;
+                for (const pragma of pragmas) {
+                    try {
+                        await this.db.exec(pragma);
+                    } catch (error) {
+                        this.logger.error(`Failed to set pragma: ${pragma}`, {
+                            error: error instanceof Error ? error.message : String(error)
+                        });
+                        throw error;
+                    }
                 }
-            }
 
-            // Verify foreign keys are enabled
-            const fkResult = await this.db.get('PRAGMA foreign_keys');
-            if (!fkResult || !fkResult['foreign_keys']) {
-                throw new Error('Failed to enable foreign key constraints');
-            }
+                // Verify foreign keys are enabled
+                const fkResult = await this.db.get('PRAGMA foreign_keys');
+                if (!fkResult || !fkResult['foreign_keys']) {
+                    throw new Error('Failed to enable foreign key constraints');
+                }
 
-            // Create tables and set up database schema
-            await this.setupDatabase();
+                // Create tables and set up database schema
+                await this.setupDatabase();
 
                 this.isInitialized = true;
                 this.logger.info('SQLite storage initialized', {
@@ -205,6 +209,11 @@ export class SqliteStorage implements TaskStorage {
         }
 
         try {
+            // Cleanup any active transactions
+            if (this.currentTransactionId) {
+                await this.rollbackTransaction();
+            }
+
             this.isClosed = true;
             await this.db.close();
             this.db = null;
@@ -224,17 +233,27 @@ export class SqliteStorage implements TaskStorage {
     // Transaction methods
     async beginTransaction(): Promise<void> {
         if (!this.db) throw new Error('Database not initialized');
-        await this.db.run('BEGIN IMMEDIATE');
+        if (this.currentTransactionId) {
+            // Transaction already started, increment depth
+            return;
+        }
+        this.currentTransactionId = await this.transactionManager.beginTransaction(this.db);
     }
 
     async commitTransaction(): Promise<void> {
-        if (!this.db) throw new Error('Database not initialized');
-        await this.db.run('COMMIT');
+        if (!this.db || !this.currentTransactionId) {
+            throw new Error('No active transaction');
+        }
+        await this.transactionManager.commitTransaction(this.db, this.currentTransactionId);
+        this.currentTransactionId = null;
     }
 
     async rollbackTransaction(): Promise<void> {
-        if (!this.db) throw new Error('Database not initialized');
-        await this.db.run('ROLLBACK');
+        if (!this.db || !this.currentTransactionId) {
+            throw new Error('No active transaction');
+        }
+        await this.transactionManager.rollbackTransaction(this.db, this.currentTransactionId);
+        this.currentTransactionId = null;
     }
 
     // Task operations

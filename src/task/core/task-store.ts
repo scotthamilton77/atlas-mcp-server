@@ -39,7 +39,7 @@ export class TaskStore {
             cleanupInterval: 15000 // Reduced from 30000
         });
         this.nodes = new Map();
-        this.transactionManager = new TransactionManager(storage);
+        this.transactionManager = TransactionManager.getInstance(storage);
 
         // Start memory monitoring
         this.startMemoryMonitoring();
@@ -530,12 +530,16 @@ export class TaskStore {
             const allTasks = [task, ...subtasks];
             const allPaths = allTasks.map(t => t.path);
 
-            // Add delete operation to transaction with both paths and tasks
-            transaction.operations.push({
-                type: 'delete',
-                paths: allPaths,
-                tasks: allTasks
-            });
+            // Add delete operation to transaction
+            for (const taskPath of allPaths) {
+                transaction.operations.push({
+                    id: `delete-${Date.now()}-${Math.random()}`,
+                    type: 'delete',
+                    timestamp: Date.now(),
+                    path: taskPath,
+                    tasks: allTasks
+                });
+            }
 
             // Delete from storage
             await this.storage.deleteTasks(allPaths);

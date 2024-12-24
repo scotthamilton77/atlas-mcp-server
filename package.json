@@ -11,15 +11,14 @@
     "build"
   ],
   "scripts": {
-    "build": "tsc && node --eval \"import('fs').then(fs => fs.promises.chmod('build/index.js', '755') && fs.promises.chmod('build/storage/init-storage.js', '755'))\"",
+    "build": "tsc && node --eval \"import('fs').then(fs => fs.promises.chmod('build/index.js', '755'))\"",
     "prepare": "npm run build",
-    "init-storage": "node build/storage/init-storage.js",
     "watch": "tsc --watch",
     "inspector": "npx @modelcontextprotocol/inspector build/index.js",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
-    "prestart": "npm run build && npm run init-storage",
+    "prestart": "npm run build",
     "start": "node build/index.js",
-    "dev": "npm run build && concurrently \"npm run watch\" \"npm run init-storage && npm run start\""
+    "dev": "npm run build && concurrently \"npm run watch\" \"npm run start\""
   },
   "repository": {
     "type": "git",
