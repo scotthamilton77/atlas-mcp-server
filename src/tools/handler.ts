@@ -164,19 +164,11 @@ export class ToolHandler {
                     // Validate hierarchy rules
                     await this.validateTaskHierarchy(args, 'create');
                     
-                    // Validate required fields
-                    if (!args.name || typeof args.name !== 'string') {
-                        throw createError(
-                            ErrorCodes.INVALID_INPUT,
-                            'Task name is required and must be a string'
-                        );
-                    }
-
                     // Create task input with proper type casting
                     const taskInput: CreateTaskInput = {
-                        name: args.name,
+                        name: args.name as string,
                         path: args.path as string | undefined,
-                        type: args.type ? (args.type as string).toUpperCase() as TaskType : TaskType.TASK,
+                        type: args.type ? (args.type as string).toUpperCase() as TaskType : undefined,
                         description: args.description as string | undefined,
                         parentPath: args.parentPath as string | undefined,
                         dependencies: Array.isArray(args.dependencies) ? args.dependencies as string[] : [],

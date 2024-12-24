@@ -2,7 +2,7 @@
  * SQLite storage implementation
  */
 import { Database, open } from 'sqlite';
-import { Task, TaskStatus, CreateTaskInput, UpdateTaskInput } from '../types/task.js';
+import { Task, TaskStatus, TaskType, CreateTaskInput, UpdateTaskInput } from '../types/task.js';
 import { 
     StorageConfig, 
     TaskStorage, 
@@ -294,26 +294,22 @@ const dbPath = path.join(this.config.baseDir, `${this.config.name}.db`);
     }
 
     async createTask(input: CreateTaskInput): Promise<Task> {
-        if (!input.path) {
+        if (!input.name) {
             throw createError(
                 ErrorCodes.INVALID_INPUT,
-                'Task path is required',
+                'Task name is required',
                 'createTask'
             );
         }
 
-        if (!input.type) {
-            throw createError(
-                ErrorCodes.INVALID_INPUT,
-                'Task type is required',
-                'createTask'
-            );
-        }
-
+        // Generate path first
+        const taskPath = input.path || input.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+        
+        // Then create task with the generated path
         const task: Task = {
-            path: input.path,
+            path: taskPath,
             name: input.name,
-            type: input.type,
+            type: input.type || TaskType.TASK,
             status: TaskStatus.PENDING,
             description: input.description || undefined,
             parentPath: input.parentPath || undefined,
@@ -325,7 +321,7 @@ const dbPath = path.join(this.config.baseDir, `${this.config.name}.db`);
                 ...input.metadata,
                 created: Date.now(),
                 updated: Date.now(),
-                projectPath: input.path.split('/')[0],
+                projectPath: input.path?.split('/')[0] || taskPath.split('/')[0],
                 version: 1
             }
         };

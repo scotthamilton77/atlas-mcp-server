@@ -2,9 +2,11 @@ import { Logger } from '../../logging/index.js';
 import { EventManager } from '../../events/event-manager.js';
 import { EventTypes } from '../../types/events.js';
 import { TaskStorage } from '../../types/storage.js';
-import { Task, TaskStatus, CreateTaskInput, UpdateTaskInput } from '../../types/task.js';
+import { Task, TaskStatus, TaskType, CreateTaskInput, UpdateTaskInput } from '../../types/task.js';
 import { TaskValidator } from '../validation/task-validator.js';
 import { ErrorCodes, createError } from '../../errors/index.js';
+import { TransactionManager } from '../core/transactions/transaction-manager.js';
+import { StatusUpdateBatch } from '../core/batch/status-update-batch.js';
 
 interface TaskEvent {
   type: EventTypes;
@@ -21,33 +23,35 @@ interface TaskEvent {
 export class TaskOperations {
   private readonly logger: Logger;
   private readonly eventManager: EventManager;
-  private readonly eventSubscriptions: Map<EventTypes, WeakRef<{ unsubscribe: () => void }>> = new Map();
+  private readonly transactionManager: TransactionManager;
+  private readonly eventSubscriptions: Map<string, { unsubscribe: () => void }> = new Map();
   private readonly HIGH_MEMORY_THRESHOLD = 0.7; // 70% memory pressure threshold
   private readonly MEMORY_CHECK_INTERVAL = 10000; // 10 seconds
   private memoryCheckInterval?: NodeJS.Timeout;
-  private activeTransactions: Set<string> = new Set();
   private isShuttingDown = false;
-  private readonly TRANSACTION_TIMEOUT = 5000; // 5 seconds
   private static instance: TaskOperations | null = null;
   private static initializationPromise: Promise<TaskOperations> | null = null;
   private initialized = false;
+  private readonly statusUpdateBatch: StatusUpdateBatch;
 
-  private constructor(
-    private readonly storage: TaskStorage,
-    private readonly validator: TaskValidator
-  ) {
-    this.logger = Logger.getInstance().child({ component: 'TaskOperations' });
-    this.eventManager = EventManager.getInstance();
-    
-    // Setup event listeners with cleanup tracking
-    this.setupEventListeners();
+    private constructor(
+        private readonly storage: TaskStorage,
+        private readonly validator: TaskValidator
+    ) {
+        this.logger = Logger.getInstance().child({ component: 'TaskOperations' });
+        this.eventManager = EventManager.getInstance();
+        this.transactionManager = TransactionManager.getInstance(storage);
+        this.statusUpdateBatch = new StatusUpdateBatch(storage);
+        
+        // Setup event listeners
+        this.setupEventListeners();
 
-    // Setup memory monitoring
-    this.startMemoryMonitoring();
-    
-    // Log initial memory state
-    this.logMemoryUsage('Initialization');
-  }
+        // Setup memory monitoring
+        this.startMemoryMonitoring();
+        
+        // Log initial memory state
+        this.logMemoryUsage('Initialization');
+    }
 
   /**
    * Gets the TaskOperations instance
@@ -103,13 +107,13 @@ export class TaskOperations {
   }
 
   private setupEventListeners(): void {
-    // Setup event listeners with WeakRef for better memory management
+    // Setup event listeners with strong references and explicit cleanup
     const setupListener = (type: EventTypes) => {
       const handler = (event: TaskEvent) => {
         this.logger.debug(`${type} event received`, { taskId: event.taskId });
       };
       const subscription = this.eventManager.on(type, handler);
-      this.eventSubscriptions.set(type, new WeakRef(subscription));
+      this.eventSubscriptions.set(type, subscription);
     };
 
     setupListener(EventTypes.TASK_CREATED);
@@ -129,14 +133,12 @@ export class TaskOperations {
         heapTotal: `${Math.round(memoryUsage.heapTotal / 1024 / 1024)}MB`,
         rss: `${Math.round(memoryUsage.rss / 1024 / 1024)}MB`,
         external: `${Math.round(memoryUsage.external / 1024 / 1024)}MB`,
-        arrayBuffers: `${Math.round(memoryUsage.arrayBuffers / 1024 / 1024)}MB`,
-        activeTransactions: this.activeTransactions.size
+        arrayBuffers: `${Math.round(memoryUsage.arrayBuffers / 1024 / 1024)}MB`
       });
 
       if (heapUsed > this.HIGH_MEMORY_THRESHOLD) {
         this.logger.warn('High memory usage detected', {
-          heapUsed: `${(heapUsed * 100).toFixed(1)}%`,
-          activeTransactions: this.activeTransactions.size
+          heapUsed: `${(heapUsed * 100).toFixed(1)}%`
         });
         
         // Force cleanup when memory pressure is high
@@ -167,10 +169,10 @@ export class TaskOperations {
       const startTime = Date.now();
       let cleanedCount = 0;
 
-      // Clean up any dereferenced event subscriptions
-      for (const [type, weakRef] of this.eventSubscriptions.entries()) {
-        const subscription = weakRef.deref();
-        if (!subscription || force) {
+      // Clean up event subscriptions
+      if (force) {
+        for (const [type, subscription] of this.eventSubscriptions.entries()) {
+          subscription.unsubscribe();
           this.eventSubscriptions.delete(type);
           cleanedCount++;
         }
@@ -195,29 +197,7 @@ export class TaskOperations {
   }
 
   private cleanupStaleTransactions(): void {
-    const now = Date.now();
-    let cleanedCount = 0;
-
-    for (const transactionId of this.activeTransactions) {
-      const [timestamp] = transactionId.split('-');
-      const age = now - parseInt(timestamp);
-      
-      if (age > this.TRANSACTION_TIMEOUT) {
-        this.activeTransactions.delete(transactionId);
-        cleanedCount++;
-        this.logger.warn('Cleaned up stale transaction', {
-          transactionId,
-          age: `${age}ms`
-        });
-      }
-    }
-
-    if (cleanedCount > 0) {
-      this.logger.info('Stale transactions cleanup completed', {
-        cleanedCount,
-        remainingTransactions: this.activeTransactions.size
-      });
-    }
+    // Transaction cleanup is now handled by TransactionManager
   }
 
   private getMemoryMetrics(): Record<string, string> {
@@ -247,38 +227,14 @@ export class TaskOperations {
         this.memoryCheckInterval = undefined;
       }
 
-      // Wait for active transactions to complete with timeout
-      if (this.activeTransactions.size > 0) {
-        this.logger.info('Waiting for active transactions to complete', {
-          count: this.activeTransactions.size
-        });
-        
-        const timeout = 5000;
-        const startTime = Date.now();
-        
-        while (this.activeTransactions.size > 0 && Date.now() - startTime < timeout) {
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
-
-        if (this.activeTransactions.size > 0) {
-          this.logger.warn('Some transactions did not complete before timeout', {
-            remainingTransactions: this.activeTransactions.size
-          });
-        }
-      }
-
-      // Cleanup event subscriptions with WeakRef handling
-      for (const [type, weakRef] of this.eventSubscriptions.entries()) {
-        const subscription = weakRef.deref();
-        if (subscription) {
-          subscription.unsubscribe();
-        }
+      // Cleanup event subscriptions
+      for (const [type, subscription] of this.eventSubscriptions.entries()) {
+        subscription.unsubscribe();
         this.eventSubscriptions.delete(type);
       }
 
       // Force final cleanup
       await this.cleanupResources(true);
-      this.activeTransactions.clear();
 
       // Final garbage collection
       if (global.gc) {
@@ -289,7 +245,6 @@ export class TaskOperations {
       this.logMemoryUsage('Cleanup end');
       this.logger.info('Task operations cleanup completed', {
         finalMetrics: {
-          activeTransactions: this.activeTransactions.size,
           eventSubscriptions: this.eventSubscriptions.size,
           ...this.getMemoryMetrics()
         }
@@ -302,64 +257,71 @@ export class TaskOperations {
 
   async createTask(input: CreateTaskInput): Promise<Task> {
     if (!this.initialized) {
-      throw createError(
-        ErrorCodes.OPERATION_FAILED,
-        'Task operations not initialized'
-      );
+      throw createError(ErrorCodes.OPERATION_FAILED, 'Task operations not initialized');
     }
     if (this.isShuttingDown) {
-      throw createError(
-        ErrorCodes.OPERATION_FAILED,
-        'System is shutting down'
-      );
+      throw createError(ErrorCodes.OPERATION_FAILED, 'System is shutting down');
     }
 
-    const transactionId = `create-${Date.now()}-${Math.random()}`;
-    this.activeTransactions.add(transactionId);
+    // Set defaults and generate path
+    const taskInput: CreateTaskInput = {
+      ...input,
+      type: input.type || TaskType.TASK // Default to TASK type if not provided
+    };
+
+    // Generate path from name if not provided
+    if (!taskInput.path) {
+      // Convert name to URL-friendly format for path
+      const pathName = taskInput.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-') // Replace non-alphanumeric chars with dash
+        .replace(/^-+|-+$/g, ''); // Remove leading/trailing dashes
+      
+      taskInput.path = taskInput.parentPath 
+        ? `${taskInput.parentPath}/${pathName}`
+        : pathName;
+    }
+
+    // Validate input
+    await this.validator.validateCreate(taskInput);
+
+    const transaction = await this.transactionManager.begin({
+      timeout: 10000,
+      requireLock: true
+    });
 
     try {
-      // Validate input
-      await this.validator.validateCreate(input);
+      // Create task with processed input containing defaults
+      const task = await this.storage.createTask(taskInput);
 
-      // Start transaction
-      await this.storage.beginTransaction();
-
-      try {
-        // Create task
-        const task = await this.storage.createTask(input);
-
-        // Emit event
-        this.eventManager.emit({
-          type: EventTypes.TASK_CREATED,
-          timestamp: Date.now(),
-          taskId: task.path,
-          task,
-          metadata: {
-            input
-          }
-        });
-
-        // Commit transaction
-        await this.storage.commitTransaction();
-
-        return task;
-      } catch (error) {
-        // Rollback on error
-        await this.storage.rollbackTransaction();
-        throw error;
-      } finally {
-        this.activeTransactions.delete(transactionId);
-      }
-    } catch (error) {
-      this.logger.error('Failed to create task', {
-        error,
-        input
+      // Add operation to transaction
+      transaction.operations.push({
+        id: `create-${Date.now()}`,
+        type: 'create',
+        timestamp: Date.now(),
+        path: task.path,
+        task
       });
+
+      // Emit event
+      this.eventManager.emit({
+        type: EventTypes.TASK_CREATED,
+        timestamp: Date.now(),
+        taskId: task.path,
+        task,
+        metadata: { input }
+      });
+
+      await this.transactionManager.commit(transaction);
+      return task;
+    } catch (error) {
+      await this.transactionManager.rollback(transaction);
+      this.logger.error('Failed to create task', { error, input });
       throw error;
     }
   }
 
-  async updateTask(path: string, updates: UpdateTaskInput, retryCount: number = 0): Promise<Task> {
+  async updateTask(path: string, updates: UpdateTaskInput): Promise<Task> {
     if (!this.initialized) {
       throw createError(
         ErrorCodes.OPERATION_FAILED,
@@ -373,86 +335,61 @@ export class TaskOperations {
       );
     }
 
-    const maxRetries = 3;
-    const transactionId = `update-${Date.now()}-${Math.random()}`;
-    this.activeTransactions.add(transactionId);
+    // Get existing task
+    const existingTask = await this.storage.getTask(path);
+    if (!existingTask) {
+      throw createError(ErrorCodes.TASK_NOT_FOUND, `Task not found: ${path}`);
+    }
+
+    // Validate updates
+    await this.validator.validateUpdate(path, updates);
+
+    const transaction = await this.transactionManager.begin({
+      timeout: 10000,
+      requireLock: true
+    });
 
     try {
-      // Get existing task with current version
-      const existingTask = await this.storage.getTask(path);
-      if (!existingTask) {
-        throw createError(
-          ErrorCodes.TASK_NOT_FOUND,
-          `Task not found: ${path}`
-        );
+      // Update task with version increment
+      const updatedTask = await this.storage.updateTask(path, {
+        ...updates,
+        metadata: {
+          ...updates.metadata,
+          version: existingTask.metadata.version + 1,
+          updated: Date.now()
+        }
+      });
+
+      // Add operation to transaction
+      transaction.operations.push({
+        id: `update-${Date.now()}`,
+        type: 'update',
+        timestamp: Date.now(),
+        path: updatedTask.path,
+        task: updatedTask,
+        previousState: existingTask
+      });
+
+      // Handle status changes in batch
+      if (updates.status && updates.status !== existingTask.status) {
+        await this.handleStatusChange(existingTask, updatedTask);
+        await this.statusUpdateBatch.execute();
       }
 
-      const currentVersion = existingTask.metadata.version;
-
-      // Validate updates
-      await this.validator.validateUpdate(path, updates);
-
-      // Start transaction with IMMEDIATE locking
-      await this.storage.beginTransaction();
-
-      try {
-        // Verify version hasn't changed
-        const freshTask = await this.storage.getTask(path);
-        if (!freshTask || freshTask.metadata.version !== currentVersion) {
-          await this.storage.rollbackTransaction();
-          if (retryCount < maxRetries) {
-            this.logger.warn('Concurrent modification detected, retrying', {
-              path,
-              expectedVersion: currentVersion,
-              actualVersion: freshTask?.metadata.version,
-              retryCount
-            });
-            return this.updateTask(path, updates, retryCount + 1);
-          }
-          throw createError(
-            ErrorCodes.CONCURRENT_MODIFICATION,
-            'Task was modified by another process'
-          );
+      // Emit update event
+      this.eventManager.emit({
+        type: EventTypes.TASK_UPDATED,
+        timestamp: Date.now(),
+        taskId: updatedTask.path,
+        task: updatedTask,
+        changes: {
+          before: existingTask,
+          after: updatedTask
         }
+      });
 
-        // Update task with version increment
-        const updatedTask = await this.storage.updateTask(path, {
-          ...updates,
-          metadata: {
-            ...updates.metadata,
-            version: currentVersion + 1,
-            updated: Date.now()
-          }
-        });
-
-        // Check if status changed
-        if (updates.status && updates.status !== existingTask.status) {
-          await this.handleStatusChange(existingTask, updatedTask);
-        }
-
-        // Emit update event
-        this.eventManager.emit({
-          type: EventTypes.TASK_UPDATED,
-          timestamp: Date.now(),
-          taskId: updatedTask.path,
-          task: updatedTask,
-          changes: {
-            before: existingTask,
-            after: updatedTask
-          }
-        });
-
-        // Commit transaction
-        await this.storage.commitTransaction();
-
-        return updatedTask;
-      } catch (error) {
-        // Rollback on error
-        await this.storage.rollbackTransaction();
-        throw error;
-      } finally {
-        this.activeTransactions.delete(transactionId);
-      }
+      await this.transactionManager.commit(transaction);
+      return updatedTask;
     } catch (error) {
       this.logger.error('Failed to update task', {
         error,
@@ -465,55 +402,45 @@ export class TaskOperations {
 
   async deleteTask(path: string): Promise<void> {
     if (!this.initialized) {
-      throw createError(
-        ErrorCodes.OPERATION_FAILED,
-        'Task operations not initialized'
-      );
+      throw createError(ErrorCodes.OPERATION_FAILED, 'Task operations not initialized');
     }
     if (this.isShuttingDown) {
-      throw createError(
-        ErrorCodes.OPERATION_FAILED,
-        'System is shutting down'
-      );
+      throw createError(ErrorCodes.OPERATION_FAILED, 'System is shutting down');
     }
 
-    const transactionId = `delete-${Date.now()}-${Math.random()}`;
-    this.activeTransactions.add(transactionId);
+    // Get existing task
+    const existingTask = await this.storage.getTask(path);
+    if (!existingTask) {
+      throw createError(ErrorCodes.TASK_NOT_FOUND, `Task not found: ${path}`);
+    }
+
+    const transaction = await this.transactionManager.begin({
+      timeout: 10000,
+      requireLock: true
+    });
 
     try {
-      // Get existing task
-      const existingTask = await this.storage.getTask(path);
-      if (!existingTask) {
-        throw createError(
-          ErrorCodes.TASK_NOT_FOUND,
-          `Task not found: ${path}`
-        );
-      }
+      // Delete task
+      await this.storage.deleteTask(path);
 
-      // Start transaction
-      await this.storage.beginTransaction();
+      // Add operation to transaction
+      transaction.operations.push({
+        id: `delete-${Date.now()}`,
+        type: 'delete',
+        timestamp: Date.now(),
+        path: existingTask.path,
+        tasks: [existingTask]
+      });
 
-      try {
-        // Delete task
-        await this.storage.deleteTask(path);
+      // Emit delete event
+      this.eventManager.emit({
+        type: EventTypes.TASK_DELETED,
+        timestamp: Date.now(),
+        taskId: existingTask.path,
+        task: existingTask
+      });
 
-        // Emit delete event
-        this.eventManager.emit({
-          type: EventTypes.TASK_DELETED,
-          timestamp: Date.now(),
-          taskId: existingTask.path,
-          task: existingTask
-        });
-
-        // Commit transaction
-        await this.storage.commitTransaction();
-      } catch (error) {
-        // Rollback on error
-        await this.storage.rollbackTransaction();
-        throw error;
-      } finally {
-        this.activeTransactions.delete(transactionId);
-      }
+      await this.transactionManager.commit(transaction);
     } catch (error) {
       this.logger.error('Failed to delete task', {
         error,
