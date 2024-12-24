@@ -117,39 +117,39 @@ async function main() {
                         // Task CRUD operations
                         {
                             name: 'create_task',
-                            description: 'Create a new task in the hierarchical task structure. Supports parent-child relationships and task dependencies.',
+                            description: 'Create a new task in the hierarchical task structure. Tasks can be organized in a tree-like structure with parent-child relationships and dependencies. Each task has a unique path identifier, metadata, and status tracking.\n\nBest Practices:\n- Use descriptive path names that reflect the task hierarchy (e.g., "project/feature/subtask")\n- Set appropriate task types (TASK for work items, GROUP for organization, MILESTONE for major checkpoints)\n- Include detailed descriptions for better context\n- Use metadata for custom fields like priority, tags, or deadlines\n- Consider dependencies carefully to avoid circular references\n\nExample:\n{\n  "path": "website/auth/login-form",\n  "name": "Implement login form",\n  "description": "Create React component for user authentication",\n  "type": "TASK",\n  "parentPath": "website/auth",\n  "dependencies": ["website/auth/api-endpoints"],\n  "metadata": {\n    "priority": "high",\n    "estimatedHours": 4,\n    "tags": ["frontend", "security"]\n  }\n}',
                             inputSchema: {
                                 type: 'object',
                                 properties: {
                                     path: { 
                                         type: 'string',
-                                        description: 'Unique path identifier for the task (e.g., "project/feature/subtask")'
+                                        description: 'Optional: Unique path identifier for the task (e.g., "project/feature/subtask"). If not provided, will be generated from name'
                                     },
                                     name: { 
                                         type: 'string',
-                                        description: 'Display name of the task'
+                                        description: 'Required: Display name of the task. This is the only required field'
                                     },
                                     description: { 
                                         type: 'string',
-                                        description: 'Detailed description of the task'
+                                        description: 'Optional: Detailed description of the task'
                                     },
                                     type: { 
                                         type: 'string', 
                                         enum: ['TASK', 'GROUP', 'MILESTONE'],
-                                        description: 'Type of task: TASK (individual task), GROUP (container), or MILESTONE (major checkpoint)'
+                                        description: 'Optional: Type of task: TASK (individual task), GROUP (container), or MILESTONE (major checkpoint). Defaults to TASK'
                                     },
                                     parentPath: { 
                                         type: 'string',
-                                        description: 'Path of the parent task if this is a subtask'
+                                        description: 'Optional: Path of the parent task if this is a subtask. Used for hierarchical organization'
                                     },
                                     dependencies: { 
                                         type: 'array', 
                                         items: { type: 'string' },
-                                        description: 'Array of task paths that must be completed before this task can start'
+                                        description: 'Optional: Array of task paths that must be completed before this task can start. Used for dependency tracking'
                                     },
                                     metadata: { 
                                         type: 'object',
-                                        description: 'Additional task metadata like priority, tags, or custom fields'
+                                        description: 'Optional: Additional task metadata like priority, tags, or custom fields. Can store any JSON-serializable data'
                                     }
                                 },
                                 required: ['name']
@@ -157,40 +157,40 @@ async function main() {
                         },
                         {
                             name: 'update_task',
-                            description: 'Update an existing task\'s properties including status, dependencies, and metadata. Changes are validated for consistency.',
+                            description: 'Update an existing task\'s properties including status, dependencies, and metadata. All changes are validated for consistency and dependency cycles.\n\nBest Practices:\n- Update only the fields that need to change\n- Use appropriate status values to track progress\n- Validate dependencies before updating\n- Keep metadata consistent across updates\n- Consider impact on dependent tasks\n\nExample:\n{\n  "path": "website/auth/login-form",\n  "updates": {\n    "status": "IN_PROGRESS",\n    "description": "Updated implementation details...",\n    "metadata": {\n      "assignee": "john.doe",\n      "progress": 50\n    }\n  }\n}',
                             inputSchema: {
                                 type: 'object',
                                 properties: {
                                     path: { 
                                         type: 'string',
-                                        description: 'Path of the task to update'
+                                        description: 'Required: Path of the task to update. Must be an existing task path'
                                     },
                                     updates: {
                                         type: 'object',
-                                        description: 'Fields to update on the task',
+                                        description: 'Required: Fields to update on the task. At least one update field must be provided',
                                         properties: {
-                                            name: { 
-                                                type: 'string',
-                                                description: 'New display name'
-                                            },
-                                            description: { 
-                                                type: 'string',
-                                                description: 'New task description'
-                                            },
-                                            status: { 
-                                                type: 'string', 
-                                                enum: ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'BLOCKED'],
-                                                description: 'New task status'
-                                            },
-                                            dependencies: { 
-                                                type: 'array', 
-                                                items: { type: 'string' },
-                                                description: 'Updated list of dependency task paths'
-                                            },
-                                            metadata: { 
-                                                type: 'object',
-                                                description: 'Updated task metadata'
-                                            }
+                                                name: { 
+                                                    type: 'string',
+                                                    description: 'Optional: New display name for the task'
+                                                },
+                                                description: { 
+                                                    type: 'string',
+                                                    description: 'Optional: New detailed description for the task'
+                                                },
+                                                status: { 
+                                                    type: 'string', 
+                                                    enum: ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'BLOCKED'],
+                                                    description: 'Optional: New status for the task. Must be one of the defined status values'
+                                                },
+                                                dependencies: { 
+                                                    type: 'array', 
+                                                    items: { type: 'string' },
+                                                    description: 'Optional: New list of dependency task paths. Replaces existing dependencies'
+                                                },
+                                                metadata: { 
+                                                    type: 'object',
+                                                    description: 'Optional: Updated task metadata. Merges with existing metadata'
+                                                }
                                         }
                                     }
                                 },
@@ -199,13 +199,13 @@ async function main() {
                         },
                         {
                             name: 'delete_task',
-                            description: 'Delete a task and all its subtasks recursively. This operation cannot be undone.',
+                            description: 'Delete a task and all its subtasks recursively. This operation cascades through the task hierarchy and cannot be undone.\n\nBest Practices:\n- Verify task path carefully before deletion\n- Check for dependent tasks that may be affected\n- Consider archiving important tasks instead of deletion\n- Back up task data if needed before deletion\n- Update dependent task references after deletion\n\nExample:\n{\n  "path": "website/auth"\n  // Will delete auth task and all subtasks like login-form, etc.\n}',
                             inputSchema: {
                                 type: 'object',
                                 properties: {
                                     path: { 
                                         type: 'string',
-                                        description: 'Path of the task to delete (will also delete all subtasks)'
+                                        description: 'Required: Path of the task to delete. Will recursively delete this task and all its subtasks'
                                     }
                                 },
                                 required: ['path']
@@ -213,14 +213,14 @@ async function main() {
                         },
                         {
                             name: 'get_tasks_by_status',
-                            description: 'Retrieve all tasks with a specific status (PENDING, IN_PROGRESS, COMPLETED, FAILED, or BLOCKED).',
+                            description: 'Retrieve all tasks with a specific status. Useful for monitoring progress, finding blocked tasks, or generating status reports.\n\nStatus Values:\n- PENDING: Not started\n- IN_PROGRESS: Currently being worked on\n- COMPLETED: Finished successfully\n- FAILED: Encountered errors/issues\n- BLOCKED: Waiting on dependencies\n\nExample:\n{\n  "status": "BLOCKED"\n  // Returns all blocked tasks for investigation\n}',
                             inputSchema: {
                                 type: 'object',
                                 properties: {
                                     status: { 
                                         type: 'string', 
                                         enum: ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'BLOCKED'],
-                                        description: 'Status to filter tasks by'
+                                        description: 'Required: Status value to filter tasks by. Must be one of the defined status values'
                                     }
                                 },
                                 required: ['status']
@@ -228,13 +228,13 @@ async function main() {
                         },
                         {
                             name: 'get_tasks_by_path',
-                            description: 'Retrieve tasks matching a glob pattern (e.g., "project/*" for all tasks in project, "auth/**" for all tasks under auth/).',
+                            description: 'Retrieve tasks matching a glob pattern. Supports flexible path matching for finding related tasks.\n\nPattern Examples:\n- "project/*": Direct children of project\n- "project/**": All tasks under project (recursive)\n- "*/feature": Feature tasks in any project\n- "auth/login*": All login-related tasks in auth\n\nBest Practices:\n- Use specific patterns to limit results\n- Consider hierarchy depth when using **\n- Combine with status/metadata filtering\n\nExample:\n{\n  "pattern": "website/auth/**"\n  // Returns all tasks under auth hierarchy\n}',
                             inputSchema: {
                                 type: 'object',
                                 properties: {
                                     pattern: { 
                                         type: 'string',
-                                        description: 'Glob pattern to match task paths (e.g., "project/*" for all tasks in project)'
+                                        description: 'Required: Glob pattern to match task paths. Supports * for single level and ** for recursive matching'
                                     }
                                 },
                                 required: ['pattern']
@@ -242,13 +242,13 @@ async function main() {
                         },
                         {
                             name: 'get_subtasks',
-                            description: 'Retrieve all direct subtasks of a given task. Does not include nested subtasks of subtasks.',
+                            description: 'Retrieve all direct subtasks of a given task. Returns only immediate children, not the entire subtree.\n\nBest Practices:\n- Use for targeted task management\n- Combine with get_tasks_by_path for deep hierarchies\n- Check subtask status for progress tracking\n- Monitor subtask dependencies\n\nExample:\n{\n  "parentPath": "website/auth"\n  // Returns direct subtasks like login-form, signup-form, etc.\n}',
                             inputSchema: {
                                 type: 'object',
                                 properties: {
                                     parentPath: { 
                                         type: 'string',
-                                        description: 'Path of the parent task to get subtasks for'
+                                        description: 'Required: Path of the parent task to get subtasks for. Must be an existing task path'
                                     }
                                 },
                                 required: ['parentPath']
@@ -256,13 +256,13 @@ async function main() {
                         },
                         {
                             name: 'bulk_task_operations',
-                            description: 'Execute multiple task operations (create, update, delete) in a single transaction. If any operation fails, all changes are rolled back.',
+                            description: 'Execute multiple task operations atomically in a single transaction. Ensures data consistency by rolling back all changes if any operation fails.\n\nSupported Operations:\n- create: Add new tasks\n- update: Modify existing tasks\n- delete: Remove tasks and subtasks\n\nBest Practices:\n- Group related changes together\n- Order operations to handle dependencies\n- Keep transactions focused and minimal\n- Include proper error handling\n- Validate data before submission\n\nExample:\n{\n  "operations": [\n    {\n      "type": "create",\n      "path": "website/auth/oauth",\n      "data": {\n        "name": "OAuth Integration",\n        "type": "TASK"\n      }\n    },\n    {\n      "type": "update",\n      "path": "website/auth/login-form",\n      "data": {\n        "status": "COMPLETED"\n      }\n    }\n  ]\n}',
                             inputSchema: {
                                 type: 'object',
                                 properties: {
                                     operations: {
                                         type: 'array',
-                                        description: 'Array of task operations to execute in sequence. All operations are executed in a single transaction - if any operation fails, all changes are rolled back.',
+                                        description: 'Required: Array of task operations to execute atomically. Must contain at least one operation. All operations are executed in a single transaction - if any operation fails, all changes are rolled back',
                                         items: {
                                             type: 'object',
                                             properties: {
@@ -290,13 +290,13 @@ async function main() {
                         // Database maintenance operations
                         {
                             name: 'clear_all_tasks',
-                            description: 'Clear all tasks from the database and reset all caches. Requires explicit confirmation.',
+                            description: 'Clear all tasks from the database and reset all caches. This is a destructive operation that requires explicit confirmation.\n\nBest Practices:\n- Use only for complete system reset\n- Backup data before clearing\n- Verify confirmation requirement\n- Plan for cache rebuild time\n- Consider selective deletion instead\n\nExample:\n{\n  "confirm": true\n  // Must be explicitly set to true\n}',
                             inputSchema: {
                                 type: 'object',
                                 properties: {
                                     confirm: { 
                                         type: 'boolean',
-                                        description: 'Must be true to confirm deletion of all tasks'
+                                        description: 'Required: Must be explicitly set to true to confirm deletion. This is a safety measure for this destructive operation'
                                     }
                                 },
                                 required: ['confirm']
@@ -304,30 +304,30 @@ async function main() {
                         },
                         {
                             name: 'vacuum_database',
-                            description: 'Optimize database storage and performance by cleaning up unused space and updating statistics.',
+                            description: 'Optimize database storage and performance by cleaning up unused space and updating statistics.\n\nBest Practices:\n- Run during low-usage periods\n- Schedule regular maintenance\n- Monitor space reclamation\n- Update statistics for query optimization\n- Back up before major operations\n\nExample:\n{\n  "analyze": true\n  // Also updates query statistics\n}',
                             inputSchema: {
                                 type: 'object',
                                 properties: {
                                     analyze: { 
                                         type: 'boolean',
-                                        description: 'Whether to run ANALYZE after VACUUM to update database statistics'
+                                        description: 'Optional: Whether to run ANALYZE after VACUUM to update database statistics. Defaults to false'
                                     }
                                 }
                             }
                         },
                         {
                             name: 'repair_relationships',
-                            description: 'Repair parent-child relationships and fix inconsistencies in the task hierarchy. Can be run in dry-run mode.',
+                            description: 'Repair parent-child relationships and fix inconsistencies in the task hierarchy. Validates and corrects task relationships, orphaned tasks, and broken dependencies.\n\nBest Practices:\n- Run in dry-run mode first\n- Fix critical paths immediately\n- Schedule regular validation\n- Monitor repair results\n- Back up before repairs\n\nExample:\n{\n  "dryRun": true,\n  "pathPattern": "website/**"\n  // Check website hierarchy without making changes\n}',
                             inputSchema: {
                                 type: 'object',
                                 properties: {
                                     dryRun: { 
                                         type: 'boolean',
-                                        description: 'If true, only report issues without fixing them'
+                                        description: 'Optional: If true, only report issues without fixing them. Useful for safely checking what would be repaired. Defaults to false'
                                     },
                                     pathPattern: { 
                                         type: 'string',
-                                        description: 'Optional pattern to limit which tasks to check relationships for'
+                                        description: 'Optional: Pattern to limit which tasks to check relationships for. If not provided, checks all tasks'
                                     }
                                 }
                             }
