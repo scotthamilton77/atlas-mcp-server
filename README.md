@@ -30,55 +30,52 @@ ATLAS implements the Model Context Protocol (MCP), created by Anthropic, which e
 
 ### Core Components
 
-- **TaskStore**: Path-based task storage with caching, batch processing, and ACID compliance
-- **Status Management**: State machine with validation and dependency-aware updates
-- **Dependency System**: Graph-based management with cycle detection and impact analysis
-- **StorageManager**: SQLite integration for durable data persistence
-- **ValidationSystem**: Data integrity with Zod schema validation
-- **Performance Monitoring**: Rate limiting, health tracking, and metrics collection
+- **TaskManager**: Centralized task coordination with validation and event handling
+- **TaskOperations**: ACID-compliant task operations with transaction support
+- **TaskValidator**: Comprehensive validation with Zod schemas and dependency checks
+- **StorageManager**: SQLite-based persistence with WAL mode and connection management
+- **EventManager**: System-wide event tracking and notification
+- **BatchProcessors**: Optimized bulk operations for status and dependency updates
 
 ## Features
 
 ### Task Organization
-- Hierarchical structures (max 8 levels) with parent-child relationships
-- Dependency management and validation
-- Status tracking and propagation
-- Bulk operations support
-- Session-based isolation
+- Hierarchical task structure with parent-child relationships
+- Strong type validation (TASK, GROUP, MILESTONE)
+- Status management (PENDING, IN_PROGRESS, COMPLETED, FAILED, BLOCKED)
+- Dependency tracking with cycle detection
+- Rich metadata support with schema validation
 
-### Content Support
-- Markdown documentation
-- Code snippets with syntax highlighting
-- JSON data with schema validation
-- Rich metadata and tagging
-- Decision history tracking
-- Cross-reference support
-
-### System Features
-
-#### Storage & Performance
-- Memory-optimized operations (512MB cache)
-- SQLite optimization with WAL mode
-- Connection pooling and retry logic
+### Storage & Performance
+- SQLite backend with Write-Ahead Logging (WAL)
+- LRU caching with memory pressure monitoring
+- Transaction-based operations with rollback
+- Batch processing for bulk updates
+- Index-based fast retrieval
 - Automatic cache management
-- Index-based retrieval
-- Batch processing support
 
-#### Monitoring & Maintenance
-- Health monitoring and metrics
-- Rate limiting (100 req/min)
-- Resource utilization tracking
-- Database optimization
-- Relationship repair
-- Cache management
+### Validation & Safety
+- Zod schema validation for all inputs
+- Circular dependency prevention
+- Status transition validation
+- Metadata schema enforcement
+- Parent-child relationship validation
+- Version tracking for concurrency
 
-#### Error Handling
-- Comprehensive validation
-- Transaction rollback
-- State preservation
-- Recovery procedures
-- Detailed error context
-- Debug information
+### Monitoring & Maintenance
+- Comprehensive event system
+- Memory usage monitoring
+- Database optimization tools
+- Relationship repair utilities
+- Cache statistics tracking
+- Health monitoring
+
+### Error Handling
+- Detailed error codes and messages
+- Transaction safety with rollback
+- Retryable operation support
+- Rich error context
+- Event-based error tracking
 
 ## Installation
 
@@ -102,15 +99,33 @@ Add to your MCP client settings:
       "env": {
         "ATLAS_STORAGE_DIR": "/path/to/storage/directory",
         "ATLAS_STORAGE_NAME": "atlas-tasks",
-        "ATLAS_MAX_RETRIES": "3",
-        "ATLAS_RETRY_DELAY": "1000",
-        "ATLAS_BUSY_TIMEOUT": "5000",
-        "ATLAS_CHECKPOINT_INTERVAL": "300000",
-        "ATLAS_CACHE_SIZE": "2000",
-        "ATLAS_MMAP_SIZE": "30000000000",
-        "ATLAS_PAGE_SIZE": "4096"
+        "NODE_ENV": "production"
       }
     }
+  }
+}
+```
+
+Advanced configuration options:
+```json
+{
+  "storage": {
+    "connection": {
+      "maxRetries": 3,
+      "retryDelay": 500,
+      "busyTimeout": 2000
+    },
+    "performance": {
+      "checkpointInterval": 60000,
+      "cacheSize": 1000,
+      "mmapSize": 1073741824,
+      "pageSize": 4096
+    }
+  },
+  "logging": {
+    "console": true,
+    "file": true,
+    "level": "debug"
   }
 }
 ```
@@ -121,19 +136,23 @@ Tasks support rich content and metadata within a hierarchical structure:
 
 ```typescript
 {
+  "path": "project/feature/task",
   "name": "Implementation Task",
   "description": "Implement core functionality",
-  "type": "task",
+  "type": "TASK",
+  "status": "PENDING",
+  "parentPath": "project/feature",
+  "dependencies": ["project/feature/design"],
   "notes": [
     "# Requirements\n- Feature A\n- Feature B",
     "interface Feature {\n  name: string;\n  enabled: boolean;\n}"
   ],
-  "reasoning": "Modular development approach chosen for reusability",
   "metadata": {
     "priority": "high",
     "tags": ["core", "implementation"],
     "created": 1703094689310,
     "updated": 1703094734316,
+    "projectPath": "project",
     "version": 1
   }
 }
@@ -144,12 +163,12 @@ Tasks support rich content and metadata within a hierarchical structure:
 ### Task Management
 
 #### create_task
-Creates tasks with path-based hierarchy:
+Creates tasks with validation and dependency checks:
 ```typescript
 {
-  "name": "Backend Development",
   "path": "project/backend",
-  "type": "MILESTONE",
+  "name": "Backend Development",
+  "type": "GROUP",
   "description": "Implement core backend services",
   "metadata": {
     "priority": "high",
@@ -158,8 +177,24 @@ Creates tasks with path-based hierarchy:
 }
 ```
 
+#### update_task
+Updates tasks with status and dependency validation:
+```typescript
+{
+  "path": "project/backend/api",
+  "updates": {
+    "status": "IN_PROGRESS",
+    "dependencies": ["project/backend/database"],
+    "metadata": {
+      "progress": 50,
+      "assignee": "team-member"
+    }
+  }
+}
+```
+
 #### bulk_task_operations
-Executes multiple task operations in sequence:
+Executes multiple operations atomically:
 ```typescript
 {
   "operations": [
@@ -168,68 +203,105 @@ Executes multiple task operations in sequence:
       "path": "project/frontend",
       "data": {
         "name": "Frontend Development",
-        "type": "MILESTONE"
+        "type": "GROUP"
       }
     },
     {
       "type": "update",
-      "path": "project/frontend/ui",
+      "path": "project/backend",
       "data": {
-        "status": "IN_PROGRESS"
+        "status": "COMPLETED"
       }
     }
   ]
 }
 ```
 
-#### update_task
-Updates existing tasks with validation:
+### Task Queries
+
+#### get_tasks_by_status
+Retrieve tasks by execution state:
 ```typescript
 {
-  "path": "project/frontend/ui/button",
-  "updates": {
-    "status": "IN_PROGRESS",
-    "dependencies": ["project/frontend/ui/design-system"]
-  }
+  "status": "IN_PROGRESS"
 }
 ```
 
-### Task Retrieval
+#### get_tasks_by_path
+Search using glob patterns:
+```typescript
+{
+  "pattern": "project/backend/**"
+}
+```
 
-- **get_tasks_by_status**: Filter by execution state
-- **get_tasks_by_path**: Search using glob patterns
-- **get_subtasks**: List immediate child tasks
-- **get_task_tree**: Retrieve complete hierarchy
+#### get_subtasks
+List immediate child tasks:
+```typescript
+{
+  "parentPath": "project/backend"
+}
+```
 
-### Maintenance
+### Maintenance Tools
 
-- **vacuum_database**: Optimize storage and performance
-- **repair_relationships**: Fix task relationship inconsistencies
+#### vacuum_database
+Optimize database storage and performance:
+```typescript
+{
+  "analyze": true
+}
+```
+
+#### repair_relationships
+Fix task relationship inconsistencies:
+```typescript
+{
+  "dryRun": true,
+  "pathPattern": "project/**"
+}
+```
+
+#### clear_all_tasks
+Reset database with confirmation:
+```typescript
+{
+  "confirm": true
+}
+```
 
 ## Best Practices
 
 ### Task Management
-- Create parent tasks before subtasks
-- Use descriptive, action-oriented names
-- Document reasoning and context
-- Maintain clean hierarchies
-- Handle dependencies carefully
-- Monitor task relationships
+- Use descriptive path names reflecting hierarchy
+- Set appropriate task types (TASK, GROUP, MILESTONE)
+- Include detailed descriptions for context
+- Use metadata for custom fields
+- Consider dependencies carefully
+- Maintain clean parent-child relationships
 
 ### Performance
-- Use bulk operations for multiple tasks
-- Monitor rate limits
-- Handle errors gracefully
-- Clean up completed tasks
-- Optimize task retrieval
-- Maintain data integrity
+- Use bulk operations for multiple updates
+- Keep task hierarchies shallow (max 8 levels)
+- Clean up completed tasks regularly
+- Monitor memory usage
+- Use appropriate batch sizes
+- Maintain proper indexes
+
+### Data Integrity
+- Validate inputs before operations
+- Handle status transitions properly
+- Check for circular dependencies
+- Maintain metadata consistency
+- Use transactions for related changes
+- Regular database maintenance
 
 ## Development
 
 ```bash
 npm run build    # Build project
 npm run watch    # Watch for changes
-npm run inspector # Run MCP inspector
+npm test        # Run tests
 ```
 
 ## Contributing
@@ -240,7 +312,7 @@ npm run inspector # Run MCP inspector
 4. Push to the branch
 5. Create a Pull Request
 
-For bugs and feature requests, please [create an issue](https://github.com/cyanheads/atlas-mcp-server/issues).
+For bugs and feature requests, please create an issue.
 
 ## License
 

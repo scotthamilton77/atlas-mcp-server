@@ -392,19 +392,44 @@ export class TaskValidator {
         }
       }
 
-      // Validate status change
+      // Validate status value and change
       if (updates.status) {
+        // Validate status enum value
+        if (!Object.values(TaskStatus).includes(updates.status)) {
+          throw createError(
+            ErrorCodes.INVALID_INPUT,
+            `Invalid status value: ${updates.status}`
+          );
+        }
         await this.validateStatusChange(updates.status, path);
       }
 
-      // Validate dependencies change
+      // Validate dependencies change and check for cycles
       if (updates.dependencies) {
         await this.validateDependencies(updates.dependencies);
+        const hasCycle = await detectDependencyCycle(
+          existingTask,
+          updates.dependencies,
+          this.storage.getTask.bind(this.storage)
+        );
+        if (hasCycle) {
+          throw createError(
+            ErrorCodes.TASK_CYCLE,
+            'Circular dependencies detected in task relationships'
+          );
+        }
       }
 
-      // Validate metadata updates
+      // Validate metadata updates with schema
       if (updates.metadata) {
-        this.validateMetadata(updates.metadata);
+        try {
+          taskMetadataSchema.parse(updates.metadata);
+        } catch (error) {
+          throw createError(
+            ErrorCodes.INVALID_INPUT,
+            `Invalid metadata: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
       }
     } catch (error) {
       this.logger.error('Task update validation failed', {
