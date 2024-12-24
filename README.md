@@ -3,7 +3,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
 [![Model Context Protocol](https://img.shields.io/badge/MCP-1.0.4-green.svg)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Status](https://img.shields.io/badge/Status-Stable-green.svg)]()
+[![Status](https://img.shields.io/badge/Status-Beta-yellow.svg)]()
 [![GitHub](https://img.shields.io/github/stars/cyanheads/atlas-mcp-server?style=social)](https://github.com/cyanheads/atlas-mcp-server)
 
 ATLAS (Adaptive Task & Logic Automation System) is a Model Context Protocol server that provides hierarchical task management capabilities to Large Language Models. This tool provides LLMs with the structure and context needed to manage complex tasks and dependencies.
@@ -17,6 +17,7 @@ ATLAS (Adaptive Task & Logic Automation System) is a Model Context Protocol serv
 - [Task Structure](#task-structure)
 - [Tools](#tools)
 - [Best Practices](#best-practices)
+- [Known Issues](#known-issues)
 - [Development](#development)
 - [Contributing](#contributing)
 - [License](#license)
@@ -32,8 +33,10 @@ ATLAS implements the Model Context Protocol (MCP), created by Anthropic, which e
 
 - **TaskManager**: Centralized task coordination with validation and event handling
 - **TaskOperations**: ACID-compliant task operations with transaction support
-- **TaskValidator**: Comprehensive validation with Zod schemas and dependency checks
-- **StorageManager**: SQLite-based persistence with WAL mode and connection management
+- **TaskValidator**: Comprehensive validation with Zod schemas and path validation
+- **PathValidator**: Robust path validation and sanitization
+- **TransactionScope**: Improved transaction management with isolation levels
+- **StorageManager**: SQLite-based persistence with WAL mode
 - **EventManager**: System-wide event tracking and notification
 - **BatchProcessors**: Optimized bulk operations for status and dependency updates
 
@@ -45,6 +48,23 @@ ATLAS implements the Model Context Protocol (MCP), created by Anthropic, which e
 - Status management (PENDING, IN_PROGRESS, COMPLETED, FAILED, BLOCKED)
 - Dependency tracking with cycle detection
 - Rich metadata support with schema validation
+
+### Path Validation & Safety
+- Directory traversal prevention
+- Special character validation
+- Parent-child path validation
+- Path depth limits
+- Project name validation
+- Path sanitization
+- Consistent path formatting
+
+### Transaction Management
+- Isolation level support
+- Nested transaction handling
+- Savepoint management
+- Automatic rollback
+- Transaction-safe operations
+- Vacuum operation support
 
 ### Storage & Performance
 - SQLite backend with Write-Ahead Logging (WAL)
@@ -136,25 +156,49 @@ Tasks support rich content and metadata within a hierarchical structure:
 
 ```typescript
 {
+  // Path must follow validation rules:
+  // - No parent directory traversal (..)
+  // - Only alphanumeric, dash, underscore
+  // - Max depth of 5 levels
+  // - Valid project name as first segment
   "path": "project/feature/task",
+  
   "name": "Implementation Task",
   "description": "Implement core functionality",
-  "type": "TASK",
+  "type": "TASK", // TASK, GROUP, or MILESTONE
   "status": "PENDING",
+  
+  // Parent path must exist and follow same rules
   "parentPath": "project/feature",
+  
+  // Dependencies are validated for:
+  // - Existence
+  // - No circular references
+  // - Status transitions
   "dependencies": ["project/feature/design"],
+  
   "notes": [
     "# Requirements\n- Feature A\n- Feature B",
     "interface Feature {\n  name: string;\n  enabled: boolean;\n}"
   ],
+  
   "metadata": {
     "priority": "high",
     "tags": ["core", "implementation"],
-    "created": 1703094689310,
-    "updated": 1703094734316,
-    "projectPath": "project",
-    "version": 1
-  }
+    "estimatedHours": 8,
+    "assignee": "john.doe",
+    "customField": {
+      "nested": {
+        "value": 123
+      }
+    }
+  },
+
+  // System fields
+  "created": 1703094689310,
+  "updated": 1703094734316,
+  "projectPath": "project",
+  "version": 1
 }
 ```
 
@@ -166,7 +210,7 @@ Tasks support rich content and metadata within a hierarchical structure:
 Creates tasks with validation and dependency checks:
 ```typescript
 {
-  "path": "project/backend",
+  "path": "project/backend", // Must follow path rules
   "name": "Backend Development",
   "type": "GROUP",
   "description": "Implement core backend services",
@@ -183,7 +227,7 @@ Updates tasks with status and dependency validation:
 {
   "path": "project/backend/api",
   "updates": {
-    "status": "IN_PROGRESS",
+    "status": "IN_PROGRESS", // Validates dependencies
     "dependencies": ["project/backend/database"],
     "metadata": {
       "progress": 50,
@@ -249,7 +293,7 @@ List immediate child tasks:
 Optimize database storage and performance:
 ```typescript
 {
-  "analyze": true
+  "analyze": true // Also updates statistics
 }
 ```
 
@@ -257,7 +301,7 @@ Optimize database storage and performance:
 Fix task relationship inconsistencies:
 ```typescript
 {
-  "dryRun": true,
+  "dryRun": true, // Preview changes
   "pathPattern": "project/**"
 }
 ```
@@ -280,9 +324,17 @@ Reset database with confirmation:
 - Consider dependencies carefully
 - Maintain clean parent-child relationships
 
+### Path Naming
+- Use alphanumeric characters, dash, underscore
+- Keep paths short and meaningful
+- Start with valid project name
+- Avoid special characters
+- Use forward slashes
+- Keep depth under 5 levels
+
 ### Performance
 - Use bulk operations for multiple updates
-- Keep task hierarchies shallow (max 8 levels)
+- Keep task hierarchies shallow
 - Clean up completed tasks regularly
 - Monitor memory usage
 - Use appropriate batch sizes
@@ -295,6 +347,21 @@ Reset database with confirmation:
 - Maintain metadata consistency
 - Use transactions for related changes
 - Regular database maintenance
+
+## Known Issues
+
+1. Path Depth Validation
+   - Deep paths (>5 levels) may be accepted
+   - Need stricter enforcement
+
+2. Cascading Deletion
+   - Some deep path tasks may survive parent deletion
+   - Needs improved recursive deletion
+
+3. Transaction Management
+   - Bulk operations may fail with nested transactions
+   - clear_all_tasks has transaction issues
+   - Needs proper nested transaction support
 
 ## Development
 
