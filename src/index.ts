@@ -3,6 +3,8 @@
  * Path-based task management system
  */
 import { promises as fs } from 'fs';
+import { join, resolve } from 'path';
+import { homedir } from 'os';
 import { TaskManager } from './task-manager.js';
 import { Logger } from './logging/index.js';
 import { StorageConfig, TaskStorage } from './types/storage.js';
@@ -30,19 +32,23 @@ export class AtlasServerBootstrap {
             NODE_ENV: process.env.NODE_ENV
         });
 
-        // Validate required environment variables
-        if (!process.env.ATLAS_STORAGE_DIR) {
-            throw new Error('ATLAS_STORAGE_DIR environment variable is required');
-        }
-        if (!process.env.ATLAS_STORAGE_NAME) {
-            throw new Error('ATLAS_STORAGE_NAME environment variable is required');
+        // Set up storage configuration with platform-appropriate defaults
+        let storageDir = process.env.ATLAS_STORAGE_DIR;
+        const storageName = process.env.ATLAS_STORAGE_NAME || 'atlas-tasks';
+
+        if (!storageDir) {
+            // Default to platform-appropriate user directory
+            storageDir = join(homedir(), '.atlas-mcp', 'storage');
+            this.logger.info('Using default storage directory', { storageDir });
         }
 
+        // Ensure absolute path with platform-appropriate separators
+        storageDir = resolve(storageDir);
+
         // Set up storage configuration
-        const storageDir = process.env.ATLAS_STORAGE_DIR;
         this.storageConfig = {
             baseDir: storageDir,
-            name: process.env.ATLAS_STORAGE_NAME,
+            name: storageName,
             connection: {
                 maxRetries: Number(process.env.ATLAS_MAX_RETRIES) || 3,
                 retryDelay: Number(process.env.ATLAS_RETRY_DELAY) || 1000,
@@ -61,12 +67,18 @@ export class AtlasServerBootstrap {
 
     private async initialize(): Promise<void> {
         try {
-            // Ensure storage directory exists
-            await fs.mkdir(this.storageConfig.baseDir, { recursive: true });
+            // Ensure storage directory exists with platform-appropriate permissions
+            await fs.mkdir(this.storageConfig.baseDir, { 
+                recursive: true,
+                mode: process.platform === 'win32' ? undefined : 0o755
+            });
 
             // Initialize storage
             this.storage = await createStorage(this.storageConfig);
-            this.logger.info('Storage initialized', { dir: this.storageConfig.baseDir });
+            this.logger.info('Storage initialized', { 
+                dir: this.storageConfig.baseDir,
+                platform: process.platform
+            });
 
             // Initialize task manager with existing storage
             this.taskManager = new TaskManager(this.storage);
@@ -89,7 +101,11 @@ export class AtlasServerBootstrap {
             );
             this.logger.info('Server instance created');
         } catch (error) {
-            this.logger.fatal('Failed to initialize server components', { error });
+            this.logger.fatal('Failed to initialize server components', { 
+                error,
+                platform: process.platform,
+                storageDir: this.storageConfig.baseDir
+            });
             throw error;
         }
     }
@@ -107,22 +123,32 @@ export class AtlasServerBootstrap {
                 version: '0.1.0',
                 environment: process.env.NODE_ENV,
                 logLevel: process.env.LOG_LEVEL,
+                platform: process.platform,
                 maxMemory: `${Math.round(maxMemory / 1024 / 1024)}MB`,
                 maxCacheMemory: `${Math.round(maxCacheMemory / 1024 / 1024)}MB`
             });
         } catch (error) {
-            this.logger.fatal('Failed to start server', { error });
+            this.logger.fatal('Failed to start server', { 
+                error,
+                platform: process.platform
+            });
             throw error;
         }
     }
 }
 
 // Start server if run directly
-const isMainModule = import.meta.url === `file://${process.argv[1]}`;
-if (isMainModule) {
-    const server = new AtlasServerBootstrap();
-    server.start().catch((error) => {
-        console.error('Failed to start server:', error);
-        process.exit(1);
-    });
+if (import.meta.url.startsWith('file:')) {
+    const scriptPath = process.platform === 'win32' 
+        ? process.argv[1].replace(/\\/g, '/') 
+        : process.argv[1];
+    
+    const isMainModule = import.meta.url === `file://${scriptPath}`;
+    if (isMainModule) {
+        const server = new AtlasServerBootstrap();
+        server.start().catch((error) => {
+            console.error('Failed to start server:', error);
+            process.exit(1);
+        });
+    }
 }
