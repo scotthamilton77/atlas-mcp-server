@@ -4,7 +4,7 @@ import { TaskStorage } from '../../types/storage.js';
 import { Task, TaskStatus, CreateTaskInput, UpdateTaskInput } from '../../types/task.js';
 import { Logger } from '../../logging/index.js';
 import { ErrorCodes, createError } from '../../errors/index.js';
-import { TransactionManager } from '../core/transactions/manager.js';
+import { TransactionScope, IsolationLevel } from '../core/transactions/scope.js';
 
 // Constants
 export const DEFAULT_PAGE_SIZE = 4096;
@@ -40,13 +40,11 @@ export class SqliteStorage implements TaskStorage {
     private readonly logger: Logger;
     private readonly dbPath: string;
     private isInitialized = false;
-    private readonly transactionManager: TransactionManager;
-    private currentTransactionId: string | null = null;
+    private transactionScope: TransactionScope | null = null;
 
     constructor(private readonly config: SqliteConfig) {
         this.logger = Logger.getInstance().child({ component: 'SqliteStorage' });
         this.dbPath = `${config.baseDir}/${config.name}.db`;
-        this.transactionManager = TransactionManager.getInstance();
     }
 
     async initialize(): Promise<void> {
@@ -72,6 +70,9 @@ export class SqliteStorage implements TaskStorage {
                     driver: sqlite3.Database,
                     mode: sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE
                 });
+
+                // Initialize transaction scope
+                this.transactionScope = new TransactionScope(this.db);
 
                 // Configure database with proper error handling
                 const pragmas = [
@@ -211,8 +212,8 @@ export class SqliteStorage implements TaskStorage {
 
         try {
             // Cleanup any active transactions
-            if (this.currentTransactionId) {
-                await this.rollbackTransaction();
+            if (this.transactionScope?.isActive()) {
+                await this.transactionScope.rollback();
             }
 
             this.isClosed = true;
@@ -233,28 +234,26 @@ export class SqliteStorage implements TaskStorage {
 
     // Transaction methods
     async beginTransaction(): Promise<void> {
-        if (!this.db) throw new Error('Database not initialized');
-        if (this.currentTransactionId) {
-            // Transaction already started, increment depth
-            return;
-        }
-        this.currentTransactionId = await this.transactionManager.beginTransaction(this.db);
+        if (!this.db || !this.transactionScope) throw new Error('Database not initialized');
+        await this.transactionScope.begin(IsolationLevel.SERIALIZABLE);
     }
 
     async commitTransaction(): Promise<void> {
-        if (!this.db || !this.currentTransactionId) {
-            throw new Error('No active transaction');
-        }
-        await this.transactionManager.commitTransaction(this.db, this.currentTransactionId);
-        this.currentTransactionId = null;
+        if (!this.db || !this.transactionScope) throw new Error('Database not initialized');
+        await this.transactionScope.commit();
     }
 
     async rollbackTransaction(): Promise<void> {
-        if (!this.db || !this.currentTransactionId) {
-            throw new Error('No active transaction');
-        }
-        await this.transactionManager.rollbackTransaction(this.db, this.currentTransactionId);
-        this.currentTransactionId = null;
+        if (!this.db || !this.transactionScope) throw new Error('Database not initialized');
+        await this.transactionScope.rollback();
+    }
+
+    /**
+     * Executes work within a transaction
+     */
+    async executeInTransaction<T>(work: () => Promise<T>): Promise<T> {
+        if (!this.db || !this.transactionScope) throw new Error('Database not initialized');
+        return this.transactionScope.executeInTransaction(work);
     }
 
     // Task operations
@@ -500,8 +499,23 @@ export class SqliteStorage implements TaskStorage {
     }
 
     async vacuum(): Promise<void> {
-        if (!this.db) throw new Error('Database not initialized');
-        await this.db.run('VACUUM');
+        if (!this.db || !this.transactionScope) throw new Error('Database not initialized');
+        
+        // Ensure no active transaction before vacuum
+        await this.transactionScope.ensureNoTransaction();
+        
+        try {
+            await this.db.run('VACUUM');
+            this.logger.info('Database vacuum completed');
+        } catch (error) {
+            this.logger.error('Failed to vacuum database', { error });
+            throw createError(
+                ErrorCodes.STORAGE_ERROR,
+                'Failed to vacuum database',
+                'vacuum',
+                error instanceof Error ? error.message : String(error)
+            );
+        }
     }
 
     async analyze(): Promise<void> {

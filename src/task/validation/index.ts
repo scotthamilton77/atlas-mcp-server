@@ -171,7 +171,6 @@ export const ValidationUtils = {
 
 export {
     TaskValidator,
-    validateTaskPath,
     isValidTaskHierarchy,
     validateTaskStatusTransition,
     detectDependencyCycle,

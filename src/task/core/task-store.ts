@@ -2,7 +2,8 @@
  * Path-based task storage with caching, indexing, and transaction support
  */
 import { Task, TaskStatus, getParentPath } from '../../types/task.js';
-import { validateTaskPath, isValidTaskHierarchy } from '../validation/index.js';
+import { isValidTaskHierarchy } from '../validation/index.js';
+import { PathValidator } from '../../validation/index.js';
 import { TaskStorage } from '../../types/storage.js';
 import { Logger } from '../../logging/index.js';
 import { TaskIndexManager } from './indexing/index-manager.js';
@@ -16,6 +17,7 @@ export class TaskStore {
     private readonly logger: Logger;
     private readonly indexManager: TaskIndexManager;
     private readonly cacheManager: CacheManager;
+    private readonly pathValidator: PathValidator;
     private nodes: Map<string, {
         path: string;
         dependencies: Set<string>;
@@ -32,6 +34,7 @@ export class TaskStore {
     constructor(private readonly storage: TaskStorage) {
         this.logger = Logger.getInstance().child({ component: 'TaskStore' });
         this.indexManager = new TaskIndexManager();
+        this.pathValidator = new PathValidator();
         this.cacheManager = new CacheManager({
             maxSize: 500, // Reduced from 1000
             ttl: 30000, // Reduced from 60000
@@ -156,10 +159,11 @@ export class TaskStore {
      * Gets a task by path, checking cache first
      */
     private async getTaskByPath(path: string): Promise<Task | null> {
-        if (!validateTaskPath(path)) {
+        const pathResult = this.pathValidator.validatePath(path);
+        if (!pathResult.isValid) {
             throw createError(
                 ErrorCodes.TASK_INVALID_PATH,
-                `Invalid task path: ${path}`
+                pathResult.error || `Invalid task path: ${path}`
             );
         }
 
@@ -232,10 +236,11 @@ export class TaskStore {
     async saveTasks(tasks: Task[]): Promise<void> {
         // Validate paths and collect parent updates
         for (const task of tasks) {
-            if (!validateTaskPath(task.path)) {
+            const pathResult = this.pathValidator.validatePath(task.path);
+            if (!pathResult.isValid) {
                 throw createError(
                     ErrorCodes.TASK_INVALID_PATH,
-                    `Invalid task path: ${task.path}`
+                    pathResult.error || `Invalid task path: ${task.path}`
                 );
             }
         }
@@ -457,10 +462,11 @@ export class TaskStore {
      * Gets subtasks of a task with efficient caching
      */
     async getSubtasks(parentPath: string): Promise<Task[]> {
-        if (!validateTaskPath(parentPath)) {
+        const pathResult = this.pathValidator.validatePath(parentPath);
+        if (!pathResult.isValid) {
             throw createError(
                 ErrorCodes.TASK_INVALID_PATH,
-                `Invalid parent path: ${parentPath}`
+                pathResult.error || `Invalid parent path: ${parentPath}`
             );
         }
 
@@ -507,10 +513,11 @@ export class TaskStore {
      * Deletes a task and its subtasks with transaction support
      */
     async deleteTask(path: string): Promise<void> {
-        if (!validateTaskPath(path)) {
+        const pathResult = this.pathValidator.validatePath(path);
+        if (!pathResult.isValid) {
             throw createError(
                 ErrorCodes.TASK_INVALID_PATH,
-                `Invalid task path: ${path}`
+                pathResult.error || `Invalid task path: ${path}`
             );
         }
 
