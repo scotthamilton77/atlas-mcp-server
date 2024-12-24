@@ -1,73 +1,35 @@
 /**
- * SQLite storage module exports
+ * SQLite Storage Implementation
+ * 
+ * This module provides a SQLite-based implementation of the TaskStorage interface,
+ * with support for:
+ * - Task CRUD operations
+ * - Transaction management
+ * - Database maintenance
+ * - Performance monitoring
+ * - Data integrity verification
  */
-export { SqliteStorage } from './storage.js';
+
+// Core initialization and maintenance functions
 export { 
-    initializeSqliteStorage,
-    verifySqliteIntegrity,
-    getSqliteStats 
+    initializeSqliteStorage,  // Initialize SQLite storage with proper configuration
+    verifySqliteIntegrity,   // Verify database integrity and repair if needed
+    getSqliteStats           // Get detailed database statistics and metrics
 } from './init.js';
 
-import type { 
-    StorageConfig,
-    StorageMetrics,
-    TaskStorage,
-    CacheStats,
-    ConnectionStats,
-    QueryStats,
-    MonitoringMetrics
-} from '../../types/storage.js';
-import type { MonitoringConfig } from '../monitoring/index.js';
+// Main storage implementation and configuration
+export { 
+    SqliteStorage,           // Main storage class implementing TaskStorage interface
+    SqliteConfig,            // Configuration interface for SQLite storage
+    DEFAULT_PAGE_SIZE,       // Default SQLite page size (4KB)
+    DEFAULT_CACHE_SIZE,      // Default cache size (2000 pages)
+    DEFAULT_BUSY_TIMEOUT     // Default busy timeout (5000ms)
+} from './storage.js';
 
-// Re-export types
+// Re-export task types for convenience
 export type {
-    StorageConfig,
-    StorageMetrics,
-    TaskStorage,
-    CacheStats,
-    ConnectionStats,
-    QueryStats,
-    MonitoringMetrics
-};
-
-// Constants
-export const DEFAULT_PAGE_SIZE = 4096;
-export const DEFAULT_CACHE_SIZE = -2000; // 2MB in pages
-export const DEFAULT_MMAP_SIZE = 0;
-export const DEFAULT_BUSY_TIMEOUT = 5000;
-export const DEFAULT_WAL_AUTOCHECKPOINT = 1000;
-
-// SQLite-specific types
-export interface SqliteStats {
-    size: number;
-    walSize: number;
-    pageCount: number;
-    pageSize: number;
-}
-
-export interface SqliteConfig extends StorageConfig {
-    sqlite?: {
-        // SQLite-specific settings
-        journalMode?: 'DELETE' | 'TRUNCATE' | 'PERSIST' | 'MEMORY' | 'WAL' | 'OFF';
-        synchronous?: 'OFF' | 'NORMAL' | 'FULL' | 'EXTRA';
-        tempStore?: 'DEFAULT' | 'FILE' | 'MEMORY';
-        lockingMode?: 'NORMAL' | 'EXCLUSIVE';
-        autoVacuum?: 'NONE' | 'FULL' | 'INCREMENTAL';
-    };
-    monitoring?: MonitoringConfig;
-}
-
-export interface SqliteMetrics extends StorageMetrics {
-    sqlite?: {
-        // SQLite-specific metrics
-        journalMode: string;
-        synchronous: string;
-        tempStore: string;
-        lockingMode: string;
-        autoVacuum: string;
-        integrityCheck: boolean;
-        lastVacuum?: number;
-        lastAnalyze?: number;
-        lastCheckpoint?: number;
-    };
-}
+    Task,
+    TaskStatus,
+    CreateTaskInput,
+    UpdateTaskInput
+} from '../../types/task.js';

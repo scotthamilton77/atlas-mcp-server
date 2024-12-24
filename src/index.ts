@@ -11,6 +11,7 @@ import { TaskStorage } from './types/storage.js';
 
 let server: AtlasServer;
 let storage: TaskStorage;
+let taskManager: TaskManager;
 
 async function main() {
     // Load environment variables from .env file if present
@@ -78,7 +79,7 @@ async function main() {
         storage = await createStorage(config.storage);
 
         // Initialize task manager
-        const taskManager = new TaskManager(storage);
+        taskManager = new TaskManager(storage);
 
         // Initialize server with tool handler
         server = new AtlasServer(
@@ -482,19 +483,40 @@ async function main() {
                 metadata: { reason }
             });
 
-            // Ensure all cleanup happens before exit
-            await Promise.all([
-                server.shutdown(),
-                storage.close()
-            ]);
+            // Cleanup in specific order to ensure proper shutdown
+            try {
+                // First stop accepting new requests
+                if (server) {
+                    await server.shutdown();
+                }
 
-            // Force final cleanup
-            if (global.gc) {
-                global.gc();
+                // Then cleanup task manager and its resources
+                if (taskManager) {
+                    await taskManager.cleanup();
+                }
+
+                // Finally close storage
+                if (storage) {
+                    await storage.close();
+                }
+
+                // Clear event manager
+                eventManager.removeAllListeners();
+
+                // Force final cleanup
+                if (global.gc) {
+                    global.gc();
+                }
+
+                // Remove process event listeners
+                process.removeAllListeners();
+            } catch (cleanupError) {
+                logger.error('Error during component cleanup', cleanupError);
+                // Continue with shutdown despite cleanup errors
             }
 
-            // Remove all event listeners
-            process.removeAllListeners();
+            // Final logging before exit
+            logger.info('Server shutdown completed', { reason });
             
             // Exit after cleanup
             process.nextTick(() => process.exit(0));

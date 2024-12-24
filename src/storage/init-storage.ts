@@ -20,25 +20,63 @@ interface McpSettings {
 }
 
 function getMcpSettings(): McpSettings | null {
-    try {
-        // Try VSCode settings first
-        const vscodePath = join(homedir(), 'Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json');
-        const settings = JSON.parse(readFileSync(vscodePath, 'utf8'));
-        return settings;
-    } catch (error) {
+    const logger = Logger.getInstance();
+    const paths = [
+        // VSCode settings
+        join(homedir(), 'Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json'),
+        // Claude desktop app settings
+        join(homedir(), 'Library/Application Support/Claude/claude_desktop_config.json')
+    ];
+
+    for (const path of paths) {
         try {
-            // Try Claude desktop app settings
-            const claudePath = join(homedir(), 'Library/Application Support/Claude/claude_desktop_config.json');
-            const settings = JSON.parse(readFileSync(claudePath, 'utf8'));
+            logger.debug('Checking MCP settings at:', { path });
+            const settings = JSON.parse(readFileSync(path, 'utf8'));
+            logger.info('Found MCP settings:', { path });
             return settings;
         } catch (error) {
-            return null;
+            logger.debug('Failed to read MCP settings:', { path, error });
         }
+    }
+
+    return null;
+}
+
+async function validateStoragePath(dir: string): Promise<void> {
+    const logger = Logger.getInstance();
+    const fs = await import('fs/promises');
+    
+    try {
+        // Create directory if it doesn't exist
+        await fs.mkdir(dir, { recursive: true });
+        
+        // Check if directory is writable
+        const testFile = join(dir, '.write_test');
+        await fs.writeFile(testFile, '');
+        await fs.unlink(testFile);
+        
+        logger.info('Storage directory validated:', { dir });
+    } catch (error) {
+        logger.error('Storage directory validation failed:', { 
+            dir, 
+            error: error instanceof Error ? error.message : String(error)
+        });
+        throw new Error(`Invalid storage directory: ${dir}`);
     }
 }
 
 async function main() {
+    const fs = await import('fs/promises');
+    
     try {
+        // Initialize logger first with basic config
+        Logger.initialize({
+            minLevel: 'debug',
+            console: true,
+            file: false // Will enable file logging after directory validation
+        });
+        const logger = Logger.getInstance();
+
         // Try to get settings from MCP config first
         const mcpSettings = getMcpSettings();
         const atlasSettings = mcpSettings?.mcpServers?.['atlas-mcp-server']?.env;
@@ -48,33 +86,33 @@ async function main() {
             const { config } = await import('dotenv');
             config();
         } catch (error) {
-            // Ignore error if .env file doesn't exist
+            logger.debug('No .env file found');
         }
 
         // Get storage settings with fallbacks
-        const storageDir = atlasSettings?.ATLAS_STORAGE_DIR || process.env.ATLAS_STORAGE_DIR;
-        const storageName = atlasSettings?.ATLAS_STORAGE_NAME || process.env.ATLAS_STORAGE_NAME || 'ATLAS';
+        const storageDir = atlasSettings?.ATLAS_STORAGE_DIR || process.env.ATLAS_STORAGE_DIR || join(process.env.HOME || '', 'Documents/Cline/mcp-workspace/ATLAS');
+        const storageName = atlasSettings?.ATLAS_STORAGE_NAME || process.env.ATLAS_STORAGE_NAME || 'atlas';
 
-        if (!storageDir) {
-            throw new Error('ATLAS_STORAGE_DIR not found in MCP settings or environment variables');
-        }
+        logger.info('Using storage directory:', { storageDir, storageName });
 
-        // Configure logger with file output
+        // Validate storage directory
+        await validateStoragePath(storageDir);
+
+        // Create log directory
         const logDir = join(storageDir, 'logs');
-        Logger.initialize({
-            minLevel: 'debug',
-            console: true,
-            file: true,
-            logDir,
-            maxFileSize: 5 * 1024 * 1024, // 5MB
-            maxFiles: 5
+        await fs.mkdir(logDir, { recursive: true });
+        
+        // Get a new logger instance for the rest of initialization
+        const initLogger = Logger.getInstance().child({ 
+            component: 'StorageInit',
+            logDir
         });
-        const logger = Logger.getInstance();
 
-        // Initialize configuration
+        // Initialize configuration with validated paths
         const configManager = ConfigManager.getInstance();
-
+        initLogger.info('Updating configuration...');
         await configManager.updateConfig({
+            appName: 'atlas-mcp-server',
             storage: {
                 baseDir: storageDir,
                 name: storageName,
@@ -96,11 +134,11 @@ async function main() {
         await initializeSqliteStorage();
 
         // Log storage location
-        logger.info('Storage initialized at:', {
+        initLogger.info('Storage initialized at:', {
             path: `${storageDir}/${storageName}.db`
         });
 
-        logger.info('Storage initialization completed successfully');
+        initLogger.info('Storage initialization completed successfully');
     } catch (error) {
         const errorMessage = error instanceof Error 
             ? `${error.message}\n${error.stack}`

@@ -8,15 +8,22 @@ import { TaskIndex, IndexStats } from '../../../types/indexing.js';
 import { Logger } from '../../../logging/index.js';
 import { globToRegex, generatePathPatterns, matchesPattern } from '../../../utils/pattern-matcher.js';
 
-
 export class TaskIndexManager {
     private readonly logger: Logger;
-    private readonly taskIndexes: Map<string, TaskIndex>;
+    private readonly taskIndexes: Map<string, WeakRef<TaskIndex>>;
     private readonly pathIndex: Map<string, Set<string>>;
     private readonly patternIndex: Map<string, Set<string>>;
     private readonly statusIndex: Map<TaskStatus, Set<string>>;
     private readonly parentIndex: Map<string, Set<string>>;
     private readonly dependencyIndex: Map<string, Set<string>>;
+    
+    // Keep track of pattern count to prevent unbounded growth
+    private readonly MAX_PATTERNS = 1000;
+    private patternCount = 0;
+
+    // Cleanup interval
+    private readonly CLEANUP_INTERVAL = 60000; // 1 minute
+    private cleanupTimer?: NodeJS.Timeout;
 
     constructor() {
         this.logger = Logger.getInstance().child({ component: 'TaskIndexManager' });
@@ -26,6 +33,33 @@ export class TaskIndexManager {
         this.statusIndex = new Map();
         this.parentIndex = new Map();
         this.dependencyIndex = new Map();
+
+        // Start cleanup timer
+        this.startCleanupTimer();
+    }
+
+    private startCleanupTimer(): void {
+        if (this.cleanupTimer) {
+            clearInterval(this.cleanupTimer);
+        }
+        
+        this.cleanupTimer = setInterval(() => {
+            this.cleanupIndexes();
+            this.cleanupPatterns();
+            
+            // Force GC if available
+            if (global.gc) {
+                global.gc();
+            }
+        }, this.CLEANUP_INTERVAL);
+
+        // Ensure cleanup timer is cleared on process exit
+        process.once('beforeExit', () => {
+            if (this.cleanupTimer) {
+                clearInterval(this.cleanupTimer);
+                this.cleanupTimer = undefined;
+            }
+        });
     }
 
     /**
@@ -39,9 +73,27 @@ export class TaskIndexManager {
             if (!paths) {
                 paths = new Set();
                 this.patternIndex.set(pattern, paths);
+                this.patternCount++;
             }
             paths.add(path);
         }
+    }
+
+    /**
+     * Gets a task from its weak reference
+     */
+    private getTaskFromWeakRef(path: string): TaskIndex | undefined {
+        const ref = this.taskIndexes.get(path);
+        if (!ref) return undefined;
+        
+        const task = ref.deref();
+        if (!task) {
+            // Clean up if task was garbage collected
+            this.taskIndexes.delete(path);
+            return undefined;
+        }
+        
+        return task;
     }
 
     /**
@@ -55,12 +107,17 @@ export class TaskIndexManager {
                 path: task.path,
                 status: task.status,
                 parentPath: task.parentPath,
-                dependencies: task.dependencies,
-                subtasks: task.subtasks
+                dependencies: task.dependencies || [],
+                subtasks: task.subtasks || []
             };
 
-            // Update task indexes
-            this.taskIndexes.set(task.path, taskIndex);
+            // Store weak reference to allow GC
+            this.taskIndexes.set(task.path, new WeakRef(taskIndex));
+
+            // Clean up old patterns if we're at the limit
+            if (this.patternCount >= this.MAX_PATTERNS) {
+                this.cleanupPatterns();
+            }
 
             // Update path index and patterns
             const pathSegments = task.path.split('/');
@@ -122,17 +179,32 @@ export class TaskIndexManager {
         // First try exact pattern match from pattern index
         const exactMatches = this.patternIndex.get(pattern);
         if (exactMatches) {
-            return Array.from(exactMatches)
-                .map(path => this.taskIndexes.get(path))
+            const tasks = Array.from(exactMatches)
+                .map(path => this.getTaskFromWeakRef(path))
                 .filter((task): task is TaskIndex => task !== undefined);
+            
+            // If we got matches, return them
+            if (tasks.length > 0) {
+                return tasks;
+            }
+            // Otherwise clean up the empty pattern
+            this.patternIndex.delete(pattern);
+            this.patternCount--;
         }
 
         // Try prefix match from path index
         const prefixMatches = this.pathIndex.get(pattern);
         if (prefixMatches) {
-            return Array.from(prefixMatches)
-                .map(path => this.taskIndexes.get(path))
+            const tasks = Array.from(prefixMatches)
+                .map(path => this.getTaskFromWeakRef(path))
                 .filter((task): task is TaskIndex => task !== undefined);
+            
+            // Clean up empty sets
+            if (tasks.length === 0) {
+                this.pathIndex.delete(pattern);
+            }
+            
+            return tasks;
         }
 
         // Fall back to regex matching
@@ -141,7 +213,7 @@ export class TaskIndexManager {
             .filter(path => regex.test(path));
 
         return matchingPaths
-            .map(path => this.taskIndexes.get(path))
+            .map(path => this.getTaskFromWeakRef(path))
             .filter((task): task is TaskIndex => task !== undefined);
     }
 
@@ -153,7 +225,7 @@ export class TaskIndexManager {
         
         if (!pattern) {
             return Array.from(statusPaths)
-                .map(path => this.taskIndexes.get(path))
+                .map(path => this.getTaskFromWeakRef(path))
                 .filter((task): task is TaskIndex => task !== undefined);
         }
 
@@ -162,7 +234,7 @@ export class TaskIndexManager {
             .filter(path => matchesPattern(path, pattern));
 
         return matchingPaths
-            .map(path => this.taskIndexes.get(path))
+            .map(path => this.getTaskFromWeakRef(path))
             .filter((task): task is TaskIndex => task !== undefined);
     }
 
@@ -179,7 +251,7 @@ export class TaskIndexManager {
     async getTasksByParent(parentPath: string): Promise<TaskIndex[]> {
         const children = this.parentIndex.get(parentPath) || new Set<string>();
         return Array.from(children)
-            .map(path => this.taskIndexes.get(path))
+            .map(path => this.getTaskFromWeakRef(path))
             .filter((task): task is TaskIndex => task !== undefined);
     }
 
@@ -189,7 +261,7 @@ export class TaskIndexManager {
     async getDependentTasks(path: string): Promise<TaskIndex[]> {
         const dependents = this.dependencyIndex.get(path) || new Set<string>();
         return Array.from(dependents)
-            .map(path => this.taskIndexes.get(path))
+            .map(path => this.getTaskFromWeakRef(path))
             .filter((task): task is TaskIndex => task !== undefined);
     }
 
@@ -197,7 +269,7 @@ export class TaskIndexManager {
      * Gets a task by path
      */
     async getTaskByPath(path: string): Promise<TaskIndex | null> {
-        return this.taskIndexes.get(path) || null;
+        return this.getTaskFromWeakRef(path) || null;
     }
 
     /**
@@ -229,6 +301,7 @@ export class TaskIndexManager {
                     paths.delete(task.path);
                     if (paths.size === 0) {
                         this.patternIndex.delete(pattern);
+                        this.patternCount--;
                     }
                 }
             }
@@ -283,35 +356,129 @@ export class TaskIndexManager {
         const byStatus = {} as Record<TaskStatus, number>;
         const byDepth = {} as Record<number, number>;
         let totalDepth = 0;
+        let validTaskCount = 0;
 
-        for (const task of this.taskIndexes.values()) {
-            // Count by status
-            byStatus[task.status] = (byStatus[task.status] || 0) + 1;
+        // Only count tasks that haven't been garbage collected
+        for (const [path, weakRef] of this.taskIndexes.entries()) {
+            const task = weakRef.deref();
+            if (task) {
+                validTaskCount++;
+                
+                // Count by status
+                byStatus[task.status] = (byStatus[task.status] || 0) + 1;
 
-            // Count by depth
-            const depth = task.path.split('/').length - 1;
-            byDepth[depth] = (byDepth[depth] || 0) + 1;
-            totalDepth += depth;
+                // Count by depth
+                const depth = path.split('/').length - 1;
+                byDepth[depth] = (byDepth[depth] || 0) + 1;
+                totalDepth += depth;
+            }
         }
 
         return {
-            totalTasks: this.taskIndexes.size,
+            totalTasks: validTaskCount,
             byStatus,
             byDepth,
-            averageDepth: this.taskIndexes.size > 0 ? totalDepth / this.taskIndexes.size : 0
+            averageDepth: validTaskCount > 0 ? totalDepth / validTaskCount : 0
         };
+    }
+
+    /**
+     * Cleans up old patterns to prevent unbounded growth
+     */
+    private cleanupPatterns(): void {
+        // Remove patterns with no valid tasks
+        for (const [pattern, paths] of this.patternIndex.entries()) {
+            const validPaths = Array.from(paths)
+                .filter(path => this.getTaskFromWeakRef(path) !== undefined);
+            
+            if (validPaths.length === 0) {
+                this.patternIndex.delete(pattern);
+                this.patternCount--;
+            } else if (validPaths.length !== paths.size) {
+                // Update set with only valid paths
+                this.patternIndex.set(pattern, new Set(validPaths));
+            }
+        }
+    }
+
+    /**
+     * Cleans up invalid references and empty sets
+     */
+    private cleanupIndexes(): void {
+        // Clean up task indexes
+        for (const [path, weakRef] of this.taskIndexes.entries()) {
+            if (weakRef.deref() === undefined) {
+                this.taskIndexes.delete(path);
+            }
+        }
+
+        // Clean up empty sets in all indexes
+        for (const [prefix, paths] of this.pathIndex.entries()) {
+            const validPaths = Array.from(paths)
+                .filter(path => this.getTaskFromWeakRef(path) !== undefined);
+            
+            if (validPaths.length === 0) {
+                this.pathIndex.delete(prefix);
+            } else if (validPaths.length !== paths.size) {
+                this.pathIndex.set(prefix, new Set(validPaths));
+            }
+        }
+
+        for (const [status, paths] of this.statusIndex.entries()) {
+            const validPaths = Array.from(paths)
+                .filter(path => this.getTaskFromWeakRef(path) !== undefined);
+            
+            if (validPaths.length === 0) {
+                this.statusIndex.delete(status);
+            } else if (validPaths.length !== paths.size) {
+                this.statusIndex.set(status, new Set(validPaths));
+            }
+        }
+
+        for (const [parent, children] of this.parentIndex.entries()) {
+            const validPaths = Array.from(children)
+                .filter(path => this.getTaskFromWeakRef(path) !== undefined);
+            
+            if (validPaths.length === 0) {
+                this.parentIndex.delete(parent);
+            } else if (validPaths.length !== children.size) {
+                this.parentIndex.set(parent, new Set(validPaths));
+            }
+        }
+
+        for (const [dep, dependents] of this.dependencyIndex.entries()) {
+            const validPaths = Array.from(dependents)
+                .filter(path => this.getTaskFromWeakRef(path) !== undefined);
+            
+            if (validPaths.length === 0) {
+                this.dependencyIndex.delete(dep);
+            } else if (validPaths.length !== dependents.size) {
+                this.dependencyIndex.set(dep, new Set(validPaths));
+            }
+        }
     }
 
     /**
      * Clears all indexes
      */
     clear(): void {
+        // Stop cleanup timer
+        if (this.cleanupTimer) {
+            clearInterval(this.cleanupTimer);
+            this.cleanupTimer = undefined;
+        }
+
         this.taskIndexes.clear();
         this.pathIndex.clear();
         this.patternIndex.clear();
         this.statusIndex.clear();
         this.parentIndex.clear();
         this.dependencyIndex.clear();
+        this.patternCount = 0;
+
+        // Restart cleanup timer
+        this.startCleanupTimer();
+        
         this.logger.debug('Cleared all indexes');
     }
 }

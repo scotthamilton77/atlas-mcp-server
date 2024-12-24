@@ -25,8 +25,9 @@ export class TaskManager {
     private readonly cacheManager: CacheManager;
     private readonly indexManager: TaskIndexManager;
     private memoryMonitor?: NodeJS.Timeout;
-    private readonly MAX_CACHE_MEMORY = 512 * 1024 * 1024; // 512MB cache limit
-    private readonly MEMORY_CHECK_INTERVAL = 60000; // 1 minute
+    private readonly MAX_CACHE_MEMORY = 256 * 1024 * 1024; // 256MB cache limit
+    private readonly MEMORY_CHECK_INTERVAL = 30000; // 30 seconds
+    private readonly MEMORY_PRESSURE_THRESHOLD = 0.8; // 80% of max before cleanup
 
     private readonly eventManager: EventManager;
 
@@ -545,42 +546,66 @@ export class TaskManager {
      * Sets up memory monitoring for cache management
      */
     private setupMemoryMonitoring(): void {
+        // Clear any existing monitor
+        if (this.memoryMonitor) {
+            clearInterval(this.memoryMonitor);
+        }
+
+        // Set up new monitor with weak reference to this
+        const weakThis = new WeakRef(this);
+        
         this.memoryMonitor = setInterval(async () => {
+            const instance = weakThis.deref();
+            if (!instance) {
+                // If instance is garbage collected, stop monitoring
+                clearInterval(this.memoryMonitor);
+                return;
+            }
+
             const memUsage = process.memoryUsage();
             
             // Log memory stats
-            this.logger.debug('Task manager memory usage:', {
+            instance.logger.debug('Task manager memory usage:', {
                 heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
                 heapTotal: `${Math.round(memUsage.heapTotal / 1024 / 1024)}MB`,
                 rss: `${Math.round(memUsage.rss / 1024 / 1024)}MB`
             });
 
-            // Check if cache is using too much memory
-            if (memUsage.heapUsed > this.MAX_CACHE_MEMORY) {
+            // Check if memory usage is approaching threshold
+            const memoryUsageRatio = memUsage.heapUsed / instance.MAX_CACHE_MEMORY;
+            
+            if (memoryUsageRatio > instance.MEMORY_PRESSURE_THRESHOLD) {
                 // Emit memory pressure event
-                this.eventManager.emitCacheEvent({
+                instance.eventManager.emitCacheEvent({
                     type: EventTypes.MEMORY_PRESSURE,
                     timestamp: Date.now(),
                     metadata: {
                         memoryUsage: memUsage,
-                        threshold: this.MAX_CACHE_MEMORY
+                        threshold: instance.MAX_CACHE_MEMORY
                     }
                 });
 
-                this.logger.warn('Cache memory threshold exceeded, clearing caches', {
+                instance.logger.warn('Cache memory threshold exceeded, clearing caches', {
                     heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
-                    threshold: `${Math.round(this.MAX_CACHE_MEMORY / 1024 / 1024)}MB`
+                    threshold: `${Math.round(instance.MAX_CACHE_MEMORY / 1024 / 1024)}MB`
                 });
                 
-                await this.clearCaches();
+                await instance.clearCaches(true);
             }
         }, this.MEMORY_CHECK_INTERVAL);
+
+        // Ensure interval is cleaned up if process exits
+        process.on('beforeExit', () => {
+            if (this.memoryMonitor) {
+                clearInterval(this.memoryMonitor);
+            }
+        });
     }
 
     /**
      * Clears all caches to free memory
      */
-    async clearCaches(): Promise<void> {
+    async clearCaches(forceClean: boolean = false): Promise<void> {
         try {
             // Clear storage and manager caches
             await this.cacheManager.clear();
@@ -589,6 +614,16 @@ export class TaskManager {
             // Force garbage collection if available
             if (global.gc) {
                 global.gc();
+                
+                // Check if GC helped
+                const afterGC = process.memoryUsage();
+                if (forceClean && afterGC.heapUsed > (this.MAX_CACHE_MEMORY * this.MEMORY_PRESSURE_THRESHOLD)) {
+                    // If memory is still high after aggressive cleanup, log warning
+                    this.logger.warn('Memory usage remains high after cleanup', {
+                        heapUsed: `${Math.round(afterGC.heapUsed / 1024 / 1024)}MB`,
+                        threshold: `${Math.round(this.MAX_CACHE_MEMORY / 1024 / 1024)}MB`
+                    });
+                }
             }
 
             this.logger.info('Caches cleared successfully');
@@ -615,21 +650,70 @@ export class TaskManager {
      */
     async cleanup(): Promise<void> {
         try {
-            // Stop memory monitoring
+            // Stop memory monitoring first
             if (this.memoryMonitor) {
                 clearInterval(this.memoryMonitor);
+                this.memoryMonitor = undefined;
             }
 
-            // Clear caches
-            await this.clearCaches();
+            // Clear caches with force clean
+            await this.clearCaches(true);
 
-            // Close storage
-            await this.storage.close();
+            // Cleanup batch processors
+            try {
+                if (this.statusBatchProcessor) {
+                    await (this.statusBatchProcessor as any).cleanup?.();
+                }
+                if (this.dependencyBatchProcessor) {
+                    await (this.dependencyBatchProcessor as any).cleanup?.();
+                }
+            } catch (batchError) {
+                this.logger.warn('Error cleaning up batch processors', { error: batchError });
+            }
+
+            // Cleanup operations
+            try {
+                if (this.operations) {
+                    await (this.operations as any).cleanup?.();
+                }
+            } catch (opsError) {
+                this.logger.warn('Error cleaning up operations', { error: opsError });
+            }
+
+            // Remove event listeners
+            try {
+                this.eventManager.removeAllListeners();
+            } catch (eventError) {
+                this.logger.warn('Error cleaning up event listeners', { error: eventError });
+            }
+
+            // Cleanup index manager
+            try {
+                await this.indexManager.clear();
+            } catch (indexError) {
+                this.logger.warn('Error cleaning up index manager', { error: indexError });
+            }
+
+            // Close storage last
+            if (this.storage) {
+                await this.storage.close();
+            }
+
+            // Force final GC if available
+            if (global.gc) {
+                global.gc();
+            }
 
             this.logger.info('Task manager cleanup completed');
         } catch (error) {
             this.logger.error('Failed to cleanup task manager', { error });
             throw error;
+        } finally {
+            // Ensure memory monitor is cleared even if cleanup fails
+            if (this.memoryMonitor) {
+                clearInterval(this.memoryMonitor);
+                this.memoryMonitor = undefined;
+            }
         }
     }
 

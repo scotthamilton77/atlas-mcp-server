@@ -27,6 +27,19 @@ export abstract class BaseBatchProcessor<T = unknown> {
     concurrentBatches: 1
   };
 
+  private activeTimeouts: Set<NodeJS.Timeout> = new Set();
+  private activeBatches: Map<string, { 
+    startTime: number;
+    results: WeakRef<any[]>;
+  }> = new Map();
+  private isShuttingDown = false;
+  private cleanupInterval?: NodeJS.Timeout;
+  private readonly CLEANUP_INTERVAL = 30000; // 30 seconds - more frequent cleanup
+  private readonly BATCH_RESULT_TTL = 60000; // 1 minute - shorter TTL
+  private readonly MEMORY_CHECK_INTERVAL = 10000; // 10 seconds
+  private memoryCheckInterval?: NodeJS.Timeout;
+  private readonly HEAP_THRESHOLD = 0.7; // 70% heap usage threshold
+
   constructor(
     protected readonly dependencies: BatchDependencies,
     protected readonly options: BatchOptions = {}
@@ -35,12 +48,29 @@ export abstract class BaseBatchProcessor<T = unknown> {
       component: this.constructor.name 
     });
     this.options = { ...this.defaultOptions, ...options };
+
+    // Start monitoring and cleanup
+    this.startMemoryMonitoring();
+    this.startPeriodicCleanup();
+    
+    // Log initial memory state
+    this.logMemoryUsage('Initialization');
   }
 
   /**
    * Main execution method that orchestrates the batch processing flow
    */
   async execute(batch: BatchData[]): Promise<BatchResult<T>> {
+    if (this.isShuttingDown) {
+      throw new Error('Batch processor is shutting down');
+    }
+
+    const batchId = `batch-${Date.now()}-${Math.random()}`;
+    this.activeBatches.set(batchId, {
+      startTime: Date.now(),
+      results: new WeakRef([])
+    });
+
     try {
       // Validate batch if enabled
       if (this.options.validateBeforeProcess) {
@@ -57,11 +87,12 @@ export abstract class BaseBatchProcessor<T = unknown> {
           timeoutId = setTimeout(() => {
             reject(new Error(`Batch processing timed out after ${this.options.timeout}ms`));
           }, this.options.timeout);
+          this.activeTimeouts.add(timeoutId);
         }
       });
 
       // Process the batch with timeout
-      const result = await Promise.race([
+      const processResult = await Promise.race([
         this.process(batch),
         timeoutPromise
       ]);
@@ -69,19 +100,31 @@ export abstract class BaseBatchProcessor<T = unknown> {
       // Clear timeout if it was set
       if (timeoutId) {
         clearTimeout(timeoutId);
+        this.activeTimeouts.delete(timeoutId);
       }
 
-      return result as BatchResult<T>;
+      // Store results with WeakRef for memory management
+      const batchInfo = this.activeBatches.get(batchId);
+      if (batchInfo) {
+        batchInfo.results = new WeakRef(processResult.results);
+      }
+
+      // Log metrics
+      this.logMetrics(processResult);
+
+      return processResult;
     } catch (error) {
       this.logger.error('Batch processing failed', { error });
       throw error;
+    } finally {
+      this.activeBatches.delete(batchId);
     }
   }
 
   /**
    * Process items in batches with configurable concurrency
    */
-  async processInBatches(
+  public async processInBatches(
     items: BatchData[],
     batchSize: number,
     processor: (item: BatchData) => Promise<T>
@@ -152,36 +195,61 @@ export abstract class BaseBatchProcessor<T = unknown> {
     batch: BatchData[],
     processor: (item: BatchData) => Promise<T>
   ): Promise<BatchResult<T>> {
+    if (this.isShuttingDown) {
+      throw new Error('Batch processor is shutting down');
+    }
+
+    const batchId = `sub-batch-${Date.now()}-${Math.random()}`;
     const results: T[] = [];
     const errors: Error[] = [];
     const startTime = Date.now();
 
-    for (const item of batch) {
-      try {
-        const result = await this.withRetry(
-          () => processor(item),
-          `Processing item ${item.id}`
-        );
-        results.push(result);
-      } catch (error) {
-        errors.push(error as Error);
-        this.logger.error('Failed to process batch item', {
-          error,
-          itemId: item.id
-        });
-      }
-    }
+    // Track this sub-batch
+    this.activeBatches.set(batchId, {
+      startTime,
+      results: new WeakRef([])
+    });
 
-    const endTime = Date.now();
-    return {
-      results,
-      errors,
-      metadata: {
-        processingTime: endTime - startTime,
-        successCount: results.length,
-        errorCount: errors.length
+    try {
+      for (const item of batch) {
+        try {
+          const result = await this.withRetry(
+            () => processor(item),
+            `Processing item ${item.id}`
+          );
+          results.push(result);
+        } catch (error) {
+          errors.push(error as Error);
+          this.logger.error('Failed to process batch item', {
+            error,
+            itemId: item.id
+          });
+        }
       }
-    };
+
+      const endTime = Date.now();
+      const batchResult = {
+        results,
+        errors,
+        metadata: {
+          processingTime: endTime - startTime,
+          successCount: results.length,
+          errorCount: errors.length,
+          batchId
+        }
+      };
+
+      // Update batch results reference
+      const batchInfo = this.activeBatches.get(batchId);
+      if (batchInfo) {
+        batchInfo.results = new WeakRef(results);
+      }
+
+      return batchResult;
+    } finally {
+      // Clean up batch tracking after processing
+      this.activeBatches.delete(batchId);
+    }
   }
 
   /**
@@ -218,12 +286,177 @@ export abstract class BaseBatchProcessor<T = unknown> {
   /**
    * Helper method to log batch processing metrics
    */
-  protected logMetrics(result: BatchResult<any>): void {
+  protected logMetrics(result: BatchResult<T>): void {
     this.logger.info('Batch processing completed', {
       processingTime: result.metadata?.processingTime,
       successCount: result.metadata?.successCount,
       errorCount: result.metadata?.errorCount,
       totalItems: result.results.length + result.errors.length
+    });
+  }
+
+  /**
+   * Cleanup resources and prepare for shutdown
+   */
+  private startMemoryMonitoring(): void {
+    // Monitor memory usage periodically
+    this.memoryCheckInterval = setInterval(() => {
+      const memoryUsage = process.memoryUsage();
+      const heapUsed = memoryUsage.heapUsed / memoryUsage.heapTotal;
+
+      this.logger.debug('Memory usage', {
+        heapUsed: `${(heapUsed * 100).toFixed(1)}%`,
+        heapTotal: `${Math.round(memoryUsage.heapTotal / 1024 / 1024)}MB`,
+        rss: `${Math.round(memoryUsage.rss / 1024 / 1024)}MB`,
+        external: `${Math.round(memoryUsage.external / 1024 / 1024)}MB`,
+        arrayBuffers: `${Math.round(memoryUsage.arrayBuffers / 1024 / 1024)}MB`
+      });
+
+      if (heapUsed > this.HEAP_THRESHOLD) {
+        this.logger.warn('High memory usage detected', {
+          heapUsed: `${(heapUsed * 100).toFixed(1)}%`,
+          activeTimeouts: this.activeTimeouts.size,
+          activeBatches: this.activeBatches.size
+        });
+        
+        // Force cleanup when memory pressure is high
+        this.cleanupExpiredBatches(true);
+        
+        // Force GC if available
+        if (global.gc) {
+          this.logger.info('Forcing garbage collection');
+          global.gc();
+        }
+      }
+    }, this.MEMORY_CHECK_INTERVAL);
+
+    // Ensure cleanup on process exit
+    process.once('beforeExit', () => {
+      if (this.memoryCheckInterval) {
+        clearInterval(this.memoryCheckInterval);
+        this.memoryCheckInterval = undefined;
+      }
+    });
+  }
+
+  private startPeriodicCleanup(): void {
+    // More frequent cleanup interval
+    this.cleanupInterval = setInterval(() => {
+      this.cleanupExpiredBatches();
+    }, this.CLEANUP_INTERVAL);
+
+    // Ensure cleanup interval is cleared on process exit
+    process.once('beforeExit', () => {
+      if (this.cleanupInterval) {
+        clearInterval(this.cleanupInterval);
+        this.cleanupInterval = undefined;
+      }
+    });
+  }
+
+  private cleanupExpiredBatches(force: boolean = false): void {
+    const now = Date.now();
+    let cleanedCount = 0;
+
+    for (const [batchId, batchInfo] of this.activeBatches.entries()) {
+      // Clean up batches that have expired or force cleanup
+      if (force || now - batchInfo.startTime > this.BATCH_RESULT_TTL) {
+        this.activeBatches.delete(batchId);
+        cleanedCount++;
+        continue;
+      }
+
+      // Clean up batches whose results have been garbage collected
+      const results = batchInfo.results.deref();
+      if (!results) {
+        this.activeBatches.delete(batchId);
+        cleanedCount++;
+      }
+    }
+
+    // Always log cleanup metrics
+    this.logger.debug('Batch cleanup completed', {
+      cleanedCount,
+      remainingBatches: this.activeBatches.size,
+      forced: force,
+      memoryUsage: this.getMemoryMetrics()
+    });
+  }
+
+  private getMemoryMetrics(): Record<string, string> {
+    const memoryUsage = process.memoryUsage();
+    return {
+      heapUsed: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)}MB`,
+      heapTotal: `${Math.round(memoryUsage.heapTotal / 1024 / 1024)}MB`,
+      rss: `${Math.round(memoryUsage.rss / 1024 / 1024)}MB`,
+      external: `${Math.round(memoryUsage.external / 1024 / 1024)}MB`,
+      arrayBuffers: `${Math.round(memoryUsage.arrayBuffers / 1024 / 1024)}MB`,
+      heapUsedPercentage: `${((memoryUsage.heapUsed / memoryUsage.heapTotal) * 100).toFixed(1)}%`
+    };
+  }
+
+  private logMemoryUsage(context: string): void {
+    this.logger.info(`Memory usage - ${context}`, this.getMemoryMetrics());
+  }
+
+  async cleanup(): Promise<void> {
+    this.isShuttingDown = true;
+    this.logMemoryUsage('Cleanup start');
+
+    // Stop all monitoring and cleanup intervals
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = undefined;
+    }
+
+    if (this.memoryCheckInterval) {
+      clearInterval(this.memoryCheckInterval);
+      this.memoryCheckInterval = undefined;
+    }
+
+    // Clear all timeouts
+    for (const timeout of this.activeTimeouts) {
+      clearTimeout(timeout);
+    }
+    this.activeTimeouts.clear();
+
+    // Wait for active batches to complete with timeout
+    if (this.activeBatches.size > 0) {
+      this.logger.info('Waiting for active batches to complete', {
+        count: this.activeBatches.size
+      });
+
+      const timeout = 5000;
+      const startTime = Date.now();
+      
+      while (this.activeBatches.size > 0 && Date.now() - startTime < timeout) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
+      if (this.activeBatches.size > 0) {
+        this.logger.warn('Some batches did not complete before timeout', {
+          remainingBatches: this.activeBatches.size
+        });
+      }
+    }
+
+    // Force final cleanup
+    this.cleanupExpiredBatches(true);
+    this.activeBatches.clear();
+    
+    // Force garbage collection
+    if (global.gc) {
+      this.logger.info('Forcing final garbage collection');
+      global.gc();
+    }
+
+    this.logMemoryUsage('Cleanup end');
+    this.logger.info('Batch processor cleanup completed', {
+      finalMetrics: {
+        activeTimeouts: this.activeTimeouts.size,
+        activeBatches: this.activeBatches.size,
+        ...this.getMemoryMetrics()
+      }
     });
   }
 }

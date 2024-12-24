@@ -6,9 +6,28 @@ import { Task, TaskStatus, CreateTaskInput, UpdateTaskInput } from '../../types/
 import { TaskValidator } from '../validation/task-validator.js';
 import { ErrorCodes, createError } from '../../errors/index.js';
 
+interface TaskEvent {
+  type: EventTypes;
+  timestamp: number;
+  taskId: string;
+  task: Task;
+  metadata?: Record<string, any>;
+  changes?: {
+    before: Partial<Task>;
+    after: Partial<Task>;
+  };
+}
+
 export class TaskOperations {
   private readonly logger: Logger;
   private readonly eventManager: EventManager;
+  private readonly eventSubscriptions: Map<EventTypes, WeakRef<{ unsubscribe: () => void }>> = new Map();
+  private readonly HIGH_MEMORY_THRESHOLD = 0.7; // 70% memory pressure threshold
+  private readonly MEMORY_CHECK_INTERVAL = 10000; // 10 seconds
+  private memoryCheckInterval?: NodeJS.Timeout;
+  private activeTransactions: Set<string> = new Set();
+  private isShuttingDown = false;
+  private readonly TRANSACTION_TIMEOUT = 5000; // 5 seconds
 
   constructor(
     private readonly storage: TaskStorage,
@@ -16,9 +35,229 @@ export class TaskOperations {
   ) {
     this.logger = Logger.getInstance().child({ component: 'TaskOperations' });
     this.eventManager = EventManager.getInstance();
+    
+    // Setup event listeners with cleanup tracking
+    this.setupEventListeners();
+
+    // Setup memory monitoring
+    this.startMemoryMonitoring();
+    
+    // Log initial memory state
+    this.logMemoryUsage('Initialization');
+  }
+
+  private setupEventListeners(): void {
+    // Setup event listeners with WeakRef for better memory management
+    const setupListener = (type: EventTypes) => {
+      const handler = (event: TaskEvent) => {
+        this.logger.debug(`${type} event received`, { taskId: event.taskId });
+      };
+      const subscription = this.eventManager.on(type, handler);
+      this.eventSubscriptions.set(type, new WeakRef(subscription));
+    };
+
+    setupListener(EventTypes.TASK_CREATED);
+    setupListener(EventTypes.TASK_UPDATED);
+    setupListener(EventTypes.TASK_DELETED);
+    setupListener(EventTypes.TASK_STATUS_CHANGED);
+  }
+
+  /**
+   * Cleanup resources and prepare for shutdown
+   */
+  private startMemoryMonitoring(): void {
+    // Monitor memory usage periodically
+    this.memoryCheckInterval = setInterval(() => {
+      const memoryUsage = process.memoryUsage();
+      const heapUsed = memoryUsage.heapUsed / memoryUsage.heapTotal;
+
+      this.logger.debug('Memory usage', {
+        heapUsed: `${(heapUsed * 100).toFixed(1)}%`,
+        heapTotal: `${Math.round(memoryUsage.heapTotal / 1024 / 1024)}MB`,
+        rss: `${Math.round(memoryUsage.rss / 1024 / 1024)}MB`,
+        external: `${Math.round(memoryUsage.external / 1024 / 1024)}MB`,
+        arrayBuffers: `${Math.round(memoryUsage.arrayBuffers / 1024 / 1024)}MB`,
+        activeTransactions: this.activeTransactions.size
+      });
+
+      if (heapUsed > this.HIGH_MEMORY_THRESHOLD) {
+        this.logger.warn('High memory usage detected', {
+          heapUsed: `${(heapUsed * 100).toFixed(1)}%`,
+          activeTransactions: this.activeTransactions.size
+        });
+        
+        // Force cleanup when memory pressure is high
+        this.cleanupResources(true);
+        
+        // Force GC if available
+        if (global.gc) {
+          this.logger.info('Forcing garbage collection');
+          global.gc();
+        }
+      }
+
+      // Check for stale transactions
+      this.cleanupStaleTransactions();
+    }, this.MEMORY_CHECK_INTERVAL);
+
+    // Ensure cleanup on process exit
+    process.once('beforeExit', () => {
+      if (this.memoryCheckInterval) {
+        clearInterval(this.memoryCheckInterval);
+        this.memoryCheckInterval = undefined;
+      }
+    });
+  }
+
+  private async cleanupResources(force: boolean = false): Promise<void> {
+    try {
+      const startTime = Date.now();
+      let cleanedCount = 0;
+
+      // Clean up any dereferenced event subscriptions
+      for (const [type, weakRef] of this.eventSubscriptions.entries()) {
+        const subscription = weakRef.deref();
+        if (!subscription || force) {
+          this.eventSubscriptions.delete(type);
+          cleanedCount++;
+        }
+      }
+
+      // Force garbage collection if available
+      if (global.gc && (force || cleanedCount > 0)) {
+        global.gc();
+      }
+
+      const endTime = Date.now();
+      this.logger.info('Resource cleanup completed', {
+        duration: endTime - startTime,
+        cleanedCount,
+        forced: force,
+        remainingSubscriptions: this.eventSubscriptions.size,
+        memoryUsage: this.getMemoryMetrics()
+      });
+    } catch (error) {
+      this.logger.error('Error during resource cleanup', { error });
+    }
+  }
+
+  private cleanupStaleTransactions(): void {
+    const now = Date.now();
+    let cleanedCount = 0;
+
+    for (const transactionId of this.activeTransactions) {
+      const [timestamp] = transactionId.split('-');
+      const age = now - parseInt(timestamp);
+      
+      if (age > this.TRANSACTION_TIMEOUT) {
+        this.activeTransactions.delete(transactionId);
+        cleanedCount++;
+        this.logger.warn('Cleaned up stale transaction', {
+          transactionId,
+          age: `${age}ms`
+        });
+      }
+    }
+
+    if (cleanedCount > 0) {
+      this.logger.info('Stale transactions cleanup completed', {
+        cleanedCount,
+        remainingTransactions: this.activeTransactions.size
+      });
+    }
+  }
+
+  private getMemoryMetrics(): Record<string, string> {
+    const memoryUsage = process.memoryUsage();
+    return {
+      heapUsed: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)}MB`,
+      heapTotal: `${Math.round(memoryUsage.heapTotal / 1024 / 1024)}MB`,
+      rss: `${Math.round(memoryUsage.rss / 1024 / 1024)}MB`,
+      external: `${Math.round(memoryUsage.external / 1024 / 1024)}MB`,
+      arrayBuffers: `${Math.round(memoryUsage.arrayBuffers / 1024 / 1024)}MB`,
+      heapUsedPercentage: `${((memoryUsage.heapUsed / memoryUsage.heapTotal) * 100).toFixed(1)}%`
+    };
+  }
+
+  private logMemoryUsage(context: string): void {
+    this.logger.info(`Memory usage - ${context}`, this.getMemoryMetrics());
+  }
+
+  async cleanup(): Promise<void> {
+    try {
+      this.isShuttingDown = true;
+      this.logMemoryUsage('Cleanup start');
+
+      // Stop memory monitoring
+      if (this.memoryCheckInterval) {
+        clearInterval(this.memoryCheckInterval);
+        this.memoryCheckInterval = undefined;
+      }
+
+      // Wait for active transactions to complete with timeout
+      if (this.activeTransactions.size > 0) {
+        this.logger.info('Waiting for active transactions to complete', {
+          count: this.activeTransactions.size
+        });
+        
+        const timeout = 5000;
+        const startTime = Date.now();
+        
+        while (this.activeTransactions.size > 0 && Date.now() - startTime < timeout) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        if (this.activeTransactions.size > 0) {
+          this.logger.warn('Some transactions did not complete before timeout', {
+            remainingTransactions: this.activeTransactions.size
+          });
+        }
+      }
+
+      // Cleanup event subscriptions with WeakRef handling
+      for (const [type, weakRef] of this.eventSubscriptions.entries()) {
+        const subscription = weakRef.deref();
+        if (subscription) {
+          subscription.unsubscribe();
+        }
+        this.eventSubscriptions.delete(type);
+      }
+
+      // Force final cleanup
+      await this.cleanupResources(true);
+      this.activeTransactions.clear();
+
+      // Final garbage collection
+      if (global.gc) {
+        this.logger.info('Forcing final garbage collection');
+        global.gc();
+      }
+
+      this.logMemoryUsage('Cleanup end');
+      this.logger.info('Task operations cleanup completed', {
+        finalMetrics: {
+          activeTransactions: this.activeTransactions.size,
+          eventSubscriptions: this.eventSubscriptions.size,
+          ...this.getMemoryMetrics()
+        }
+      });
+    } catch (error) {
+      this.logger.error('Error during task operations cleanup', { error });
+      throw error;
+    }
   }
 
   async createTask(input: CreateTaskInput): Promise<Task> {
+    if (this.isShuttingDown) {
+      throw createError(
+        ErrorCodes.OPERATION_FAILED,
+        'System is shutting down'
+      );
+    }
+
+    const transactionId = `create-${Date.now()}-${Math.random()}`;
+    this.activeTransactions.add(transactionId);
+
     try {
       // Validate input
       await this.validator.validateCreate(input);
@@ -49,6 +288,8 @@ export class TaskOperations {
         // Rollback on error
         await this.storage.rollbackTransaction();
         throw error;
+      } finally {
+        this.activeTransactions.delete(transactionId);
       }
     } catch (error) {
       this.logger.error('Failed to create task', {
@@ -60,7 +301,17 @@ export class TaskOperations {
   }
 
   async updateTask(path: string, updates: UpdateTaskInput, retryCount: number = 0): Promise<Task> {
+    if (this.isShuttingDown) {
+      throw createError(
+        ErrorCodes.OPERATION_FAILED,
+        'System is shutting down'
+      );
+    }
+
     const maxRetries = 3;
+    const transactionId = `update-${Date.now()}-${Math.random()}`;
+    this.activeTransactions.add(transactionId);
+
     try {
       // Get existing task with current version
       const existingTask = await this.storage.getTask(path);
@@ -134,6 +385,8 @@ export class TaskOperations {
         // Rollback on error
         await this.storage.rollbackTransaction();
         throw error;
+      } finally {
+        this.activeTransactions.delete(transactionId);
       }
     } catch (error) {
       this.logger.error('Failed to update task', {
@@ -146,6 +399,16 @@ export class TaskOperations {
   }
 
   async deleteTask(path: string): Promise<void> {
+    if (this.isShuttingDown) {
+      throw createError(
+        ErrorCodes.OPERATION_FAILED,
+        'System is shutting down'
+      );
+    }
+
+    const transactionId = `delete-${Date.now()}-${Math.random()}`;
+    this.activeTransactions.add(transactionId);
+
     try {
       // Get existing task
       const existingTask = await this.storage.getTask(path);
@@ -177,6 +440,8 @@ export class TaskOperations {
         // Rollback on error
         await this.storage.rollbackTransaction();
         throw error;
+      } finally {
+        this.activeTransactions.delete(transactionId);
       }
     } catch (error) {
       this.logger.error('Failed to delete task', {

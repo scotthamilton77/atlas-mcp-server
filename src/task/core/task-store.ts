@@ -16,38 +16,139 @@ export class TaskStore {
     private readonly logger: Logger;
     private readonly indexManager: TaskIndexManager;
     private readonly cacheManager: CacheManager;
-    private readonly nodes: Map<string, {
+    private nodes: Map<string, {
         path: string;
         dependencies: Set<string>;
         dependents: Set<string>;
         visited: boolean;
         inPath: boolean;
+        ref: WeakRef<object>;
     }>;
     private readonly transactionManager: TransactionManager;
+    private readonly HIGH_MEMORY_THRESHOLD = 0.7; // 70% memory pressure threshold
+    private readonly MEMORY_CHECK_INTERVAL = 10000; // 10 seconds
+    private memoryCheckInterval?: NodeJS.Timeout;
 
     constructor(private readonly storage: TaskStorage) {
         this.logger = Logger.getInstance().child({ component: 'TaskStore' });
         this.indexManager = new TaskIndexManager();
         this.cacheManager = new CacheManager({
-            maxSize: 1000,
-            ttl: 60000, // 1 minute
-            maxTTL: 300000, // 5 minutes
-            cleanupInterval: 30000 // 30 seconds
+            maxSize: 500, // Reduced from 1000
+            ttl: 30000, // Reduced from 60000
+            maxTTL: 60000, // Reduced from 300000
+            cleanupInterval: 15000 // Reduced from 30000
         });
         this.nodes = new Map();
         this.transactionManager = new TransactionManager(storage);
+
+        // Start memory monitoring
+        this.startMemoryMonitoring();
+    }
+
+    private startMemoryMonitoring(): void {
+        this.memoryCheckInterval = setInterval(() => {
+            const memoryUsage = process.memoryUsage();
+            const heapUsed = memoryUsage.heapUsed / memoryUsage.heapTotal;
+
+            this.logger.debug('Memory usage', {
+                heapUsed: `${(heapUsed * 100).toFixed(1)}%`,
+                heapTotal: `${Math.round(memoryUsage.heapTotal / 1024 / 1024)}MB`,
+                rss: `${Math.round(memoryUsage.rss / 1024 / 1024)}MB`,
+                external: `${Math.round(memoryUsage.external / 1024 / 1024)}MB`,
+                arrayBuffers: `${Math.round(memoryUsage.arrayBuffers / 1024 / 1024)}MB`,
+                nodeCount: this.nodes.size,
+                activeNodes: Array.from(this.nodes.keys()).length
+            });
+
+            if (heapUsed > this.HIGH_MEMORY_THRESHOLD) {
+                this.logger.warn('High memory usage detected in TaskStore', {
+                    heapUsed: `${(heapUsed * 100).toFixed(1)}%`
+                });
+                
+                // Force cleanup
+                this.cleanupResources(true);
+                
+                // Force GC if available
+                if (global.gc) {
+                    global.gc();
+                }
+            }
+        }, this.MEMORY_CHECK_INTERVAL);
+
+        // Ensure cleanup on process exit
+        process.once('beforeExit', () => {
+            if (this.memoryCheckInterval) {
+                clearInterval(this.memoryCheckInterval);
+                this.memoryCheckInterval = undefined;
+            }
+        });
+    }
+
+    private async cleanupResources(force: boolean = false): Promise<void> {
+        try {
+            const startTime = Date.now();
+            let cleanedCount = 0;
+
+            // Clean up nodes whose refs have been collected
+            for (const [path, node] of this.nodes.entries()) {
+                if (!node.ref.deref() || force) {
+                    this.nodes.delete(path);
+                    cleanedCount++;
+                }
+            }
+
+            // Force garbage collection if needed
+            if (global.gc && (force || cleanedCount > 0)) {
+                global.gc();
+            }
+
+            const endTime = Date.now();
+            this.logger.info('Resource cleanup completed', {
+                duration: endTime - startTime,
+                cleanedCount,
+                remainingNodes: this.nodes.size,
+                memoryUsage: this.getMemoryMetrics()
+            });
+        } catch (error) {
+            this.logger.error('Error during resource cleanup', { error });
+        }
+    }
+
+    private getMemoryMetrics(): Record<string, string> {
+        const memoryUsage = process.memoryUsage();
+        return {
+            heapUsed: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)}MB`,
+            heapTotal: `${Math.round(memoryUsage.heapTotal / 1024 / 1024)}MB`,
+            rss: `${Math.round(memoryUsage.rss / 1024 / 1024)}MB`,
+            external: `${Math.round(memoryUsage.external / 1024 / 1024)}MB`,
+            arrayBuffers: `${Math.round(memoryUsage.arrayBuffers / 1024 / 1024)}MB`,
+            heapUsedPercentage: `${((memoryUsage.heapUsed / memoryUsage.heapTotal) * 100).toFixed(1)}%`
+        };
     }
 
     /**
-     * Processes tasks in batches
+     * Processes tasks in batches with memory-efficient processing
      */
     private async processBatch<T>(
         items: T[],
         processor: (item: T) => Promise<void>
     ): Promise<void> {
-        for (let i = 0; i < items.length; i += BATCH_SIZE) {
-            const batch = items.slice(i, i + BATCH_SIZE);
-            await Promise.all(batch.map(processor));
+        // Process in smaller chunks to avoid memory spikes
+        const chunkSize = Math.min(BATCH_SIZE, 10);
+        for (let i = 0; i < items.length; i += chunkSize) {
+            const chunk = items.slice(i, i + chunkSize);
+            
+            // Process items sequentially in chunk to reduce memory pressure
+            for (const item of chunk) {
+                await processor(item);
+            }
+
+            // Allow GC between chunks
+            if (i > 0 && i % (chunkSize * 5) === 0) {
+                if (global.gc) {
+                    global.gc();
+                }
+            }
         }
     }
 
@@ -798,15 +899,18 @@ export class TaskStore {
         dependents: Set<string>;
         visited: boolean;
         inPath: boolean;
+        ref: WeakRef<object>;
     } {
         let node = this.nodes.get(path);
         if (!node) {
+            const obj = { path }; // Create object to track via WeakRef
             node = {
                 path,
                 dependencies: new Set(),
                 dependents: new Set(),
                 visited: false,
-                inPath: false
+                inPath: false,
+                ref: new WeakRef(obj)
             };
             this.nodes.set(path, node);
         }
@@ -817,15 +921,17 @@ export class TaskStore {
      * Gets the current state of the dependency graph for debugging
      */
     private getGraphState(): Record<string, unknown> {
-        const graphState: Record<string, unknown> = {};
-        for (const [path, node] of this.nodes) {
-            graphState[path] = {
-                dependencies: Array.from(node.dependencies),
-                dependents: Array.from(node.dependents),
-                visited: node.visited,
-                inPath: node.inPath
-            };
-        }
-        return graphState;
+        return Object.fromEntries(
+            Array.from(this.nodes.entries()).map(([path, node]) => [
+                path,
+                {
+                    dependencies: Array.from(node.dependencies),
+                    dependents: Array.from(node.dependents),
+                    visited: node.visited,
+                    inPath: node.inPath,
+                    hasRef: node.ref.deref() !== undefined
+                }
+            ])
+        );
     }
 }

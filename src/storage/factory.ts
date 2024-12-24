@@ -12,12 +12,29 @@ import {
 } from './sqlite/index.js';
 import { ConfigManager } from '../config/index.js';
 import { promises as fs } from 'fs';
+import { Logger } from '../logging/index.js';
+
+// Singleton storage instance
+let storageInstance: TaskStorage | null = null;
 
 /**
- * Creates a storage instance based on configuration
+ * Creates or returns the singleton storage instance
  */
 export async function createStorage(config: SqliteConfig): Promise<TaskStorage> {
+    const logger = Logger.getInstance();
+
     try {
+        // Return existing instance if available
+        if (storageInstance) {
+            logger.debug('Returning existing storage instance');
+            return storageInstance;
+        }
+
+        logger.info('Creating new storage instance', {
+            baseDir: config.baseDir,
+            name: config.name
+        });
+
         // Ensure base directory exists with platform-appropriate permissions
         await fs.mkdir(config.baseDir, { 
             recursive: true, 
@@ -47,10 +64,11 @@ export async function createStorage(config: SqliteConfig): Promise<TaskStorage> 
         };
 
         // Create SQLite storage
-        const storage = new SqliteStorage(sqliteConfig);
-        await storage.initialize();
+        storageInstance = new SqliteStorage(sqliteConfig);
+        await storageInstance.initialize();
 
-        return storage;
+        logger.info('Storage instance created successfully');
+        return storageInstance;
     } catch (error) {
         throw createError(
             ErrorCodes.STORAGE_INIT,
@@ -61,16 +79,35 @@ export async function createStorage(config: SqliteConfig): Promise<TaskStorage> 
 }
 
 /**
- * Creates a storage instance with default configuration from ConfigManager
+ * Creates or returns the storage instance with default configuration
  */
 export async function createDefaultStorage(): Promise<TaskStorage> {
-    const configManager = ConfigManager.getInstance();
-    const config = configManager.getConfig();
+    const logger = Logger.getInstance();
     
-    // Use the storage config from ConfigManager which already handles:
-    // - Platform-specific paths
-    // - Environment variables
-    // - Default values
-    // - Directory creation
-    return createStorage(config.storage as SqliteConfig);
+    try {
+        // Return existing instance if available
+        if (storageInstance) {
+            logger.debug('Returning existing default storage instance');
+            return storageInstance;
+        }
+
+        const configManager = ConfigManager.getInstance();
+        const config = configManager.getConfig();
+        
+        if (!config.storage) {
+            throw new Error('Storage configuration not found in ConfigManager');
+        }
+
+        logger.info('Creating default storage instance');
+        return createStorage(config.storage as SqliteConfig);
+    } catch (error) {
+        logger.error('Failed to create default storage', {
+            error: error instanceof Error ? error.message : String(error)
+        });
+        throw createError(
+            ErrorCodes.STORAGE_INIT,
+            'Failed to create default storage',
+            error instanceof Error ? error.message : String(error)
+        );
+    }
 }

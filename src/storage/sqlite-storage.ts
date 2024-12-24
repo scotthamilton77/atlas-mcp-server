@@ -532,8 +532,7 @@ const dbPath = path.join(this.config.baseDir, `${this.config.name}.db`);
             hits: this.cacheHits,
             misses: this.cacheMisses,
             hitRate: totalRequests > 0 ? this.cacheHits / totalRequests : 0,
-            memoryUsage: process.memoryUsage().heapUsed,
-            lastCleanup: Date.now()
+            memoryUsage: process.memoryUsage().heapUsed
         };
     }
 
