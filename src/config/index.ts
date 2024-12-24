@@ -5,7 +5,7 @@
 
 import { ConfigError, ErrorCodes } from '../errors/index.js';
 import { LogLevel, LogLevels } from '../types/logging.js';
-import { join, resolve } from 'path';
+import { resolve, join } from 'path';
 import { homedir } from 'os';
 
 /**
@@ -14,7 +14,8 @@ import { homedir } from 'os';
 export const EnvVars = {
     NODE_ENV: 'NODE_ENV',
     LOG_LEVEL: 'LOG_LEVEL',
-    TASK_STORAGE_DIR: 'TASK_STORAGE_DIR'
+    ATLAS_STORAGE_DIR: 'ATLAS_STORAGE_DIR',
+    ATLAS_STORAGE_NAME: 'ATLAS_STORAGE_NAME'
 } as const;
 
 /**
@@ -179,8 +180,8 @@ export class ConfigManager {
     private static instance: ConfigManager;
     private config: any;
 
-    private constructor(initialConfig: any = {}) {
-        this.config = this.loadConfig(initialConfig);
+    private constructor() {
+        this.config = defaultConfig;
     }
 
     /**
@@ -196,14 +197,15 @@ export class ConfigManager {
     /**
      * Initializes the configuration manager with custom config
      */
-    static initialize(config: any): void {
+    static async initialize(config: any): Promise<void> {
         if (ConfigManager.instance) {
             throw new ConfigError(
                 ErrorCodes.CONFIG_INVALID,
                 'Configuration already initialized'
             );
         }
-        ConfigManager.instance = new ConfigManager(config);
+        ConfigManager.instance = new ConfigManager();
+        await ConfigManager.instance.updateConfig(config);
     }
 
     /**
@@ -216,7 +218,7 @@ export class ConfigManager {
     /**
      * Updates the configuration
      */
-    updateConfig(updates: any): void {
+    async updateConfig(updates: any): Promise<void> {
         const newConfig = {
             ...this.config,
             ...updates,
@@ -230,73 +232,66 @@ export class ConfigManager {
             }
         };
 
-        this.validateConfig(newConfig);
-        this.config = newConfig;
-    }
-
-    /**
-     * Loads and validates configuration
-     */
-    private loadConfig(customConfig: any): any {
-        try {
-            // Load from environment
-            const envConfig = this.loadEnvConfig(customConfig);
-
-            // Merge configurations with precedence:
-            // custom > environment > default
-            const mergedConfig = {
-                ...defaultConfig,
-                ...envConfig,
-                ...customConfig,
-                logging: {
-                    ...defaultLoggingConfig,
-                    ...(envConfig.logging || {}),
-                    ...(customConfig.logging || {})
-                },
-                storage: {
-                    ...(envConfig.storage || {}),
-                    ...(customConfig.storage || {})
-                }
-            };
-
-            // Validate final configuration
-            this.validateConfig(mergedConfig);
-
-            return mergedConfig;
-        } catch (error) {
-            if (error instanceof ConfigError) {
-                throw error;
+        // Load environment config and create directories
+        const envConfig = await this.loadEnvConfig(newConfig);
+        
+        // Merge with environment config
+        const finalConfig = {
+            ...newConfig,
+            storage: {
+                ...newConfig.storage,
+                ...envConfig.storage
             }
-            throw new ConfigError(
-                ErrorCodes.CONFIG_INVALID,
-                'Failed to load configuration',
-                error
-            );
-        }
+        };
+
+        this.validateConfig(finalConfig);
+        this.config = finalConfig;
     }
 
     /**
-     * Loads configuration from environment variables
+     * Loads configuration from environment variables and ensures directories exist
      */
-    private loadEnvConfig(customConfig: any): any {
+    private async loadEnvConfig(customConfig: any): Promise<any> {
         const env = process.env[EnvVars.NODE_ENV];
         const logLevel = process.env[EnvVars.LOG_LEVEL];
         
         // Handle storage directory with platform-agnostic paths
-        let storageDir = customConfig.storage?.baseDir || process.env[EnvVars.TASK_STORAGE_DIR];
+        let storageDir = customConfig.storage?.baseDir || process.env[EnvVars.ATLAS_STORAGE_DIR];
+        let storageName = customConfig.storage?.name || process.env[EnvVars.ATLAS_STORAGE_NAME];
         
+        // Use defaults if env vars not provided
         if (!storageDir) {
-            // Default to platform-appropriate user directory
-            storageDir = join(homedir(), '.atlas-mcp', 'storage');
+            if (process.platform === 'win32') {
+                storageDir = join(process.env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local'), 'AtlasMCP', 'storage');
+            } else {
+                const xdgDataHome = process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share');
+                storageDir = join(xdgDataHome, 'atlas-mcp', 'storage');
+            }
         }
 
-        // Ensure absolute path
+        if (!storageName) {
+            storageName = 'atlas-tasks';
+        }
+
+        // Ensure absolute path and create directory if needed
         storageDir = resolve(storageDir);
+        try {
+            const fs = await import('fs/promises');
+            await fs.mkdir(storageDir, { 
+                recursive: true,
+                mode: process.platform === 'win32' ? undefined : 0o755
+            });
+        } catch (error) {
+            throw new ConfigError(
+                ErrorCodes.CONFIG_INVALID,
+                `Failed to create storage directory: ${error instanceof Error ? error.message : String(error)}`
+            );
+        }
 
         const config: any = {
             storage: {
                 baseDir: storageDir,
-                name: 'atlas-tasks',
+                name: storageName,
                 connection: {
                     maxRetries: 3,
                     retryDelay: 1000,
@@ -345,6 +340,13 @@ export class ConfigManager {
             throw new ConfigError(
                 ErrorCodes.CONFIG_MISSING,
                 'Storage directory must be provided'
+            );
+        }
+
+        if (!config.storage?.name) {
+            throw new ConfigError(
+                ErrorCodes.CONFIG_MISSING,
+                'Storage name must be provided'
             );
         }
 

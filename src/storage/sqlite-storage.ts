@@ -52,21 +52,39 @@ const dbPath = path.join(this.config.baseDir, `${this.config.name}.db`);
             const fs = await import('fs/promises');
             const path = await import('path');
             
-            // Ensure storage directory exists with proper permissions
+            // Ensure storage directory exists and is writable
             const dirPath = path.dirname(dbPath);
-            // Use platform-agnostic directory creation
-            await fs.mkdir(dirPath, { 
-                recursive: true, 
-                // Use more portable permissions that work across platforms
-                mode: process.platform === 'win32' ? undefined : 0o755
-            });
-            
-            // Log directory contents before
             try {
+                // Create directory with proper permissions
+                await fs.mkdir(dirPath, { 
+                    recursive: true, 
+                    // Use portable permissions
+                    mode: process.platform === 'win32' ? undefined : 0o755
+                });
+
+                // Verify directory is writable
+                await fs.access(dirPath, fs.constants.W_OK);
+                
+                // Log directory contents
                 const dirContents = await fs.readdir(dirPath);
-                this.logger.info('Storage directory contents before:', { dirPath, contents: dirContents });
+                this.logger.info('Storage directory ready:', { 
+                    path: dirPath,
+                    contents: dirContents,
+                    writable: true
+                });
             } catch (err) {
-                this.logger.error('Failed to read directory', { error: err });
+                const error = err as NodeJS.ErrnoException;
+                this.logger.error('Storage directory error', {
+                    path: dirPath,
+                    code: error.code,
+                    errno: error.errno,
+                    syscall: error.syscall
+                });
+                throw createError(
+                    ErrorCodes.STORAGE_INIT,
+                    'Storage directory not writable',
+                    `Failed to access ${dirPath}: ${error.message}`
+                );
             }
 
             // Import sqlite3 with verbose mode for better error messages
@@ -79,15 +97,106 @@ const dbPath = path.join(this.config.baseDir, `${this.config.name}.db`);
             // Initialize database with retry support
             await this.connectionManager.executeWithRetry(async () => {
                 try {
-                    // Initialize database with promise interface
-                    this.db = await open({
-                        filename: dbPath,
-                        driver: sqlite3.default.Database,
-                        mode: sqlite3.default.OPEN_READWRITE | sqlite3.default.OPEN_CREATE
+                    // Open database with retry for locked files
+                    await this.connectionManager.handleBusy(async () => {
+                        this.db = await open({
+                            filename: dbPath,
+                            driver: sqlite3.default.Database,
+                            mode: sqlite3.default.OPEN_READWRITE | sqlite3.default.OPEN_CREATE
+                        });
+                        this.logger.debug('Database opened successfully');
+                    }, 'open_database');
+
+                    return this.withDb(async (db) => {
+                        // Set basic PRAGMAs first
+                        await db.exec(`
+                            PRAGMA busy_timeout=${this.config.connection?.busyTimeout || 5000};
+                            PRAGMA temp_store=MEMORY;
+                            PRAGMA foreign_keys=ON;
+                            PRAGMA locking_mode=EXCLUSIVE;
+                        `);
+
+                        // Check and enable WAL mode with exclusive lock
+                        await this.connectionManager.handleBusy(async () => {
+                            const currentMode = await db.get<{value: string}>('PRAGMA journal_mode');
+                            this.logger.info('Current journal mode:', { mode: currentMode?.value });
+
+                            if (currentMode?.value !== 'wal') {
+                                await db.exec(`
+                                    PRAGMA locking_mode=EXCLUSIVE;
+                                    PRAGMA journal_mode=WAL;
+                                `);
+                                const walMode = await db.get<{value: string}>('PRAGMA journal_mode');
+                                if (walMode?.value !== 'wal') {
+                                    this.logger.error('Failed to set WAL mode', {
+                                        requested: 'wal',
+                                        actual: walMode?.value,
+                                        currentMode: currentMode?.value
+                                    });
+                                    throw new Error(`Failed to enable WAL mode: got ${walMode?.value}`);
+                                }
+                                this.logger.info('WAL mode enabled successfully');
+                            } else {
+                                this.logger.info('Database already in WAL mode');
+                            }
+                        }, 'enable_wal');
+
+                        // Set other PRAGMAs after WAL mode is confirmed
+                        await db.exec(`
+                            PRAGMA synchronous=NORMAL;
+                            PRAGMA wal_autocheckpoint=1000;
+                            PRAGMA cache_size=${this.config.performance?.cacheSize || 2000};
+                            PRAGMA mmap_size=${this.config.performance?.mmapSize || 30000000000};
+                            PRAGMA page_size=${this.config.performance?.pageSize || 4096};
+                        `);
+
+                        // Create schema and set up database
+                        await this.setupDatabase();
+
+                        // Force a write to create WAL files
+                        await db.exec(`
+                            BEGIN IMMEDIATE;
+                            CREATE TABLE IF NOT EXISTS _wal_test (id INTEGER PRIMARY KEY);
+                            INSERT OR REPLACE INTO _wal_test (id) VALUES (1);
+                            COMMIT;
+                        `);
+
+                        // Ensure WAL mode persisted after write
+                        const journalMode = await db.get<{value: string}>('PRAGMA journal_mode');
+                        this.logger.info('Journal mode confirmed:', { mode: journalMode?.value });
+
+                        if (journalMode?.value !== 'wal') {
+                            throw new Error('WAL mode not persisted after write');
+                        }
+
+                        // Log WAL status
+                        const fs = await import('fs/promises');
+                        const walPath = `${dbPath}-wal`;
+                        const shmPath = `${dbPath}-shm`;
+                        
+                        try {
+                            await Promise.all([
+                                fs.access(walPath),
+                                fs.access(shmPath)
+                            ]);
+                            this.logger.info('WAL files present', {
+                                wal: walPath,
+                                shm: shmPath
+                            });
+                        } catch (err) {
+                            this.logger.warn('WAL files not immediately visible', {
+                                error: err,
+                                note: 'This may be normal if files are being created'
+                            });
+                        }
+
+                        this.logger.info('SQLite storage initialized', { 
+                            path: this.config.baseDir,
+                            journalMode: journalMode?.value
+                        });
                     });
-                    this.logger.debug('Database opened successfully');
                 } catch (err) {
-                    this.logger.error('Failed to open database', {
+                    this.logger.error('Failed to initialize database', {
                         error: err instanceof Error ? {
                             name: err.name,
                             message: err.message,
@@ -98,30 +207,7 @@ const dbPath = path.join(this.config.baseDir, `${this.config.name}.db`);
                     });
                     throw err;
                 }
-
-                // Set busy timeout
-                await this.db.run(`PRAGMA busy_timeout = ${this.config.connection?.busyTimeout || 5000}`);
-
-                // Enable extended error codes
-                await this.db.run('PRAGMA extended_result_codes = ON');
-
-                // Configure database
-                if (this.config.performance) {
-                    await this.db.exec(`
-                        PRAGMA cache_size=${this.config.performance.cacheSize || 2000};
-                        PRAGMA mmap_size=${this.config.performance.mmapSize || 30000000000};
-                        PRAGMA page_size=${this.config.performance.pageSize || 4096};
-                        PRAGMA journal_mode=WAL;
-                        PRAGMA synchronous=NORMAL;
-                        PRAGMA temp_store=MEMORY;
-                        PRAGMA foreign_keys=ON;
-                        PRAGMA busy_timeout=${this.config.connection?.busyTimeout || 5000};
-                    `);
-                }
             }, 'initialize');
-
-            await this.setupDatabase();
-            this.logger.info('SQLite storage initialized', { path: this.config.baseDir });
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
             const errorDetails = {
@@ -164,6 +250,7 @@ const dbPath = path.join(this.config.baseDir, `${this.config.name}.db`);
 
     private async setupDatabase(): Promise<void> {
         return this.withDb(async (db) => {
+            // Create tables and indexes
             await db.exec(`
                 CREATE TABLE IF NOT EXISTS tasks (
                     path TEXT PRIMARY KEY,
@@ -185,6 +272,24 @@ const dbPath = path.join(this.config.baseDir, `${this.config.name}.db`);
                 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
                 CREATE INDEX IF NOT EXISTS idx_tasks_type ON tasks(type);
             `);
+
+            // Set WAL file permissions if needed
+            try {
+                const fs = await import('fs/promises');
+                const path = await import('path');
+                const dbPath = path.join(this.config.baseDir, `${this.config.name}.db`);
+                const walPath = `${dbPath}-wal`;
+                const shmPath = `${dbPath}-shm`;
+                
+                // Set permissions for WAL and SHM files if they exist
+                await Promise.all([
+                    fs.access(walPath).then(() => fs.chmod(walPath, 0o644)).catch(() => {}),
+                    fs.access(shmPath).then(() => fs.chmod(shmPath, 0o644)).catch(() => {})
+                ]);
+            } catch (error) {
+                this.logger.warn('Failed to set WAL file permissions', { error });
+                // Don't throw - this is not critical
+            }
         });
     }
 
@@ -753,32 +858,54 @@ const dbPath = path.join(this.config.baseDir, `${this.config.name}.db`);
     }> {
         return this.withDb(async (db) => {
             try {
-                const [taskStats, storageStats] = await Promise.all([
-                    db.get<Record<string, unknown>>(`
+                interface TaskStats {
+                    total: number;
+                    noteCount: number;
+                    dependencyCount: number;
+                }
+
+                const [taskStats, statusStats, storageStats] = await Promise.all([
+                    db.get<TaskStats>(`
                         SELECT 
                             COUNT(*) as total,
-                            SUM(CASE WHEN notes IS NOT NULL THEN 1 ELSE 0 END) as noteCount,
-                            SUM(CASE WHEN dependencies IS NOT NULL THEN json_array_length(dependencies) ELSE 0 END) as dependencyCount,
-                            json_group_object(status, COUNT(*)) as byStatus
+                            COUNT(CASE WHEN notes IS NOT NULL THEN 1 END) as noteCount,
+                            SUM(CASE 
+                                WHEN dependencies IS NOT NULL 
+                                AND json_valid(dependencies) 
+                                AND json_array_length(dependencies) > 0 
+                                THEN json_array_length(dependencies) 
+                                ELSE 0 
+                            END) as dependencyCount
                         FROM tasks
+                    `),
+                    db.all(`
+                        SELECT status, COUNT(*) as count
+                        FROM tasks
+                        GROUP BY status
                     `),
                     db.get<Record<string, unknown>>(`
                         SELECT 
                             page_count * page_size as totalSize,
                             page_size,
                             page_count,
-                            (SELECT page_count * page_size FROM pragma_wal_checkpoint) as wal_size
-                        FROM pragma_page_count, pragma_page_size
+                            0 as wal_size
+                        FROM pragma_page_count, pragma_page_size LIMIT 1
                     `)
                 ]);
 
                 const memUsage = process.memoryUsage();
                 const cacheStats = await this.getCacheStats();
 
+                // Convert status stats array to object
+                const byStatus = (statusStats as { status: string; count: number }[]).reduce((acc: Record<string, number>, curr) => {
+                    acc[curr.status] = curr.count;
+                    return acc;
+                }, {});
+
                 return {
                     tasks: {
                         total: Number(taskStats?.total || 0),
-                        byStatus: this.parseJSON(String(taskStats?.byStatus || '{}'), {}),
+                        byStatus,
                         noteCount: Number(taskStats?.noteCount || 0),
                         dependencyCount: Number(taskStats?.dependencyCount || 0)
                     },
@@ -1033,11 +1160,25 @@ const dbPath = path.join(this.config.baseDir, `${this.config.name}.db`);
         });
     }
 
+    /**
+     * Closes the database connection and cleans up resources
+     */
     async close(): Promise<void> {
-        await this.clearCache();
-        if (this.db) {
-            await this.db.close();
-            this.db = null;
+        try {
+            await this.clearCache();
+            if (this.db) {
+                await this.db.close();
+                this.db = null;
+                this.logger.info('Database connection closed');
+            }
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            this.logger.error('Failed to close database', { error: errorMessage });
+            throw createError(
+                ErrorCodes.STORAGE_ERROR,
+                'Failed to close database',
+                errorMessage
+            );
         }
     }
 }

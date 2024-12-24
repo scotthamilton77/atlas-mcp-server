@@ -1,46 +1,59 @@
 import { Logger } from './logging/index.js';
 import { TaskManager } from './task-manager.js';
-import { SqliteStorage } from './storage/sqlite-storage.js';
+import { createStorage } from './storage/index.js';
 import { AtlasServer } from './server/index.js';
-import { join } from 'path';
-import { homedir } from 'os';
+import { EventManager } from './events/event-manager.js';
+import { EventTypes } from './types/events.js';
+import { BaseError, ErrorCodes, createError } from './errors/index.js';
+import { ConfigManager } from './config/index.js';
+
+let server: AtlasServer;
 
 async function main() {
-    // Initialize logger with file output
-    const logDir = join(homedir(), 'Library', 'Logs', 'atlas-mcp-server');
-    Logger.initialize({
-        minLevel: 'info',
-        console: false, // Disable console output
-        file: true,
-        logDir,
-        maxFileSize: 5 * 1024 * 1024, // 5MB
-        maxFiles: 5,
-        noColors: true
+    // Load environment variables from .env file if present
+    try {
+        const { config } = await import('dotenv');
+        config();
+    } catch (error) {
+        // Ignore error if .env file doesn't exist
+    }
+
+    const eventManager = EventManager.getInstance();
+
+    // Initialize configuration with defaults from ConfigManager
+    const configManager = ConfigManager.getInstance();
+    await configManager.updateConfig({
+        logging: {
+            console: false, // Disable console logging for server
+            file: true     // Enable file logging
+        }
     });
 
+    // Initialize logger based on config
+    const config = configManager.getConfig();
+    Logger.initialize(config.logging);
     const logger = Logger.getInstance();
 
     try {
-        // Initialize storage
-        const storage = new SqliteStorage({
-            baseDir: join(homedir(), 'Library', 'Application Support', 'atlas-mcp-server'),
-            name: 'tasks',
-            connection: {
-                busyTimeout: 5000
-            },
-            performance: {
-                cacheSize: 2000,
-                pageSize: 4096,
-                mmapSize: 30000000000
+
+        // Emit system startup event
+        eventManager.emitSystemEvent({
+            type: EventTypes.SYSTEM_STARTUP,
+            timestamp: Date.now(),
+            metadata: {
+                version: '0.1.0',
+                environment: process.env.NODE_ENV || 'development'
             }
         });
-        await storage.initialize();
+
+        // Initialize storage using factory
+        const storage = await createStorage(config.storage);
 
         // Initialize task manager
         const taskManager = new TaskManager(storage);
 
         // Initialize server with tool handler
-        const server = new AtlasServer(
+        server = new AtlasServer(
             {
                 name: 'atlas-mcp-server',
                 version: '0.1.0',
@@ -54,7 +67,7 @@ async function main() {
                         // Task CRUD operations
                         {
                             name: 'create_task',
-                            description: 'Create a new task',
+                            description: 'Create a new task in the hierarchical task structure. Supports parent-child relationships and task dependencies.',
                             inputSchema: {
                                 type: 'object',
                                 properties: {
@@ -94,7 +107,7 @@ async function main() {
                         },
                         {
                             name: 'update_task',
-                            description: 'Update an existing task',
+                            description: 'Update an existing task\'s properties including status, dependencies, and metadata. Changes are validated for consistency.',
                             inputSchema: {
                                 type: 'object',
                                 properties: {
@@ -136,7 +149,7 @@ async function main() {
                         },
                         {
                             name: 'delete_task',
-                            description: 'Delete a task and its subtasks',
+                            description: 'Delete a task and all its subtasks recursively. This operation cannot be undone.',
                             inputSchema: {
                                 type: 'object',
                                 properties: {
@@ -150,7 +163,7 @@ async function main() {
                         },
                         {
                             name: 'get_tasks_by_status',
-                            description: 'Get tasks by status',
+                            description: 'Retrieve all tasks with a specific status (PENDING, IN_PROGRESS, COMPLETED, FAILED, or BLOCKED).',
                             inputSchema: {
                                 type: 'object',
                                 properties: {
@@ -165,7 +178,7 @@ async function main() {
                         },
                         {
                             name: 'get_tasks_by_path',
-                            description: 'Get tasks matching a path pattern',
+                            description: 'Retrieve tasks matching a glob pattern (e.g., "project/*" for all tasks in project, "auth/**" for all tasks under auth/).',
                             inputSchema: {
                                 type: 'object',
                                 properties: {
@@ -179,7 +192,7 @@ async function main() {
                         },
                         {
                             name: 'get_subtasks',
-                            description: 'Get subtasks of a task',
+                            description: 'Retrieve all direct subtasks of a given task. Does not include nested subtasks of subtasks.',
                             inputSchema: {
                                 type: 'object',
                                 properties: {
@@ -193,7 +206,7 @@ async function main() {
                         },
                         {
                             name: 'bulk_task_operations',
-                            description: 'Execute multiple task operations in a single transaction',
+                            description: 'Execute multiple task operations (create, update, delete) in a single transaction. If any operation fails, all changes are rolled back.',
                             inputSchema: {
                                 type: 'object',
                                 properties: {
@@ -227,7 +240,7 @@ async function main() {
                         // Database maintenance operations
                         {
                             name: 'clear_all_tasks',
-                            description: 'Clear all tasks from the database',
+                            description: 'Clear all tasks from the database and reset all caches. Requires explicit confirmation.',
                             inputSchema: {
                                 type: 'object',
                                 properties: {
@@ -241,7 +254,7 @@ async function main() {
                         },
                         {
                             name: 'vacuum_database',
-                            description: 'Optimize database storage',
+                            description: 'Optimize database storage and performance by cleaning up unused space and updating statistics.',
                             inputSchema: {
                                 type: 'object',
                                 properties: {
@@ -254,7 +267,7 @@ async function main() {
                         },
                         {
                             name: 'repair_relationships',
-                            description: 'Repair task relationships',
+                            description: 'Repair parent-child relationships and fix inconsistencies in the task hierarchy. Can be run in dry-run mode.',
                             inputSchema: {
                                 type: 'object',
                                 properties: {
@@ -273,30 +286,154 @@ async function main() {
                 }),
                 handleToolCall: async (request) => {
                     const { name, arguments: args } = request.params;
-                    switch (name) {
+                    const eventManager = EventManager.getInstance();
+                    let result;
+
+                    try {
+                        // Emit tool start event
+                        eventManager.emitSystemEvent({
+                            type: EventTypes.TOOL_STARTED,
+                            timestamp: Date.now(),
+                            metadata: {
+                                tool: name,
+                                args
+                            }
+                        });
+
+                        switch (name) {
                         case 'create_task':
-                            return await taskManager.createTask(args);
+                            result = await taskManager.createTask(args);
+                            return {
+                                content: [{
+                                    type: 'text',
+                                    text: JSON.stringify(result, null, 2)
+                                }]
+                            };
                         case 'update_task':
-                            return await taskManager.updateTask(args.path, args.updates);
+                            result = await taskManager.updateTask(args.path, args.updates);
+                            return {
+                                content: [{
+                                    type: 'text',
+                                    text: JSON.stringify(result, null, 2)
+                                }]
+                            };
                         case 'delete_task':
-                            return await taskManager.deleteTask(args.path);
+                            await taskManager.deleteTask(args.path);
+                            return {
+                                content: [{
+                                    type: 'text',
+                                    text: 'Task deleted successfully'
+                                }]
+                            };
                         case 'get_tasks_by_status':
-                            return await taskManager.getTasksByStatus(args.status);
+                            result = await taskManager.getTasksByStatus(args.status);
+                            return {
+                                content: [{
+                                    type: 'text',
+                                    text: JSON.stringify(result, null, 2)
+                                }]
+                            };
                         case 'get_tasks_by_path':
-                            return await taskManager.listTasks(args.pattern);
+                            result = await taskManager.listTasks(args.pattern);
+                            return {
+                                content: [{
+                                    type: 'text',
+                                    text: JSON.stringify(result, null, 2)
+                                }]
+                            };
                         case 'get_subtasks':
-                            return await taskManager.getSubtasks(args.parentPath);
+                            result = await taskManager.getSubtasks(args.parentPath);
+                            return {
+                                content: [{
+                                    type: 'text',
+                                    text: JSON.stringify(result, null, 2)
+                                }]
+                            };
                         case 'bulk_task_operations':
-                            return await taskManager.bulkTaskOperations(args.operations);
+                            result = await taskManager.bulkTaskOperations(args.operations);
+                            return {
+                                content: [{
+                                    type: 'text',
+                                    text: JSON.stringify(result, null, 2)
+                                }]
+                            };
                         case 'clear_all_tasks':
-                            return await taskManager.clearAllTasks(args.confirm);
+                            await taskManager.clearAllTasks(args.confirm);
+                            return {
+                                content: [{
+                                    type: 'text',
+                                    text: 'All tasks cleared successfully'
+                                }]
+                            };
                         case 'vacuum_database':
-                            return await taskManager.vacuumDatabase(args.analyze);
+                            await taskManager.vacuumDatabase(args.analyze);
+                            return {
+                                content: [{
+                                    type: 'text',
+                                    text: 'Database vacuumed successfully'
+                                }]
+                            };
                         case 'repair_relationships':
-                            return await taskManager.repairRelationships(args.dryRun, args.pathPattern);
+                            result = await taskManager.repairRelationships(args.dryRun, args.pathPattern);
+                            return {
+                                content: [{
+                                    type: 'text',
+                                    text: JSON.stringify(result, null, 2)
+                                }]
+                            };
                         default:
-                            throw new Error(`Unknown tool: ${name}`);
+                            throw createError(
+                                ErrorCodes.INVALID_INPUT,
+                                `Unknown tool: ${name}`,
+                                'handleToolCall'
+                            );
                     }
+
+                    // Emit tool success event
+                    eventManager.emitSystemEvent({
+                        type: EventTypes.TOOL_COMPLETED,
+                        timestamp: Date.now(),
+                        metadata: {
+                            tool: name,
+                            success: true
+                        }
+                    });
+
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: JSON.stringify(result, null, 2)
+                        }]
+                    };
+                } catch (error) {
+                    // Emit tool error event
+                    eventManager.emitErrorEvent({
+                        type: EventTypes.ERROR_OCCURRED,
+                        timestamp: Date.now(),
+                        error: error instanceof Error ? error : new Error(String(error)),
+                        context: {
+                            component: 'ToolHandler',
+                            operation: name,
+                            args
+                        }
+                    });
+
+                    // Format error response
+                    const errorMessage = error instanceof BaseError 
+                        ? error.getUserMessage()
+                        : String(error);
+
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: JSON.stringify({
+                                error: errorMessage,
+                                code: error instanceof BaseError ? error.code : ErrorCodes.INTERNAL_ERROR
+                            }, null, 2)
+                        }],
+                        isError: true
+                    };
+                }
                 },
                 getStorageMetrics: async () => await storage.getMetrics(),
                 clearCaches: async () => {
@@ -311,9 +448,41 @@ async function main() {
         // Run server
         await server.run();
     } catch (error) {
+        // Emit system error event
+        eventManager.emitSystemEvent({
+            type: EventTypes.SYSTEM_ERROR,
+            timestamp: Date.now(),
+            metadata: {
+                error: error instanceof Error ? error : new Error(String(error))
+            }
+        });
+
         logger.error('Failed to start server', error);
         process.exit(1);
     }
+
+    // Handle graceful shutdown
+    const shutdown = async () => {
+        try {
+            // Emit system shutdown event
+            eventManager.emitSystemEvent({
+                type: EventTypes.SYSTEM_SHUTDOWN,
+                timestamp: Date.now(),
+                metadata: {
+                    reason: 'graceful_shutdown'
+                }
+            });
+
+            await server.shutdown();
+            process.exit(0);
+        } catch (error) {
+            logger.error('Error during shutdown', error);
+            process.exit(1);
+        }
+    };
+
+    process.on('SIGINT', shutdown);
+    process.on('SIGTERM', shutdown);
 }
 
 main().catch((error) => {

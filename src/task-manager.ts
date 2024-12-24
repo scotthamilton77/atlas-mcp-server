@@ -6,6 +6,8 @@ import { Task, TaskStatus, CreateTaskInput, UpdateTaskInput, TaskResponse } from
 import { TaskStorage } from './types/storage.js';
 import { Logger } from './logging/index.js';
 import { ErrorCodes, createError } from './errors/index.js';
+import { EventManager } from './events/event-manager.js';
+import { EventTypes } from './types/events.js';
 import { TaskOperations } from './task/operations/task-operations.js';
 import { TaskStatusBatchProcessor } from './task/core/batch/task-status-batch-processor.js';
 import { DependencyAwareBatchProcessor } from './task/core/batch/dependency-aware-batch-processor.js';
@@ -26,9 +28,12 @@ export class TaskManager {
     private readonly MAX_CACHE_MEMORY = 512 * 1024 * 1024; // 512MB cache limit
     private readonly MEMORY_CHECK_INTERVAL = 60000; // 1 minute
 
+    private readonly eventManager: EventManager;
+
     constructor(readonly storage: TaskStorage) {
         // Initialize components
         this.logger = Logger.getInstance().child({ component: 'TaskManager' });
+        this.eventManager = EventManager.getInstance();
         this.validator = new TaskValidator(storage);
         this.operations = new TaskOperations(storage, this.validator);
         
@@ -81,8 +86,31 @@ export class TaskManager {
      */
     async createTask(input: CreateTaskInput): Promise<TaskResponse<Task>> {
         try {
+            // Validate input
+            if (!input.name) {
+                throw createError(
+                    ErrorCodes.VALIDATION_ERROR,
+                    'Task name is required'
+                );
+            }
+
             const result = await this.operations.createTask(input);
             await this.indexManager.indexTask(result);
+
+            this.logger.info('Task created successfully', {
+                taskId: result.path,
+                type: result.type,
+                parentPath: input.parentPath
+            });
+
+            // Emit task created event
+            this.eventManager.emitTaskEvent({
+                type: EventTypes.TASK_CREATED,
+                timestamp: Date.now(),
+                taskId: result.path,
+                task: result,
+                metadata: { input }
+            });
             return {
                 success: true,
                 data: result,
@@ -112,8 +140,49 @@ export class TaskManager {
      */
     async updateTask(path: string, updates: UpdateTaskInput): Promise<TaskResponse<Task>> {
         try {
+            const oldTask = await this.getTaskByPath(path);
+            if (!oldTask) {
+                throw createError(
+                    ErrorCodes.TASK_NOT_FOUND,
+                    `Task not found: ${path}`
+                );
+            }
+
             const result = await this.operations.updateTask(path, updates);
             await this.indexManager.indexTask(result);
+
+            this.logger.info('Task updated successfully', {
+                taskId: result.path,
+                updates,
+                oldStatus: oldTask.status,
+                newStatus: result.status
+            });
+
+            // Emit task updated event
+            this.eventManager.emitTaskEvent({
+                type: EventTypes.TASK_UPDATED,
+                timestamp: Date.now(),
+                taskId: result.path,
+                task: result,
+                changes: {
+                    before: oldTask,
+                    after: result
+                }
+            });
+
+            // Emit status change event if status was updated
+            if (updates.status && oldTask.status !== updates.status) {
+                this.eventManager.emitTaskEvent({
+                    type: EventTypes.TASK_STATUS_CHANGED,
+                    timestamp: Date.now(),
+                    taskId: result.path,
+                    task: result,
+                    changes: {
+                        before: { status: oldTask.status },
+                        after: { status: updates.status }
+                    }
+                });
+            }
             return {
                 success: true,
                 data: result,
@@ -323,6 +392,13 @@ export class TaskManager {
         try {
             const task = await this.storage.getTask(path);
             if (task) {
+                // Emit task deleted event before deletion
+                this.eventManager.emitTaskEvent({
+                    type: EventTypes.TASK_DELETED,
+                    timestamp: Date.now(),
+                    taskId: task.path,
+                    task: task
+                });
                 await this.indexManager.unindexTask(task);
             }
             await this.operations.deleteTask(path);
@@ -476,6 +552,16 @@ export class TaskManager {
 
             // Check if cache is using too much memory
             if (memUsage.heapUsed > this.MAX_CACHE_MEMORY) {
+                // Emit memory pressure event
+                this.eventManager.emitCacheEvent({
+                    type: EventTypes.MEMORY_PRESSURE,
+                    timestamp: Date.now(),
+                    metadata: {
+                        memoryUsage: memUsage,
+                        threshold: this.MAX_CACHE_MEMORY
+                    }
+                });
+
                 this.logger.warn('Cache memory threshold exceeded, clearing caches', {
                     heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
                     threshold: `${Math.round(this.MAX_CACHE_MEMORY / 1024 / 1024)}MB`
@@ -576,6 +662,20 @@ export class TaskManager {
                                 const created = await this.operations.createTask(op.data as CreateTaskInput);
                                 await this.indexManager.indexTask(created);
                                 results.push(created);
+
+                                // Emit task created event
+                                this.eventManager.emitTaskEvent({
+                                    type: EventTypes.TASK_CREATED,
+                                    timestamp: Date.now(),
+                                    taskId: created.path,
+                                    task: created,
+                                    metadata: { input: op.data }
+                                });
+
+                                this.logger.info('Task created in bulk operation', {
+                                    taskId: created.path,
+                                    type: created.type
+                                });
                                 break;
 
                             case 'update':
@@ -585,15 +685,51 @@ export class TaskManager {
                                         'Update operation requires task updates'
                                     );
                                 }
+                                const oldTask = await this.getTaskByPath(op.path);
+                                if (!oldTask) {
+                                    throw createError(
+                                        ErrorCodes.TASK_NOT_FOUND,
+                                        `Task not found: ${op.path}`
+                                    );
+                                }
+
                                 const updated = await this.operations.updateTask(op.path, op.data as UpdateTaskInput);
                                 await this.indexManager.indexTask(updated);
                                 results.push(updated);
+
+                                // Emit task updated event
+                                this.eventManager.emitTaskEvent({
+                                    type: EventTypes.TASK_UPDATED,
+                                    timestamp: Date.now(),
+                                    taskId: updated.path,
+                                    task: updated,
+                                    changes: {
+                                        before: oldTask,
+                                        after: updated
+                                    }
+                                });
+
+                                this.logger.info('Task updated in bulk operation', {
+                                    taskId: updated.path,
+                                    updates: op.data
+                                });
                                 break;
 
                             case 'delete':
                                 const task = await this.storage.getTask(op.path);
                                 if (task) {
+                                    // Emit task deleted event before deletion
+                                    this.eventManager.emitTaskEvent({
+                                        type: EventTypes.TASK_DELETED,
+                                        timestamp: Date.now(),
+                                        taskId: task.path,
+                                        task: task
+                                    });
+
                                     await this.indexManager.unindexTask(task);
+                                    this.logger.info('Task deleted in bulk operation', {
+                                        taskId: task.path
+                                    });
                                 }
                                 await this.operations.deleteTask(op.path);
                                 break;

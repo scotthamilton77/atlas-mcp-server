@@ -33,25 +33,57 @@ export class ConnectionManager {
 
         while (retryCount < this.maxRetries) {
             try {
-                return await operation();
+                const result = await operation();
+                // Operation succeeded
+                if (retryCount > 0) {
+                    this.logger.info(`Operation succeeded after ${retryCount} retries`, {
+                        context
+                    });
+                }
+                return result;
             } catch (error) {
                 lastError = error instanceof Error ? error : new Error(String(error));
                 retryCount++;
 
+                // Log detailed error info
+                const errorDetails = lastError instanceof Error ? {
+                    name: lastError.name,
+                    message: lastError.message,
+                    code: (lastError as any).code,
+                    errno: (lastError as any).errno
+                } : lastError;
+
+                this.logger.warn(`Operation failed${retryCount < this.maxRetries ? ', retrying' : ''}`, {
+                    attempt: retryCount,
+                    maxRetries: this.maxRetries,
+                    error: errorDetails,
+                    context
+                });
+
+                // Check if error is WAL-related
+                const isWalError = lastError instanceof Error && 
+                    (lastError.message.includes('WAL') || 
+                     lastError.message.includes('journal_mode') ||
+                     lastError.message.includes('Safety level'));
+
                 if (retryCount < this.maxRetries) {
-                    this.logger.warn(`Operation failed, retrying (${retryCount}/${this.maxRetries})`, {
-                        error: lastError,
-                        context
-                    });
-                    await new Promise(resolve => setTimeout(resolve, this.retryDelay));
+                    // Longer delay for WAL-related errors
+                    const baseDelay = isWalError ? 1000 : this.retryDelay;
+                    const delay = Math.min(
+                        baseDelay * Math.pow(2, retryCount - 1) * (0.5 + Math.random()),
+                        isWalError ? 10000 : 5000 // Higher cap for WAL errors
+                    );
+                    await new Promise(resolve => setTimeout(resolve, delay));
                 }
             }
         }
 
+        // All retries failed
         throw createError(
             ErrorCodes.STORAGE_ERROR,
             'Operation failed',
-            `Failed after ${this.maxRetries} retries: ${lastError?.message}`
+            `Failed after ${this.maxRetries} retries: ${lastError?.message}`,
+            lastError?.message
         );
     }
 
