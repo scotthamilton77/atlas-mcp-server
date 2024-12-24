@@ -34,6 +34,7 @@ export class TaskOperations {
         this.eventManager.emit({
           type: EventTypes.TASK_CREATED,
           timestamp: Date.now(),
+          taskId: task.path,
           task,
           metadata: {
             input
@@ -58,9 +59,10 @@ export class TaskOperations {
     }
   }
 
-  async updateTask(path: string, updates: UpdateTaskInput): Promise<Task> {
+  async updateTask(path: string, updates: UpdateTaskInput, retryCount: number = 0): Promise<Task> {
+    const maxRetries = 3;
     try {
-      // Get existing task
+      // Get existing task with current version
       const existingTask = await this.storage.getTask(path);
       if (!existingTask) {
         throw createError(
@@ -69,15 +71,43 @@ export class TaskOperations {
         );
       }
 
+      const currentVersion = existingTask.metadata.version;
+
       // Validate updates
       await this.validator.validateUpdate(path, updates);
 
-      // Start transaction
+      // Start transaction with IMMEDIATE locking
       await this.storage.beginTransaction();
 
       try {
-        // Update task
-        const updatedTask = await this.storage.updateTask(path, updates);
+        // Verify version hasn't changed
+        const freshTask = await this.storage.getTask(path);
+        if (!freshTask || freshTask.metadata.version !== currentVersion) {
+          await this.storage.rollbackTransaction();
+          if (retryCount < maxRetries) {
+            this.logger.warn('Concurrent modification detected, retrying', {
+              path,
+              expectedVersion: currentVersion,
+              actualVersion: freshTask?.metadata.version,
+              retryCount
+            });
+            return this.updateTask(path, updates, retryCount + 1);
+          }
+          throw createError(
+            ErrorCodes.CONCURRENT_MODIFICATION,
+            'Task was modified by another process'
+          );
+        }
+
+        // Update task with version increment
+        const updatedTask = await this.storage.updateTask(path, {
+          ...updates,
+          metadata: {
+            ...updates.metadata,
+            version: currentVersion + 1,
+            updated: Date.now()
+          }
+        });
 
         // Check if status changed
         if (updates.status && updates.status !== existingTask.status) {
@@ -88,6 +118,7 @@ export class TaskOperations {
         this.eventManager.emit({
           type: EventTypes.TASK_UPDATED,
           timestamp: Date.now(),
+          taskId: updatedTask.path,
           task: updatedTask,
           changes: {
             before: existingTask,
@@ -136,6 +167,7 @@ export class TaskOperations {
         this.eventManager.emit({
           type: EventTypes.TASK_DELETED,
           timestamp: Date.now(),
+          taskId: existingTask.path,
           task: existingTask
         });
 
@@ -169,6 +201,7 @@ export class TaskOperations {
       this.eventManager.emit({
         type: EventTypes.TASK_STATUS_CHANGED,
         timestamp: Date.now(),
+        taskId: newTask.path,
         task: newTask,
         changes: {
           before: { status: oldTask.status },

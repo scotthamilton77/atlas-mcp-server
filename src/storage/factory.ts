@@ -1,16 +1,22 @@
 /**
  * Storage factory for creating task storage instances
  */
-import { StorageConfig, TaskStorage } from '../types/storage.js';
+import { TaskStorage } from '../types/storage.js';
 import { ErrorCodes, createError } from '../errors/index.js';
-import { SqliteStorage } from './sqlite-storage.js';
+import { 
+    SqliteStorage,
+    SqliteConfig,
+    DEFAULT_PAGE_SIZE,
+    DEFAULT_CACHE_SIZE,
+    DEFAULT_BUSY_TIMEOUT
+} from './sqlite/index.js';
 import { ConfigManager } from '../config/index.js';
 import { promises as fs } from 'fs';
 
 /**
  * Creates a storage instance based on configuration
  */
-export async function createStorage(config: StorageConfig): Promise<TaskStorage> {
+export async function createStorage(config: SqliteConfig): Promise<TaskStorage> {
     try {
         // Ensure base directory exists with platform-appropriate permissions
         await fs.mkdir(config.baseDir, { 
@@ -18,8 +24,30 @@ export async function createStorage(config: StorageConfig): Promise<TaskStorage>
             mode: process.platform === 'win32' ? undefined : 0o755 
         });
 
+        // Apply SQLite-specific defaults
+        const sqliteConfig: SqliteConfig = {
+            ...config,
+            sqlite: {
+                journalMode: 'WAL',
+                synchronous: 'NORMAL',
+                tempStore: 'MEMORY',
+                lockingMode: 'NORMAL',
+                autoVacuum: 'NONE',
+                ...config.sqlite
+            },
+            performance: {
+                pageSize: DEFAULT_PAGE_SIZE,
+                cacheSize: DEFAULT_CACHE_SIZE,
+                ...config.performance
+            },
+            connection: {
+                busyTimeout: DEFAULT_BUSY_TIMEOUT,
+                ...config.connection
+            }
+        };
+
         // Create SQLite storage
-        const storage = new SqliteStorage(config);
+        const storage = new SqliteStorage(sqliteConfig);
         await storage.initialize();
 
         return storage;
@@ -44,5 +72,5 @@ export async function createDefaultStorage(): Promise<TaskStorage> {
     // - Environment variables
     // - Default values
     // - Directory creation
-    return createStorage(config.storage);
+    return createStorage(config.storage as SqliteConfig);
 }

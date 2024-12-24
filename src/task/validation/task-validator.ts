@@ -198,12 +198,14 @@ export async function validateTaskStatusTransition(
         newStatus === TaskStatus.IN_PROGRESS) {
         throw createError(
             ErrorCodes.TASK_STATUS,
+            `Cannot transition from ${task.status} to ${newStatus}`,
+            'validateTaskStatusTransition',
+            undefined,
             {
                 taskPath: task.path,
                 currentStatus: task.status,
                 newStatus
-            },
-            `Cannot transition from ${task.status} to ${newStatus}`
+            }
         );
     }
 
@@ -214,12 +216,14 @@ export async function validateTaskStatusTransition(
             if (!depTask || depTask.status !== TaskStatus.COMPLETED) {
                 throw createError(
                     ErrorCodes.TASK_DEPENDENCY,
+                    `Cannot complete task: dependency ${depPath} is not completed`,
+                    'validateTaskStatusTransition',
+                    undefined,
                     {
                         taskPath: task.path,
                         dependencyPath: depPath,
                         dependencyStatus: depTask?.status
-                    },
-                    `Cannot complete task: dependency ${depPath} is not completed`
+                    }
                 );
             }
         }
@@ -231,11 +235,13 @@ export async function validateTaskStatusTransition(
         if (blockedByDeps) {
             throw createError(
                 ErrorCodes.TASK_DEPENDENCY,
+                'Cannot start task: blocked by incomplete dependencies',
+                'validateTaskStatusTransition',
+                undefined,
                 {
                     taskPath: task.path,
                     dependencies: task.dependencies
-                },
-                'Cannot start task: blocked by incomplete dependencies'
+                }
             );
         }
     }

@@ -87,6 +87,7 @@ export class CacheManager {
     this.eventManager.emit({
       type: EventTypes.CACHE_INVALIDATED,
       timestamp: Date.now(),
+      batchId: `cache_invalidate_${Date.now()}`,
       metadata: {
         pattern,
         entriesRemaining: this.cache.size
@@ -113,6 +114,7 @@ export class CacheManager {
     this.eventManager.emit({
       type: EventTypes.CACHE_CLEARED,
       timestamp: Date.now(),
+      batchId: `cache_clear_${Date.now()}`,
       metadata: {
         reason: 'manual_clear'
       }

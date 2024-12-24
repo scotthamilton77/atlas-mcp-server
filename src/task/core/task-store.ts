@@ -621,15 +621,13 @@ export class TaskStore {
         if (missingDeps.length > 0) {
             throw createError(
                 ErrorCodes.TASK_NOT_FOUND,
+                'One or more dependency tasks not found',
+                'preValidateDependencies',
+                'Ensure all dependency tasks exist before creating relationships',
                 {
-                    message: 'One or more dependency tasks not found',
-                    context: {
-                        missingDependencies: missingDeps,
-                        totalDependencies: dependencies.length
-                    }
-                },
-                `Missing dependencies: ${missingDeps.join(', ')}`,
-                'Ensure all dependency tasks exist before creating relationships'
+                    missingDependencies: missingDeps,
+                    totalDependencies: dependencies.length
+                }
             );
         }
     }
@@ -649,13 +647,13 @@ export class TaskStore {
                     // This shouldn't happen due to pre-validation, but handle just in case
                     throw createError(
                         ErrorCodes.TASK_NOT_FOUND,
+                        'Dependency task not found during graph building',
+                        'buildDependencyGraph',
+                        undefined,
                         {
-                            message: 'Dependency task not found during graph building',
-                            context: {
-                                taskPath,
-                                dependencyPath: depPath,
-                                graphState: this.getGraphState()
-                            }
+                            taskPath,
+                            dependencyPath: depPath,
+                            graphState: this.getGraphState()
                         }
                     );
                 }
@@ -703,17 +701,15 @@ export class TaskStore {
                 const cyclePath = this.getCyclePath(depPath);
                 throw createError(
                     ErrorCodes.TASK_CYCLE,
+                    'Circular dependency detected in task graph',
+                    'detectCycles',
+                    'Remove one of the dependencies to break the cycle',
                     {
-                        message: 'Circular dependency detected in task graph',
-                        context: {
-                            cyclePath,
-                            startPath,
-                            affectedTasks: Array.from(this.nodes.keys()),
-                            graphState: this.getGraphState()
-                        }
-                    },
-                    `Circular dependency: ${cyclePath}`,
-                    'Remove one of the dependencies to break the cycle'
+                        cyclePath,
+                        startPath,
+                        affectedTasks: Array.from(this.nodes.keys()),
+                        graphState: this.getGraphState()
+                    }
                 );
             }
         }
@@ -782,15 +778,13 @@ export class TaskStore {
         if (statusIssues.length > 0) {
             throw createError(
                 ErrorCodes.TASK_DEPENDENCY,
+                'Dependency status validation failed',
+                'validateDependencyStatuses',
+                'Ensure all dependencies are in a valid state before proceeding',
                 {
-                    message: 'Dependency status validation failed',
-                    context: {
-                        statusIssues,
-                        graphState: this.getGraphState()
-                    }
-                },
-                `Invalid dependency statuses: ${statusIssues.map(i => `${i.path} (${i.status})`).join(', ')}`,
-                'Ensure all dependencies are in a valid state before proceeding'
+                    statusIssues,
+                    graphState: this.getGraphState()
+                }
             );
         }
     }

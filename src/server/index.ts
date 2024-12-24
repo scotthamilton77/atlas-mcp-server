@@ -9,6 +9,7 @@ import {
     ErrorCode,
     ListToolsRequestSchema,
     McpError,
+    Request
 } from '@modelcontextprotocol/sdk/types.js';
 import { Logger } from '../logging/index.js';
 import { RateLimiter } from './rate-limiter.js';
@@ -60,7 +61,12 @@ export class AtlasServer {
         
         // Initialize components
         this.rateLimiter = new RateLimiter(config.maxRequestsPerMinute || 600);
-        this.healthMonitor = new HealthMonitor();
+        this.healthMonitor = new HealthMonitor({
+            checkInterval: 30000,
+            failureThreshold: 3,
+            shutdownGracePeriod: config.shutdownTimeout || 30000,
+            clientPingTimeout: 60000
+        });
         this.metricsCollector = new MetricsCollector();
         this.requestTracer = new RequestTracer();
 
@@ -72,7 +78,18 @@ export class AtlasServer {
             },
             {
                 capabilities: {
-                    tools: {},
+                    tools: {
+                        create_task: {},
+                        update_task: {},
+                        delete_task: {},
+                        get_tasks_by_status: {},
+                        get_tasks_by_path: {},
+                        get_subtasks: {},
+                        bulk_task_operations: {},
+                        clear_all_tasks: {},
+                        vacuum_database: {},
+                        repair_relationships: {}
+                    },
                 },
             }
         );
@@ -87,7 +104,7 @@ export class AtlasServer {
      * Sets up error handling for the server
      */
     private setupErrorHandling(): void {
-        this.server.onerror = (error) => {
+        this.server.onerror = (error: unknown) => {
             const metricEvent: MetricEvent = {
                 type: 'error',
                 timestamp: Date.now(),
@@ -125,8 +142,14 @@ export class AtlasServer {
         });
 
         process.on('uncaughtException', (error) => {
+            const errorMessage = error instanceof Error 
+                ? { name: error.name, message: error.message, stack: error.stack }
+                : error && typeof error === 'object'
+                    ? JSON.stringify(error)
+                    : String(error);
+            
             this.logger.error('Uncaught Exception:', {
-                error,
+                error: errorMessage,
                 metrics: this.metricsCollector.getMetrics()
             });
             this.shutdown().finally(() => process.exit(1));
@@ -148,6 +171,9 @@ export class AtlasServer {
             try {
                 await this.rateLimiter.checkLimit();
                 this.activeRequests.add(requestId);
+                
+                // Record client activity
+                this.recordClientActivity();
                 
                 this.requestTracer.startTrace(requestId, traceEvent);
                 const response = await this.toolHandler.listTools();
@@ -173,11 +199,14 @@ export class AtlasServer {
         });
 
         // Handler for tool execution requests
-        this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
+        this.server.setRequestHandler(CallToolRequestSchema, async (request: Request) => {
+            if (!request.params?.name) {
+                throw new McpError(ErrorCode.InvalidRequest, 'Missing tool name');
+            }
             const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
             const traceEvent: TraceEvent = {
                 type: 'tool_execution',
-                tool: request.params.name,
+                tool: String(request.params.name),
                 timestamp: Date.now()
             };
             
@@ -192,6 +221,9 @@ export class AtlasServer {
                 await this.rateLimiter.checkLimit();
                 this.activeRequests.add(requestId);
                 
+                // Record client activity
+                this.recordClientActivity();
+                
                 this.requestTracer.startTrace(requestId, traceEvent);
                 const response = await Promise.race([
                     this.toolHandler.handleToolCall(request),
@@ -200,7 +232,7 @@ export class AtlasServer {
                 
                 const metricEvent: MetricEvent = {
                     type: 'tool_execution',
-                    tool: request.params.name,
+                    tool: String(request.params.name),
                     timestamp: Date.now(),
                     duration: Date.now() - traceEvent.timestamp
                 };
@@ -224,6 +256,13 @@ export class AtlasServer {
      * Sets up health check endpoint
      */
     private setupHealthCheck(): void {
+        // Start health monitor with shutdown callback
+        this.healthMonitor.start(async () => {
+            this.logger.info('Health monitor triggered shutdown');
+            await this.shutdown();
+        });
+
+        // Set up periodic status checks
         setInterval(async () => {
             try {
                 const status: ComponentStatus = {
@@ -231,16 +270,18 @@ export class AtlasServer {
                     rateLimiter: this.rateLimiter.getStatus(),
                     metrics: this.metricsCollector.getMetrics()
                 };
-
-                const health = await this.healthMonitor.check(status);
-
-                if (!health.healthy) {
-                    this.logger.warn('Health check failed:', { health, status });
-                }
+                await this.healthMonitor.check(status);
             } catch (error) {
                 this.logger.error('Health check error:', { error });
             }
         }, 30000);
+    }
+
+    /**
+     * Record client activity
+     */
+    private recordClientActivity(): void {
+        this.healthMonitor.recordClientPing();
     }
 
     /**
@@ -261,10 +302,16 @@ export class AtlasServer {
      * Transforms errors into McpErrors
      */
     private handleToolError(error: unknown): void {
+        const errorMessage = error instanceof Error 
+            ? error.message 
+            : error && typeof error === 'object'
+                ? JSON.stringify(error)
+                : String(error);
+
         const metricEvent: MetricEvent = {
             type: 'error',
             timestamp: Date.now(),
-            error: error instanceof Error ? error.message : String(error)
+            error: errorMessage
         };
         this.metricsCollector.recordError(metricEvent);
 
@@ -272,8 +319,14 @@ export class AtlasServer {
             return;
         }
 
+        const errorDetails = error instanceof Error 
+            ? { name: error.name, message: error.message, stack: error.stack }
+            : error && typeof error === 'object'
+                ? JSON.stringify(error)
+                : String(error);
+
         this.logger.error('Unexpected error in tool handler:', {
-            error,
+            error: errorDetails,
             metrics: this.metricsCollector.getMetrics()
         });
         

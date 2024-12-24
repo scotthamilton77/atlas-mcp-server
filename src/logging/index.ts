@@ -17,8 +17,60 @@ export class Logger {
     private static instance: Logger;
     private logger: WinstonLogger;
 
+    private config: LoggerConfig;
+    private isShuttingDown = false;
+
     private constructor(config: LoggerConfig) {
+        this.config = config;
         this.logger = this.createLogger(config);
+        
+        // Handle process events
+        process.on('SIGINT', () => this.handleShutdown());
+        process.on('SIGTERM', () => this.handleShutdown());
+        process.on('exit', () => this.handleShutdown());
+    }
+
+    /**
+     * Handle graceful shutdown
+     */
+    private handleShutdown(): void {
+        if (this.isShuttingDown) return;
+        this.isShuttingDown = true;
+
+        // Close transports
+        this.logger.close();
+    }
+
+    /**
+     * Recreate logger if needed
+     */
+    private lastHealthCheck = 0;
+    private readonly HEALTH_CHECK_INTERVAL = 5000; // 5 seconds
+
+    private ensureLogger(): void {
+        if (this.isShuttingDown) return;
+
+        const now = Date.now();
+        // Only check every 5 seconds to reduce memory pressure
+        if (now - this.lastHealthCheck < this.HEALTH_CHECK_INTERVAL) {
+            return;
+        }
+        
+        try {
+            // Test if logger is working
+            this.logger.log({
+                level: 'debug',
+                message: 'Logger health check'
+            });
+            this.lastHealthCheck = now;
+        } catch (error) {
+            const err = error as Error;
+            if (err?.message?.includes('EPIPE')) {
+                // Recreate logger with same config
+                this.logger = this.createLogger(this.config);
+                this.lastHealthCheck = now;
+            }
+        }
     }
 
     /**
@@ -39,10 +91,10 @@ export class Logger {
      */
     static initialize(config: LoggerConfig): void {
         if (Logger.instance) {
-            throw new BaseError(
-                ErrorCodes.INVALID_STATE,
-                'Logger already initialized'
-            );
+            throw new BaseError({
+                code: ErrorCodes.INVALID_STATE,
+                message: 'Logger already initialized'
+            });
         }
         Logger.instance = new Logger(config);
     }
@@ -163,7 +215,9 @@ export class Logger {
                 message: error.message,
                 code: error.code,
                 details: error.details,
-                stack: error.stack
+                stack: error.stack,
+                operation: error.operation,
+                timestamp: Date.now()
             };
         }
 
@@ -171,13 +225,34 @@ export class Logger {
             return {
                 name: error.name,
                 message: error.message,
-                stack: error.stack
+                stack: error.stack,
+                timestamp: Date.now()
             };
+        }
+
+        if (error && typeof error === 'object') {
+            try {
+                return {
+                    name: 'ObjectError',
+                    message: JSON.stringify(error, null, 2),
+                    raw: error,
+                    timestamp: Date.now()
+                };
+            } catch (e) {
+                return {
+                    name: 'UnserializableError',
+                    message: 'Error object could not be stringified',
+                    type: typeof error,
+                    timestamp: Date.now()
+                };
+            }
         }
 
         return {
             name: 'UnknownError',
-            message: String(error)
+            message: String(error),
+            type: typeof error,
+            timestamp: Date.now()
         };
     }
 
@@ -185,11 +260,48 @@ export class Logger {
      * Internal log method
      */
     private log(level: LogLevel, message: string, context?: Record<string, unknown>): void {
-        this.logger.log({
-            level,
-            message,
-            ...context
-        });
+        if (this.isShuttingDown) return;
+
+        try {
+            // Ensure logger is working
+            this.ensureLogger();
+
+            // Ensure context is properly stringified
+            const safeContext = context ? this.sanitizeContext(context) : undefined;
+            
+            this.logger.log({
+                level,
+                message,
+                timestamp: Date.now(),
+                ...safeContext
+            });
+        } catch (error) {
+            // If logging fails, write to stderr as fallback
+            const fallbackMessage = JSON.stringify({
+                level,
+                message,
+                timestamp: Date.now(),
+                error: this.formatError(error)
+            });
+            process.stderr.write(fallbackMessage + '\n');
+        }
+    }
+
+    /**
+     * Sanitizes context objects for logging
+     */
+    private sanitizeContext(context: Record<string, unknown>): Record<string, unknown> {
+        const sanitized: Record<string, unknown> = {};
+        
+        for (const [key, value] of Object.entries(context)) {
+            if (value instanceof Error || (value && typeof value === 'object')) {
+                sanitized[key] = this.formatError(value);
+            } else {
+                sanitized[key] = value;
+            }
+        }
+        
+        return sanitized;
     }
 }
 
@@ -200,11 +312,11 @@ export function createDefaultLogger(): Logger {
     try {
         return Logger.getInstance();
     } catch (error) {
-        throw new BaseError(
-            ErrorCodes.STORAGE_INIT,
-            'Failed to create default logger',
-            error
-        );
+        throw new BaseError({
+            code: ErrorCodes.STORAGE_INIT,
+            message: 'Failed to create default logger',
+            details: { error: error instanceof Error ? error.message : String(error) }
+        });
     }
 }
 

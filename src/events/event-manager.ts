@@ -38,11 +38,19 @@ export class EventManager {
   emit<T extends AtlasEvent>(event: T): void {
     try {
       if (this.debugMode) {
-        this.logger.debug('Emitting event', {
+        const debugInfo: Record<string, unknown> = {
           type: event.type,
-          timestamp: event.timestamp,
-          metadata: event.metadata
-        });
+          timestamp: event.timestamp
+        };
+
+        // Handle different event types' metadata/context
+        if ('metadata' in event) {
+          debugInfo.metadata = event.metadata;
+        } else if ('context' in event) {
+          debugInfo.context = event.context;
+        }
+
+        this.logger.debug('Emitting event', debugInfo);
       }
 
       // Add timestamp if not present
@@ -182,7 +190,7 @@ export class EventManager {
     metadata?: Record<string, unknown>
   ): void {
     const errorEvent: ErrorEvent = {
-      type: EventTypes.ERROR_OCCURRED,
+      type: EventTypes.SYSTEM_ERROR,
       timestamp: Date.now(),
       error,
       context: {
@@ -193,7 +201,7 @@ export class EventManager {
     };
 
     try {
-      this.emitter.emit(EventTypes.ERROR_OCCURRED, errorEvent);
+      this.emitter.emit(EventTypes.SYSTEM_ERROR, errorEvent);
     } catch (emitError) {
       // Last resort error logging
       this.logger.error('Failed to emit error event', {

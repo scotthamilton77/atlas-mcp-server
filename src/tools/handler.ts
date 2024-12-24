@@ -464,8 +464,10 @@ export class ToolHandler {
         if (!tool) {
             throw createError(
                 ErrorCodes.INVALID_INPUT,
-                { tool: name },
-                'Unknown tool'
+                'Unknown tool',
+                'handleToolCall',
+                undefined,
+                { tool: name }
             );
         }
 
@@ -473,8 +475,10 @@ export class ToolHandler {
         if (!handler) {
             throw createError(
                 ErrorCodes.INVALID_INPUT,
-                { tool: name },
-                'Tool handler not found'
+                'Tool handler not found',
+                'handleToolCall',
+                undefined,
+                { tool: name }
             );
         }
 

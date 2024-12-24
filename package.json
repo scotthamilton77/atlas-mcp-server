@@ -13,11 +13,13 @@
   "scripts": {
     "build": "tsc && node --eval \"import('fs').then(fs => fs.promises.chmod('build/index.js', '755') && fs.promises.chmod('build/storage/init-storage.js', '755'))\"",
     "prepare": "npm run build",
-    "postinstall": "node --eval \"import('fs').then(fs => fs.promises.mkdir(process.env.ATLAS_STORAGE_DIR || new URL('.storage', import.meta.url).pathname, { recursive: true }))\" && node build/storage/init-storage.js",
+    "init-storage": "node build/storage/init-storage.js",
     "watch": "tsc --watch",
     "inspector": "npx @modelcontextprotocol/inspector build/index.js",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
-    "start": "node build/index.js"
+    "prestart": "npm run build && npm run init-storage",
+    "start": "node build/index.js",
+    "dev": "npm run build && concurrently \"npm run watch\" \"npm run init-storage && npm run start\""
   },
   "repository": {
     "type": "git",
@@ -29,8 +31,7 @@
   },
   "homepage": "https://github.com/cyanheads/atlas-mcp-server#readme",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.0.4",
-    "@types/sqlite3": "^3.1.11",
+    "@modelcontextprotocol/sdk": "^1.0.4",
     "@types/uuid": "^9.0.7",
     "@types/winston": "^2.4.4",
     "dotenv": "^16.4.1",
@@ -44,7 +45,9 @@
   "devDependencies": {
     "@jest/types": "^29.6.3",
     "@types/jest": "^29.5.12",
-    "@types/node": "^20.11.16",
+    "@types/node": "^20.17.10",
+    "@types/sqlite3": "^3.1.11",
+    "concurrently": "^8.2.2",
     "jest": "^29.7.0",
     "ts-jest": "^29.1.2",
     "typescript": "^5.3.3"

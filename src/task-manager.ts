@@ -224,11 +224,13 @@ export class TaskManager {
             if (result.errors.length > 0) {
                 throw createError(
                     ErrorCodes.TASK_STATUS,
+                    'Failed to update task statuses',
+                    'updateTaskStatuses',
+                    undefined,
                     {
                         errors: result.errors,
                         updates
-                    },
-                    'Failed to update task statuses'
+                    }
                 );
             }
 
@@ -276,11 +278,13 @@ export class TaskManager {
             if (result.errors.length > 0) {
                 throw createError(
                     ErrorCodes.TASK_DEPENDENCY,
+                    'Failed to update task dependencies',
+                    'updateTaskDependencies',
+                    undefined,
                     {
                         errors: result.errors,
                         updates
-                    },
-                    'Failed to update task dependencies'
+                    }
                 );
             }
 
@@ -430,12 +434,13 @@ export class TaskManager {
         if (!confirm) {
             throw createError(
                 ErrorCodes.INVALID_INPUT,
+                'Must explicitly confirm task deletion',
+                'clearAllTasks',
+                'Set confirm parameter to true to proceed with clearing all tasks. This operation cannot be undone.',
                 {
                     context: 'Clear all tasks',
                     required: 'explicit confirmation'
-                },
-                'Must explicitly confirm task deletion',
-                'Set confirm parameter to true to proceed with clearing all tasks. This operation cannot be undone.'
+                }
             );
         }
 
@@ -750,11 +755,13 @@ export class TaskManager {
                     await this.storage.rollbackTransaction();
                     throw createError(
                         ErrorCodes.INVALID_INPUT,
+                        'Failed to execute bulk operations',
+                        'bulkTaskOperations',
+                        undefined,
                         {
                             errors,
                             operations
-                        },
-                        'Failed to execute bulk operations'
+                        }
                     );
                 }
 

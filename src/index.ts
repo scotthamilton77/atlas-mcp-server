@@ -7,7 +7,10 @@ import { EventTypes } from './types/events.js';
 import { BaseError, ErrorCodes, createError } from './errors/index.js';
 import { ConfigManager } from './config/index.js';
 
+import { TaskStorage } from './types/storage.js';
+
 let server: AtlasServer;
+let storage: TaskStorage;
 
 async function main() {
     // Load environment variables from .env file if present
@@ -18,21 +21,46 @@ async function main() {
         // Ignore error if .env file doesn't exist
     }
 
-    const eventManager = EventManager.getInstance();
+    // Initialize logger first before any other operations
+    Logger.initialize({
+        console: true,
+        file: true,
+        minLevel: 'debug',
+        logDir: process.env.ATLAS_STORAGE_DIR ? `${process.env.ATLAS_STORAGE_DIR}/logs` : 'logs',
+        maxFileSize: 5 * 1024 * 1024, // 5MB
+        maxFiles: 5
+    });
+    const logger = Logger.getInstance();
 
-    // Initialize configuration with defaults from ConfigManager
+    // Then initialize other components
+    const eventManager = EventManager.getInstance();
     const configManager = ConfigManager.getInstance();
+    
+    // Update config after logger is initialized
     await configManager.updateConfig({
         logging: {
-            console: false, // Disable console logging for server
-            file: true     // Enable file logging
+            console: true,
+            file: true,
+            level: 'debug'
+        },
+        storage: {
+            baseDir: process.env.ATLAS_STORAGE_DIR || 'atlas-tasks',
+            name: process.env.ATLAS_STORAGE_NAME || 'atlas-tasks',
+            connection: {
+                maxRetries: 1,
+                retryDelay: 500,
+                busyTimeout: 2000
+            },
+            performance: {
+                checkpointInterval: 60000,
+                cacheSize: 1000,
+                mmapSize: 1024 * 1024 * 1024, // 1GB
+                pageSize: 4096
+            }
         }
     });
 
-    // Initialize logger based on config
     const config = configManager.getConfig();
-    Logger.initialize(config.logging);
-    const logger = Logger.getInstance();
 
     try {
 
@@ -47,7 +75,7 @@ async function main() {
         });
 
         // Initialize storage using factory
-        const storage = await createStorage(config.storage);
+        storage = await createStorage(config.storage);
 
         // Initialize task manager
         const taskManager = new TaskManager(storage);
@@ -388,27 +416,10 @@ async function main() {
                                 'handleToolCall'
                             );
                     }
-
-                    // Emit tool success event
-                    eventManager.emitSystemEvent({
-                        type: EventTypes.TOOL_COMPLETED,
-                        timestamp: Date.now(),
-                        metadata: {
-                            tool: name,
-                            success: true
-                        }
-                    });
-
-                    return {
-                        content: [{
-                            type: 'text',
-                            text: JSON.stringify(result, null, 2)
-                        }]
-                    };
                 } catch (error) {
                     // Emit tool error event
                     eventManager.emitErrorEvent({
-                        type: EventTypes.ERROR_OCCURRED,
+                        type: EventTypes.SYSTEM_ERROR,
                         timestamp: Date.now(),
                         error: error instanceof Error ? error : new Error(String(error)),
                         context: {
@@ -462,27 +473,51 @@ async function main() {
     }
 
     // Handle graceful shutdown
-    const shutdown = async () => {
+    const shutdown = async (reason: string = 'graceful_shutdown') => {
         try {
             // Emit system shutdown event
             eventManager.emitSystemEvent({
                 type: EventTypes.SYSTEM_SHUTDOWN,
                 timestamp: Date.now(),
-                metadata: {
-                    reason: 'graceful_shutdown'
-                }
+                metadata: { reason }
             });
 
-            await server.shutdown();
-            process.exit(0);
+            // Ensure all cleanup happens before exit
+            await Promise.all([
+                server.shutdown(),
+                storage.close()
+            ]);
+
+            // Force final cleanup
+            if (global.gc) {
+                global.gc();
+            }
+
+            // Remove all event listeners
+            process.removeAllListeners();
+            
+            // Exit after cleanup
+            process.nextTick(() => process.exit(0));
         } catch (error) {
             logger.error('Error during shutdown', error);
-            process.exit(1);
+            process.nextTick(() => process.exit(1));
         }
     };
 
-    process.on('SIGINT', shutdown);
-    process.on('SIGTERM', shutdown);
+    // Handle various shutdown signals
+    process.on('SIGINT', () => shutdown('SIGINT'));
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('beforeExit', () => shutdown('beforeExit'));
+    process.on('exit', () => {
+        try {
+            // Synchronous cleanup for exit event
+            if (global.gc) {
+                global.gc();
+            }
+        } catch (error) {
+            console.error('Error during final cleanup:', error);
+        }
+    });
 }
 
 main().catch((error) => {

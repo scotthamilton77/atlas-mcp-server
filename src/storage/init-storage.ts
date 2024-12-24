@@ -1,11 +1,48 @@
-#!/usr/bin/env node
-import { createDefaultStorage } from './factory.js';
+/**
+ * Storage initialization entry point
+ */
 import { Logger } from '../logging/index.js';
 import { ConfigManager } from '../config/index.js';
-import { TaskType } from '../types/task.js';
+import { initializeSqliteStorage } from './sqlite/init.js';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import { homedir } from 'os';
 
-async function initStorage() {
+interface McpSettings {
+    mcpServers: {
+        'atlas-mcp-server'?: {
+            env?: {
+                ATLAS_STORAGE_DIR?: string;
+                ATLAS_STORAGE_NAME?: string;
+            };
+        };
+    };
+}
+
+function getMcpSettings(): McpSettings | null {
     try {
+        // Try VSCode settings first
+        const vscodePath = join(homedir(), 'Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json');
+        const settings = JSON.parse(readFileSync(vscodePath, 'utf8'));
+        return settings;
+    } catch (error) {
+        try {
+            // Try Claude desktop app settings
+            const claudePath = join(homedir(), 'Library/Application Support/Claude/claude_desktop_config.json');
+            const settings = JSON.parse(readFileSync(claudePath, 'utf8'));
+            return settings;
+        } catch (error) {
+            return null;
+        }
+    }
+}
+
+async function main() {
+    try {
+        // Try to get settings from MCP config first
+        const mcpSettings = getMcpSettings();
+        const atlasSettings = mcpSettings?.mcpServers?.['atlas-mcp-server']?.env;
+        
         // Load environment variables from .env file if present
         try {
             const { config } = await import('dotenv');
@@ -14,75 +51,76 @@ async function initStorage() {
             // Ignore error if .env file doesn't exist
         }
 
-        // Initialize configuration with defaults from ConfigManager
+        // Get storage settings with fallbacks
+        const storageDir = atlasSettings?.ATLAS_STORAGE_DIR || process.env.ATLAS_STORAGE_DIR;
+        const storageName = atlasSettings?.ATLAS_STORAGE_NAME || process.env.ATLAS_STORAGE_NAME || 'ATLAS';
+
+        if (!storageDir) {
+            throw new Error('ATLAS_STORAGE_DIR not found in MCP settings or environment variables');
+        }
+
+        // Configure logger with file output
+        const logDir = join(storageDir, 'logs');
+        Logger.initialize({
+            minLevel: 'debug',
+            console: true,
+            file: true,
+            logDir,
+            maxFileSize: 5 * 1024 * 1024, // 5MB
+            maxFiles: 5
+        });
+        const logger = Logger.getInstance();
+
+        // Initialize configuration
         const configManager = ConfigManager.getInstance();
-        
-        // Only override what's needed for initialization
+
         await configManager.updateConfig({
-            logging: {
-                console: true, // Enable console logging for initialization
-                file: true    // Enable file logging
+            storage: {
+                baseDir: storageDir,
+                name: storageName,
+                connection: {
+                    busyTimeout: 5000,
+                    maxRetries: 3,
+                    retryDelay: 1000
+                },
+                performance: {
+                    cacheSize: 2000,
+                    checkpointInterval: 300000,
+                    mmapSize: 30000000000,
+                    pageSize: 4096
+                }
             }
         });
 
-        // Initialize logger with config
-        const config = configManager.getConfig();
-        Logger.initialize(config.logging);
-        const logger = Logger.getInstance();
+        // Initialize SQLite storage
+        await initializeSqliteStorage();
 
-        logger.info('Initializing storage with configuration:', {
-            env: config.env,
-            storage: {
-                baseDir: config.storage.baseDir,
-                name: config.storage.name,
-                connection: config.storage.connection,
-                performance: config.storage.performance
-            },
-            logging: config.logging
+        // Log storage location
+        logger.info('Storage initialized at:', {
+            path: `${storageDir}/${storageName}.db`
         });
 
-        // Initialize storage and create database
-        const storage = await createDefaultStorage();
-        
-        // Create a test task to verify database functionality
-        await storage.createTask({
-            path: '_test/init',
-            name: 'Test Task',
-            type: TaskType.TASK,
-            description: 'Test task to verify database initialization'
-        });
-
-        // Get metrics again to verify task creation
-        const updatedMetrics = await storage.getMetrics();
-        logger.info('Test task created successfully', { metrics: updatedMetrics });
-
-        // Delete test task
-        await storage.deleteTask('_test/init');
-
-        // Optimize database
-        await storage.vacuum();
-        await storage.analyze();
-        await storage.checkpoint();
-
-        // Close storage after initialization
-        await storage.close();
-        logger.info('Storage connection closed');
-
-        process.exit(0);
+        logger.info('Storage initialization completed successfully');
     } catch (error) {
-        // Try to get logger instance if available
-        try {
-            const logger = Logger.getInstance();
-            logger.error('Failed to initialize storage', error);
-        } catch {
-            // Fallback to console if logger isn't initialized
-            console.error('Failed to initialize storage:', error);
-        }
+        const errorMessage = error instanceof Error 
+            ? `${error.message}\n${error.stack}`
+            : error && typeof error === 'object'
+                ? JSON.stringify(error, null, 2)
+                : String(error);
+        
+        console.error('Storage initialization failed:', errorMessage);
         process.exit(1);
     }
 }
 
-initStorage().catch((error) => {
-    console.error('Fatal error during storage initialization:', error);
+// Run initialization
+main().catch(error => {
+    const errorMessage = error instanceof Error 
+        ? `${error.message}\n${error.stack}`
+        : error && typeof error === 'object'
+            ? JSON.stringify(error, null, 2)
+            : String(error);
+    
+    console.error('Fatal error during storage initialization:', errorMessage);
     process.exit(1);
 });

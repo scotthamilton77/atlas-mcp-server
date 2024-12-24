@@ -158,11 +158,12 @@ export const configSchema = {
  * Default logging configuration
  */
 const defaultLoggingConfig: LoggingConfig = {
-    level: LogLevels.INFO,
-    console: true,
-    file: false,
-    maxFiles: 5,
-    maxSize: 5242880
+            level: LogLevels.INFO,
+            console: true,
+            file: true,
+            dir: 'logs',
+            maxFiles: 5,
+            maxSize: 5242880
 };
 
 /**
