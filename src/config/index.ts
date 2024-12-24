@@ -178,8 +178,10 @@ export const defaultConfig = {
  * Configuration manager class
  */
 export class ConfigManager {
-    private static instance: ConfigManager;
+    private static instance: ConfigManager | null = null;
+    private static initializationPromise: Promise<ConfigManager> | null = null;
     private config: any;
+    private initialized = false;
 
     private constructor() {
         this.config = defaultConfig;
@@ -189,8 +191,11 @@ export class ConfigManager {
      * Gets the configuration manager instance
      */
     static getInstance(): ConfigManager {
-        if (!ConfigManager.instance) {
-            ConfigManager.instance = new ConfigManager();
+        if (!ConfigManager.instance || !ConfigManager.instance.initialized) {
+            throw new ConfigError(
+                ErrorCodes.CONFIG_INVALID,
+                'Configuration not initialized. Call ConfigManager.initialize() first.'
+            );
         }
         return ConfigManager.instance;
     }
@@ -198,15 +203,42 @@ export class ConfigManager {
     /**
      * Initializes the configuration manager with custom config
      */
-    static async initialize(config: any): Promise<void> {
-        if (ConfigManager.instance) {
-            throw new ConfigError(
-                ErrorCodes.CONFIG_INVALID,
-                'Configuration already initialized'
-            );
+    static async initialize(config?: any): Promise<ConfigManager> {
+        // Return existing instance if available
+        if (ConfigManager.instance && ConfigManager.instance.initialized) {
+            return ConfigManager.instance;
         }
-        ConfigManager.instance = new ConfigManager();
-        await ConfigManager.instance.updateConfig(config);
+
+        // If initialization is in progress, wait for it
+        if (ConfigManager.initializationPromise) {
+            return ConfigManager.initializationPromise;
+        }
+
+        // Start new initialization with mutex
+        ConfigManager.initializationPromise = (async () => {
+            try {
+                // Double-check instance hasn't been created while waiting
+                if (ConfigManager.instance && ConfigManager.instance.initialized) {
+                    return ConfigManager.instance;
+                }
+
+                ConfigManager.instance = new ConfigManager();
+                if (config) {
+                    await ConfigManager.instance.updateConfig(config);
+                }
+                ConfigManager.instance.initialized = true;
+                return ConfigManager.instance;
+            } catch (error) {
+                throw new ConfigError(
+                    ErrorCodes.CONFIG_INVALID,
+                    `Failed to initialize configuration: ${error instanceof Error ? error.message : String(error)}`
+                );
+            } finally {
+                ConfigManager.initializationPromise = null;
+            }
+        })();
+
+        return ConfigManager.initializationPromise;
     }
 
     /**

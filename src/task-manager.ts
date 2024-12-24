@@ -17,32 +17,41 @@ import { CacheOptions } from './types/cache.js';
 import { TaskIndexManager } from './task/core/indexing/index-manager.js';
 
 export class TaskManager {
-    private readonly logger: Logger;
-    private readonly operations: TaskOperations;
+    private static logger: Logger;
+    private operations!: TaskOperations;
+
+    private static initLogger(): void {
+        if (!TaskManager.logger) {
+            TaskManager.logger = Logger.getInstance().child({ component: 'TaskManager' });
+        }
+    }
     private readonly validator: TaskValidator;
     private readonly statusBatchProcessor: TaskStatusBatchProcessor;
     private readonly dependencyBatchProcessor: DependencyAwareBatchProcessor;
     private readonly cacheManager: CacheManager;
     private readonly indexManager: TaskIndexManager;
     private memoryMonitor?: NodeJS.Timeout;
-    private readonly MAX_CACHE_MEMORY = 256 * 1024 * 1024; // 256MB cache limit
-    private readonly MEMORY_CHECK_INTERVAL = 30000; // 30 seconds
-    private readonly MEMORY_PRESSURE_THRESHOLD = 0.8; // 80% of max before cleanup
+    private readonly MAX_CACHE_MEMORY = 1024 * 1024 * 1024; // 1GB cache limit
+    private readonly MEMORY_CHECK_INTERVAL = 60000; // 60 seconds
+    private readonly MEMORY_PRESSURE_THRESHOLD = 0.9; // 90% of max before cleanup
 
     private readonly eventManager: EventManager;
 
-    constructor(readonly storage: TaskStorage) {
-        // Initialize components
-        this.logger = Logger.getInstance().child({ component: 'TaskManager' });
+    private static instance: TaskManager | null = null;
+    private static initializationPromise: Promise<TaskManager> | null = null;
+    private initialized = false;
+
+    private constructor(readonly storage: TaskStorage) {
+        // Initialize basic components that don't require async operations
+        TaskManager.initLogger();
         this.eventManager = EventManager.getInstance();
         this.validator = new TaskValidator(storage);
-        this.operations = new TaskOperations(storage, this.validator);
         
         // Initialize cache management
         const cacheOptions: CacheOptions = {
             maxSize: this.MAX_CACHE_MEMORY,
-            ttl: 5 * 60 * 1000, // 5 minutes
-            cleanupInterval: 60 * 1000 // 1 minute
+            ttl: 15 * 60 * 1000, // 15 minutes
+            cleanupInterval: 5 * 60 * 1000 // 5 minutes
         };
         this.cacheManager = new CacheManager(cacheOptions);
         this.indexManager = new TaskIndexManager();
@@ -51,7 +60,7 @@ export class TaskManager {
         const batchDeps = {
             storage,
             validator: this.validator,
-            logger: this.logger,
+            logger: TaskManager.logger,
             cacheManager: this.cacheManager
         };
         this.statusBatchProcessor = new TaskStatusBatchProcessor(batchDeps);
@@ -59,25 +68,86 @@ export class TaskManager {
 
         // Setup memory monitoring
         this.setupMemoryMonitoring();
+    }
 
-        // Initialize indexes from storage
-        this.initializeIndexes().catch((error: Error) => {
-            this.logger.error('Failed to initialize indexes', { error });
-        });
+    /**
+     * Initializes components that require async operations
+     */
+    private async initializeComponents(): Promise<void> {
+        // Initialize task operations
+        this.operations = await TaskOperations.getInstance(this.storage, this.validator);
+    }
+
+    /**
+     * Gets the TaskManager instance
+     */
+    static async getInstance(storage: TaskStorage): Promise<TaskManager> {
+        // Return existing instance if available
+        if (TaskManager.instance && TaskManager.instance.initialized) {
+            return TaskManager.instance;
+        }
+
+        // If initialization is in progress, wait for it
+        if (TaskManager.initializationPromise) {
+            return TaskManager.initializationPromise;
+        }
+
+        // Start new initialization with mutex
+        TaskManager.initializationPromise = (async () => {
+            try {
+                // Double-check instance hasn't been created while waiting
+                if (TaskManager.instance && TaskManager.instance.initialized) {
+                    return TaskManager.instance;
+                }
+
+                TaskManager.instance = new TaskManager(storage);
+                await TaskManager.instance.initialize();
+                return TaskManager.instance;
+            } catch (error) {
+                throw createError(
+                    ErrorCodes.STORAGE_INIT,
+                    `Failed to initialize TaskManager: ${error instanceof Error ? error.message : String(error)}`
+                );
+            } finally {
+                TaskManager.initializationPromise = null;
+            }
+        })();
+
+        return TaskManager.initializationPromise;
     }
 
     /**
      * Initializes task indexes from storage
      */
-    private async initializeIndexes(): Promise<void> {
+    private async initialize(): Promise<void> {
+        if (this.initialized) {
+            TaskManager.logger.debug('Task manager already initialized');
+            return;
+        }
+
         try {
+            // Initialize async components first
+            await this.initializeComponents();
+            // Get all tasks and build indexes
             const tasks = await this.storage.getTasksByPattern('*');
-            for (const task of tasks) {
-                await this.indexManager.indexTask(task);
+            
+            // Initialize indexes in batches to avoid memory pressure
+            const batchSize = 100;
+            for (let i = 0; i < tasks.length; i += batchSize) {
+                const batch = tasks.slice(i, i + batchSize);
+                for (const task of batch) {
+                    await this.indexManager.indexTask(task);
+                }
+                // Allow GC between batches
+                if (global.gc) {
+                    global.gc();
+                }
             }
-            this.logger.info('Task indexes initialized', { taskCount: tasks.length });
+            
+            this.initialized = true;
+            TaskManager.logger.info('Task indexes initialized', { taskCount: tasks.length });
         } catch (error) {
-            this.logger.error('Failed to initialize task indexes', { error });
+            TaskManager.logger.error('Failed to initialize task indexes', { error });
             throw error;
         }
     }
@@ -98,7 +168,7 @@ export class TaskManager {
             const result = await this.operations.createTask(input);
             await this.indexManager.indexTask(result);
 
-            this.logger.info('Task created successfully', {
+            TaskManager.logger.info('Task created successfully', {
                 taskId: result.path,
                 type: result.type,
                 parentPath: input.parentPath
@@ -123,7 +193,7 @@ export class TaskManager {
                 }
             };
         } catch (error) {
-            this.logger.error('Failed to create task', {
+            TaskManager.logger.error('Failed to create task', {
                 error,
                 input,
                 context: {
@@ -152,7 +222,7 @@ export class TaskManager {
             const result = await this.operations.updateTask(path, updates);
             await this.indexManager.indexTask(result);
 
-            this.logger.info('Task updated successfully', {
+            TaskManager.logger.info('Task updated successfully', {
                 taskId: result.path,
                 updates,
                 oldStatus: oldTask.status,
@@ -195,7 +265,7 @@ export class TaskManager {
                 }
             };
         } catch (error) {
-            this.logger.error('Failed to update task', {
+            TaskManager.logger.error('Failed to update task', {
                 error,
                 context: {
                     path,
@@ -253,7 +323,7 @@ export class TaskManager {
                 }
             };
         } catch (error) {
-            this.logger.error('Failed to update task statuses', {
+            TaskManager.logger.error('Failed to update task statuses', {
                 error,
                 updates
             });
@@ -307,7 +377,7 @@ export class TaskManager {
                 }
             };
         } catch (error) {
-            this.logger.error('Failed to update task dependencies', {
+            TaskManager.logger.error('Failed to update task dependencies', {
                 error,
                 updates
             });
@@ -331,7 +401,7 @@ export class TaskManager {
                 subtasks: indexedTask.subtasks || []
             };
         } catch (error) {
-            this.logger.error('Failed to get task by path', { error, path });
+            TaskManager.logger.error('Failed to get task by path', { error, path });
             throw error;
         }
     }
@@ -349,7 +419,7 @@ export class TaskManager {
                 subtasks: t.subtasks || []
             }));
         } catch (error) {
-            this.logger.error('Failed to list tasks', { error, pathPattern });
+            TaskManager.logger.error('Failed to list tasks', { error, pathPattern });
             throw error;
         }
     }
@@ -367,7 +437,7 @@ export class TaskManager {
                 subtasks: t.subtasks || []
             }));
         } catch (error) {
-            this.logger.error('Failed to get tasks by status', { error, status });
+            TaskManager.logger.error('Failed to get tasks by status', { error, status });
             throw error;
         }
     }
@@ -385,7 +455,7 @@ export class TaskManager {
                 subtasks: t.subtasks || []
             }));
         } catch (error) {
-            this.logger.error('Failed to get subtasks', { error, parentPath });
+            TaskManager.logger.error('Failed to get subtasks', { error, parentPath });
             throw error;
         }
     }
@@ -417,7 +487,7 @@ export class TaskManager {
                 }
             };
         } catch (error) {
-            this.logger.error('Failed to delete task', {
+            TaskManager.logger.error('Failed to delete task', {
                 error,
                 context: {
                     path,
@@ -475,13 +545,13 @@ export class TaskManager {
                     await this.storage.checkpoint();
                 } catch (optimizeError) {
                     // Log but don't fail if optimization fails
-                    this.logger.warn('Failed to optimize database after clearing tasks', { 
+                    TaskManager.logger.warn('Failed to optimize database after clearing tasks', { 
                         error: optimizeError,
                         operation: 'clearAllTasks'
                     });
                 }
 
-                this.logger.info('Database and caches reset', {
+                TaskManager.logger.info('Database and caches reset', {
                     tasksCleared: taskCount,
                     operation: 'clearAllTasks'
                 });
@@ -491,7 +561,7 @@ export class TaskManager {
                 throw error;
             }
         } catch (error) {
-            this.logger.error('Failed to clear tasks', {
+            TaskManager.logger.error('Failed to clear tasks', {
                 error,
                 context: {
                     operation: 'clearAllTasks',
@@ -512,9 +582,9 @@ export class TaskManager {
                 await this.storage.analyze();
             }
             await this.storage.checkpoint();
-            this.logger.info('Database optimized', { analyzed: analyze });
+            TaskManager.logger.info('Database optimized', { analyzed: analyze });
         } catch (error) {
-            this.logger.error('Failed to optimize database', { error });
+            TaskManager.logger.error('Failed to optimize database', { error });
             throw error;
         }
     }
@@ -527,9 +597,9 @@ export class TaskManager {
             const result = await this.storage.repairRelationships(dryRun);
             if (!dryRun) {
                 // Reinitialize indexes after repair
-                await this.initializeIndexes();
+                await this.initialize();
             }
-            this.logger.info('Relationship repair completed', { 
+            TaskManager.logger.info('Relationship repair completed', { 
                 dryRun,
                 pathPattern,
                 fixed: result.fixed,
@@ -537,7 +607,7 @@ export class TaskManager {
             });
             return result;
         } catch (error) {
-            this.logger.error('Failed to repair relationships', { error });
+            TaskManager.logger.error('Failed to repair relationships', { error });
             throw error;
         }
     }
@@ -565,7 +635,7 @@ export class TaskManager {
             const memUsage = process.memoryUsage();
             
             // Log memory stats
-            instance.logger.debug('Task manager memory usage:', {
+            TaskManager.logger.debug('Task manager memory usage:', {
                 heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
                 heapTotal: `${Math.round(memUsage.heapTotal / 1024 / 1024)}MB`,
                 rss: `${Math.round(memUsage.rss / 1024 / 1024)}MB`
@@ -585,7 +655,7 @@ export class TaskManager {
                     }
                 });
 
-                instance.logger.warn('Cache memory threshold exceeded, clearing caches', {
+                TaskManager.logger.warn('Cache memory threshold exceeded, clearing caches', {
                     heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
                     threshold: `${Math.round(instance.MAX_CACHE_MEMORY / 1024 / 1024)}MB`
                 });
@@ -619,16 +689,16 @@ export class TaskManager {
                 const afterGC = process.memoryUsage();
                 if (forceClean && afterGC.heapUsed > (this.MAX_CACHE_MEMORY * this.MEMORY_PRESSURE_THRESHOLD)) {
                     // If memory is still high after aggressive cleanup, log warning
-                    this.logger.warn('Memory usage remains high after cleanup', {
+                    TaskManager.logger.warn('Memory usage remains high after cleanup', {
                         heapUsed: `${Math.round(afterGC.heapUsed / 1024 / 1024)}MB`,
                         threshold: `${Math.round(this.MAX_CACHE_MEMORY / 1024 / 1024)}MB`
                     });
                 }
             }
 
-            this.logger.info('Caches cleared successfully');
+            TaskManager.logger.info('Caches cleared successfully');
         } catch (error) {
-            this.logger.error('Failed to clear caches', { error });
+            TaskManager.logger.error('Failed to clear caches', { error });
             throw error;
         }
     }
@@ -668,7 +738,7 @@ export class TaskManager {
                     await (this.dependencyBatchProcessor as any).cleanup?.();
                 }
             } catch (batchError) {
-                this.logger.warn('Error cleaning up batch processors', { error: batchError });
+                TaskManager.logger.warn('Error cleaning up batch processors', { error: batchError });
             }
 
             // Cleanup operations
@@ -677,21 +747,21 @@ export class TaskManager {
                     await (this.operations as any).cleanup?.();
                 }
             } catch (opsError) {
-                this.logger.warn('Error cleaning up operations', { error: opsError });
+                TaskManager.logger.warn('Error cleaning up operations', { error: opsError });
             }
 
             // Remove event listeners
             try {
                 this.eventManager.removeAllListeners();
             } catch (eventError) {
-                this.logger.warn('Error cleaning up event listeners', { error: eventError });
+                TaskManager.logger.warn('Error cleaning up event listeners', { error: eventError });
             }
 
             // Cleanup index manager
             try {
                 await this.indexManager.clear();
             } catch (indexError) {
-                this.logger.warn('Error cleaning up index manager', { error: indexError });
+                TaskManager.logger.warn('Error cleaning up index manager', { error: indexError });
             }
 
             // Close storage last
@@ -704,9 +774,9 @@ export class TaskManager {
                 global.gc();
             }
 
-            this.logger.info('Task manager cleanup completed');
+            TaskManager.logger.info('Task manager cleanup completed');
         } catch (error) {
-            this.logger.error('Failed to cleanup task manager', { error });
+            TaskManager.logger.error('Failed to cleanup task manager', { error });
             throw error;
         } finally {
             // Ensure memory monitor is cleared even if cleanup fails
@@ -761,7 +831,7 @@ export class TaskManager {
                                     metadata: { input: op.data }
                                 });
 
-                                this.logger.info('Task created in bulk operation', {
+                                TaskManager.logger.info('Task created in bulk operation', {
                                     taskId: created.path,
                                     type: created.type
                                 });
@@ -798,7 +868,7 @@ export class TaskManager {
                                     }
                                 });
 
-                                this.logger.info('Task updated in bulk operation', {
+                                TaskManager.logger.info('Task updated in bulk operation', {
                                     taskId: updated.path,
                                     updates: op.data
                                 });
@@ -816,7 +886,7 @@ export class TaskManager {
                                     });
 
                                     await this.indexManager.unindexTask(task);
-                                    this.logger.info('Task deleted in bulk operation', {
+                                    TaskManager.logger.info('Task deleted in bulk operation', {
                                         taskId: task.path
                                     });
                                 }
@@ -825,7 +895,7 @@ export class TaskManager {
                         }
                     } catch (error) {
                         errors.push(error as Error);
-                        this.logger.error('Failed to execute bulk operation', {
+                        TaskManager.logger.error('Failed to execute bulk operation', {
                             error,
                             operation: op
                         });
@@ -864,7 +934,7 @@ export class TaskManager {
                 throw error;
             }
         } catch (error) {
-            this.logger.error('Failed to execute bulk operations', { error });
+            TaskManager.logger.error('Failed to execute bulk operations', { error });
             throw error;
         }
     }

@@ -4,7 +4,6 @@ import { TaskStorage } from '../../types/storage.js';
 import { Task, TaskStatus, CreateTaskInput, UpdateTaskInput } from '../../types/task.js';
 import { Logger } from '../../logging/index.js';
 import { ErrorCodes, createError } from '../../errors/index.js';
-import { initializeSqliteStorage } from './init.js';
 
 // Constants
 export const DEFAULT_PAGE_SIZE = 4096;
@@ -35,9 +34,11 @@ export interface SqliteConfig {
 }
 
 export class SqliteStorage implements TaskStorage {
+    private static initializationPromise: Promise<void> | null = null;
     private db: Database | null = null;
     private readonly logger: Logger;
     private readonly dbPath: string;
+    private isInitialized = false;
 
     constructor(private readonly config: SqliteConfig) {
         this.logger = Logger.getInstance().child({ component: 'SqliteStorage' });
@@ -45,7 +46,22 @@ export class SqliteStorage implements TaskStorage {
     }
 
     async initialize(): Promise<void> {
-        try {
+        // Return if already initialized
+        if (this.isInitialized) {
+            this.logger.debug('SQLite storage already initialized');
+            return;
+        }
+
+        // If initialization is in progress, wait for it
+        if (SqliteStorage.initializationPromise) {
+            this.logger.debug('Waiting for existing initialization to complete');
+            await SqliteStorage.initializationPromise;
+            return;
+        }
+
+        // Start new initialization with mutex
+        SqliteStorage.initializationPromise = (async () => {
+            try {
             // Initialize SQLite with WAL mode
             this.db = await open({
                 filename: this.dbPath,
@@ -53,36 +69,131 @@ export class SqliteStorage implements TaskStorage {
                 mode: sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE
             });
 
-            // Configure database
+            // Configure database with proper error handling
+            const pragmas = [
+                // Enable WAL mode first for better concurrency
+                `PRAGMA journal_mode=${this.config.sqlite?.journalMode || 'WAL'}`,
+                
+                // Enable foreign keys for referential integrity
+                'PRAGMA foreign_keys=ON',
+                
+                // Configure synchronization and durability
+                `PRAGMA synchronous=${this.config.sqlite?.synchronous || 'NORMAL'}`,
+                
+                // Memory and performance settings
+                `PRAGMA temp_store=${this.config.sqlite?.tempStore || 'MEMORY'}`,
+                `PRAGMA page_size=${this.config.performance?.pageSize || DEFAULT_PAGE_SIZE}`,
+                `PRAGMA cache_size=${this.config.performance?.cacheSize || DEFAULT_CACHE_SIZE}`,
+                `PRAGMA mmap_size=${this.config.performance?.mmapSize || 30000000000}`,
+                
+                // Concurrency settings
+                `PRAGMA locking_mode=${this.config.sqlite?.lockingMode || 'NORMAL'}`,
+                `PRAGMA busy_timeout=${this.config.connection?.busyTimeout || DEFAULT_BUSY_TIMEOUT}`,
+                
+                // Maintenance settings
+                `PRAGMA auto_vacuum=${this.config.sqlite?.autoVacuum || 'NONE'}`,
+                
+                // Query optimization
+                'PRAGMA optimize'
+            ];
+
+            for (const pragma of pragmas) {
+                try {
+                    await this.db.exec(pragma);
+                } catch (error) {
+                    this.logger.error(`Failed to set pragma: ${pragma}`, {
+                        error: error instanceof Error ? error.message : String(error)
+                    });
+                    throw error;
+                }
+            }
+
+            // Verify foreign keys are enabled
+            const fkResult = await this.db.get('PRAGMA foreign_keys');
+            if (!fkResult || !fkResult['foreign_keys']) {
+                throw new Error('Failed to enable foreign key constraints');
+            }
+
+            // Create tables and set up database schema
+            await this.setupDatabase();
+
+                this.isInitialized = true;
+                this.logger.info('SQLite storage initialized', {
+                    path: this.dbPath,
+                    config: this.config
+                });
+            } catch (error) {
+                this.logger.error('Failed to initialize SQLite storage', {
+                    error: error instanceof Error ? error.message : String(error),
+                    path: this.dbPath
+                });
+                throw createError(
+                    ErrorCodes.STORAGE_INIT,
+                    'Failed to initialize SQLite storage',
+                    error instanceof Error ? error.message : String(error)
+                );
+            } finally {
+                SqliteStorage.initializationPromise = null;
+            }
+        })();
+
+        await SqliteStorage.initializationPromise;
+    }
+
+    /**
+     * Sets up the database schema and tables
+     */
+    private async setupDatabase(): Promise<void> {
+        if (!this.db) throw new Error('Database not initialized');
+
+        try {
+            // Create tables and indexes
             await this.db.exec(`
-                PRAGMA journal_mode=${this.config.sqlite?.journalMode || 'WAL'};
-                PRAGMA synchronous=${this.config.sqlite?.synchronous || 'NORMAL'};
-                PRAGMA temp_store=${this.config.sqlite?.tempStore || 'MEMORY'};
-                PRAGMA locking_mode=${this.config.sqlite?.lockingMode || 'NORMAL'};
-                PRAGMA auto_vacuum=${this.config.sqlite?.autoVacuum || 'NONE'};
-                PRAGMA page_size=${this.config.performance?.pageSize || DEFAULT_PAGE_SIZE};
-                PRAGMA cache_size=${this.config.performance?.cacheSize || DEFAULT_CACHE_SIZE};
-                PRAGMA mmap_size=${this.config.performance?.mmapSize || 30000000000};
-                PRAGMA busy_timeout=${this.config.connection?.busyTimeout || DEFAULT_BUSY_TIMEOUT};
+                CREATE TABLE IF NOT EXISTS tasks (
+                    path TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    description TEXT,
+                    type TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    parent_path TEXT,
+                    notes TEXT,
+                    reasoning TEXT,
+                    dependencies TEXT,
+                    subtasks TEXT,
+                    metadata TEXT,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_path);
+                CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+                CREATE INDEX IF NOT EXISTS idx_tasks_type ON tasks(type);
             `);
 
-            // Initialize storage
-            await initializeSqliteStorage(this.dbPath);
+            // Set WAL file permissions if needed
+            try {
+                const fs = await import('fs/promises');
+                const path = await import('path');
+                const dbPath = path.join(this.config.baseDir, `${this.config.name}.db`);
+                const walPath = `${dbPath}-wal`;
+                const shmPath = `${dbPath}-shm`;
+                
+                // Set permissions for WAL and SHM files if they exist
+                await Promise.all([
+                    fs.access(walPath).then(() => fs.chmod(walPath, 0o644)).catch(() => {}),
+                    fs.access(shmPath).then(() => fs.chmod(shmPath, 0o644)).catch(() => {})
+                ]);
+            } catch (error) {
+                this.logger.warn('Failed to set WAL file permissions', { error });
+                // Don't throw - this is not critical
+            }
 
-            this.logger.info('SQLite storage initialized', {
-                path: this.dbPath,
-                config: this.config
-            });
+            this.logger.info('Database schema setup completed');
         } catch (error) {
-            this.logger.error('Failed to initialize SQLite storage', {
-                error: error instanceof Error ? error.message : String(error),
-                path: this.dbPath
+            this.logger.error('Failed to set up database schema', {
+                error: error instanceof Error ? error.message : String(error)
             });
-            throw createError(
-                ErrorCodes.STORAGE_INIT,
-                'Failed to initialize SQLite storage',
-                error instanceof Error ? error.message : String(error)
-            );
+            throw error;
         }
     }
 
@@ -398,6 +509,74 @@ export class SqliteStorage implements TaskStorage {
     async clearCache(): Promise<void> {
         // SQLite implementation doesn't use cache
         return;
+    }
+
+    /**
+     * Verifies database integrity and repairs if needed
+     */
+    async verifyIntegrity(): Promise<boolean> {
+        if (!this.db) throw new Error('Database not initialized');
+        
+        try {
+            await this.beginTransaction();
+            
+            try {
+                await this.analyze();
+                await this.vacuum();
+                await this.checkpoint();
+                
+                await this.commitTransaction();
+                
+                this.logger.info('SQLite integrity check passed');
+                return true;
+            } catch (error) {
+                await this.rollbackTransaction();
+                throw error;
+            }
+        } catch (error) {
+            this.logger.error('SQLite integrity check failed', {
+                error: error instanceof Error ? error.message : String(error)
+            });
+            return false;
+        }
+    }
+
+    /**
+     * Gets detailed database statistics
+     */
+    async getStats(): Promise<{
+        size: number;
+        walSize: number;
+        pageCount: number;
+        pageSize: number;
+        journalMode: string;
+    }> {
+        if (!this.db) throw new Error('Database not initialized');
+        
+        try {
+            const metrics = await this.getMetrics();
+            const fs = await import('fs/promises');
+            
+            const stats = await fs.stat(this.dbPath);
+            const walPath = `${this.dbPath}-wal`;
+            const walStats = await fs.stat(walPath).catch(() => ({ size: 0 }));
+
+            const result = {
+                size: stats.size,
+                walSize: walStats.size,
+                pageCount: metrics.storage.pageCount,
+                pageSize: metrics.storage.pageSize,
+                journalMode: 'WAL'
+            };
+
+            this.logger.debug('SQLite stats retrieved', { stats: result });
+            return result;
+        } catch (error) {
+            this.logger.error('Failed to get SQLite stats', {
+                error: error instanceof Error ? error.message : String(error)
+            });
+            throw error;
+        }
     }
 
     async getMetrics(): Promise<{

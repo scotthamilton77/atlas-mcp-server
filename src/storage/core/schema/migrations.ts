@@ -33,33 +33,48 @@ export class SchemaManager {
             version: 1,
             description: 'Initial schema',
             up: async (db: Database) => {
-                await db.exec(`
-                    CREATE TABLE IF NOT EXISTS schema_migrations (
-                        version INTEGER PRIMARY KEY,
-                        description TEXT NOT NULL,
-                        applied_at INTEGER NOT NULL
-                    );
+                // Create tables one at a time with error handling
+                await db.exec('BEGIN IMMEDIATE');
+                
+                try {
+                    // Create schema_migrations table first
+                    await db.exec(`
+                        CREATE TABLE IF NOT EXISTS schema_migrations (
+                            version INTEGER PRIMARY KEY,
+                            description TEXT NOT NULL,
+                            applied_at INTEGER NOT NULL
+                        )
+                    `);
 
-                    CREATE TABLE IF NOT EXISTS tasks (
-                        path TEXT PRIMARY KEY,
-                        name TEXT NOT NULL,
-                        description TEXT,
-                        type TEXT NOT NULL,
-                        status TEXT NOT NULL,
-                        parent_path TEXT,
-                        notes TEXT,
-                        reasoning TEXT,
-                        dependencies TEXT,
-                        subtasks TEXT,
-                        metadata TEXT,
-                        created_at INTEGER NOT NULL,
-                        updated_at INTEGER NOT NULL
-                    );
+                    // Create tasks table with proper column types
+                    await db.exec(`
+                        CREATE TABLE IF NOT EXISTS tasks (
+                            path TEXT PRIMARY KEY,
+                            name TEXT NOT NULL,
+                            description TEXT,
+                            type TEXT NOT NULL CHECK(type IN ('TASK', 'GROUP', 'MILESTONE')),
+                            status TEXT NOT NULL CHECK(status IN ('PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'BLOCKED')),
+                            parent_path TEXT REFERENCES tasks(path) ON DELETE CASCADE,
+                            notes TEXT,
+                            reasoning TEXT,
+                            dependencies TEXT CHECK(json_valid(COALESCE(dependencies, '[]'))),
+                            subtasks TEXT CHECK(json_valid(COALESCE(subtasks, '[]'))),
+                            metadata TEXT CHECK(json_valid(COALESCE(metadata, '{}'))),
+                            created_at INTEGER NOT NULL,
+                            updated_at INTEGER NOT NULL
+                        )
+                    `);
 
-                    CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_path);
-                    CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
-                    CREATE INDEX IF NOT EXISTS idx_tasks_type ON tasks(type);
-                `);
+                    // Create indexes with proper syntax
+                    await db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_path) WHERE parent_path IS NOT NULL`);
+                    await db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)`);
+                    await db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_type ON tasks(type)`);
+                    
+                    await db.exec('COMMIT');
+                } catch (error) {
+                    await db.exec('ROLLBACK');
+                    throw error;
+                }
             },
             down: async (db: Database) => {
                 await db.exec(`
@@ -77,7 +92,7 @@ export class SchemaManager {
                 await db.exec(`
                     CREATE INDEX IF NOT EXISTS idx_tasks_created ON tasks(created_at);
                     CREATE INDEX IF NOT EXISTS idx_tasks_updated ON tasks(updated_at);
-                    CREATE INDEX IF NOT EXISTS idx_tasks_dependencies ON tasks(dependencies);
+                    CREATE INDEX IF NOT EXISTS idx_tasks_dependencies ON tasks(dependencies) WHERE json_array_length(dependencies) > 0;
                 `);
             },
             down: async (db: Database) => {

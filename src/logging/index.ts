@@ -76,11 +76,13 @@ export class Logger {
     /**
      * Gets the logger instance
      */
+    private static initializationPromise: Promise<Logger> | null = null;
+
     static getInstance(): Logger {
         if (!Logger.instance) {
-            Logger.instance = new Logger({
-                minLevel: LogLevels.INFO,
-                console: true
+            throw new BaseError({
+                code: ErrorCodes.INVALID_STATE,
+                message: 'Logger not initialized. Call Logger.initialize() first.'
             });
         }
         return Logger.instance;
@@ -89,14 +91,39 @@ export class Logger {
     /**
      * Initializes the logger with configuration
      */
-    static initialize(config: LoggerConfig): void {
+    static async initialize(config: LoggerConfig): Promise<Logger> {
+        // Return existing instance if available
         if (Logger.instance) {
-            throw new BaseError({
-                code: ErrorCodes.INVALID_STATE,
-                message: 'Logger already initialized'
-            });
+            return Logger.instance;
         }
-        Logger.instance = new Logger(config);
+
+        // If initialization is in progress, wait for it
+        if (Logger.initializationPromise) {
+            return Logger.initializationPromise;
+        }
+
+        // Start new initialization with mutex
+        Logger.initializationPromise = (async () => {
+            try {
+                // Double-check instance hasn't been created while waiting
+                if (Logger.instance) {
+                    return Logger.instance;
+                }
+
+                Logger.instance = new Logger(config);
+                return Logger.instance;
+            } catch (error) {
+                throw new BaseError({
+                    code: ErrorCodes.STORAGE_INIT,
+                    message: 'Failed to initialize logger',
+                    details: { error: error instanceof Error ? error.message : String(error) }
+                });
+            } finally {
+                Logger.initializationPromise = null;
+            }
+        })();
+
+        return Logger.initializationPromise;
     }
 
     /**

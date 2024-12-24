@@ -28,8 +28,11 @@ export class TaskOperations {
   private activeTransactions: Set<string> = new Set();
   private isShuttingDown = false;
   private readonly TRANSACTION_TIMEOUT = 5000; // 5 seconds
+  private static instance: TaskOperations | null = null;
+  private static initializationPromise: Promise<TaskOperations> | null = null;
+  private initialized = false;
 
-  constructor(
+  private constructor(
     private readonly storage: TaskStorage,
     private readonly validator: TaskValidator
   ) {
@@ -44,6 +47,59 @@ export class TaskOperations {
     
     // Log initial memory state
     this.logMemoryUsage('Initialization');
+  }
+
+  /**
+   * Gets the TaskOperations instance
+   */
+  static async getInstance(storage: TaskStorage, validator: TaskValidator): Promise<TaskOperations> {
+    // Return existing instance if available
+    if (TaskOperations.instance && TaskOperations.instance.initialized) {
+      return TaskOperations.instance;
+    }
+
+    // If initialization is in progress, wait for it
+    if (TaskOperations.initializationPromise) {
+      return TaskOperations.initializationPromise;
+    }
+
+    // Start new initialization with mutex
+    TaskOperations.initializationPromise = (async () => {
+      try {
+        // Double-check instance hasn't been created while waiting
+        if (TaskOperations.instance && TaskOperations.instance.initialized) {
+          return TaskOperations.instance;
+        }
+
+        TaskOperations.instance = new TaskOperations(storage, validator);
+        await TaskOperations.instance.initialize();
+        return TaskOperations.instance;
+      } catch (error) {
+        throw createError(
+          ErrorCodes.STORAGE_INIT,
+          `Failed to initialize TaskOperations: ${error instanceof Error ? error.message : String(error)}`
+        );
+      } finally {
+        TaskOperations.initializationPromise = null;
+      }
+    })();
+
+    return TaskOperations.initializationPromise;
+  }
+
+  private async initialize(): Promise<void> {
+    if (this.initialized) {
+      this.logger.debug('Task operations already initialized');
+      return;
+    }
+
+    try {
+      this.initialized = true;
+      this.logger.debug('Task operations initialized');
+    } catch (error) {
+      this.logger.error('Failed to initialize task operations', { error });
+      throw error;
+    }
   }
 
   private setupEventListeners(): void {
@@ -62,9 +118,6 @@ export class TaskOperations {
     setupListener(EventTypes.TASK_STATUS_CHANGED);
   }
 
-  /**
-   * Cleanup resources and prepare for shutdown
-   */
   private startMemoryMonitoring(): void {
     // Monitor memory usage periodically
     this.memoryCheckInterval = setInterval(() => {
@@ -248,6 +301,12 @@ export class TaskOperations {
   }
 
   async createTask(input: CreateTaskInput): Promise<Task> {
+    if (!this.initialized) {
+      throw createError(
+        ErrorCodes.OPERATION_FAILED,
+        'Task operations not initialized'
+      );
+    }
     if (this.isShuttingDown) {
       throw createError(
         ErrorCodes.OPERATION_FAILED,
@@ -301,6 +360,12 @@ export class TaskOperations {
   }
 
   async updateTask(path: string, updates: UpdateTaskInput, retryCount: number = 0): Promise<Task> {
+    if (!this.initialized) {
+      throw createError(
+        ErrorCodes.OPERATION_FAILED,
+        'Task operations not initialized'
+      );
+    }
     if (this.isShuttingDown) {
       throw createError(
         ErrorCodes.OPERATION_FAILED,
@@ -399,6 +464,12 @@ export class TaskOperations {
   }
 
   async deleteTask(path: string): Promise<void> {
+    if (!this.initialized) {
+      throw createError(
+        ErrorCodes.OPERATION_FAILED,
+        'Task operations not initialized'
+      );
+    }
     if (this.isShuttingDown) {
       throw createError(
         ErrorCodes.OPERATION_FAILED,

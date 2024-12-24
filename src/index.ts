@@ -6,8 +6,11 @@ import { EventManager } from './events/event-manager.js';
 import { EventTypes } from './types/events.js';
 import { BaseError, ErrorCodes, createError } from './errors/index.js';
 import { ConfigManager } from './config/index.js';
+import { join } from 'path';
+import { promises as fs } from 'fs';
 
 import { TaskStorage } from './types/storage.js';
+import { CreateTaskInput, UpdateTaskInput, TaskStatus } from './types/task.js';
 
 let server: AtlasServer;
 let storage: TaskStorage;
@@ -23,22 +26,34 @@ async function main() {
     }
 
     // Initialize logger first before any other operations
-    Logger.initialize({
+    const logDir = process.env.ATLAS_STORAGE_DIR ? 
+        `${process.env.ATLAS_STORAGE_DIR}/logs` : 
+        join(process.env.HOME || '', 'Documents/Cline/mcp-workspace/ATLAS/logs');
+
+    // Create log directory with proper permissions
+    await fs.mkdir(logDir, { recursive: true, mode: 0o755 });
+
+    // Initialize logger with explicit file permissions and await initialization
+    const logger = await Logger.initialize({
         console: true,
         file: true,
         minLevel: 'debug',
-        logDir: process.env.ATLAS_STORAGE_DIR ? `${process.env.ATLAS_STORAGE_DIR}/logs` : 'logs',
+        logDir: logDir,  // Ensure logDir is explicitly set
         maxFileSize: 5 * 1024 * 1024, // 5MB
-        maxFiles: 5
+        maxFiles: 5,
+        noColors: false  // Enable colors for better readability
     });
-    const logger = Logger.getInstance();
+    logger.info('Logger initialized', { logDir, permissions: '0755' });
 
-    // Then initialize other components
-    const eventManager = EventManager.getInstance();
-    const configManager = ConfigManager.getInstance();
-    
-    // Update config after logger is initialized
-    await configManager.updateConfig({
+    // Ensure logger is fully initialized before proceeding
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Increase event listener limits to prevent warnings
+    process.setMaxListeners(20);
+
+    // Initialize components in correct order
+    const eventManager = await EventManager.initialize();
+    const configManager = await ConfigManager.initialize({
         logging: {
             console: true,
             file: true,
@@ -75,14 +90,20 @@ async function main() {
             }
         });
 
-        // Initialize storage using factory
+        // Initialize storage with mutex
         storage = await createStorage(config.storage);
+        
+        // Initialize task manager with existing storage instance
+        taskManager = await TaskManager.getInstance(storage);
 
-        // Initialize task manager
-        taskManager = new TaskManager(storage);
+        // Run maintenance after initialization
+        await storage.vacuum();
+        await storage.analyze();
+        await storage.checkpoint();
 
-        // Initialize server with tool handler
-        server = new AtlasServer(
+        // Initialize server only if it doesn't exist
+        if (!server) {
+            server = await AtlasServer.getInstance(
             {
                 name: 'atlas-mcp-server',
                 version: '0.1.0',
@@ -314,7 +335,8 @@ async function main() {
                     ]
                 }),
                 handleToolCall: async (request) => {
-                    const { name, arguments: args } = request.params;
+                    const name = request.params?.name as string;
+                    const args = request.params?.arguments as Record<string, any>;
                     const eventManager = EventManager.getInstance();
                     let result;
 
@@ -331,7 +353,7 @@ async function main() {
 
                         switch (name) {
                         case 'create_task':
-                            result = await taskManager.createTask(args);
+                            result = await taskManager.createTask(args as CreateTaskInput);
                             return {
                                 content: [{
                                     type: 'text',
@@ -339,7 +361,7 @@ async function main() {
                                 }]
                             };
                         case 'update_task':
-                            result = await taskManager.updateTask(args.path, args.updates);
+                            result = await taskManager.updateTask(args.path as string, args.updates as UpdateTaskInput);
                             return {
                                 content: [{
                                     type: 'text',
@@ -347,7 +369,7 @@ async function main() {
                                 }]
                             };
                         case 'delete_task':
-                            await taskManager.deleteTask(args.path);
+                            await taskManager.deleteTask(args.path as string);
                             return {
                                 content: [{
                                     type: 'text',
@@ -355,7 +377,7 @@ async function main() {
                                 }]
                             };
                         case 'get_tasks_by_status':
-                            result = await taskManager.getTasksByStatus(args.status);
+                            result = await taskManager.getTasksByStatus(args.status as TaskStatus);
                             return {
                                 content: [{
                                     type: 'text',
@@ -363,7 +385,7 @@ async function main() {
                                 }]
                             };
                         case 'get_tasks_by_path':
-                            result = await taskManager.listTasks(args.pattern);
+                            result = await taskManager.listTasks(args.pattern as string);
                             return {
                                 content: [{
                                     type: 'text',
@@ -371,7 +393,7 @@ async function main() {
                                 }]
                             };
                         case 'get_subtasks':
-                            result = await taskManager.getSubtasks(args.parentPath);
+                            result = await taskManager.getSubtasks(args.parentPath as string);
                             return {
                                 content: [{
                                     type: 'text',
@@ -379,7 +401,7 @@ async function main() {
                                 }]
                             };
                         case 'bulk_task_operations':
-                            result = await taskManager.bulkTaskOperations(args.operations);
+                            result = await taskManager.bulkTaskOperations(args.operations as Array<{ type: 'create' | 'update' | 'delete', path: string, data?: CreateTaskInput | UpdateTaskInput }>);
                             return {
                                 content: [{
                                     type: 'text',
@@ -387,7 +409,7 @@ async function main() {
                                 }]
                             };
                         case 'clear_all_tasks':
-                            await taskManager.clearAllTasks(args.confirm);
+                            await taskManager.clearAllTasks(args.confirm as boolean);
                             return {
                                 content: [{
                                     type: 'text',
@@ -395,7 +417,7 @@ async function main() {
                                 }]
                             };
                         case 'vacuum_database':
-                            await taskManager.vacuumDatabase(args.analyze);
+                            await taskManager.vacuumDatabase(args.analyze as boolean);
                             return {
                                 content: [{
                                     type: 'text',
@@ -403,7 +425,7 @@ async function main() {
                                 }]
                             };
                         case 'repair_relationships':
-                            result = await taskManager.repairRelationships(args.dryRun, args.pathPattern);
+                            result = await taskManager.repairRelationships(args.dryRun as boolean, args.pathPattern as string | undefined);
                             return {
                                 content: [{
                                     type: 'text',
@@ -456,9 +478,7 @@ async function main() {
                 }
             }
         );
-
-        // Run server
-        await server.run();
+        }
     } catch (error) {
         // Emit system error event
         eventManager.emitSystemEvent({

@@ -58,11 +58,23 @@ export class TransactionManager {
             retryCount = 0
         } = options;
 
+        // Check for existing transaction
+        const existingTxs = this.connectionTransactions.get(connectionId);
+        if (existingTxs && existingTxs.size > 0) {
+            // Return existing transaction ID for nested transaction
+            const existingTxId = Array.from(existingTxs)[0];
+            const existingTx = this.activeTransactions.get(existingTxId);
+            if (existingTx) {
+                existingTx.depth++;
+                return existingTxId;
+            }
+        }
+
         // Generate unique transaction ID
         const txId = crypto.randomUUID();
 
         try {
-            // Start transaction with specified isolation
+            // Start new transaction with specified isolation
             await db.exec(`BEGIN ${isolation}`);
 
             // Set up transaction timeout
@@ -142,6 +154,12 @@ export class TransactionManager {
             );
         }
 
+        // Handle nested transactions
+        if (transaction.depth > 1) {
+            transaction.depth--;
+            return;
+        }
+
         try {
             await db.exec('COMMIT');
 
@@ -178,6 +196,12 @@ export class TransactionManager {
                 'Transaction not found',
                 `Transaction ${txId} not found`
             );
+        }
+
+        // Handle nested transactions
+        if (transaction.depth > 1) {
+            transaction.depth--;
+            return;
         }
 
         try {

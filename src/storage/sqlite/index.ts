@@ -10,14 +10,12 @@
  * - Data integrity verification
  */
 
-// Core initialization and maintenance functions
+// Core initialization and cleanup
 export { 
-    initializeSqliteStorage,  // Initialize SQLite storage with proper configuration
-    verifySqliteIntegrity,   // Verify database integrity and repair if needed
-    getSqliteStats           // Get detailed database statistics and metrics
+    initializeSqliteStorage  // Initialize SQLite storage cleanup handlers
 } from './init.js';
 
-// Main storage implementation and configuration
+// Storage implementation and configuration
 export { 
     SqliteStorage,           // Main storage class implementing TaskStorage interface
     SqliteConfig,            // Configuration interface for SQLite storage

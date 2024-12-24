@@ -34,11 +34,11 @@ export abstract class BaseBatchProcessor<T = unknown> {
   }> = new Map();
   private isShuttingDown = false;
   private cleanupInterval?: NodeJS.Timeout;
-  private readonly CLEANUP_INTERVAL = 30000; // 30 seconds - more frequent cleanup
-  private readonly BATCH_RESULT_TTL = 60000; // 1 minute - shorter TTL
-  private readonly MEMORY_CHECK_INTERVAL = 10000; // 10 seconds
+  private readonly CLEANUP_INTERVAL = 300000; // 5 minutes
+  private readonly BATCH_RESULT_TTL = 600000; // 10 minutes
+  private readonly MEMORY_CHECK_INTERVAL = 60000; // 1 minute
+  private readonly HEAP_THRESHOLD = 0.9; // 90% heap usage threshold
   private memoryCheckInterval?: NodeJS.Timeout;
-  private readonly HEAP_THRESHOLD = 0.7; // 70% heap usage threshold
 
   constructor(
     protected readonly dependencies: BatchDependencies,
