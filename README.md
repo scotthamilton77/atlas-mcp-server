@@ -29,6 +29,10 @@ ATLAS implements the Model Context Protocol (MCP), created by Anthropic, which e
 - **Servers** that provide tools and resources
 - **LLMs** that interact with servers through client applications
 
+#### Dev Note:
+- This project is in active development and may have breaking changes.
+- This is my first time working with TypeScript and I'm learning as I go.
+
 ### Core Components
 
 - **TaskManager**: Centralized task coordination with validation and event handling

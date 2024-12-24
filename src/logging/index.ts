@@ -197,7 +197,11 @@ export class Logger {
         // File transport
         if (config.file && config.logDir) {
             // Ensure log directory exists with platform-appropriate permissions
-            mkdirSync(config.logDir, { recursive: true, mode: process.platform === 'win32' ? undefined : 0o755 });
+            mkdirSync(config.logDir, { 
+                recursive: true, 
+                // Skip mode on Windows as it's ignored
+                ...(process.platform !== 'win32' && { mode: 0o755 })
+            });
 
             const errorLogPath = join(config.logDir, 'error.log');
             const combinedLogPath = join(config.logDir, 'combined.log');

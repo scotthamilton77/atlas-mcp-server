@@ -12,11 +12,14 @@ export class PathUtils {
    * - Normalizing slashes
    */
   static normalize(path: string): string {
-    return path.toLowerCase()
+    // First convert Windows backslashes to forward slashes
+    const normalized = path.replace(/\\/g, '/');
+    
+    return normalized.toLowerCase()
       .trim()
       .replace(/\s+/g, '-')
       .replace(/[^a-z0-9-\/]/g, '')
-      .replace(/\/+/g, '/')
+      .replace(/\/+/g, '/') // Normalize multiple slashes to single
       .replace(/^\/+|\/+$/g, ''); // Trim leading/trailing slashes
   }
 
@@ -80,8 +83,8 @@ export class PathUtils {
       );
     }
 
-    // Validate path format
-    const pathRegex = /^[a-z0-9-]+(?:\/[a-z0-9-]+)*$/;
+    // Validate path format (allow both forward and backslashes in input, but normalize to forward slashes)
+    const pathRegex = /^[a-z0-9-]+(?:[\/\\][a-z0-9-]+)*$/;
     if (!pathRegex.test(normalized)) {
       throw createError(
         ErrorCodes.INVALID_INPUT,

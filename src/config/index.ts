@@ -40,6 +40,40 @@ export interface LoggingConfig {
 }
 
 /**
+ * Storage configuration type
+ */
+export interface StorageConfig {
+    baseDir: string;
+    name: string;
+    connection?: {
+        maxRetries?: number;
+        retryDelay?: number;
+        busyTimeout?: number;
+    };
+    performance?: {
+        checkpointInterval?: number;
+        cacheSize?: number;
+        mmapSize?: number;
+        pageSize?: number;
+    };
+}
+
+/**
+ * Application configuration type
+ */
+export interface AppConfig {
+    env: string;
+    logging: LoggingConfig;
+    storage: StorageConfig;  // Make storage required
+}
+
+export interface PartialAppConfig {
+    env?: string;
+    logging?: Partial<LoggingConfig>;
+    storage?: Partial<StorageConfig>;
+}
+
+/**
  * Configuration schema
  */
 export const configSchema = {
@@ -57,15 +91,7 @@ export const configSchema = {
         properties: {
             level: {
                 type: 'string',
-                enum: [
-                    LogLevels.ERROR,
-                    LogLevels.WARN,
-                    LogLevels.INFO,
-                    LogLevels.HTTP,
-                    LogLevels.VERBOSE,
-                    LogLevels.DEBUG,
-                    LogLevels.SILLY
-                ],
+                enum: Object.values(LogLevels),
                 default: LogLevels.INFO
             },
             console: {
@@ -158,20 +184,39 @@ export const configSchema = {
  * Default logging configuration
  */
 const defaultLoggingConfig: LoggingConfig = {
-            level: LogLevels.INFO,
-            console: true,
-            file: true,
-            dir: 'logs',
-            maxFiles: 5,
-            maxSize: 5242880
+    level: LogLevels.INFO,
+    console: true,
+    file: true,
+    dir: 'logs',
+    maxFiles: 5,
+    maxSize: 5242880
 };
 
 /**
  * Default configuration values
  */
-export const defaultConfig = {
+export const defaultConfig: AppConfig = {
     env: Environments.DEVELOPMENT,
-    logging: defaultLoggingConfig
+    logging: defaultLoggingConfig,
+    storage: {
+        baseDir: join(process.platform === 'win32' ? 
+            process.env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local') :
+            process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share'),
+            'atlas-mcp', 'storage'
+        ),
+        name: 'atlas-tasks',
+        connection: {
+            maxRetries: 3,
+            retryDelay: 1000,
+            busyTimeout: 5000
+        },
+        performance: {
+            checkpointInterval: 300000, // 5 minutes
+            cacheSize: 2000,
+            mmapSize: 30000000000, // 30GB
+            pageSize: 4096
+        }
+    }
 };
 
 /**
@@ -180,7 +225,7 @@ export const defaultConfig = {
 export class ConfigManager {
     private static instance: ConfigManager | null = null;
     private static initializationPromise: Promise<ConfigManager> | null = null;
-    private config: any;
+    private config: AppConfig;
     private initialized = false;
 
     private constructor() {
@@ -203,7 +248,7 @@ export class ConfigManager {
     /**
      * Initializes the configuration manager with custom config
      */
-    static async initialize(config?: any): Promise<ConfigManager> {
+    static async initialize(config?: PartialAppConfig): Promise<ConfigManager> {
         // Return existing instance if available
         if (ConfigManager.instance && ConfigManager.instance.initialized) {
             return ConfigManager.instance;
@@ -244,14 +289,14 @@ export class ConfigManager {
     /**
      * Gets the current configuration
      */
-    getConfig(): any {
+    getConfig(): AppConfig {
         return { ...this.config };
     }
 
     /**
      * Updates the configuration
      */
-    async updateConfig(updates: any): Promise<void> {
+    async updateConfig(updates: PartialAppConfig): Promise<void> {
         const newConfig = {
             ...this.config,
             ...updates,
@@ -282,11 +327,30 @@ export class ConfigManager {
     }
 
     /**
+     * Gets platform-specific user data directory
+     */
+    private getUserDataDir(): string {
+        // Try environment variables first
+        if (process.env.LOCALAPPDATA) {
+            return process.env.LOCALAPPDATA;
+        }
+        if (process.env.XDG_DATA_HOME) {
+            return process.env.XDG_DATA_HOME;
+        }
+
+        // Fall back to platform-specific defaults
+        const home = homedir();
+        return process.platform === 'win32'
+            ? join(home, 'AppData', 'Local')
+            : join(home, '.local', 'share');
+    }
+
+    /**
      * Loads configuration from environment variables and ensures directories exist
      */
-    private async loadEnvConfig(customConfig: any): Promise<any> {
-        const env = process.env[EnvVars.NODE_ENV];
-        const logLevel = process.env[EnvVars.LOG_LEVEL];
+    private async loadEnvConfig(customConfig: PartialAppConfig): Promise<AppConfig> {
+        const currentEnv = process.env[EnvVars.NODE_ENV];
+        const currentLogLevel = process.env[EnvVars.LOG_LEVEL];
         
         // Handle storage directory with platform-agnostic paths
         let storageDir = customConfig.storage?.baseDir || process.env[EnvVars.ATLAS_STORAGE_DIR];
@@ -294,12 +358,8 @@ export class ConfigManager {
         
         // Use defaults if env vars not provided
         if (!storageDir) {
-            if (process.platform === 'win32') {
-                storageDir = join(process.env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local'), 'AtlasMCP', 'storage');
-            } else {
-                const xdgDataHome = process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share');
-                storageDir = join(xdgDataHome, 'atlas-mcp', 'storage');
-            }
+            const userDataDir = this.getUserDataDir();
+            storageDir = join(userDataDir, 'atlas-mcp', 'storage');
         }
 
         if (!storageName) {
@@ -312,7 +372,8 @@ export class ConfigManager {
             const fs = await import('fs/promises');
             await fs.mkdir(storageDir, { 
                 recursive: true,
-                mode: process.platform === 'win32' ? undefined : 0o755
+                // Skip mode on Windows as it's ignored
+                ...(process.platform !== 'win32' && { mode: 0o755 })
             });
         } catch (error) {
             throw new ConfigError(
@@ -321,7 +382,8 @@ export class ConfigManager {
             );
         }
 
-        const config: any = {
+        const config: AppConfig = {
+            env: currentEnv || Environments.DEVELOPMENT,
             storage: {
                 baseDir: storageDir,
                 name: storageName,
@@ -340,25 +402,25 @@ export class ConfigManager {
             logging: { ...defaultLoggingConfig }
         };
 
-        if (env) {
-            if (!Object.values(Environments).includes(env as any)) {
+        if (currentEnv) {
+            if (!Object.values(Environments).includes(currentEnv as any)) {
                 throw new ConfigError(
                     ErrorCodes.CONFIG_INVALID,
                     'Invalid environment'
                 );
             }
-            config.env = env;
+            config.env = currentEnv;
         }
 
-        if (logLevel) {
-            const level = logLevel.toLowerCase();
+        if (currentLogLevel) {
+            const level = currentLogLevel.toLowerCase();
             if (!Object.values(LogLevels).includes(level as any)) {
                 throw new ConfigError(
                     ErrorCodes.CONFIG_INVALID,
                     'Invalid log level'
                 );
             }
-            config.logging!.level = level;
+            config.logging.level = level as LogLevel;
         }
 
         return config;
@@ -367,8 +429,7 @@ export class ConfigManager {
     /**
      * Validates configuration against schema
      */
-    private validateConfig(config: any): void {
-        // Basic validation - could be expanded
+    private validateConfig(config: AppConfig): void {
         if (!config.storage?.baseDir) {
             throw new ConfigError(
                 ErrorCodes.CONFIG_MISSING,
