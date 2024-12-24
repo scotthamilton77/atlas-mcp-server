@@ -167,7 +167,7 @@ export class ToolHandler {
                     // Create task input with proper type casting
                     const taskInput: CreateTaskInput = {
                         name: args.name as string,
-                        path: args.path as string | undefined,
+                        path: args.path as string, // Path is now required
                         type: args.type ? (args.type as string).toUpperCase() as TaskType : undefined,
                         description: args.description as string | undefined,
                         parentPath: args.parentPath as string | undefined,

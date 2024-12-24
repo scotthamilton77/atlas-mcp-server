@@ -4,22 +4,19 @@ import { CreateTaskInput, UpdateTaskInput, TaskType, TaskStatus, CONSTRAINTS, Ta
 import { ErrorCodes, createError } from '../../errors/index.js';
 import { z } from 'zod';
 
-// Task metadata schema
+// Task metadata schema (user-defined fields only)
 const taskMetadataSchema = z.object({
     priority: z.enum(['low', 'medium', 'high']).optional(),
     tags: z.array(z.string().max(100)).max(100).optional(),
     reasoning: z.string().max(2000).optional(),
     toolsUsed: z.array(z.string().max(100)).max(100).optional(),
     resourcesAccessed: z.array(z.string().max(100)).max(100).optional(),
-    contextUsed: z.array(z.string().max(1000)).max(100).optional(),
-    created: z.number(),
-    updated: z.number(),
-    projectPath: z.string().max(1000),
-    version: z.number().positive()
+    contextUsed: z.array(z.string().max(1000)).max(100).optional()
 }).passthrough();
 
-// Base task schema
+// Base task schema with system fields at root level
 const baseTaskSchema = z.object({
+    // System fields
     path: z.string()
         .regex(/^[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*$/)
         .refine(
@@ -27,14 +24,22 @@ const baseTaskSchema = z.object({
             'Path depth cannot exceed 8 levels'
         ),
     name: z.string().min(1).max(200),
-    description: z.string().max(2000).optional(),
     type: z.nativeEnum(TaskType),
     status: z.nativeEnum(TaskStatus),
+    created: z.number(),
+    updated: z.number(),
+    version: z.number().positive(),
+    projectPath: z.string().max(1000),
+
+    // Optional fields
+    description: z.string().max(2000).optional(),
     parentPath: z.string().optional(),
     notes: z.array(z.string().max(1000)).max(100).optional(),
     reasoning: z.string().max(2000).optional(),
     dependencies: z.array(z.string()).max(50),
     subtasks: z.array(z.string()).max(100),
+
+    // User-defined metadata
     metadata: taskMetadataSchema
 });
 
@@ -104,10 +109,9 @@ export const createTaskSchema = z.object({
     path: z.string()
         .regex(/^[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*$/)
         .refine(
-            (path) => !path || path.split('/').length <= 8,
+            (path) => path.split('/').length <= 8,
             'Path depth cannot exceed 8 levels'
-        )
-        .optional(),
+        ),
     name: z.string().min(1).max(200),
     parentPath: z.string()
         .regex(/^[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*$/)
@@ -121,15 +125,7 @@ export const createTaskSchema = z.object({
     notes: z.array(z.string().max(1000)).max(100).optional(),
     reasoning: z.string().max(2000).optional(),
     dependencies: z.array(z.string()).max(50).optional(),
-    metadata: z.object({
-        priority: z.enum(['low', 'medium', 'high']).optional(),
-        tags: z.array(z.string().max(100)).max(100).optional(),
-        reasoning: z.string().max(2000).optional(),
-        toolsUsed: z.array(z.string().max(100)).max(100).optional(),
-        resourcesAccessed: z.array(z.string().max(100)).max(100).optional(),
-        contextUsed: z.array(z.string().max(1000)).max(100).optional(),
-        dependencies: z.array(z.string()).max(50).optional()
-    }).partial().optional()
+    metadata: taskMetadataSchema.optional()
 });
 
 // Update task input schema
@@ -141,15 +137,7 @@ export const updateTaskSchema = z.object({
     notes: z.array(z.string().max(1000)).max(100).optional(),
     reasoning: z.string().max(2000).optional(),
     dependencies: z.array(z.string()).max(50).optional(),
-    metadata: z.object({
-        priority: z.enum(['low', 'medium', 'high']).optional(),
-        tags: z.array(z.string().max(100)).max(100).optional(),
-        reasoning: z.string().max(2000).optional(),
-        toolsUsed: z.array(z.string().max(100)).max(100).optional(),
-        resourcesAccessed: z.array(z.string().max(100)).max(100).optional(),
-        contextUsed: z.array(z.string().max(1000)).max(100).optional(),
-        dependencies: z.array(z.string()).max(50).optional()
-    }).partial().optional()
+    metadata: taskMetadataSchema.optional()
 });
 
 // Task response schema
@@ -342,12 +330,6 @@ export class TaskValidator {
           );
         }
 
-        if (parent.type === TaskType.GROUP && input.type === TaskType.MILESTONE) {
-          throw createError(
-            ErrorCodes.INVALID_INPUT,
-            'GROUP type cannot contain MILESTONE tasks'
-          );
-        }
       }
 
       // Validate dependencies if provided
@@ -464,14 +446,13 @@ export class TaskValidator {
       name: 'Temporary Task',
       type: TaskType.TASK,
       status: TaskStatus.PENDING,
+      created: Date.now(),
+      updated: Date.now(),
+      version: 1,
+      projectPath: 'temp',
       dependencies: [],
       subtasks: [],
-      metadata: {
-        version: 1,
-        created: Date.now(),
-        updated: Date.now(),
-        projectPath: 'temp'
-      }
+      metadata: {}
     };
 
     const hasCycle = await detectDependencyCycle(

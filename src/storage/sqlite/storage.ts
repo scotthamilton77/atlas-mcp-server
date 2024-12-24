@@ -166,7 +166,8 @@ export class SqliteStorage implements TaskStorage {
                     subtasks TEXT,
                     metadata TEXT,
                     created_at INTEGER NOT NULL,
-                    updated_at INTEGER NOT NULL
+                    updated_at INTEGER NOT NULL,
+                    version INTEGER NOT NULL DEFAULT 1
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_path);
@@ -269,24 +270,30 @@ export class SqliteStorage implements TaskStorage {
             );
         }
 
+        const now = Date.now();
+        const projectPath = input.path.split('/')[0];
+        
         const task: Task = {
+            // System fields
             path: input.path,
             name: input.name,
             type: input.type,
             status: TaskStatus.PENDING,
+            created: now,
+            updated: now,
+            version: 1,
+            projectPath,
+
+            // Optional fields
             description: input.description,
             parentPath: input.parentPath,
             notes: input.notes || [],
             reasoning: input.reasoning,
             dependencies: input.dependencies || [],
             subtasks: [],
-            metadata: {
-                ...input.metadata,
-                created: Date.now(),
-                updated: Date.now(),
-                projectPath: input.path.split('/')[0],
-                version: 1
-            }
+            
+            // User metadata
+            metadata: input.metadata || {}
         };
 
         await this.saveTask(task);
@@ -306,14 +313,17 @@ export class SqliteStorage implements TaskStorage {
             );
         }
 
+        const now = Date.now();
         const updatedTask: Task = {
             ...existingTask,
             ...updates,
+            // Update system fields
+            updated: now,
+            version: existingTask.version + 1,
+            // Keep user metadata separate
             metadata: {
                 ...existingTask.metadata,
-                ...updates.metadata,
-                updated: Date.now(),
-                version: existingTask.metadata.version + 1
+                ...updates.metadata
             }
         };
 
@@ -427,8 +437,8 @@ export class SqliteStorage implements TaskStorage {
                 `INSERT OR REPLACE INTO tasks (
                     path, name, description, type, status,
                     parent_path, notes, reasoning, dependencies,
-                    subtasks, metadata, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    subtasks, metadata, created_at, updated_at, version
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 task.path,
                 task.name,
                 task.description,
@@ -440,8 +450,9 @@ export class SqliteStorage implements TaskStorage {
                 JSON.stringify(task.dependencies),
                 JSON.stringify(task.subtasks),
                 JSON.stringify(task.metadata),
-                task.metadata.created,
-                task.metadata.updated
+                task.created,
+                task.updated,
+                task.version
             );
         }
     }
@@ -452,23 +463,30 @@ export class SqliteStorage implements TaskStorage {
     }
 
     private rowToTask(row: Record<string, unknown>): Task {
+        const metadata = this.parseJSON(String(row.metadata || '{}'), {});
+        const now = Date.now();
+        
         return {
+            // System fields
             path: String(row.path || ''),
             name: String(row.name || ''),
-            description: row.description ? String(row.description) : undefined,
             type: String(row.type || '') as Task['type'],
             status: String(row.status || '') as TaskStatus,
+            created: Number(row.created_at || now),
+            updated: Number(row.updated_at || now),
+            version: Number(row.version || 1),
+            projectPath: String(row.path || '').split('/')[0],
+
+            // Optional fields
+            description: row.description ? String(row.description) : undefined,
             parentPath: row.parent_path ? String(row.parent_path) : undefined,
             notes: this.parseJSON<string[]>(String(row.notes || '[]'), []),
             reasoning: row.reasoning ? String(row.reasoning) : undefined,
             dependencies: this.parseJSON<string[]>(String(row.dependencies || '[]'), []),
             subtasks: this.parseJSON<string[]>(String(row.subtasks || '[]'), []),
-            metadata: this.parseJSON(String(row.metadata || '{}'), {
-                created: Number(row.created_at),
-                updated: Number(row.updated_at),
-                projectPath: String(row.path || '').split('/')[0],
-                version: 1
-            })
+            
+            // User metadata
+            metadata
         };
     }
 
