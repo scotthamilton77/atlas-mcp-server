@@ -2,7 +2,69 @@
  * Task validation module
  */
 import { z } from 'zod';
-import { TaskType, TaskStatus } from '../types/task.js';
+import { TaskType, TaskStatus, CONSTRAINTS } from '../types/task.js';
+import { createError, ErrorCodes } from '../errors/index.js';
+
+/**
+ * Validates a task path format and depth
+ */
+export function validateTaskPath(path: string): { valid: boolean; error?: string } {
+    // Path must be non-empty
+    if (!path) {
+        return { valid: false, error: 'Path cannot be empty' };
+    }
+
+    // Path must contain only allowed characters
+    if (!path.match(/^[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*$/)) {
+        return { 
+            valid: false, 
+            error: 'Path can only contain alphanumeric characters, underscores, dots, and hyphens' 
+        };
+    }
+    
+    // Check path depth
+    if (path.split('/').length > CONSTRAINTS.MAX_PATH_DEPTH) {
+        return { 
+            valid: false, 
+            error: `Path depth cannot exceed ${CONSTRAINTS.MAX_PATH_DEPTH} levels` 
+        };
+    }
+
+    return { valid: true };
+}
+
+/**
+ * Validates parent-child task type relationships
+ */
+export function isValidTaskHierarchy(parentType: TaskType, childType: TaskType): { valid: boolean; reason?: string } {
+    switch (parentType) {
+        case TaskType.MILESTONE:
+            // Milestones can contain tasks and groups
+            return {
+                valid: childType === TaskType.TASK || childType === TaskType.GROUP,
+                reason: childType !== TaskType.TASK && childType !== TaskType.GROUP ?
+                    `MILESTONE can only contain TASK or GROUP types, not ${childType}` : undefined
+            };
+        case TaskType.GROUP:
+            // Groups can contain tasks
+            return {
+                valid: childType === TaskType.TASK,
+                reason: childType !== TaskType.TASK ?
+                    `GROUP can only contain TASK type, not ${childType}` : undefined
+            };
+        case TaskType.TASK:
+            // Tasks cannot contain other tasks
+            return {
+                valid: false,
+                reason: `TASK type cannot contain any subtasks (attempted to add ${childType})`
+            };
+        default:
+            return {
+                valid: false,
+                reason: `Unknown task type: ${parentType}`
+            };
+    }
+}
 
 // Task metadata schema
 const taskMetadataSchema = z.object({
@@ -131,6 +193,114 @@ export function validateCreateTaskInput(input: unknown) {
 
 export function validateUpdateTaskInput(input: unknown) {
     return updateTaskSchema.parse(input);
+}
+
+/**
+ * Validates task status transitions and dependencies
+ */
+export async function validateTaskStatusTransition(
+    task: z.infer<typeof baseTaskSchema>,
+    newStatus: TaskStatus,
+    getTaskByPath: (path: string) => Promise<z.infer<typeof baseTaskSchema> | null>
+): Promise<void> {
+    // Cannot transition from COMPLETED/FAILED back to IN_PROGRESS
+    if ((task.status === TaskStatus.COMPLETED || task.status === TaskStatus.FAILED) &&
+        newStatus === TaskStatus.IN_PROGRESS) {
+        throw createError(
+            ErrorCodes.TASK_STATUS,
+            {
+                taskPath: task.path,
+                currentStatus: task.status,
+                newStatus
+            },
+            `Cannot transition from ${task.status} to ${newStatus}`
+        );
+    }
+
+    // Check dependencies for COMPLETED status
+    if (newStatus === TaskStatus.COMPLETED) {
+        for (const depPath of task.dependencies) {
+            const depTask = await getTaskByPath(depPath);
+            if (!depTask || depTask.status !== TaskStatus.COMPLETED) {
+                throw createError(
+                    ErrorCodes.TASK_DEPENDENCY,
+                    {
+                        taskPath: task.path,
+                        dependencyPath: depPath,
+                        dependencyStatus: depTask?.status
+                    },
+                    `Cannot complete task: dependency ${depPath} is not completed`
+                );
+            }
+        }
+    }
+
+    // Check dependencies for IN_PROGRESS status
+    if (newStatus === TaskStatus.IN_PROGRESS) {
+        const blockedByDeps = await isBlockedByDependencies(task, getTaskByPath);
+        if (blockedByDeps) {
+            throw createError(
+                ErrorCodes.TASK_DEPENDENCY,
+                {
+                    taskPath: task.path,
+                    dependencies: task.dependencies
+                },
+                'Cannot start task: blocked by incomplete dependencies'
+            );
+        }
+    }
+}
+
+/**
+ * Checks if a task is blocked by its dependencies
+ */
+async function isBlockedByDependencies(
+    task: z.infer<typeof baseTaskSchema>,
+    getTaskByPath: (path: string) => Promise<z.infer<typeof baseTaskSchema> | null>
+): Promise<boolean> {
+    for (const depPath of task.dependencies) {
+        const depTask = await getTaskByPath(depPath);
+        if (!depTask || depTask.status === TaskStatus.FAILED || 
+            depTask.status === TaskStatus.BLOCKED || 
+            depTask.status === TaskStatus.PENDING) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Detects circular dependencies in task relationships
+ */
+export async function detectDependencyCycle(
+    task: z.infer<typeof baseTaskSchema>,
+    newDeps: string[],
+    getTaskByPath: (path: string) => Promise<z.infer<typeof baseTaskSchema> | null>
+): Promise<boolean> {
+    const visited = new Set<string>();
+    const recursionStack = new Set<string>();
+
+    async function dfs(currentPath: string): Promise<boolean> {
+        if (recursionStack.has(currentPath)) return true;
+        if (visited.has(currentPath)) return false;
+
+        visited.add(currentPath);
+        recursionStack.add(currentPath);
+
+        const current = await getTaskByPath(currentPath);
+        if (!current) return false;
+
+        // Check both existing and new dependencies
+        const allDeps = currentPath === task.path ? newDeps : current.dependencies;
+        for (const depPath of allDeps) {
+            if (await dfs(depPath)) return true;
+        }
+
+        recursionStack.delete(currentPath);
+        return false;
+    }
+
+    return await dfs(task.path);
 }
 
 export function validateTaskResponse(response: unknown) {

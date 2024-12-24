@@ -1,11 +1,11 @@
 /**
  * Path-based task manager implementation
  */
-import { Task, TaskStatus, TaskType, CreateTaskInput, UpdateTaskInput, TaskResponse, TaskMetadata } from './types/task.js';
+import { Task, TaskStatus, TaskType, CreateTaskInput, UpdateTaskInput, TaskResponse, TaskMetadata, getParentPath } from './types/task.js';
 import { TaskStorage } from './types/storage.js';
 import { Logger } from './logging/index.js';
 import { ErrorCodes, createError } from './errors/index.js';
-import { validateTaskPath, isValidTaskHierarchy } from './types/task.js';
+import { validateTaskPath, isValidTaskHierarchy, validateTaskStatusTransition, detectDependencyCycle, validateTask } from './validation/task.js';
 
 export class TaskManager {
     private logger: Logger;
@@ -197,6 +197,7 @@ export class TaskManager {
 
                 // Validate new dependencies if changed
                 if (dependencies !== task.dependencies) {
+                    // Check for missing dependencies
                     const missingDeps = [];
                     for (const depPath of dependencies) {
                         const depTask = await this.getTaskByPath(depPath);
@@ -214,6 +215,24 @@ export class TaskManager {
                             `Missing dependency tasks: ${missingDeps.join(', ')}. All dependencies must exist before updating task dependencies.`
                         );
                     }
+
+                    // Check for circular dependencies
+                    const hasCycle = await detectDependencyCycle(task, dependencies, this.getTaskByPath.bind(this));
+                    if (hasCycle) {
+                        throw createError(
+                            ErrorCodes.TASK_CYCLE,
+                            {
+                                path,
+                                dependencies
+                            },
+                            'Circular dependency detected in task relationships'
+                        );
+                    }
+                }
+
+                // Validate status transition if status is being updated
+                if (updates.status && updates.status !== task.status) {
+                    await validateTaskStatusTransition(task, updates.status, this.getTaskByPath.bind(this));
                 }
 
                 // Remove dependencies from metadata to avoid duplication
