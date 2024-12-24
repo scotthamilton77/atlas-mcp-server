@@ -137,7 +137,7 @@ export const createTaskSchema = {
                         'Note: dependencies in metadata.dependencies will be migrated to the main dependencies array.',
         }
     },
-    required: ['name'],
+    required: ['name', 'path'],
 };
 
 /** Updates an existing task */

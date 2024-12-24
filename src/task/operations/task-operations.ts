@@ -263,24 +263,11 @@ export class TaskOperations {
       throw createError(ErrorCodes.OPERATION_FAILED, 'System is shutting down');
     }
 
-    // Set defaults and generate path
+    // Set defaults
     const taskInput: CreateTaskInput = {
       ...input,
       type: input.type || TaskType.TASK // Default to TASK type if not provided
     };
-
-    // Generate path from name if not provided
-    if (!taskInput.path) {
-      // Convert name to URL-friendly format for path
-      const pathName = taskInput.name
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-') // Replace non-alphanumeric chars with dash
-        .replace(/^-+|-+$/g, ''); // Remove leading/trailing dashes
-      
-      taskInput.path = taskInput.parentPath 
-        ? `${taskInput.parentPath}/${pathName}`
-        : pathName;
-    }
 
     // Validate input
     await this.validator.validateCreate(taskInput);
@@ -350,14 +337,14 @@ export class TaskOperations {
     });
 
     try {
-      // Update task with version increment
+      // Update task with system fields
       const updatedTask = await this.storage.updateTask(path, {
         ...updates,
-        metadata: {
-          ...updates.metadata,
-          version: existingTask.metadata.version + 1,
-          updated: Date.now()
-        }
+        version: existingTask.version + 1,
+        updated: Date.now(),
+        // Preserve other system fields
+        created: existingTask.created,
+        projectPath: existingTask.projectPath
       });
 
       // Add operation to transaction
@@ -539,11 +526,12 @@ export class TaskOperations {
       if (depTask.status !== TaskStatus.FAILED) {
         await this.updateTask(depTask.path, {
           status: TaskStatus.BLOCKED,
-          metadata: {
-            ...depTask.metadata,
-            blockedBy: task.path,
-            blockReason: `Dependency task ${task.path} failed`
-          }
+            metadata: {
+              ...depTask.metadata,
+              blockedBy: task.path,
+              blockReason: `Dependency task ${task.path} failed`,
+              blockTimestamp: Date.now()
+            }
         });
       }
     }
@@ -557,10 +545,11 @@ export class TaskOperations {
       if (depTask.status !== TaskStatus.BLOCKED) {
         await this.updateTask(depTask.path, {
           status: TaskStatus.BLOCKED,
-          metadata: {
-            ...depTask.metadata,
-            blockedBy: task.path
-          }
+            metadata: {
+              ...depTask.metadata,
+              blockedBy: task.path,
+              blockTimestamp: Date.now()
+            }
         });
       }
     }
@@ -580,7 +569,9 @@ export class TaskOperations {
             status: TaskStatus.PENDING,
             metadata: {
               ...depTask.metadata,
-              blockedBy: undefined
+              blockedBy: undefined,
+              blockTimestamp: undefined,
+              unblockTimestamp: Date.now()
             }
           });
         }

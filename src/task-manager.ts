@@ -188,7 +188,7 @@ export class TaskManager {
                 metadata: {
                     timestamp: Date.now(),
                     requestId: Math.random().toString(36).substring(7),
-                    projectPath: result.metadata.projectPath,
+                    projectPath: result.projectPath,
                     affectedPaths: [result.path]
                 }
             };
@@ -260,7 +260,7 @@ export class TaskManager {
                 metadata: {
                     timestamp: Date.now(),
                     requestId: Math.random().toString(36).substring(7),
-                    projectPath: result.metadata.projectPath,
+                    projectPath: result.projectPath,
                     affectedPaths: [result.path]
                 }
             };
@@ -318,7 +318,7 @@ export class TaskManager {
                 metadata: {
                     timestamp: Date.now(),
                     requestId: Math.random().toString(36).substring(7),
-                    projectPath: tasks[0]?.metadata.projectPath || 'unknown',
+                    projectPath: tasks[0]?.projectPath || 'unknown',
                     affectedPaths: updates.map(u => u.path)
                 }
             };
@@ -372,7 +372,7 @@ export class TaskManager {
                 metadata: {
                     timestamp: Date.now(),
                     requestId: Math.random().toString(36).substring(7),
-                    projectPath: tasks[0]?.metadata.projectPath || 'unknown',
+                    projectPath: tasks[0]?.projectPath || 'unknown',
                     affectedPaths: updates.map(u => u.path)
                 }
             };
@@ -925,7 +925,7 @@ export class TaskManager {
                     metadata: {
                         timestamp: Date.now(),
                         requestId: Math.random().toString(36).substring(7),
-                        projectPath: results[0]?.metadata.projectPath || 'unknown',
+                        projectPath: results[0]?.projectPath || 'unknown',
                         affectedPaths: operations.map(op => op.path)
                     }
                 };

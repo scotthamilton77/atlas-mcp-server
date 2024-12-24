@@ -16,36 +16,48 @@ export enum TaskStatus {
     BLOCKED = 'BLOCKED'
 }
 
-export interface TaskMetadata {
+/**
+ * User-defined metadata for tasks
+ * All fields are optional and can be customized
+ */
+export interface TaskMetadata extends Record<string, unknown> {
     priority?: 'low' | 'medium' | 'high';
     tags?: string[];
     reasoning?: string;  // LLM's reasoning about task decisions
     toolsUsed?: string[];  // Tools used by LLM to accomplish task
     resourcesAccessed?: string[];  // Resources accessed by LLM
     contextUsed?: string[];  // Key context pieces used in decision making
-    created: number;
-    updated: number;
-    projectPath: string;
-    version: number;
-    [key: string]: unknown;
+    // Each string field max 1000 chars, arrays max 100 items
 }
 
+/**
+ * Core task interface with system fields at root level
+ */
 export interface Task {
+    // System fields (required)
     path: string;  // Max depth of 8 levels
     name: string;  // Max 200 chars
-    description?: string;  // Max 2000 chars
     type: TaskType;
     status: TaskStatus;
+    created: number;  // Timestamp of creation
+    updated: number;  // Timestamp of last update
+    version: number;  // Incremental version number
+    projectPath: string;  // Root project path
+
+    // Optional fields
+    description?: string;  // Max 2000 chars
     parentPath?: string;
     notes?: string[];  // Each note max 1000 chars
     reasoning?: string;  // Max 2000 chars - LLM's reasoning about the task
     dependencies: string[];  // Max 50 dependencies
     subtasks: string[];  // Max 100 subtasks
-    metadata: TaskMetadata;  // Each string field max 1000 chars, arrays max 100 items
+    
+    // User-defined metadata (flexible)
+    metadata: TaskMetadata;  // Custom fields defined by user
 }
 
 export interface CreateTaskInput extends Record<string, unknown> {
-    path?: string;
+    path: string;  // Now required
     name: string;
     parentPath?: string;
     description?: string;

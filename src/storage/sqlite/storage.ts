@@ -4,7 +4,7 @@ import { TaskStorage } from '../../types/storage.js';
 import { Task, TaskStatus, CreateTaskInput, UpdateTaskInput } from '../../types/task.js';
 import { Logger } from '../../logging/index.js';
 import { ErrorCodes, createError } from '../../errors/index.js';
-import { TransactionManager } from '../core/transactions/manager.js';
+import { TransactionScope, IsolationLevel } from '../core/transactions/scope.js';
 
 // Constants
 export const DEFAULT_PAGE_SIZE = 4096;
@@ -40,13 +40,11 @@ export class SqliteStorage implements TaskStorage {
     private readonly logger: Logger;
     private readonly dbPath: string;
     private isInitialized = false;
-    private readonly transactionManager: TransactionManager;
-    private currentTransactionId: string | null = null;
+    private transactionScope: TransactionScope | null = null;
 
     constructor(private readonly config: SqliteConfig) {
         this.logger = Logger.getInstance().child({ component: 'SqliteStorage' });
         this.dbPath = `${config.baseDir}/${config.name}.db`;
-        this.transactionManager = TransactionManager.getInstance();
     }
 
     async initialize(): Promise<void> {
@@ -72,6 +70,9 @@ export class SqliteStorage implements TaskStorage {
                     driver: sqlite3.Database,
                     mode: sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE
                 });
+
+                // Initialize transaction scope
+                this.transactionScope = new TransactionScope(this.db);
 
                 // Configure database with proper error handling
                 const pragmas = [
@@ -166,7 +167,8 @@ export class SqliteStorage implements TaskStorage {
                     subtasks TEXT,
                     metadata TEXT,
                     created_at INTEGER NOT NULL,
-                    updated_at INTEGER NOT NULL
+                    updated_at INTEGER NOT NULL,
+                    version INTEGER NOT NULL DEFAULT 1
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_path);
@@ -210,8 +212,8 @@ export class SqliteStorage implements TaskStorage {
 
         try {
             // Cleanup any active transactions
-            if (this.currentTransactionId) {
-                await this.rollbackTransaction();
+            if (this.transactionScope?.isActive()) {
+                await this.transactionScope.rollback();
             }
 
             this.isClosed = true;
@@ -232,28 +234,26 @@ export class SqliteStorage implements TaskStorage {
 
     // Transaction methods
     async beginTransaction(): Promise<void> {
-        if (!this.db) throw new Error('Database not initialized');
-        if (this.currentTransactionId) {
-            // Transaction already started, increment depth
-            return;
-        }
-        this.currentTransactionId = await this.transactionManager.beginTransaction(this.db);
+        if (!this.db || !this.transactionScope) throw new Error('Database not initialized');
+        await this.transactionScope.begin(IsolationLevel.SERIALIZABLE);
     }
 
     async commitTransaction(): Promise<void> {
-        if (!this.db || !this.currentTransactionId) {
-            throw new Error('No active transaction');
-        }
-        await this.transactionManager.commitTransaction(this.db, this.currentTransactionId);
-        this.currentTransactionId = null;
+        if (!this.db || !this.transactionScope) throw new Error('Database not initialized');
+        await this.transactionScope.commit();
     }
 
     async rollbackTransaction(): Promise<void> {
-        if (!this.db || !this.currentTransactionId) {
-            throw new Error('No active transaction');
-        }
-        await this.transactionManager.rollbackTransaction(this.db, this.currentTransactionId);
-        this.currentTransactionId = null;
+        if (!this.db || !this.transactionScope) throw new Error('Database not initialized');
+        await this.transactionScope.rollback();
+    }
+
+    /**
+     * Executes work within a transaction
+     */
+    async executeInTransaction<T>(work: () => Promise<T>): Promise<T> {
+        if (!this.db || !this.transactionScope) throw new Error('Database not initialized');
+        return this.transactionScope.executeInTransaction(work);
     }
 
     // Task operations
@@ -269,24 +269,30 @@ export class SqliteStorage implements TaskStorage {
             );
         }
 
+        const now = Date.now();
+        const projectPath = input.path.split('/')[0];
+        
         const task: Task = {
+            // System fields
             path: input.path,
             name: input.name,
             type: input.type,
             status: TaskStatus.PENDING,
+            created: now,
+            updated: now,
+            version: 1,
+            projectPath,
+
+            // Optional fields
             description: input.description,
             parentPath: input.parentPath,
             notes: input.notes || [],
             reasoning: input.reasoning,
             dependencies: input.dependencies || [],
             subtasks: [],
-            metadata: {
-                ...input.metadata,
-                created: Date.now(),
-                updated: Date.now(),
-                projectPath: input.path.split('/')[0],
-                version: 1
-            }
+            
+            // User metadata
+            metadata: input.metadata || {}
         };
 
         await this.saveTask(task);
@@ -306,14 +312,17 @@ export class SqliteStorage implements TaskStorage {
             );
         }
 
+        const now = Date.now();
         const updatedTask: Task = {
             ...existingTask,
             ...updates,
+            // Update system fields
+            updated: now,
+            version: existingTask.version + 1,
+            // Keep user metadata separate
             metadata: {
                 ...existingTask.metadata,
-                ...updates.metadata,
-                updated: Date.now(),
-                version: existingTask.metadata.version + 1
+                ...updates.metadata
             }
         };
 
@@ -427,8 +436,8 @@ export class SqliteStorage implements TaskStorage {
                 `INSERT OR REPLACE INTO tasks (
                     path, name, description, type, status,
                     parent_path, notes, reasoning, dependencies,
-                    subtasks, metadata, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    subtasks, metadata, created_at, updated_at, version
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 task.path,
                 task.name,
                 task.description,
@@ -440,8 +449,9 @@ export class SqliteStorage implements TaskStorage {
                 JSON.stringify(task.dependencies),
                 JSON.stringify(task.subtasks),
                 JSON.stringify(task.metadata),
-                task.metadata.created,
-                task.metadata.updated
+                task.created,
+                task.updated,
+                task.version
             );
         }
     }
@@ -452,23 +462,30 @@ export class SqliteStorage implements TaskStorage {
     }
 
     private rowToTask(row: Record<string, unknown>): Task {
+        const metadata = this.parseJSON(String(row.metadata || '{}'), {});
+        const now = Date.now();
+        
         return {
+            // System fields
             path: String(row.path || ''),
             name: String(row.name || ''),
-            description: row.description ? String(row.description) : undefined,
             type: String(row.type || '') as Task['type'],
             status: String(row.status || '') as TaskStatus,
+            created: Number(row.created_at || now),
+            updated: Number(row.updated_at || now),
+            version: Number(row.version || 1),
+            projectPath: String(row.path || '').split('/')[0],
+
+            // Optional fields
+            description: row.description ? String(row.description) : undefined,
             parentPath: row.parent_path ? String(row.parent_path) : undefined,
             notes: this.parseJSON<string[]>(String(row.notes || '[]'), []),
             reasoning: row.reasoning ? String(row.reasoning) : undefined,
             dependencies: this.parseJSON<string[]>(String(row.dependencies || '[]'), []),
             subtasks: this.parseJSON<string[]>(String(row.subtasks || '[]'), []),
-            metadata: this.parseJSON(String(row.metadata || '{}'), {
-                created: Number(row.created_at),
-                updated: Number(row.updated_at),
-                projectPath: String(row.path || '').split('/')[0],
-                version: 1
-            })
+            
+            // User metadata
+            metadata
         };
     }
 
@@ -482,8 +499,23 @@ export class SqliteStorage implements TaskStorage {
     }
 
     async vacuum(): Promise<void> {
-        if (!this.db) throw new Error('Database not initialized');
-        await this.db.run('VACUUM');
+        if (!this.db || !this.transactionScope) throw new Error('Database not initialized');
+        
+        // Ensure no active transaction before vacuum
+        await this.transactionScope.ensureNoTransaction();
+        
+        try {
+            await this.db.run('VACUUM');
+            this.logger.info('Database vacuum completed');
+        } catch (error) {
+            this.logger.error('Failed to vacuum database', { error });
+            throw createError(
+                ErrorCodes.STORAGE_ERROR,
+                'Failed to vacuum database',
+                'vacuum',
+                error instanceof Error ? error.message : String(error)
+            );
+        }
     }
 
     async analyze(): Promise<void> {

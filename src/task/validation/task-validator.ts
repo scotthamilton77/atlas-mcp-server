@@ -2,69 +2,59 @@ import { Logger } from '../../logging/index.js';
 import { TaskStorage } from '../../types/storage.js';
 import { CreateTaskInput, UpdateTaskInput, TaskType, TaskStatus, CONSTRAINTS, Task } from '../../types/task.js';
 import { ErrorCodes, createError } from '../../errors/index.js';
+import { PathValidator } from '../../validation/index.js';
 import { z } from 'zod';
 
-// Task metadata schema
+// Task metadata schema (user-defined fields only)
 const taskMetadataSchema = z.object({
     priority: z.enum(['low', 'medium', 'high']).optional(),
     tags: z.array(z.string().max(100)).max(100).optional(),
     reasoning: z.string().max(2000).optional(),
     toolsUsed: z.array(z.string().max(100)).max(100).optional(),
     resourcesAccessed: z.array(z.string().max(100)).max(100).optional(),
-    contextUsed: z.array(z.string().max(1000)).max(100).optional(),
-    created: z.number(),
-    updated: z.number(),
-    projectPath: z.string().max(1000),
-    version: z.number().positive()
+    contextUsed: z.array(z.string().max(1000)).max(100).optional()
 }).passthrough();
 
-// Base task schema
+// Initialize path validator for schema validation
+const pathValidator = new PathValidator({
+    maxDepth: CONSTRAINTS.MAX_PATH_DEPTH,
+    maxLength: 1000,
+    allowedCharacters: /^[a-zA-Z0-9-_/]+$/,
+    projectNamePattern: /^[a-zA-Z][a-zA-Z0-9-_]*$/,
+    maxProjectNameLength: 100
+});
+
+// Base task schema with system fields at root level
 const baseTaskSchema = z.object({
+    // System fields
     path: z.string()
-        .regex(/^[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*$/)
         .refine(
-            (path) => path.split('/').length <= 8,
-            'Path depth cannot exceed 8 levels'
+            (path) => {
+                const result = pathValidator.validatePath(path);
+                return result.isValid;
+            },
+            (path) => ({ message: pathValidator.validatePath(path).error || 'Invalid path format' })
         ),
     name: z.string().min(1).max(200),
-    description: z.string().max(2000).optional(),
     type: z.nativeEnum(TaskType),
     status: z.nativeEnum(TaskStatus),
+    created: z.number(),
+    updated: z.number(),
+    version: z.number().positive(),
+    projectPath: z.string().max(1000),
+
+    // Optional fields
+    description: z.string().max(2000).optional(),
     parentPath: z.string().optional(),
     notes: z.array(z.string().max(1000)).max(100).optional(),
     reasoning: z.string().max(2000).optional(),
     dependencies: z.array(z.string()).max(50),
     subtasks: z.array(z.string()).max(100),
+
+    // User-defined metadata
     metadata: taskMetadataSchema
 });
 
-/**
- * Validates a task path format and depth
- */
-export function validateTaskPath(path: string): { valid: boolean; error?: string } {
-    // Path must be non-empty
-    if (!path) {
-        return { valid: false, error: 'Path cannot be empty' };
-    }
-
-    // Path must contain only allowed characters
-    if (!path.match(/^[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*$/)) {
-        return { 
-            valid: false, 
-            error: 'Path can only contain alphanumeric characters, underscores, dots, and hyphens' 
-        };
-    }
-    
-    // Check path depth
-    if (path.split('/').length > CONSTRAINTS.MAX_PATH_DEPTH) {
-        return { 
-            valid: false, 
-            error: `Path depth cannot exceed ${CONSTRAINTS.MAX_PATH_DEPTH} levels` 
-        };
-    }
-
-    return { valid: true };
-}
 
 /**
  * Validates parent-child task type relationships
@@ -102,18 +92,21 @@ export function isValidTaskHierarchy(parentType: TaskType, childType: TaskType):
 // Create task input schema
 export const createTaskSchema = z.object({
     path: z.string()
-        .regex(/^[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*$/)
         .refine(
-            (path) => !path || path.split('/').length <= 8,
-            'Path depth cannot exceed 8 levels'
-        )
-        .optional(),
+            (path) => {
+                const result = pathValidator.validatePath(path);
+                return result.isValid;
+            },
+            (path) => ({ message: pathValidator.validatePath(path).error || 'Invalid path format' })
+        ),
     name: z.string().min(1).max(200),
     parentPath: z.string()
-        .regex(/^[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*$/)
         .refine(
-            (path) => path.split('/').length <= 7, // One less than max to allow for child
-            'Parent path depth cannot exceed 7 levels'
+            (path) => {
+                const result = pathValidator.validatePath(path);
+                return result.isValid;
+            },
+            (path) => ({ message: pathValidator.validatePath(path).error || 'Invalid parent path format' })
         )
         .optional(),
     description: z.string().max(2000).optional(),
@@ -121,15 +114,7 @@ export const createTaskSchema = z.object({
     notes: z.array(z.string().max(1000)).max(100).optional(),
     reasoning: z.string().max(2000).optional(),
     dependencies: z.array(z.string()).max(50).optional(),
-    metadata: z.object({
-        priority: z.enum(['low', 'medium', 'high']).optional(),
-        tags: z.array(z.string().max(100)).max(100).optional(),
-        reasoning: z.string().max(2000).optional(),
-        toolsUsed: z.array(z.string().max(100)).max(100).optional(),
-        resourcesAccessed: z.array(z.string().max(100)).max(100).optional(),
-        contextUsed: z.array(z.string().max(1000)).max(100).optional(),
-        dependencies: z.array(z.string()).max(50).optional()
-    }).partial().optional()
+    metadata: taskMetadataSchema.optional()
 });
 
 // Update task input schema
@@ -141,15 +126,7 @@ export const updateTaskSchema = z.object({
     notes: z.array(z.string().max(1000)).max(100).optional(),
     reasoning: z.string().max(2000).optional(),
     dependencies: z.array(z.string()).max(50).optional(),
-    metadata: z.object({
-        priority: z.enum(['low', 'medium', 'high']).optional(),
-        tags: z.array(z.string().max(100)).max(100).optional(),
-        reasoning: z.string().max(2000).optional(),
-        toolsUsed: z.array(z.string().max(100)).max(100).optional(),
-        resourcesAccessed: z.array(z.string().max(100)).max(100).optional(),
-        contextUsed: z.array(z.string().max(1000)).max(100).optional(),
-        dependencies: z.array(z.string()).max(50).optional()
-    }).partial().optional()
+    metadata: taskMetadataSchema.optional()
 });
 
 // Task response schema
@@ -301,9 +278,17 @@ export async function detectDependencyCycle(
 
 export class TaskValidator {
   private readonly logger: Logger;
+  private readonly pathValidator: PathValidator;
 
   constructor(private readonly storage: TaskStorage) {
     this.logger = Logger.getInstance().child({ component: 'TaskValidator' });
+    this.pathValidator = new PathValidator({
+      maxDepth: CONSTRAINTS.MAX_PATH_DEPTH,
+      maxLength: 1000,
+      allowedCharacters: /^[a-zA-Z0-9-_/]+$/,
+      projectNamePattern: /^[a-zA-Z][a-zA-Z0-9-_]*$/,
+      maxProjectNameLength: 100
+    });
   }
 
   async validateCreate(input: CreateTaskInput): Promise<void> {
@@ -324,6 +309,18 @@ export class TaskValidator {
         );
       }
 
+      // Validate path and parent path
+      const pathResult = input.parentPath ? 
+        this.pathValidator.validateTaskPath(input.path, input.parentPath) :
+        this.pathValidator.validatePath(input.path);
+
+      if (!pathResult.isValid) {
+        throw createError(
+          ErrorCodes.INVALID_INPUT,
+          pathResult.error || 'Invalid task path'
+        );
+      }
+
       // Validate parent path if provided
       if (input.parentPath) {
         const parent = await this.storage.getTask(input.parentPath);
@@ -339,13 +336,6 @@ export class TaskValidator {
           throw createError(
             ErrorCodes.INVALID_INPUT,
             'TASK type cannot have child tasks'
-          );
-        }
-
-        if (parent.type === TaskType.GROUP && input.type === TaskType.MILESTONE) {
-          throw createError(
-            ErrorCodes.INVALID_INPUT,
-            'GROUP type cannot contain MILESTONE tasks'
           );
         }
       }
@@ -464,14 +454,13 @@ export class TaskValidator {
       name: 'Temporary Task',
       type: TaskType.TASK,
       status: TaskStatus.PENDING,
+      created: Date.now(),
+      updated: Date.now(),
+      version: 1,
+      projectPath: 'temp',
       dependencies: [],
       subtasks: [],
-      metadata: {
-        version: 1,
-        created: Date.now(),
-        updated: Date.now(),
-        projectPath: 'temp'
-      }
+      metadata: {}
     };
 
     const hasCycle = await detectDependencyCycle(

@@ -2,6 +2,8 @@
  * Error codes and error creation utility
  */
 export const ErrorCodes = {
+    // Migration errors
+    MIGRATION_ERROR: 'MIGRATION_1001',
     // Task errors (1000-1999)
     TASK_NOT_FOUND: 'TASK_1001',
     TASK_VALIDATION: 'TASK_1002',
