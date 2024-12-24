@@ -159,25 +159,97 @@ export class TaskOperations {
     oldTask: Task,
     newTask: Task
   ): Promise<void> {
-    // Emit status change event
-    this.eventManager.emit({
-      type: EventTypes.TASK_STATUS_CHANGED,
-      timestamp: Date.now(),
-      task: newTask,
-      changes: {
-        before: { status: oldTask.status },
-        after: { status: newTask.status }
+    try {
+      // Clear cache before status updates
+      if ('clearCache' in this.storage) {
+        await (this.storage as any).clearCache();
       }
-    });
 
-    // Handle blocked status
-    if (newTask.status === TaskStatus.BLOCKED) {
-      await this.handleBlockedStatus(newTask);
+      // Emit status change event
+      this.eventManager.emit({
+        type: EventTypes.TASK_STATUS_CHANGED,
+        timestamp: Date.now(),
+        task: newTask,
+        changes: {
+          before: { status: oldTask.status },
+          after: { status: newTask.status }
+        }
+      });
+
+      // Update parent task status if needed
+      if (newTask.parentPath) {
+        const parent = await this.storage.getTask(newTask.parentPath);
+        if (parent) {
+          const siblings = await this.storage.getSubtasks(parent.path);
+          const allCompleted = siblings.every(t => t.status === TaskStatus.COMPLETED);
+          const anyFailed = siblings.some(t => t.status === TaskStatus.FAILED);
+          const anyBlocked = siblings.some(t => t.status === TaskStatus.BLOCKED);
+          const anyInProgress = siblings.some(t => t.status === TaskStatus.IN_PROGRESS);
+
+          let newParentStatus = parent.status;
+          if (allCompleted) {
+            newParentStatus = TaskStatus.COMPLETED;
+          } else if (anyFailed) {
+            newParentStatus = TaskStatus.FAILED;
+          } else if (anyBlocked) {
+            newParentStatus = TaskStatus.BLOCKED;
+          } else if (anyInProgress) {
+            newParentStatus = TaskStatus.IN_PROGRESS;
+          }
+
+          if (newParentStatus !== parent.status) {
+            await this.updateTask(parent.path, {
+              status: newParentStatus,
+              metadata: {
+                ...parent.metadata,
+                statusUpdatedAt: Date.now(),
+                previousStatus: parent.status
+              }
+            });
+          }
+        }
+      }
+
+      // Handle blocked status
+      if (newTask.status === TaskStatus.BLOCKED) {
+        await this.handleBlockedStatus(newTask);
+      }
+
+      // Handle completed status
+      if (newTask.status === TaskStatus.COMPLETED) {
+        await this.handleCompletedStatus(newTask);
+      }
+
+      // Handle failed status
+      if (newTask.status === TaskStatus.FAILED) {
+        await this.handleFailedStatus(newTask);
+      }
+    } catch (error) {
+      this.logger.error('Failed to handle status change', {
+        error,
+        oldStatus: oldTask.status,
+        newStatus: newTask.status,
+        taskPath: newTask.path
+      });
+      throw error;
     }
+  }
 
-    // Handle completed status
-    if (newTask.status === TaskStatus.COMPLETED) {
-      await this.handleCompletedStatus(newTask);
+  private async handleFailedStatus(task: Task): Promise<void> {
+    // Block dependent tasks when a task fails
+    const dependentTasks = await this.storage.getDependentTasks(task.path);
+    
+    for (const depTask of dependentTasks) {
+      if (depTask.status !== TaskStatus.FAILED) {
+        await this.updateTask(depTask.path, {
+          status: TaskStatus.BLOCKED,
+          metadata: {
+            ...depTask.metadata,
+            blockedBy: task.path,
+            blockReason: `Dependency task ${task.path} failed`
+          }
+        });
+      }
     }
   }
 

@@ -1,18 +1,15 @@
 import { Task, TaskStatus } from '../../../types/task.js';
 import { BatchData, BatchResult, ValidationResult } from './common/batch-utils.js';
 import { BaseBatchProcessor, BatchDependencies, BatchOptions } from './base-batch-processor.js';
+import { detectDependencyCycle } from '../../validation/index.js';
 
 interface TaskBatchData extends BatchData {
   task: Task;
   dependencies: string[];
 }
 
-interface DependencyGraph {
-  [taskId: string]: Set<string>;
-}
-
 export class DependencyAwareBatchProcessor extends BaseBatchProcessor {
-  private dependencyGraph: DependencyGraph = {};
+  private dependencyGraph: Record<string, Set<string>> = {};
 
   constructor(
     dependencies: BatchDependencies,
@@ -29,13 +26,47 @@ export class DependencyAwareBatchProcessor extends BaseBatchProcessor {
     const tasks = batch as TaskBatchData[];
 
     try {
+      // Clear any stale cache entries before validation
+      if ('clearCache' in this.dependencies.storage) {
+        await (this.dependencies.storage as any).clearCache();
+      }
+
       // Build dependency graph
       this.buildDependencyGraph(tasks);
 
-      // Check for circular dependencies
-      const circularDeps = this.findCircularDependencies();
-      if (circularDeps.length > 0) {
-        errors.push(`Circular dependencies detected: ${circularDeps.join(' -> ')}`);
+      // First pass: validate task existence and basic structure
+      for (const task of tasks) {
+        const existingTask = await this.dependencies.storage.getTask(task.task.path);
+        if (!existingTask) {
+          errors.push(`Task ${task.task.path} not found`);
+          continue;
+        }
+
+        // Validate task matches stored version
+        if (existingTask.metadata.version !== task.task.metadata.version) {
+          errors.push(`Task ${task.task.path} has been modified by another process`);
+          continue;
+        }
+      }
+
+      // Check for circular dependencies using shared validation
+      for (const taskData of tasks) {
+        try {
+          const hasCycle = await detectDependencyCycle(
+            taskData.task,
+            taskData.dependencies,
+            this.dependencies.storage.getTask.bind(this.dependencies.storage)
+          );
+          if (hasCycle) {
+            errors.push(`Circular dependency detected for task ${taskData.task.path}`);
+          }
+        } catch (error) {
+          if (error instanceof Error) {
+            errors.push(error.message);
+          } else {
+            errors.push('Unknown error checking dependencies');
+          }
+        }
       }
 
       // Validate each task's dependencies exist
@@ -139,43 +170,6 @@ export class DependencyAwareBatchProcessor extends BaseBatchProcessor {
     }
   }
 
-  private findCircularDependencies(): string[] {
-    const visited = new Set<string>();
-    const recursionStack = new Set<string>();
-    const path: string[] = [];
-
-    const dfs = (taskId: string): boolean => {
-      visited.add(taskId);
-      recursionStack.add(taskId);
-      path.push(taskId);
-
-      const dependencies = this.dependencyGraph[taskId] || new Set();
-      for (const depId of dependencies) {
-        if (!visited.has(depId)) {
-          if (dfs(depId)) return true;
-        } else if (recursionStack.has(depId)) {
-          // Found circular dependency
-          path.push(depId); // Add the repeated dependency to show the cycle
-          return true;
-        }
-      }
-
-      path.pop();
-      recursionStack.delete(taskId);
-      return false;
-    };
-
-    for (const taskId of Object.keys(this.dependencyGraph)) {
-      if (!visited.has(taskId)) {
-        if (dfs(taskId)) {
-          return path;
-        }
-      }
-    }
-
-    return [];
-  }
-
   private async findMissingDependencies(task: TaskBatchData): Promise<string[]> {
     const missing: string[] = [];
     
@@ -226,20 +220,83 @@ export class DependencyAwareBatchProcessor extends BaseBatchProcessor {
   }
 
   private async processTask(task: TaskBatchData): Promise<Task> {
-    // Check dependencies are complete
-    for (const depId of task.dependencies) {
-      const depTask = await this.dependencies.storage.getTask(depId);
-      if (!depTask || depTask.status !== TaskStatus.COMPLETED) {
-        throw new Error(`Dependency ${depId} is not completed`);
+    try {
+      // Re-fetch task to ensure we have latest state
+      const currentTask = await this.dependencies.storage.getTask(task.task.path);
+      if (!currentTask) {
+        throw new Error(`Task ${task.task.path} not found during processing`);
       }
+
+      // Check dependencies are complete
+      const incompleteDeps: string[] = [];
+      const failedDeps: string[] = [];
+      
+      for (const depId of task.dependencies) {
+        const depTask = await this.dependencies.storage.getTask(depId);
+        if (!depTask) {
+          incompleteDeps.push(depId);
+        } else if (depTask.status === TaskStatus.FAILED) {
+          failedDeps.push(depId);
+        } else if (depTask.status !== TaskStatus.COMPLETED) {
+          incompleteDeps.push(depId);
+        }
+      }
+
+      // Handle dependency issues
+      if (failedDeps.length > 0) {
+        // If any dependencies failed, mark this task as failed
+        return await this.dependencies.storage.updateTask(
+          task.task.path,
+          {
+            status: TaskStatus.FAILED,
+            metadata: {
+              ...currentTask.metadata,
+              failureReason: `Dependencies failed: ${failedDeps.join(', ')}`,
+              updated: Date.now(),
+              version: currentTask.metadata.version + 1
+            }
+          }
+        );
+      }
+
+      if (incompleteDeps.length > 0) {
+        // If dependencies are incomplete, mark as blocked
+        return await this.dependencies.storage.updateTask(
+          task.task.path,
+          {
+            status: TaskStatus.BLOCKED,
+            metadata: {
+              ...currentTask.metadata,
+              blockedBy: incompleteDeps,
+              updated: Date.now(),
+              version: currentTask.metadata.version + 1
+            }
+          }
+        );
+      }
+
+      // All dependencies complete, process the task
+      const processedTask = await this.dependencies.storage.updateTask(
+        task.task.path,
+        {
+          status: TaskStatus.COMPLETED,
+          metadata: {
+            ...currentTask.metadata,
+            completedAt: Date.now(),
+            updated: Date.now(),
+            version: currentTask.metadata.version + 1
+          }
+        }
+      );
+
+      return processedTask;
+    } catch (error) {
+      this.logger.error('Failed to process task', {
+        error,
+        taskPath: task.task.path,
+        dependencies: task.dependencies
+      });
+      throw error;
     }
-
-    // Process the task (implementation will vary based on task type)
-    const processedTask = await this.dependencies.storage.updateTask(
-      task.task.path,
-      { status: TaskStatus.COMPLETED }
-    );
-
-    return processedTask;
   }
 }

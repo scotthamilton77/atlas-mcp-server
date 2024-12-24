@@ -1,20 +1,11 @@
-import { Task, TaskStatus } from '../../../types/task.js';
+ import { Task, TaskStatus } from '../../../types/task.js';
 import { BatchData, BatchResult, ValidationResult, TaskBatchData } from './common/batch-utils.js';
 import { BaseBatchProcessor, BatchDependencies, BatchOptions } from './base-batch-processor.js';
+import { validateTaskStatusTransition } from '../../validation/index.js';
 
 export interface TaskStatusBatchConfig extends BatchOptions {
-  allowedTransitions?: Record<TaskStatus, TaskStatus[]>;
-  validateDependencies?: boolean;
   updateDependents?: boolean;
 }
-
-const DEFAULT_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
-  [TaskStatus.PENDING]: [TaskStatus.IN_PROGRESS, TaskStatus.BLOCKED],
-  [TaskStatus.IN_PROGRESS]: [TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.BLOCKED],
-  [TaskStatus.COMPLETED]: [TaskStatus.IN_PROGRESS],
-  [TaskStatus.FAILED]: [TaskStatus.PENDING],
-  [TaskStatus.BLOCKED]: [TaskStatus.PENDING]
-};
 
 export class TaskStatusBatchProcessor extends BaseBatchProcessor<Task> {
   private readonly config: Required<TaskStatusBatchConfig> & Required<BatchOptions>;
@@ -28,8 +19,6 @@ export class TaskStatusBatchProcessor extends BaseBatchProcessor<Task> {
       {},
       this.defaultOptions,
       {
-        allowedTransitions: DEFAULT_TRANSITIONS,
-        validateDependencies: true,
         updateDependents: true
       },
       config
@@ -50,8 +39,13 @@ export class TaskStatusBatchProcessor extends BaseBatchProcessor<Task> {
       return { valid: false, errors };
     }
 
+    // Clear any stale cache entries before validation
+    if ('clearCache' in this.dependencies.storage) {
+      await (this.dependencies.storage as any).clearCache();
+    }
+
+    // First pass: validate all status transitions
     for (const task of tasks) {
-      const currentStatus = task.status;
       const newStatus = task.metadata?.newStatus as TaskStatus;
 
       if (!newStatus) {
@@ -59,16 +53,38 @@ export class TaskStatusBatchProcessor extends BaseBatchProcessor<Task> {
         continue;
       }
 
-      const allowedTransitions = this.config.allowedTransitions[currentStatus];
-      if (!allowedTransitions?.includes(newStatus)) {
-        errors.push(
-          `Invalid status transition for task ${task.path}: ${currentStatus} -> ${newStatus}`
-        );
+      try {
+        // Use shared validation utility for status transitions
+        await validateTaskStatusTransition(task, newStatus, this.dependencies.storage.getTask.bind(this.dependencies.storage));
+      } catch (error) {
+        if (error instanceof Error) {
+          errors.push(error.message);
+        } else {
+          errors.push('Unknown validation error occurred');
+        }
+      }
+    }
+
+    // Second pass: validate parent-child status consistency
+    for (const task of tasks) {
+      const newStatus = task.metadata?.newStatus as TaskStatus;
+      if (!newStatus || !task.parentPath) continue;
+
+      const parent = await this.dependencies.storage.getTask(task.parentPath);
+      if (!parent) continue;
+
+      const siblings = await this.dependencies.storage.getSubtasks(parent.path);
+      const siblingStatuses = new Set(siblings.map((t: Task) => t.status));
+
+      // Check for invalid status combinations
+      if (newStatus === TaskStatus.COMPLETED && 
+          siblingStatuses.has(TaskStatus.BLOCKED)) {
+        errors.push(`Cannot complete task ${task.path} while sibling tasks are blocked`);
       }
 
-      if (this.config.validateDependencies && newStatus === TaskStatus.COMPLETED) {
-        const invalidDeps = await this.validateDependencies(task);
-        errors.push(...invalidDeps);
+      if (newStatus === TaskStatus.IN_PROGRESS && 
+          siblingStatuses.has(TaskStatus.FAILED)) {
+        errors.push(`Cannot start task ${task.path} while sibling tasks have failed`);
       }
     }
 
@@ -116,23 +132,6 @@ export class TaskStatusBatchProcessor extends BaseBatchProcessor<Task> {
 
     this.logMetrics(result);
     return result;
-  }
-
-  private async validateDependencies(task: Task): Promise<string[]> {
-    const errors: string[] = [];
-
-    for (const depPath of task.dependencies) {
-      const depTask = await this.dependencies.storage.getTask(depPath);
-      if (!depTask) {
-        errors.push(`Task ${task.path} has missing dependency: ${depPath}`);
-      } else if (depTask.status !== TaskStatus.COMPLETED) {
-        errors.push(
-          `Task ${task.path} has incomplete dependency: ${depPath} (${depTask.status})`
-        );
-      }
-    }
-
-    return errors;
   }
 
   private async updateTaskStatus(task: Task, newStatus: TaskStatus): Promise<Task> {

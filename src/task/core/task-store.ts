@@ -1,7 +1,8 @@
 /**
  * Path-based task storage with caching, indexing, and transaction support
  */
-import { Task, TaskStatus, validateTaskPath, isValidTaskHierarchy, getParentPath } from '../../types/task.js';
+import { Task, TaskStatus, getParentPath } from '../../types/task.js';
+import { validateTaskPath, isValidTaskHierarchy } from '../validation/index.js';
 import { TaskStorage } from '../../types/storage.js';
 import { Logger } from '../../logging/index.js';
 import { TaskIndexManager } from './indexing/index-manager.js';
