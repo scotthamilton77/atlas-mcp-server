@@ -5,6 +5,7 @@
 
 import { ConfigError, ErrorCodes } from '../errors/index.js';
 import { LogLevel, LogLevels } from '../types/logging.js';
+import { ErrorContext, ErrorSeverity } from '../types/error.js';
 import { resolve, join } from 'path';
 import { homedir } from 'os';
 
@@ -64,121 +65,17 @@ export interface StorageConfig {
 export interface AppConfig {
     env: string;
     logging: LoggingConfig;
-    storage: StorageConfig;  // Make storage required
+    storage: StorageConfig;
 }
 
+/**
+ * Partial application configuration type
+ */
 export interface PartialAppConfig {
     env?: string;
     logging?: Partial<LoggingConfig>;
     storage?: Partial<StorageConfig>;
 }
-
-/**
- * Configuration schema
- */
-export const configSchema = {
-    env: {
-        type: 'string',
-        enum: [
-            Environments.DEVELOPMENT,
-            Environments.PRODUCTION,
-            Environments.TEST
-        ],
-        default: Environments.DEVELOPMENT
-    },
-    logging: {
-        type: 'object',
-        properties: {
-            level: {
-                type: 'string',
-                enum: Object.values(LogLevels),
-                default: LogLevels.INFO
-            },
-            console: {
-                type: 'boolean',
-                default: true
-            },
-            file: {
-                type: 'boolean',
-                default: false
-            },
-            dir: {
-                type: 'string',
-                optional: true
-            },
-            maxFiles: {
-                type: 'number',
-                minimum: 1,
-                default: 5
-            },
-            maxSize: {
-                type: 'number',
-                minimum: 1024,
-                default: 5242880 // 5MB
-            }
-        },
-        required: ['level']
-    },
-    storage: {
-        type: 'object',
-        properties: {
-            baseDir: {
-                type: 'string'
-            },
-            name: {
-                type: 'string'
-            },
-            connection: {
-                type: 'object',
-                properties: {
-                    maxRetries: {
-                        type: 'number',
-                        minimum: 1,
-                        optional: true
-                    },
-                    retryDelay: {
-                        type: 'number',
-                        minimum: 0,
-                        optional: true
-                    },
-                    busyTimeout: {
-                        type: 'number',
-                        minimum: 0,
-                        optional: true
-                    }
-                },
-                optional: true
-            },
-            performance: {
-                type: 'object',
-                properties: {
-                    checkpointInterval: {
-                        type: 'number',
-                        minimum: 0,
-                        optional: true
-                    },
-                    cacheSize: {
-                        type: 'number',
-                        minimum: 0,
-                        optional: true
-                    },
-                    mmapSize: {
-                        type: 'number',
-                        minimum: 0,
-                        optional: true
-                    },
-                    pageSize: {
-                        type: 'number',
-                        minimum: 0,
-                        optional: true
-                    }
-                },
-                optional: true
-            }
-        },
-        required: ['baseDir', 'name']
-    }
-};
 
 /**
  * Default logging configuration
@@ -233,13 +130,30 @@ export class ConfigManager {
     }
 
     /**
+     * Creates an error context
+     */
+    private static createErrorContext(
+        operation: string,
+        metadata?: Record<string, unknown>
+    ): ErrorContext {
+        return {
+            operation,
+            timestamp: Date.now(),
+            severity: ErrorSeverity.HIGH,
+            metadata,
+            stackTrace: new Error().stack
+        };
+    }
+
+    /**
      * Gets the configuration manager instance
      */
     static getInstance(): ConfigManager {
         if (!ConfigManager.instance || !ConfigManager.instance.initialized) {
             throw new ConfigError(
                 ErrorCodes.CONFIG_INVALID,
-                'Configuration not initialized. Call ConfigManager.initialize() first.'
+                'Configuration not initialized. Call ConfigManager.initialize() first.',
+                this.createErrorContext('ConfigManager.getInstance')
             );
         }
         return ConfigManager.instance;
@@ -276,7 +190,8 @@ export class ConfigManager {
             } catch (error) {
                 throw new ConfigError(
                     ErrorCodes.CONFIG_INVALID,
-                    `Failed to initialize configuration: ${error instanceof Error ? error.message : String(error)}`
+                    `Failed to initialize configuration: ${error instanceof Error ? error.message : String(error)}`,
+                    this.createErrorContext('ConfigManager.initialize', { error })
                 );
             } finally {
                 ConfigManager.initializationPromise = null;
@@ -378,7 +293,11 @@ export class ConfigManager {
         } catch (error) {
             throw new ConfigError(
                 ErrorCodes.CONFIG_INVALID,
-                `Failed to create storage directory: ${error instanceof Error ? error.message : String(error)}`
+                `Failed to create storage directory: ${error instanceof Error ? error.message : String(error)}`,
+                ConfigManager.createErrorContext('ConfigManager.loadEnvConfig', {
+                    storageDir,
+                    error
+                })
             );
         }
 
@@ -406,7 +325,10 @@ export class ConfigManager {
             if (!Object.values(Environments).includes(currentEnv as any)) {
                 throw new ConfigError(
                     ErrorCodes.CONFIG_INVALID,
-                    'Invalid environment'
+                    'Invalid environment',
+                    ConfigManager.createErrorContext('ConfigManager.loadEnvConfig', {
+                        currentEnv
+                    })
                 );
             }
             config.env = currentEnv;
@@ -417,7 +339,10 @@ export class ConfigManager {
             if (!Object.values(LogLevels).includes(level as any)) {
                 throw new ConfigError(
                     ErrorCodes.CONFIG_INVALID,
-                    'Invalid log level'
+                    'Invalid log level',
+                    ConfigManager.createErrorContext('ConfigManager.loadEnvConfig', {
+                        currentLogLevel
+                    })
                 );
             }
             config.logging.level = level as LogLevel;
@@ -433,21 +358,31 @@ export class ConfigManager {
         if (!config.storage?.baseDir) {
             throw new ConfigError(
                 ErrorCodes.CONFIG_MISSING,
-                'Storage directory must be provided'
+                'Storage directory must be provided',
+                ConfigManager.createErrorContext('ConfigManager.validateConfig', {
+                    config
+                })
             );
         }
 
         if (!config.storage?.name) {
             throw new ConfigError(
                 ErrorCodes.CONFIG_MISSING,
-                'Storage name must be provided'
+                'Storage name must be provided',
+                ConfigManager.createErrorContext('ConfigManager.validateConfig', {
+                    config
+                })
             );
         }
 
         if (config.logging?.level && !Object.values(LogLevels).includes(config.logging.level)) {
             throw new ConfigError(
                 ErrorCodes.CONFIG_INVALID,
-                'Invalid log level'
+                'Invalid log level',
+                ConfigManager.createErrorContext('ConfigManager.validateConfig', {
+                    level: config.logging.level,
+                    validLevels: Object.values(LogLevels)
+                })
             );
         }
     }

@@ -1,6 +1,6 @@
 import { Database } from 'sqlite';
 import { Logger } from '../../../logging/index.js';
-import { ErrorCodes, createError } from '../../../errors/index.js';
+import { ErrorCodes, createError, type ErrorCode } from '../../../errors/index.js';
 import { EventManager } from '../../../events/event-manager.js';
 import { EventTypes } from '../../../types/events.js';
 import crypto from 'crypto';
@@ -11,6 +11,25 @@ export interface TransactionState {
     startTime: number;
     timeout?: NodeJS.Timeout;
     id: string;
+}
+
+/**
+ * Helper function to create errors with consistent operation naming
+ */
+function createTransactionError(
+    code: ErrorCode,
+    message: string,
+    operation: string = 'TransactionManager',
+    userMessage?: string,
+    metadata?: Record<string, unknown>
+): Error {
+    return createError(
+        code,
+        message,
+        `TransactionManager.${operation}`,
+        userMessage,
+        metadata
+    );
 }
 
 export class TransactionManager {
@@ -85,11 +104,11 @@ export class TransactionManager {
             return txId;
         } catch (error) {
             this.logger.error('Failed to begin transaction', { error });
-            throw createError(
+            throw createTransactionError(
                 ErrorCodes.TRANSACTION_ERROR,
                 'Failed to begin transaction',
                 'beginTransaction',
-                undefined,
+                'Could not start database transaction',
                 { originalError: error }
             );
         }
@@ -101,9 +120,11 @@ export class TransactionManager {
     async commitTransaction(db: Database, txId: string): Promise<void> {
         const transaction = this.activeTransactions.get(txId);
         if (!transaction) {
-            throw createError(
+            throw createTransactionError(
                 ErrorCodes.TRANSACTION_ERROR,
-                'No active transaction to commit'
+                'No active transaction to commit',
+                'commitTransaction',
+                'Transaction not found or already completed'
             );
         }
 
@@ -142,11 +163,11 @@ export class TransactionManager {
             });
         } catch (error) {
             this.logger.error('Failed to commit transaction', { error });
-            throw createError(
+            throw createTransactionError(
                 ErrorCodes.TRANSACTION_ERROR,
                 'Failed to commit transaction',
                 'commitTransaction',
-                undefined,
+                'Could not commit database changes',
                 { originalError: error }
             );
         }
@@ -158,9 +179,11 @@ export class TransactionManager {
     async rollbackTransaction(db: Database, txId: string): Promise<void> {
         const transaction = this.activeTransactions.get(txId);
         if (!transaction) {
-            throw createError(
+            throw createTransactionError(
                 ErrorCodes.TRANSACTION_ERROR,
-                'No active transaction to rollback'
+                'No active transaction to rollback',
+                'rollbackTransaction',
+                'Transaction not found or already completed'
             );
         }
 
@@ -199,11 +222,11 @@ export class TransactionManager {
             });
         } catch (error) {
             this.logger.error('Failed to rollback transaction', { error });
-            throw createError(
+            throw createTransactionError(
                 ErrorCodes.TRANSACTION_ERROR,
                 'Failed to rollback transaction',
                 'rollbackTransaction',
-                undefined,
+                'Could not rollback database changes',
                 { originalError: error }
             );
         }

@@ -32,13 +32,14 @@ export class TaskManager {
     private readonly indexManager: TaskIndexManager;
     private memoryMonitor?: NodeJS.Timeout;
     private readonly MAX_CACHE_MEMORY = 1024 * 1024 * 1024; // 1GB cache limit
-    private readonly MEMORY_CHECK_INTERVAL = 60000; // 60 seconds
-    private readonly MEMORY_PRESSURE_THRESHOLD = 0.9; // 90% of max before cleanup
+    private readonly MEMORY_CHECK_INTERVAL = 300000; // 5 minutes
+    private readonly MEMORY_PRESSURE_THRESHOLD = 0.95; // 95% of max before cleanup
+    private readonly MEMORY_CHECK_COOLDOWN = 60000; // 1 minute cooldown between cleanups
+    private lastCleanupTime: number = 0;
 
     private readonly eventManager: EventManager;
 
     private static instance: TaskManager | null = null;
-    private static initializationPromise: Promise<TaskManager> | null = null;
     private initialized = false;
 
     private constructor(readonly storage: TaskStorage) {
@@ -81,39 +82,54 @@ export class TaskManager {
     /**
      * Gets the TaskManager instance
      */
+    private static initializationMutex = new Set<string>();
+    private static instanceId = Math.random().toString(36).substr(2, 9);
+
     static async getInstance(storage: TaskStorage): Promise<TaskManager> {
-        // Return existing instance if available
-        if (TaskManager.instance && TaskManager.instance.initialized) {
+        const mutexKey = `taskmanager-${TaskManager.instanceId}`;
+        
+        // Return existing instance if fully initialized
+        if (TaskManager.instance?.initialized) {
             return TaskManager.instance;
         }
 
-        // If initialization is in progress, wait for it
-        if (TaskManager.initializationPromise) {
-            return TaskManager.initializationPromise;
+        // Wait if initialization is in progress
+        while (TaskManager.initializationMutex.has(mutexKey)) {
+            await new Promise(resolve => setTimeout(resolve, 50));
         }
 
-        // Start new initialization with mutex
-        TaskManager.initializationPromise = (async () => {
-            try {
-                // Double-check instance hasn't been created while waiting
-                if (TaskManager.instance && TaskManager.instance.initialized) {
-                    return TaskManager.instance;
-                }
+        // Double-check after waiting
+        if (TaskManager.instance?.initialized) {
+            return TaskManager.instance;
+        }
 
+        // Acquire initialization mutex
+        TaskManager.initializationMutex.add(mutexKey);
+
+        try {
+            // Create new instance if needed
+            if (!TaskManager.instance) {
                 TaskManager.instance = new TaskManager(storage);
-                await TaskManager.instance.initialize();
-                return TaskManager.instance;
-            } catch (error) {
-                throw createError(
-                    ErrorCodes.STORAGE_INIT,
-                    `Failed to initialize TaskManager: ${error instanceof Error ? error.message : String(error)}`
-                );
-            } finally {
-                TaskManager.initializationPromise = null;
             }
-        })();
 
-        return TaskManager.initializationPromise;
+            // Initialize if not already done
+            if (!TaskManager.instance.initialized) {
+                await TaskManager.instance.initialize();
+            }
+
+            return TaskManager.instance;
+        } catch (error) {
+            // Clear instance on initialization failure
+            TaskManager.instance = null;
+            throw createError(
+                ErrorCodes.STORAGE_INIT,
+                `Failed to initialize TaskManager: ${error instanceof Error ? error.message : String(error)}`,
+                'getInstance'
+            );
+        } finally {
+            // Release mutex
+            TaskManager.initializationMutex.delete(mutexKey);
+        }
     }
 
     /**
@@ -153,6 +169,73 @@ export class TaskManager {
     }
 
     /**
+     * Sets up memory monitoring for cache management
+     */
+    private setupMemoryMonitoring(): void {
+        // Clear any existing monitor
+        if (this.memoryMonitor) {
+            clearInterval(this.memoryMonitor);
+        }
+
+        // Set up new monitor with weak reference to this
+        const weakThis = new WeakRef(this);
+        
+        this.memoryMonitor = setInterval(async () => {
+            const instance = weakThis.deref();
+            if (!instance) {
+                // If instance is garbage collected, stop monitoring
+                clearInterval(this.memoryMonitor);
+                return;
+            }
+
+            const memUsage = process.memoryUsage();
+            
+            // Log memory stats with Windows-specific handling
+            const stats = {
+                heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
+                heapTotal: `${Math.round(memUsage.heapTotal / 1024 / 1024)}MB`,
+                rss: `${Math.round(memUsage.rss / 1024 / 1024)}MB`,
+                // Windows can have different memory reporting
+                platform: process.platform
+            };
+            
+            TaskManager.logger.debug('Task manager memory usage:', stats);
+
+            // Check if memory usage is approaching threshold
+            const memoryUsageRatio = memUsage.heapUsed / instance.MAX_CACHE_MEMORY;
+            
+            const now = Date.now();
+            if (memoryUsageRatio > instance.MEMORY_PRESSURE_THRESHOLD && 
+                (now - instance.lastCleanupTime) >= instance.MEMORY_CHECK_COOLDOWN) {
+                instance.lastCleanupTime = now;
+                // Emit memory pressure event
+                instance.eventManager.emitCacheEvent({
+                    type: EventTypes.MEMORY_PRESSURE,
+                    timestamp: Date.now(),
+                    metadata: {
+                        memoryUsage: memUsage,
+                        threshold: instance.MAX_CACHE_MEMORY
+                    }
+                });
+
+                TaskManager.logger.warn('Cache memory threshold exceeded, clearing caches', {
+                    heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
+                    threshold: `${Math.round(instance.MAX_CACHE_MEMORY / 1024 / 1024)}MB`
+                });
+                
+                await instance.clearCaches(true);
+            }
+        }, this.MEMORY_CHECK_INTERVAL);
+
+        // Ensure interval is cleaned up if process exits
+        process.on('beforeExit', () => {
+            if (this.memoryMonitor) {
+                clearInterval(this.memoryMonitor);
+            }
+        });
+    }
+
+    /**
      * Creates a new task with path-based hierarchy
      */
     async createTask(input: CreateTaskInput): Promise<TaskResponse<Task>> {
@@ -161,7 +244,8 @@ export class TaskManager {
             if (!input.name) {
                 throw createError(
                     ErrorCodes.VALIDATION_ERROR,
-                    'Task name is required'
+                    'Task name is required',
+                    'createTask'
                 );
             }
 
@@ -215,7 +299,8 @@ export class TaskManager {
             if (!oldTask) {
                 throw createError(
                     ErrorCodes.TASK_NOT_FOUND,
-                    `Task not found: ${path}`
+                    `Task not found: ${path}`,
+                    'updateTask'
                 );
             }
 
@@ -479,6 +564,7 @@ export class TaskManager {
             await this.operations.deleteTask(path);
             return {
                 success: true,
+                data: undefined,
                 metadata: {
                     timestamp: Date.now(),
                     requestId: Math.random().toString(36).substring(7),
@@ -610,70 +696,6 @@ export class TaskManager {
             TaskManager.logger.error('Failed to repair relationships', { error });
             throw error;
         }
-    }
-
-    /**
-     * Sets up memory monitoring for cache management
-     */
-    private setupMemoryMonitoring(): void {
-        // Clear any existing monitor
-        if (this.memoryMonitor) {
-            clearInterval(this.memoryMonitor);
-        }
-
-        // Set up new monitor with weak reference to this
-        const weakThis = new WeakRef(this);
-        
-        this.memoryMonitor = setInterval(async () => {
-            const instance = weakThis.deref();
-            if (!instance) {
-                // If instance is garbage collected, stop monitoring
-                clearInterval(this.memoryMonitor);
-                return;
-            }
-
-            const memUsage = process.memoryUsage();
-            
-            // Log memory stats with Windows-specific handling
-            const stats = {
-                heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
-                heapTotal: `${Math.round(memUsage.heapTotal / 1024 / 1024)}MB`,
-                rss: `${Math.round(memUsage.rss / 1024 / 1024)}MB`,
-                // Windows can have different memory reporting
-                platform: process.platform
-            };
-            
-            TaskManager.logger.debug('Task manager memory usage:', stats);
-
-            // Check if memory usage is approaching threshold
-            const memoryUsageRatio = memUsage.heapUsed / instance.MAX_CACHE_MEMORY;
-            
-            if (memoryUsageRatio > instance.MEMORY_PRESSURE_THRESHOLD) {
-                // Emit memory pressure event
-                instance.eventManager.emitCacheEvent({
-                    type: EventTypes.MEMORY_PRESSURE,
-                    timestamp: Date.now(),
-                    metadata: {
-                        memoryUsage: memUsage,
-                        threshold: instance.MAX_CACHE_MEMORY
-                    }
-                });
-
-                TaskManager.logger.warn('Cache memory threshold exceeded, clearing caches', {
-                    heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
-                    threshold: `${Math.round(instance.MAX_CACHE_MEMORY / 1024 / 1024)}MB`
-                });
-                
-                await instance.clearCaches(true);
-            }
-        }, this.MEMORY_CHECK_INTERVAL);
-
-        // Ensure interval is cleaned up if process exits
-        process.on('beforeExit', () => {
-            if (this.memoryMonitor) {
-                clearInterval(this.memoryMonitor);
-            }
-        });
     }
 
     /**
@@ -819,7 +841,8 @@ export class TaskManager {
                                 if (!op.data || !('type' in op.data)) {
                                     throw createError(
                                         ErrorCodes.INVALID_INPUT,
-                                        'Create operation requires valid task input'
+                                        'Create operation requires valid task input',
+                                        'bulkTaskOperations'
                                     );
                                 }
                                 const created = await this.operations.createTask(op.data as CreateTaskInput);
@@ -845,14 +868,16 @@ export class TaskManager {
                                 if (!op.data) {
                                     throw createError(
                                         ErrorCodes.INVALID_INPUT,
-                                        'Update operation requires task updates'
+                                        'Update operation requires task updates',
+                                        'bulkTaskOperations'
                                     );
                                 }
                                 const oldTask = await this.getTaskByPath(op.path);
                                 if (!oldTask) {
                                     throw createError(
                                         ErrorCodes.TASK_NOT_FOUND,
-                                        `Task not found: ${op.path}`
+                                        `Task not found: ${op.path}`,
+                                        'bulkTaskOperations'
                                     );
                                 }
 

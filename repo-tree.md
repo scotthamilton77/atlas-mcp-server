@@ -5,11 +5,25 @@
 |   |-- config/
 |   |   `-- index.ts
 |   |-- errors/
-|   |   `-- index.ts
+|   |   |-- README.md
+|   |   |-- base-error.ts
+|   |   |-- config-error.ts
+|   |   |-- error-factory.ts
+|   |   |-- index.ts
+|   |   |-- storage-error.ts
+|   |   |-- task-error.ts
+|   |   `-- tool-error.ts
 |   |-- events/
-|   |   `-- event-manager.ts
+|   |   |-- batch-processor.ts
+|   |   |-- event-manager.ts
+|   |   `-- health-monitor.ts
 |   |-- logging/
-|   |   `-- index.ts
+|   |   |-- error-formatter.ts
+|   |   |-- file-transport.ts
+|   |   |-- health-monitor.ts
+|   |   |-- index.ts
+|   |   |-- logger.ts
+|   |   `-- transport-manager.ts
 |   |-- server/
 |   |   |-- health-monitor.ts
 |   |   |-- index.ts
@@ -37,11 +51,15 @@
 |   |   |   |-- wal/
 |   |   |   |   `-- manager.ts
 |   |   |   `-- index.ts
+|   |   |-- factory/
+|   |   |   `-- error-handler.ts
 |   |   |-- monitoring/
 |   |   |   |-- health.ts
 |   |   |   |-- index.ts
 |   |   |   `-- metrics.ts
 |   |   |-- sqlite/
+|   |   |   |-- config.ts
+|   |   |   |-- error-handler.ts
 |   |   |   |-- index.ts
 |   |   |   |-- init.ts
 |   |   |   `-- storage.ts
@@ -70,17 +88,34 @@
 |   |   |   |   `-- index.ts
 |   |   |   |-- transactions/
 |   |   |   |   |-- index.ts
-|   |   |   |   |-- transaction-manager.ts
-|   |   |   |   `-- transaction-types.ts
+|   |   |   |   `-- transaction-manager.ts
+|   |   |   |-- error-handler.ts
 |   |   |   |-- index.ts
 |   |   |   `-- task-store.ts
+|   |   |-- manager/
+|   |   |   |-- error-handler.ts
+|   |   |   |-- index.ts
+|   |   |   `-- task-manager.ts
 |   |   |-- operations/
 |   |   |   |-- index.ts
 |   |   |   `-- task-operations.ts
 |   |   `-- validation/
+|   |       |-- schemas/
+|   |       |   |-- base-schema.ts
+|   |       |   |-- create-schema.ts
+|   |       |   |-- index.ts
+|   |       |   |-- metadata-schema.ts
+|   |       |   `-- update-schema.ts
+|   |       |-- utils/
+|   |       |-- validators/
+|   |       |   |-- dependency-validator.ts
+|   |       |   |-- hierarchy-validator.ts
+|   |       |   |-- index.ts
+|   |       |   `-- status-validator.ts
 |   |       |-- index.ts
 |   |       `-- task-validator.ts
 |   |-- tools/
+|   |   |-- error-handler.ts
 |   |   |-- handler.ts
 |   |   |-- index.ts
 |   |   |-- schemas.ts
@@ -114,9 +149,11 @@
 |   `-- task-manager.ts
 |-- LICENSE
 |-- README.md
+|-- improvements-v2.md
 |-- jest.config.js
 |-- package.json
 |-- repo-tree.md
+|-- repomix-output.txt
 `-- tsconfig.json
 
-29 directories, 89 files
+34 directories, 121 files

@@ -1,12 +1,31 @@
 import { Database } from 'sqlite';
 import { Logger } from '../../../logging/index.js';
-import { ErrorCodes, createError } from '../../../errors/index.js';
+import { ErrorCodes, createError, type ErrorCode } from '../../../errors/index.js';
 
 export enum IsolationLevel {
     READ_UNCOMMITTED = 'READ UNCOMMITTED',
     READ_COMMITTED = 'READ COMMITTED',
     REPEATABLE_READ = 'REPEATABLE READ',
     SERIALIZABLE = 'SERIALIZABLE'
+}
+
+/**
+ * Helper function to create errors with consistent operation naming
+ */
+function createTransactionError(
+    code: ErrorCode,
+    message: string,
+    operation: string = 'TransactionScope',
+    userMessage?: string,
+    metadata?: Record<string, unknown>
+): Error {
+    return createError(
+        code,
+        message,
+        `TransactionScope.${operation}`,
+        userMessage,
+        metadata
+    );
 }
 
 /**
@@ -52,12 +71,12 @@ export class TransactionScope {
             });
         } catch (error) {
             TransactionScope.getLogger().error('Failed to begin transaction', { error });
-            throw createError(
+            throw createTransactionError(
                 ErrorCodes.TRANSACTION_ERROR,
-                
                 'Failed to begin transaction',
                 'begin',
-                error instanceof Error ? error.message : String(error)
+                'Could not start database transaction',
+                { isolationLevel, error }
             );
         }
     }
@@ -67,9 +86,11 @@ export class TransactionScope {
      */
     async commit(): Promise<void> {
         if (!this.active) {
-            throw createError(
+            throw createTransactionError(
                 ErrorCodes.TRANSACTION_ERROR,
-                'No active transaction'
+                'No active transaction',
+                'commit',
+                'Cannot commit: no active transaction found'
             );
         }
 
@@ -92,11 +113,12 @@ export class TransactionScope {
             });
         } catch (error) {
             TransactionScope.getLogger().error('Failed to commit transaction', { error });
-            throw createError(
+            throw createTransactionError(
                 ErrorCodes.TRANSACTION_ERROR,
                 'Failed to commit transaction',
                 'commit',
-                error instanceof Error ? error.message : String(error)
+                'Could not commit database changes',
+                { depth: this.depth, error }
             );
         }
     }
@@ -127,11 +149,12 @@ export class TransactionScope {
             });
         } catch (error) {
             TransactionScope.getLogger().error('Failed to rollback transaction', { error });
-            throw createError(
+            throw createTransactionError(
                 ErrorCodes.TRANSACTION_ERROR,
                 'Failed to rollback transaction',
                 'rollback',
-                error instanceof Error ? error.message : String(error)
+                'Could not rollback database changes',
+                { depth: this.depth, error }
             );
         }
     }
@@ -151,7 +174,13 @@ export class TransactionScope {
             return result;
         } catch (error) {
             await this.rollback();
-            throw error;
+            throw createTransactionError(
+                ErrorCodes.TRANSACTION_ERROR,
+                'Transaction execution failed',
+                'executeInTransaction',
+                'Operation failed and was rolled back',
+                { isolationLevel, error }
+            );
         }
     }
 
@@ -177,7 +206,13 @@ export class TransactionScope {
                 error,
                 level
             });
-            throw error;
+            throw createTransactionError(
+                ErrorCodes.TRANSACTION_ERROR,
+                'Failed to set isolation level',
+                'setIsolationLevel',
+                'Could not configure transaction isolation',
+                { level, error }
+            );
         }
     }
 

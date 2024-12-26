@@ -396,7 +396,8 @@ const dbPath = path.join(this.config.baseDir, `${this.config.name}.db`);
         if (!this.db) {
             throw createError(
                 ErrorCodes.STORAGE_ERROR,
-                'Database not initialized'
+                'Database not initialized',
+                'withDb'
             );
         }
         return operation(this.db);

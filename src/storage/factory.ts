@@ -2,17 +2,11 @@
  * Storage factory for creating task storage instances
  */
 import { TaskStorage } from '../types/storage.js';
-import { ErrorCodes, createError } from '../errors/index.js';
-import { 
-    SqliteStorage,
-    SqliteConfig,
-    DEFAULT_PAGE_SIZE,
-    DEFAULT_CACHE_SIZE,
-    DEFAULT_BUSY_TIMEOUT
-} from './sqlite/index.js';
+import { SqliteStorage, SqliteConfig, DEFAULT_CONFIG } from './sqlite/index.js';
 import { ConfigManager } from '../config/index.js';
 import { promises as fs } from 'fs';
 import { Logger } from '../logging/index.js';
+import { StorageFactoryErrorHandler } from './factory/error-handler.js';
 
 /**
  * Storage factory class for managing singleton storage instance
@@ -22,6 +16,7 @@ class StorageFactory {
     private static initializationPromise: Promise<StorageFactory> | null = null;
     private storageInstance: TaskStorage | null = null;
     private static logger: Logger;
+    private readonly errorHandler: StorageFactoryErrorHandler;
 
     private static initLogger(): void {
         if (!StorageFactory.logger) {
@@ -31,6 +26,7 @@ class StorageFactory {
 
     private constructor() {
         StorageFactory.initLogger();
+        this.errorHandler = new StorageFactoryErrorHandler();
     }
 
     /**
@@ -58,16 +54,23 @@ class StorageFactory {
                 StorageFactory.instance = new StorageFactory();
                 return StorageFactory.instance;
             } catch (error) {
-                throw createError(
-                    ErrorCodes.STORAGE_INIT,
-                    `Failed to initialize StorageFactory: ${error instanceof Error ? error.message : String(error)}`
-                );
+                const handler = new StorageFactoryErrorHandler();
+                return handler.handleInitError(error, 'getInstance');
             } finally {
                 StorageFactory.initializationPromise = null;
             }
         })();
 
-        return StorageFactory.initializationPromise;
+        const instance = await StorageFactory.initializationPromise;
+        if (!instance) {
+            const handler = new StorageFactoryErrorHandler();
+            return handler.handleInitError(
+                new Error('Failed to initialize StorageFactory'),
+                'getInstance'
+            );
+        }
+
+        return instance;
     }
 
     /**
@@ -94,22 +97,18 @@ class StorageFactory {
 
             // Apply SQLite-specific defaults
             const sqliteConfig: SqliteConfig = {
+                ...DEFAULT_CONFIG,
                 ...config,
                 sqlite: {
-                    journalMode: 'WAL',
-                    synchronous: 'NORMAL',
-                    tempStore: 'MEMORY',
-                    lockingMode: 'NORMAL',
-                    autoVacuum: 'NONE',
+                    ...DEFAULT_CONFIG.sqlite,
                     ...config.sqlite
                 },
                 performance: {
-                    pageSize: DEFAULT_PAGE_SIZE,
-                    cacheSize: DEFAULT_CACHE_SIZE,
+                    ...DEFAULT_CONFIG.performance,
                     ...config.performance
                 },
                 connection: {
-                    busyTimeout: DEFAULT_BUSY_TIMEOUT,
+                    ...DEFAULT_CONFIG.connection,
                     ...config.connection
                 }
             };
@@ -125,14 +124,7 @@ class StorageFactory {
         } catch (error) {
             // Clear storage instance on error
             this.storageInstance = null;
-            StorageFactory.logger.error('Failed to create storage instance', {
-                error: error instanceof Error ? error.message : String(error)
-            });
-            throw createError(
-                ErrorCodes.STORAGE_INIT,
-                'Failed to create storage',
-                error instanceof Error ? error.message : String(error)
-            );
+            return this.errorHandler.handleCreateError(error, 'createStorage', { config });
         }
     }
 
@@ -151,20 +143,16 @@ class StorageFactory {
             const config = configManager.getConfig();
             
             if (!config.storage) {
-                throw new Error('Storage configuration not found in ConfigManager');
+                return this.errorHandler.handleCreateError(
+                    new Error('Storage configuration not found in ConfigManager'),
+                    'createDefaultStorage'
+                );
             }
 
             StorageFactory.logger.info('Creating default storage instance');
             return this.createStorage(config.storage as SqliteConfig);
         } catch (error) {
-            StorageFactory.logger.error('Failed to create default storage', {
-                error: error instanceof Error ? error.message : String(error)
-            });
-            throw createError(
-                ErrorCodes.STORAGE_INIT,
-                'Failed to create default storage',
-                error instanceof Error ? error.message : String(error)
-            );
+            return this.errorHandler.handleCreateError(error, 'createDefaultStorage');
         }
     }
 }

@@ -1,123 +1,150 @@
 import { createError, ErrorCodes } from '../errors/index.js';
 
 /**
- * Utilities for handling task paths with validation and normalization
+ * Path validation and manipulation utilities
  */
 export class PathUtils {
-  /**
-   * Normalizes a path string by:
-   * - Converting to lowercase
-   * - Replacing spaces with hyphens
-   * - Removing invalid characters
-   * - Normalizing slashes
-   */
-  static normalize(path: string): string {
-    // First convert Windows backslashes to forward slashes
-    const normalized = path.replace(/\\/g, '/');
-    
-    return normalized.toLowerCase()
-      .trim()
-      .replace(/\s+/g, '-')
-      .replace(/[^a-z0-9-\/]/g, '')
-      .replace(/\/+/g, '/') // Normalize multiple slashes to single
-      .replace(/^\/+|\/+$/g, ''); // Trim leading/trailing slashes
-  }
+    private static readonly PATH_SEPARATOR = '/';
+    private static readonly VALID_PATH_REGEX = /^[a-zA-Z0-9-_/]+$/;
+    private static readonly MAX_PATH_LENGTH = 255;
+    private static readonly MAX_SEGMENTS = 10;
 
-  /**
-   * Extracts the project path (first segment) from a full path
-   */
-  static getProjectPath(path: string): string {
-    const normalized = this.normalize(path);
-    const segments = normalized.split('/');
-    if (segments.length === 0) {
-      throw createError(
-        ErrorCodes.INVALID_INPUT,
-        'Invalid path: empty path'
-      );
-    }
-    return segments[0];
-  }
+    /**
+     * Validates a path string
+     */
+    static validatePath(path: string): void {
+        if (!path) {
+            throw createError(
+                ErrorCodes.VALIDATION_ERROR,
+                'Path cannot be empty',
+                'PathUtils.validatePath',
+                'Please provide a valid path'
+            );
+        }
 
-  /**
-   * Checks if a path is a valid subpath of another path
-   */
-  static isSubPath(parentPath: string, childPath: string): boolean {
-    const normalizedParent = this.normalize(parentPath);
-    const normalizedChild = this.normalize(childPath);
-    return normalizedChild.startsWith(`${normalizedParent}/`);
-  }
+        if (path.length > this.MAX_PATH_LENGTH) {
+            throw createError(
+                ErrorCodes.VALIDATION_ERROR,
+                `Path exceeds maximum length of ${this.MAX_PATH_LENGTH} characters`,
+                'PathUtils.validatePath',
+                'Path is too long'
+            );
+        }
 
-  /**
-   * Generates a valid path from a name and optional parent path
-   */
-  static generatePath(name: string, parentPath?: string): string {
-    const safeName = this.normalize(name);
-    if (!safeName) {
-      throw createError(
-        ErrorCodes.INVALID_INPUT,
-        'Invalid name: cannot generate path from empty name'
-      );
-    }
-    return parentPath ? `${this.normalize(parentPath)}/${safeName}` : safeName;
-  }
+        if (!this.VALID_PATH_REGEX.test(path)) {
+            throw createError(
+                ErrorCodes.VALIDATION_ERROR,
+                'Path contains invalid characters',
+                'PathUtils.validatePath',
+                'Path can only contain letters, numbers, hyphens, and underscores'
+            );
+        }
 
-  /**
-   * Validates a path string against path requirements
-   * Throws an error if the path is invalid
-   */
-  static validatePath(path: string): void {
-    if (!path) {
-      throw createError(
-        ErrorCodes.INVALID_INPUT,
-        'Path cannot be empty'
-      );
+        const segments = this.splitPath(path);
+        if (segments.length > this.MAX_SEGMENTS) {
+            throw createError(
+                ErrorCodes.VALIDATION_ERROR,
+                `Path has too many segments (max: ${this.MAX_SEGMENTS})`,
+                'PathUtils.validatePath',
+                'Path has too many segments'
+            );
+        }
+
+        for (const segment of segments) {
+            if (!segment) {
+                throw createError(
+                    ErrorCodes.VALIDATION_ERROR,
+                    'Path contains empty segments',
+                    'PathUtils.validatePath',
+                    'Path segments cannot be empty'
+                );
+            }
+        }
     }
 
-    const normalized = this.normalize(path);
-    
-    // Check for full path format
-    if (!normalized.includes('/')) {
-      throw createError(
-        ErrorCodes.INVALID_INPUT,
-        'Path must be fully qualified (e.g., "project/feature/task")'
-      );
+    /**
+     * Splits a path into segments
+     */
+    static splitPath(path: string): string[] {
+        return path.split(this.PATH_SEPARATOR).filter(Boolean);
     }
 
-    // Validate path format (allow both forward and backslashes in input, but normalize to forward slashes)
-    const pathRegex = /^[a-z0-9-]+(?:[\/\\][a-z0-9-]+)*$/;
-    if (!pathRegex.test(normalized)) {
-      throw createError(
-        ErrorCodes.INVALID_INPUT,
-        'Path must contain only letters, numbers, hyphens, and forward slashes'
-      );
+    /**
+     * Joins path segments
+     */
+    static joinPath(...segments: string[]): string {
+        return segments.filter(Boolean).join(this.PATH_SEPARATOR);
     }
 
-    // Check path depth (prevent excessive nesting)
-    const depth = normalized.split('/').length;
-    if (depth > 10) {
-      throw createError(
-        ErrorCodes.INVALID_INPUT,
-        'Path depth exceeds maximum allowed (10 levels)'
-      );
+    /**
+     * Gets the parent path
+     */
+    static getParentPath(path: string): string {
+        const segments = this.splitPath(path);
+        if (segments.length <= 1) {
+            throw createError(
+                ErrorCodes.VALIDATION_ERROR,
+                'Cannot get parent of root path',
+                'PathUtils.getParentPath',
+                'This path has no parent'
+            );
+        }
+        return segments.slice(0, -1).join(this.PATH_SEPARATOR);
     }
-  }
 
-  /**
-   * Gets the parent path of a given path
-   * Returns null if the path has no parent (is a root path)
-   */
-  static getParentPath(path: string): string | null {
-    const normalized = this.normalize(path);
-    const lastSlashIndex = normalized.lastIndexOf('/');
-    return lastSlashIndex === -1 ? null : normalized.substring(0, lastSlashIndex);
-  }
+    /**
+     * Gets the last segment of a path
+     */
+    static getBaseName(path: string): string {
+        const segments = this.splitPath(path);
+        if (!segments.length) {
+            throw createError(
+                ErrorCodes.VALIDATION_ERROR,
+                'Cannot get base name of empty path',
+                'PathUtils.getBaseName',
+                'Path is empty'
+            );
+        }
+        return segments[segments.length - 1];
+    }
 
-  /**
-   * Gets the name (last segment) of a path
-   */
-  static getName(path: string): string {
-    const normalized = this.normalize(path);
-    const segments = normalized.split('/');
-    return segments[segments.length - 1];
-  }
+    /**
+     * Checks if a path is a child of another path
+     */
+    static isChildPath(parentPath: string, childPath: string): boolean {
+        if (!parentPath || !childPath) {
+            return false;
+        }
+        const parentSegments = this.splitPath(parentPath);
+        const childSegments = this.splitPath(childPath);
+        if (childSegments.length <= parentSegments.length) {
+            return false;
+        }
+        return parentSegments.every((segment, index) => segment === childSegments[index]);
+    }
+
+    /**
+     * Gets the relative path from one path to another
+     */
+    static getRelativePath(from: string, to: string): string {
+        const fromSegments = this.splitPath(from);
+        const toSegments = this.splitPath(to);
+        let commonPrefixLength = 0;
+
+        // Find common prefix
+        while (
+            commonPrefixLength < fromSegments.length &&
+            commonPrefixLength < toSegments.length &&
+            fromSegments[commonPrefixLength] === toSegments[commonPrefixLength]
+        ) {
+            commonPrefixLength++;
+        }
+
+        // Build relative path
+        const upCount = fromSegments.length - commonPrefixLength;
+        const upSegments = Array(upCount).fill('..');
+        const downSegments = toSegments.slice(commonPrefixLength);
+
+        return [...upSegments, ...downSegments].join(this.PATH_SEPARATOR);
+    }
 }

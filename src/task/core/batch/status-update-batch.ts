@@ -74,6 +74,7 @@ export class StatusUpdateBatch {
             throw createError(
                 ErrorCodes.OPERATION_FAILED,
                 'Failed to execute status update batch',
+                'execute',
                 String(error)
             );
         } finally {
@@ -95,7 +96,8 @@ export class StatusUpdateBatch {
             if (visiting.has(path)) {
                 throw createError(
                     ErrorCodes.INVALID_STATE,
-                    `Circular dependency detected: ${path}`
+                    `Circular dependency detected: ${path}`,
+                    'orderUpdatesByDependencies'
                 );
             }
 

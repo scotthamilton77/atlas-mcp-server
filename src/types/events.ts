@@ -3,31 +3,80 @@
  */
 import { MonitoringMetrics } from './storage.js';
 
-// Base event type
-export type AtlasEvent = SystemEvent | TaskEvent | CacheEvent | ErrorEvent | TransactionEvent | BatchEvent;
+// Base event interface with common properties
+export interface BaseEvent {
+  type: EventTypes;
+  timestamp: number;
+  retryCount?: number;
+}
 
 // Event handler types
 export type EventHandler<T extends AtlasEvent> = (event: T) => void | Promise<void>;
 
 export interface EventSubscription {
-    unsubscribe: () => void;
+  unsubscribe: () => void;
+  type: EventTypes | '*';
+  createdAt: number;
 }
 
-// Transaction event interface
-export interface TransactionEvent {
-    type: EventTypes;
-    timestamp: number;
-    transactionId: string;
-    metadata?: Record<string, unknown>;
+export interface EventHandlerOptions {
+  timeout?: number;
+  maxRetries?: number;
+  batchOptions?: {
+    enabled: boolean;
+    maxBatchSize?: number;
+    maxWaitTime?: number;
+  };
 }
 
-// Batch event interface
-export interface BatchEvent {
-    type: EventTypes;
-    timestamp: number;
-    batchId: string;
-    metadata?: Record<string, unknown>;
+// Event interfaces extending BaseEvent
+export interface SystemEvent extends BaseEvent {
+  metadata?: SystemEventMetadata;
 }
+
+export interface TaskEvent extends BaseEvent {
+  taskId: string;
+  task: unknown;
+  metadata?: Record<string, unknown>;
+  changes?: {
+    before: unknown;
+    after: unknown;
+  };
+}
+
+export interface CacheEvent extends BaseEvent {
+  metadata: {
+    memoryUsage: {
+      heapUsed: number;
+      heapTotal: number;
+      rss: number;
+    };
+    threshold: number;
+  };
+}
+
+export interface ErrorEvent extends BaseEvent {
+  type: EventTypes.SYSTEM_ERROR;
+  error: Error;
+  context?: {
+    component: string;
+    operation: string;
+    args?: unknown;
+  };
+}
+
+export interface TransactionEvent extends BaseEvent {
+  transactionId: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface BatchEvent extends BaseEvent {
+  batchId: string;
+  metadata?: Record<string, unknown>;
+}
+
+// Union type of all event types
+export type AtlasEvent = SystemEvent | TaskEvent | CacheEvent | ErrorEvent | TransactionEvent | BatchEvent;
 
 export enum EventTypes {
     // System events
@@ -62,7 +111,17 @@ export enum EventTypes {
     // Cache events
     MEMORY_PRESSURE = 'memory_pressure',
     CACHE_CLEARED = 'cache_cleared',
-    CACHE_INVALIDATED = 'cache_invalidated'
+    CACHE_INVALIDATED = 'cache_invalidated',
+
+    // Logger events
+    LOGGER_INITIALIZED = 'logger_initialized',
+    LOGGER_SHUTDOWN = 'logger_shutdown',
+    LOGGER_TRANSPORT_ERROR = 'logger_transport_error',
+    LOGGER_TRANSPORT_RECOVERED = 'logger_transport_recovered',
+    LOGGER_TRANSPORT_FAILED = 'logger_transport_failed',
+    LOGGER_FAILOVER_USED = 'logger_failover_used',
+    LOGGER_CRITICAL_FAILURE = 'logger_critical_failure',
+    LOGGER_HEALTH_CHECK = 'logger_health_check'
 }
 
 export interface SystemEventMetadata {
@@ -104,46 +163,14 @@ export interface SystemEventMetadata {
         errorCount: number;
         avgResponseTime: number;
     };
+
+    // Logger info
+    transports?: string[];
+    failoverEnabled?: boolean;
+    transport?: string;
+    status?: Record<string, unknown>;
+    originalErrors?: string[];
+    errors?: string[];
 }
 
-export interface SystemEvent {
-    type: EventTypes;
-    timestamp: number;
-    metadata?: SystemEventMetadata;
-}
-
-export interface ErrorEvent {
-    type: EventTypes.SYSTEM_ERROR;
-    timestamp: number;
-    error: Error;
-    context?: {
-        component: string;
-        operation: string;
-        args?: unknown;
-    };
-}
-
-export interface TaskEvent {
-    type: EventTypes;
-    timestamp: number;
-    taskId: string;
-    task: unknown;
-    metadata?: Record<string, unknown>;
-    changes?: {
-        before: unknown;
-        after: unknown;
-    };
-}
-
-export interface CacheEvent {
-    type: EventTypes;
-    timestamp: number;
-    metadata: {
-        memoryUsage: {
-            heapUsed: number;
-            heapTotal: number;
-            rss: number;
-        };
-        threshold: number;
-    };
-}
+// End of file - removed duplicate interface definitions

@@ -1,11 +1,7 @@
-/**
- * Task type definitions
- */
-
 export enum TaskType {
     TASK = 'TASK',
-    MILESTONE = 'MILESTONE',
-    GROUP = 'GROUP'
+    GROUP = 'GROUP',
+    MILESTONE = 'MILESTONE'
 }
 
 export enum TaskStatus {
@@ -16,77 +12,65 @@ export enum TaskStatus {
     BLOCKED = 'BLOCKED'
 }
 
-/**
- * User-defined metadata for tasks
- * All fields are optional and can be customized
- */
-export interface TaskMetadata extends Record<string, unknown> {
-    priority?: 'low' | 'medium' | 'high';
-    tags?: string[];
-    reasoning?: string;  // LLM's reasoning about task decisions
-    toolsUsed?: string[];  // Tools used by LLM to accomplish task
-    resourcesAccessed?: string[];  // Resources accessed by LLM
-    contextUsed?: string[];  // Key context pieces used in decision making
-    // Each string field max 1000 chars, arrays max 100 items
-}
-
-/**
- * Core task interface with system fields at root level
- */
 export interface Task {
-    // System fields (required)
-    path: string;  // Max depth of 8 levels
-    name: string;  // Max 200 chars
+    path: string;
+    name: string;
     type: TaskType;
     status: TaskStatus;
-    created: number;  // Timestamp of creation
-    updated: number;  // Timestamp of last update
-    version: number;  // Incremental version number
-    projectPath: string;  // Root project path
-
-    // Optional fields
-    description?: string;  // Max 2000 chars
+    projectPath: string;
+    created: number;
+    updated: number;
+    version: number;
+    metadata: Record<string, unknown>;
+    dependencies: string[];
+    subtasks: string[];
+    description?: string;
     parentPath?: string;
-    notes?: string[];  // Each note max 1000 chars
-    reasoning?: string;  // Max 2000 chars - LLM's reasoning about the task
-    dependencies: string[];  // Max 50 dependencies
-    subtasks: string[];  // Max 100 subtasks
-    
-    // User-defined metadata (flexible)
-    metadata: TaskMetadata;  // Custom fields defined by user
+    notes?: string[];
+    reasoning?: string;
 }
 
-export interface CreateTaskInput extends Record<string, unknown> {
-    path: string;  // Now required
+export interface CreateTaskInput {
     name: string;
-    parentPath?: string;
-    description?: string;
     type?: TaskType;
+    path?: string;
+    parentPath?: string;
+    dependencies?: string[];
+    metadata?: Record<string, unknown>;
+    description?: string;
     notes?: string[];
     reasoning?: string;
-    dependencies?: string[];
-    metadata?: Partial<TaskMetadata>;
 }
 
-export interface UpdateTaskInput extends Record<string, unknown> {
+export interface UpdateTaskInput {
     name?: string;
-    description?: string;
-    type?: TaskType;
     status?: TaskStatus;
-    parentPath?: string;
+    dependencies?: string[];
+    metadata?: Record<string, unknown>;
+    description?: string;
     notes?: string[];
     reasoning?: string;
-    dependencies?: string[];
-    metadata?: Partial<TaskMetadata>;
+    type?: TaskType;
 }
+
+export const CONSTRAINTS = {
+    NAME_MAX_LENGTH: 255,
+    DESCRIPTION_MAX_LENGTH: 1000,
+    PATH_MAX_LENGTH: 255,
+    MAX_DEPENDENCIES: 100,
+    MAX_NOTES: 1000,
+    MAX_REASONING_LENGTH: 1000,
+    NOTE_MAX_LENGTH: 1000,
+    REASONING_MAX_LENGTH: 1000,
+    MAX_PATH_DEPTH: 10,
+    MAX_SUBTASKS: 100,
+    MAX_ARRAY_ITEMS: 100,
+    METADATA_STRING_MAX_LENGTH: 1000
+};
 
 export interface TaskResponse<T> {
     success: boolean;
-    data?: T;
-    error?: {
-        code: string;
-        message: string;
-    };
+    data: T;
     metadata: {
         timestamp: number;
         requestId: string;
@@ -95,32 +79,12 @@ export interface TaskResponse<T> {
     };
 }
 
-// Field length constraints
-export const CONSTRAINTS = {
-    NAME_MAX_LENGTH: 200,
-    DESCRIPTION_MAX_LENGTH: 2000,
-    NOTE_MAX_LENGTH: 1000,
-    REASONING_MAX_LENGTH: 2000,
-    METADATA_STRING_MAX_LENGTH: 1000,
-    MAX_DEPENDENCIES: 50,
-    MAX_SUBTASKS: 100,
-    MAX_NOTES: 100,
-    MAX_ARRAY_ITEMS: 100,
-    MAX_PATH_DEPTH: 8
-} as const;
-
-/**
- * Gets the task name from a path
- */
-export function getTaskName(path: string): string {
-    const segments = path.split('/');
-    return segments[segments.length - 1];
-}
-
 /**
  * Gets the parent path from a task path
+ * @param path Task path (e.g., "project/feature/task")
+ * @returns Parent path or undefined if no parent exists
  */
 export function getParentPath(path: string): string | undefined {
-    const segments = path.split('/');
-    return segments.length > 1 ? segments.slice(0, -1).join('/') : undefined;
+    const parts = path.split('/');
+    return parts.length > 1 ? parts.slice(0, -1).join('/') : undefined;
 }

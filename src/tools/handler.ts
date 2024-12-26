@@ -58,15 +58,16 @@ export class ToolHandler {
     /**
      * Validates task hierarchy rules
      */
-    private async validateTaskHierarchy(args: Record<string, unknown>, operation: 'create' | 'update'): Promise<void> {
+    private async validateTaskHierarchy(args: CreateTaskInput | UpdateTaskInput & { path?: string }, operation: 'create' | 'update'): Promise<void> {
         const taskType = (args.type || 'TASK').toString().toUpperCase();
-        const parentPath = args.parentPath as string | undefined;
+        const parentPath = ('parentPath' in args) ? args.parentPath : undefined;
 
         // Validate task type is uppercase
         if (taskType !== taskType.toUpperCase()) {
             throw createError(
                 ErrorCodes.INVALID_INPUT,
-                'Task type must be uppercase (TASK, GROUP, or MILESTONE)'
+                'Task type must be uppercase (TASK, GROUP, or MILESTONE)',
+                'validateTaskHierarchy'
             );
         }
 
@@ -74,7 +75,8 @@ export class ToolHandler {
         if (!['TASK', 'GROUP', 'MILESTONE'].includes(taskType)) {
             throw createError(
                 ErrorCodes.INVALID_INPUT,
-                'Invalid task type. Must be TASK, GROUP, or MILESTONE'
+                'Invalid task type. Must be TASK, GROUP, or MILESTONE',
+                'validateTaskHierarchy'
             );
         }
 
@@ -84,7 +86,8 @@ export class ToolHandler {
             if (!parent) {
                 throw createError(
                     ErrorCodes.INVALID_INPUT,
-                    `Parent task '${parentPath}' not found`
+                    `Parent task '${parentPath}' not found`,
+                    'validateTaskHierarchy'
                 );
             }
 
@@ -94,7 +97,8 @@ export class ToolHandler {
                     if (!['TASK', 'GROUP'].includes(taskType)) {
                         throw createError(
                             ErrorCodes.INVALID_INPUT,
-                            'MILESTONE can only contain TASK or GROUP types'
+                            'MILESTONE can only contain TASK or GROUP types',
+                            'validateTaskHierarchy'
                         );
                     }
                     break;
@@ -102,14 +106,16 @@ export class ToolHandler {
                     if (taskType !== 'TASK') {
                         throw createError(
                             ErrorCodes.INVALID_INPUT,
-                            'GROUP can only contain TASK types'
+                            'GROUP can only contain TASK types',
+                            'validateTaskHierarchy'
                         );
                     }
                     break;
                 case TaskType.TASK:
                     throw createError(
                         ErrorCodes.INVALID_INPUT,
-                        'TASK type cannot contain subtasks'
+                        'TASK type cannot contain subtasks',
+                        'validateTaskHierarchy'
                     );
             }
         }
@@ -121,7 +127,8 @@ export class ToolHandler {
             if (!task) {
                 throw createError(
                     ErrorCodes.INVALID_INPUT,
-                    `Task '${path}' not found`
+                    `Task '${path}' not found`,
+                    'validateTaskHierarchy'
                 );
             }
 
@@ -131,7 +138,8 @@ export class ToolHandler {
                 if (subtasks.length > 0) {
                     throw createError(
                         ErrorCodes.INVALID_INPUT,
-                        'Cannot change to TASK type while having subtasks'
+                        'Cannot change to TASK type while having subtasks',
+                        'validateTaskHierarchy'
                     );
                 }
             }
@@ -143,7 +151,8 @@ export class ToolHandler {
                 if (invalidSubtasks.length > 0) {
                     throw createError(
                         ErrorCodes.INVALID_INPUT,
-                        'GROUP can only contain TASK type subtasks'
+                        'GROUP can only contain TASK type subtasks',
+                        'validateTaskHierarchy'
                     );
                 }
             }
@@ -354,7 +363,8 @@ export class ToolHandler {
                                 default:
                                     throw createError(
                                         ErrorCodes.INVALID_INPUT,
-                                        `Invalid operation type: ${op.type}`
+                                        `Invalid operation type: ${op.type}`,
+                                        'handleToolCall'
                                     );
                             }
                         } catch (error) {
@@ -480,7 +490,8 @@ export class ToolHandler {
                 (args as any).metadata?.dependencies) {
                 throw createError(
                     ErrorCodes.INVALID_INPUT,
-                    'Dependencies must be specified at root level, not in metadata'
+                    'Dependencies must be specified at root level, not in metadata',
+                    'handleToolCall'
                 );
             }
 
@@ -528,7 +539,8 @@ export class ToolHandler {
             this.logger.error('Failed to format response', { error });
             throw createError(
                 ErrorCodes.INTERNAL_ERROR,
-                'Failed to format response'
+                'Failed to format response',
+                'formatResponse'
             );
         }
     }

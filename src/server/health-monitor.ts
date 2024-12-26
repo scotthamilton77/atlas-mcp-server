@@ -48,10 +48,10 @@ export class HealthMonitor {
     constructor(config: HealthConfig = {}) {
         this.logger = Logger.getInstance().child({ component: 'HealthMonitor' });
         this.config = {
-            checkInterval: config.checkInterval || 30000,      // 30 seconds
-            failureThreshold: config.failureThreshold || 3,    // 3 strikes
-            shutdownGracePeriod: config.shutdownGracePeriod || 5000, // 5 seconds
-            clientPingTimeout: config.clientPingTimeout || 60000 // 1 minute
+            checkInterval: config.checkInterval || 300000,     // 5 minutes
+            failureThreshold: config.failureThreshold || 5,    // 5 strikes
+            shutdownGracePeriod: config.shutdownGracePeriod || 10000, // 10 seconds
+            clientPingTimeout: config.clientPingTimeout || 300000 // 5 minutes
         };
     }
 

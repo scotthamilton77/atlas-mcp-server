@@ -12,13 +12,10 @@ import {
     TransactionOptions,
     DEFAULT_TRANSACTION_OPTIONS
 } from '../../../types/transaction.js';
-import { TransactionManager as StorageTransactionManager } from '../../../storage/core/transactions/manager.js';
-
 export class TransactionManager {
     private readonly logger: Logger;
     private activeTransactions: Map<string, Transaction>;
     private transactionCounter: number;
-    private readonly storageTransactionManager: StorageTransactionManager;
     private transactionTimeouts: Map<string, NodeJS.Timeout>;
     private static instance: TransactionManager | null = null;
 
@@ -27,7 +24,6 @@ export class TransactionManager {
         this.activeTransactions = new Map();
         this.transactionTimeouts = new Map();
         this.transactionCounter = 0;
-        this.storageTransactionManager = StorageTransactionManager.getInstance();
     }
 
     static getInstance(storage?: TaskStorage): TransactionManager {
@@ -74,9 +70,9 @@ export class TransactionManager {
                 await this.acquireLock(id);
             }
 
-            // Start storage-level transaction
-            if (this.storage && 'db' in this.storage) {
-                await this.storageTransactionManager.beginTransaction((this.storage as any).db);
+            // Start storage-level transaction if storage supports it
+            if (this.storage && 'beginTransaction' in this.storage) {
+                await this.storage.beginTransaction();
             }
 
             this.activeTransactions.set(id, transaction);
@@ -96,7 +92,9 @@ export class TransactionManager {
             throw createError(
                 ErrorCodes.TRANSACTION_ERROR,
                 'Failed to begin transaction',
-                String(error)
+                'TransactionManager.begin',
+                undefined,
+                { error: String(error) }
             );
         }
     }
@@ -116,12 +114,9 @@ export class TransactionManager {
 
             try {
                 // Persist and commit transaction
-                if (this.storage && 'db' in this.storage) {
+                if (this.storage && 'commitTransaction' in this.storage) {
                     await this.persistTransaction(transaction);
-                    await this.storageTransactionManager.commitTransaction(
-                        (this.storage as any).db,
-                        transaction.id
-                    );
+                    await this.storage.commitTransaction();
                 }
 
                 transaction.status = 'committed';
@@ -181,16 +176,14 @@ export class TransactionManager {
             if (!this.activeTransactions.has(transaction.id)) {
                 throw createError(
                     ErrorCodes.INVALID_STATE,
-                    `Transaction ${transaction.id} not found`
+                    `Transaction ${transaction.id} not found`,
+                    'TransactionManager.rollback'
                 );
             }
 
             // Rollback storage-level transaction first
-            if (this.storage && 'db' in this.storage) {
-                await this.storageTransactionManager.rollbackTransaction(
-                    (this.storage as any).db,
-                    transaction.id
-                );
+            if (this.storage && 'rollbackTransaction' in this.storage) {
+                await this.storage.rollbackTransaction();
             }
 
             // Then reverse operations in reverse order
@@ -217,12 +210,9 @@ export class TransactionManager {
             });
 
             // Even if application-level rollback fails, ensure storage transaction is rolled back
-            if (this.storage && 'db' in this.storage) {
+            if (this.storage && 'rollbackTransaction' in this.storage) {
                 try {
-                    await this.storageTransactionManager.rollbackTransaction(
-                        (this.storage as any).db,
-                        transaction.id
-                    );
+                    await this.storage.rollbackTransaction();
                 } catch (rollbackError) {
                     this.logger.error('Failed to rollback storage transaction', {
                         error: rollbackError,
@@ -280,17 +270,19 @@ export class TransactionManager {
 
     private validateTransactionState(transaction: Transaction): void {
         if (!this.activeTransactions.has(transaction.id)) {
-            throw createError(
-                ErrorCodes.INVALID_STATE,
-                `Transaction ${transaction.id} not found`
-            );
+                throw createError(
+                    ErrorCodes.INVALID_STATE,
+                    `Transaction ${transaction.id} not found`,
+                    'TransactionManager.validateTransactionState'
+                );
         }
 
         if (transaction.status !== 'pending') {
-            throw createError(
-                ErrorCodes.INVALID_STATE,
-                `Transaction ${transaction.id} is already ${transaction.status}`
-            );
+                throw createError(
+                    ErrorCodes.INVALID_STATE,
+                    `Transaction ${transaction.id} is already ${transaction.status}`,
+                    'TransactionManager.validateTransactionState'
+                );
         }
     }
 

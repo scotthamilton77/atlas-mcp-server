@@ -20,9 +20,15 @@ import { RequestTracer, TraceEvent } from './request-tracer.js';
 export interface ServerConfig {
     name: string;
     version: string;
-    maxRequestsPerMinute?: number;
-    requestTimeout?: number;
-    shutdownTimeout?: number;
+    maxRequestsPerMinute: number;
+    requestTimeout: number;
+    shutdownTimeout: number;
+    health?: {
+        checkInterval?: number;      // How often to run health checks (ms)
+        failureThreshold?: number;   // How many consecutive failures before shutdown
+        shutdownGracePeriod?: number; // How long to wait before force shutdown (ms)
+        clientPingTimeout?: number;  // How long to wait for client ping (ms)
+    };
 }
 
 export interface ToolHandler {
@@ -112,10 +118,10 @@ export class AtlasServer {
         // Initialize components
         this.rateLimiter = new RateLimiter(config.maxRequestsPerMinute || 600);
         this.healthMonitor = new HealthMonitor({
-            checkInterval: 30000,
-            failureThreshold: 3,
-            shutdownGracePeriod: config.shutdownTimeout || 30000,
-            clientPingTimeout: 60000
+            checkInterval: config.health?.checkInterval || 300000,
+            failureThreshold: config.health?.failureThreshold || 5,
+            shutdownGracePeriod: config.health?.shutdownGracePeriod || 10000,
+            clientPingTimeout: config.health?.clientPingTimeout || 300000
         });
         this.metricsCollector = new MetricsCollector();
         this.requestTracer = new RequestTracer();
@@ -324,7 +330,7 @@ export class AtlasServer {
             } catch (error) {
                 AtlasServer.logger.error('Health check error:', { error });
             }
-        }, 30000);
+        }, this.config.health?.checkInterval || 300000);
     }
 
     /**
