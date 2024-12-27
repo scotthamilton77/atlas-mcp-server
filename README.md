@@ -109,10 +109,14 @@ ATLAS implements the Model Context Protocol (MCP), created by Anthropic, which e
 ```bash
 git clone https://github.com/cyanheads/atlas-mcp-server.git
 cd atlas-mcp-server
+```
+
+2. Install dependencies:
+```bash
 npm install
 ```
 
-2. Build the project:
+3. Build the project:
 ```bash
 npm run build
 ```

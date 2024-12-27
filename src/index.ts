@@ -61,15 +61,21 @@ async function main(): Promise<void> {
             // Ignore error if .env file doesn't exist
         }
 
-        // Get home directory in a cross-platform way
-        const homeDir = process.env.HOME || process.env.USERPROFILE || '';
+// Get home directory and documents folder in a cross-platform way
+const homeDir = process.env.HOME || process.env.USERPROFILE || '';
+const documentsDir = process.platform === 'win32' ? 
+    join(homeDir, 'Documents') :
+    join(homeDir, 'Documents');
 
-        const logDir = process.env.ATLAS_STORAGE_DIR ? 
-            join(process.env.ATLAS_STORAGE_DIR, 'logs') : 
-            join(homeDir, 'Documents', 'Cline', 'mcp-workspace', 'ATLAS', 'logs');
+const logDir = process.env.ATLAS_STORAGE_DIR ? 
+    join(process.env.ATLAS_STORAGE_DIR, 'logs') : 
+    join(documentsDir, 'Cline', 'mcp-workspace', 'ATLAS', 'logs');
 
-        // Create log directory with proper permissions (mode is ignored on Windows)
-        await fs.mkdir(logDir, { recursive: true, ...(process.platform !== 'win32' && { mode: 0o755 }) });
+// Create log directory with proper permissions
+await fs.mkdir(logDir, { 
+    recursive: true, 
+    mode: process.platform === 'win32' ? undefined : 0o755 
+});
 
         // Get log level from environment or default to info
         const logLevel = process.env.ATLAS_LOG_LEVEL?.toLowerCase();
@@ -77,16 +83,35 @@ async function main(): Promise<void> {
             ? logLevel as LogLevel 
             : LogLevels.INFO;
 
-        // Initialize logger first - no console logging for MCP clients
+        // Initialize logger with file-only output for MCP clients
         logger = await Logger.initialize({
-            console: false,
+            console: false, // Disable console output
             file: true,
             minLevel: validLogLevel,
             logDir: logDir,
             maxFileSize: 5 * 1024 * 1024,
             maxFiles: 5,
-            noColors: true
+            noColors: true,
+            eventManager: eventManager // Ensure events go through event manager
         });
+
+        // Ensure no console output in error handlers
+        process.on('uncaughtException', (error) => {
+            logger?.error('Uncaught Exception:', error);
+            process.exit(1);
+        });
+
+        process.on('unhandledRejection', (reason) => {
+            logger?.error('Unhandled Rejection:', reason);
+            process.exit(1);
+        });
+
+        // Redirect console methods to logger
+        console.log = (...args) => logger?.info(args.join(' '));
+        console.info = (...args) => logger?.info(args.join(' '));
+        console.warn = (...args) => logger?.warn(args.join(' '));
+        console.error = (...args) => logger?.error(args.join(' '));
+        console.debug = (...args) => logger?.debug(args.join(' '));
 
         // Add debug log to verify level
         logger.debug('Logger initialized with level', { level: validLogLevel });
@@ -120,15 +145,23 @@ async function main(): Promise<void> {
                 performance: {
                     checkpointInterval: 60000,
                     cacheSize: 1000,
-                    mmapSize: 1024 * 1024 * 1024, // 1GB
-                    pageSize: 4096
+                    mmapSize: 64 * 1024 * 1024, // 64MB
+                    pageSize: 4096,
+                    maxMemory: 256 * 1024 * 1024 // 256MB max SQLite memory
                 }
             }
         });
 
-        const config = configManager.getConfig();
+const config = configManager.getConfig();
 
-        try {
+// Ensure storage directory exists with proper permissions
+const storageDir = config.storage?.baseDir || join(documentsDir, 'Cline', 'mcp-workspace', 'ATLAS');
+await fs.mkdir(storageDir, { 
+    recursive: true,
+    mode: process.platform === 'win32' ? undefined : 0o755 
+});
+
+try {
             // Emit system startup event
             eventManager.emitSystemEvent({
                 type: EventTypes.SYSTEM_STARTUP,
@@ -715,7 +748,7 @@ async function main(): Promise<void> {
             
             // Windows-specific handling for CTRL+C and other termination signals
             if (process.platform === 'win32') {
-                const readline = require('readline').createInterface({
+                const readline = (await import('readline')).createInterface({
                     input: process.stdin,
                     output: process.stdout
                 });

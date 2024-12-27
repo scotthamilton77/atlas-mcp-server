@@ -26,6 +26,7 @@ export interface SqliteConfig {
         pageSize?: number;
         cacheSize?: number;
         mmapSize?: number;
+        maxMemory?: number;
     };
     connection?: {
         busyTimeout?: number;
@@ -86,10 +87,12 @@ export class SqliteStorage implements TaskStorage {
                     `PRAGMA synchronous=${this.config.sqlite?.synchronous || 'NORMAL'}`,
                     
                     // Memory and performance settings
-                    `PRAGMA temp_store=${this.config.sqlite?.tempStore || 'MEMORY'}`,
+                    `PRAGMA temp_store=FILE`, // Force temp storage to file instead of memory
                     `PRAGMA page_size=${this.config.performance?.pageSize || DEFAULT_PAGE_SIZE}`,
-                    `PRAGMA cache_size=${this.config.performance?.cacheSize || DEFAULT_CACHE_SIZE}`,
-                    `PRAGMA mmap_size=${this.config.performance?.mmapSize || 30000000000}`,
+                    `PRAGMA cache_size=-${Math.floor((this.config.performance?.maxMemory || 256 * 1024 * 1024) / 1024)}`, // Negative value for kilobytes
+                    `PRAGMA mmap_size=${this.config.performance?.mmapSize || 64 * 1024 * 1024}`,
+                    `PRAGMA max_page_count=${Math.floor((this.config.performance?.maxMemory || 256 * 1024 * 1024) / (this.config.performance?.pageSize || DEFAULT_PAGE_SIZE))}`,
+                    'PRAGMA soft_heap_limit=256000000', // 256MB soft heap limit
                     
                     // Concurrency settings
                     `PRAGMA locking_mode=${this.config.sqlite?.lockingMode || 'NORMAL'}`,

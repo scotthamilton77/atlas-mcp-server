@@ -53,7 +53,7 @@ export class TaskStore {
         this.logger = Logger.getInstance().child({ component: 'TaskStore' });
         this.indexManager = new TaskIndexManager();
         this.pathValidator = new PathValidator();
-        this.cacheManager = new CacheManager({
+        this.cacheManager = CacheManager.getInstance({
             maxSize: 500, // Reduced from 1000
             ttl: 30000, // Reduced from 60000
             maxTTL: 60000, // Reduced from 300000

@@ -69,8 +69,8 @@ export class AtlasServer {
     private isInitialized: boolean = false;
     private readonly activeRequests: Set<string> = new Set();
     private memoryMonitor?: NodeJS.Timeout;
-    private readonly MAX_MEMORY_USAGE = 2 * 1024 * 1024 * 1024; // 2GB threshold
-    private readonly MEMORY_CHECK_INTERVAL = 30000; // 30 seconds
+    private readonly MAX_MEMORY_USAGE = 512 * 1024 * 1024; // 512MB threshold for VSCode extension environment
+    private readonly MEMORY_CHECK_INTERVAL = 5000; // 5 seconds
 
     /**
      * Gets the singleton instance of AtlasServer
@@ -465,8 +465,8 @@ export class AtlasServer {
                 });
             }
 
-            // Trigger cleanup if memory usage is too high
-            if (memUsage.heapUsed > this.MAX_MEMORY_USAGE) {
+            // More aggressive memory management for VSCode extension environment
+            if (memUsage.heapUsed > this.MAX_MEMORY_USAGE || memUsage.heapUsed / memUsage.heapTotal > 0.7) {
                 if (AtlasServer.logger) {
                     AtlasServer.logger.warn('High memory usage detected, triggering cleanup', {
                         heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
@@ -474,16 +474,31 @@ export class AtlasServer {
                     });
                 }
                 
-                // Force garbage collection if available
-                if (global.gc) {
-                    if (AtlasServer.logger) {
-                        AtlasServer.logger.info('Forcing garbage collection');
+                // Clear caches first to free up memory
+                this.toolHandler.clearCaches?.().then(() => {
+                    // Force garbage collection after cache clear
+                    if (global.gc) {
+                        if (AtlasServer.logger) {
+                            AtlasServer.logger.info('Forcing garbage collection');
+                        }
+                        global.gc();
+                        
+                        // Check memory again after GC
+                        const afterGC = process.memoryUsage();
+                        if (afterGC.heapUsed > this.MAX_MEMORY_USAGE) {
+                            if (AtlasServer.logger) {
+                                AtlasServer.logger.warn('Memory still high after GC, may need restart', {
+                                    heapUsed: `${Math.round(afterGC.heapUsed / 1024 / 1024)}MB`,
+                                    threshold: `${Math.round(this.MAX_MEMORY_USAGE / 1024 / 1024)}MB`
+                                });
+                            }
+                        }
                     }
-                    global.gc();
-                }
-
-                // Clear caches
-                this.toolHandler.clearCaches?.();
+                }).catch(error => {
+                    if (AtlasServer.logger) {
+                        AtlasServer.logger.error('Error during cache clear:', error);
+                    }
+                });
             }
         }, this.MEMORY_CHECK_INTERVAL);
     }

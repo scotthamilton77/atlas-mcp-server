@@ -24,6 +24,9 @@ export class TransactionManager {
         this.activeTransactions = new Map();
         this.transactionTimeouts = new Map();
         this.transactionCounter = 0;
+        
+        // Periodic cleanup of stale transactions
+        setInterval(() => this.cleanupStaleTransactions(), 60000); // Every minute
     }
 
     static getInstance(storage?: TaskStorage): TransactionManager {
@@ -31,6 +34,73 @@ export class TransactionManager {
             TransactionManager.instance = new TransactionManager(storage);
         }
         return TransactionManager.instance;
+    }
+
+    /**
+     * Reset the singleton instance (useful for cleanup)
+     */
+    static resetInstance(): void {
+        if (TransactionManager.instance) {
+            TransactionManager.instance.cleanup();
+            TransactionManager.instance = null;
+        }
+    }
+
+    /**
+     * Cleanup resources
+     */
+    private cleanup(): void {
+        // Rollback all active transactions
+        for (const [id, transaction] of this.activeTransactions.entries()) {
+            try {
+                this.rollback(transaction).catch(error => 
+                    this.logger.error('Failed to rollback transaction during cleanup', {
+                        error,
+                        transactionId: id
+                    })
+                );
+            } catch (error) {
+                this.logger.error('Error during transaction cleanup', {
+                    error,
+                    transactionId: id
+                });
+            }
+        }
+
+        // Clear all timeouts
+        for (const timeout of this.transactionTimeouts.values()) {
+            clearTimeout(timeout);
+        }
+
+        this.activeTransactions.clear();
+        this.transactionTimeouts.clear();
+        this.transactionCounter = 0;
+    }
+
+    /**
+     * Cleanup stale transactions
+     */
+    private async cleanupStaleTransactions(): Promise<void> {
+        const now = Date.now();
+        const staleTimeout = 30 * 60 * 1000; // 30 minutes
+
+        for (const [id, transaction] of this.activeTransactions.entries()) {
+            if (now - transaction.timestamp > staleTimeout) {
+                this.logger.warn('Found stale transaction', {
+                    transactionId: id,
+                    age: now - transaction.timestamp
+                });
+                
+                try {
+                    await this.rollback(transaction);
+                } catch (error) {
+                    this.logger.error('Failed to rollback stale transaction', {
+                        error,
+                        transactionId: id
+                    });
+                }
+            }
+        }
     }
 
     /**
@@ -255,6 +325,25 @@ export class TransactionManager {
 
         try {
             await this.rollback(transaction);
+        } catch (error) {
+            this.logger.error('Failed to rollback timed out transaction', {
+                error,
+                transactionId
+            });
+            // Force cleanup even if rollback fails
+            this.activeTransactions.delete(transactionId);
+            this.clearTransactionTimeout(transactionId);
+            
+            if (this.storage && 'rollbackTransaction' in this.storage) {
+                try {
+                    await this.storage.rollbackTransaction();
+                } catch (e) {
+                    this.logger.error('Failed to rollback storage after timeout', {
+                        error: e,
+                        transactionId
+                    });
+                }
+            }
         } finally {
             this.clearTransactionTimeout(transactionId);
         }
@@ -265,6 +354,10 @@ export class TransactionManager {
         if (timeout) {
             clearTimeout(timeout);
             this.transactionTimeouts.delete(transactionId);
+        }
+        // Also clean up transaction from active map if it exists
+        if (this.activeTransactions.has(transactionId)) {
+            this.activeTransactions.delete(transactionId);
         }
     }
 

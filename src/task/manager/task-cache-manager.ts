@@ -14,10 +14,10 @@ export class TaskCacheManager {
     private lastCleanupTime: number = 0;
 
     // Memory management constants
-    private readonly MAX_CACHE_MEMORY = 50 * 1024 * 1024; // 50MB cache limit
-    private readonly MEMORY_CHECK_INTERVAL = 60000; // 1 minute
-    private readonly MEMORY_PRESSURE_THRESHOLD = 0.8; // 80% of max before cleanup
-    private readonly MEMORY_CHECK_COOLDOWN = 10000; // 10 second cooldown between cleanups
+    private readonly MAX_CACHE_MEMORY = 16 * 1024 * 1024; // 16MB cache limit for VSCode extension
+    private readonly MEMORY_CHECK_INTERVAL = 5000; // 5 seconds
+    private readonly MEMORY_PRESSURE_THRESHOLD = 0.6; // 60% of max before cleanup
+    private readonly MEMORY_CHECK_COOLDOWN = 2000; // 2 second cooldown between cleanups
 
     constructor() {
         this.logger = Logger.getInstance().child({ component: 'TaskCacheManager' });
@@ -25,11 +25,11 @@ export class TaskCacheManager {
         
         const cacheOptions: CacheOptions = {
             maxSize: this.MAX_CACHE_MEMORY,
-            ttl: 5 * 60 * 1000, // 5 minutes
-            cleanupInterval: 60 * 1000 // 1 minute
+            ttl: 60 * 1000, // 1 minute
+            cleanupInterval: 15 * 1000 // 15 seconds
         };
         
-        this.cacheManager = new CacheManager(cacheOptions);
+        this.cacheManager = CacheManager.getInstance(cacheOptions);
         this.indexManager = new TaskIndexManager();
         
         this.setupMemoryMonitoring();
@@ -60,7 +60,11 @@ export class TaskCacheManager {
             
             this.logger.debug('Task cache memory usage:', stats);
 
-            const memoryUsageRatio = memUsage.heapUsed / instance.MAX_CACHE_MEMORY;
+            // More aggressive memory monitoring for VSCode
+            const memoryUsageRatio = Math.max(
+                memUsage.heapUsed / instance.MAX_CACHE_MEMORY,
+                memUsage.heapUsed / memUsage.heapTotal
+            );
             
             const now = Date.now();
             if (memoryUsageRatio > instance.MEMORY_PRESSURE_THRESHOLD && 

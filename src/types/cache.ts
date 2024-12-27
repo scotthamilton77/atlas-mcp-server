@@ -4,6 +4,7 @@ export interface CacheEntry<T> {
   value: T;
   expires: number;
   lastAccessed: number;
+  size?: number; // Size in bytes (optional for backward compatibility)
 }
 
 export interface CacheOptions {

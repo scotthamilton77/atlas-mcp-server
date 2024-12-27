@@ -2,6 +2,7 @@
  * SQLite storage implementation
  */
 import { Database, open } from 'sqlite';
+import { join } from 'path';
 import { Task, TaskStatus, TaskType, CreateTaskInput, UpdateTaskInput } from '../types/task.js';
 import { 
     StorageConfig, 
@@ -30,12 +31,17 @@ export class SqliteStorage implements TaskStorage {
     private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
     private cacheHits = 0;
     private cacheMisses = 0;
+    private readonly dbPath: string;
 
     constructor(config: StorageConfig) {
         this.config = config;
         this.logger = Logger.getInstance().child({ component: 'SqliteStorage' });
         this.connectionManager = new ConnectionManager(config.connection);
+        this.dbPath = (new URL(import.meta.url)).pathname.endsWith('.ts') 
+            ? join(this.config.baseDir, `${this.config.name}.db`)
+            : join(this.config.baseDir, `${this.config.name}.db`);
     }
+
 
     async initialize(): Promise<void> {
         const path = await import('path');
@@ -293,12 +299,31 @@ const dbPath = path.join(this.config.baseDir, `${this.config.name}.db`);
                 const walPath = `${dbPath}-wal`;
                 const shmPath = `${dbPath}-shm`;
                 
-                // Set permissions for WAL and SHM files if they exist and not on Windows
-                if (process.platform !== 'win32') {
-                    await Promise.all([
-                        fs.access(walPath).then(() => fs.chmod(walPath, 0o644)).catch(() => {}),
-                        fs.access(shmPath).then(() => fs.chmod(shmPath, 0o644)).catch(() => {})
-                    ]);
+                // Set appropriate file permissions for database files
+                const setFilePermissions = async (filePath: string) => {
+                    try {
+                        await fs.access(filePath);
+                        // Skip chmod on Windows as it's not fully supported
+                        if (process.platform !== 'win32') {
+                            await fs.chmod(filePath, 0o644);
+                        }
+                    } catch {
+                        // File doesn't exist, which is fine
+                    }
+                };
+
+                // Handle permissions for all database-related files
+                await Promise.all([
+                    setFilePermissions(walPath),
+                    setFilePermissions(shmPath),
+                    setFilePermissions(this.dbPath)
+                ]);
+
+                // Additional Windows-specific optimizations
+                if (process.platform === 'win32') {
+                    // Ensure proper file sharing on Windows
+                    await db.exec('PRAGMA locking_mode = NORMAL');
+                    await db.exec('PRAGMA busy_timeout = 5000');
                 }
             } catch (error) {
                 this.logger.warn('Failed to set WAL file permissions', { error });

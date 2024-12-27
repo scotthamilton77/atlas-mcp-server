@@ -16,6 +16,7 @@ export interface StorageConfig {
         cacheSize?: number;
         pageSize?: number;
         mmapSize?: number;
+        maxMemory?: number;
     };
     monitoring?: MonitoringConfig;
 }

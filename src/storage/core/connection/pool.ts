@@ -27,6 +27,7 @@ export class ConnectionPool {
     private readonly minConnections: number;
     private readonly maxConnections: number;
     private readonly idleTimeout: number;
+    private readonly maxAge: number = 30 * 60 * 1000; // 30 minutes max connection age
     private readonly stateManager: ConnectionStateManager;
     private cleanupInterval: NodeJS.Timeout | null;
     private readonly dbPath: string;
@@ -269,10 +270,18 @@ export class ConnectionPool {
 
         // Find connections to remove
         for (const [id, conn] of this.connections.entries()) {
-            if (!conn.inUse && 
-                now - conn.lastUsed > this.idleTimeout &&
-                this.connections.size > this.minConnections) {
-                idsToRemove.push(id);
+            // Remove if:
+            // 1. Connection is idle and timed out
+            // 2. Connection has exceeded max age
+            // 3. Connection has errors and isn't in use
+            if ((!conn.inUse && now - conn.lastUsed > this.idleTimeout) ||
+                (now - conn.createdAt > this.maxAge) ||
+                (conn.errorCount > 0 && !conn.inUse)) {
+                
+                // Keep minimum connections unless they're errored
+                if (this.connections.size > this.minConnections || conn.errorCount > 0) {
+                    idsToRemove.push(id);
+                }
             }
         }
 
@@ -315,8 +324,18 @@ export class ConnectionPool {
             this.cleanupInterval = null;
         }
 
-        for (const [id, conn] of this.connections.entries()) {
+        // Force close all connections, even those with transactions
+        const closePromises = Array.from(this.connections.entries()).map(async ([id, conn]) => {
             try {
+                // Rollback any active transactions
+                if (this.stateManager.hasActiveTransaction(id)) {
+                    try {
+                        await conn.db.exec('ROLLBACK');
+                    } catch (e) {
+                        // Ignore rollback errors on close
+                    }
+                }
+                
                 await conn.db.close();
                 this.stateManager.unregisterConnection(id);
                 this.connectionIds.delete(conn.db);
@@ -327,9 +346,11 @@ export class ConnectionPool {
                     error: error instanceof Error ? error.message : String(error)
                 });
             }
-        }
+        });
 
+        await Promise.all(closePromises);
         this.connections.clear();
+        this.verifiedConnections.clear();
         this.logger.info('Connection pool closed');
     }
 }

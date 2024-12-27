@@ -56,6 +56,7 @@ export interface StorageConfig {
         cacheSize?: number;
         mmapSize?: number;
         pageSize?: number;
+        maxMemory?: number;
     };
 }
 
@@ -110,7 +111,8 @@ export const defaultConfig: AppConfig = {
         performance: {
             checkpointInterval: 300000, // 5 minutes
             cacheSize: 2000,
-            mmapSize: 30000000000, // 30GB
+            mmapSize: 64 * 1024 * 1024, // 64MB
+            maxMemory: 256 * 1024 * 1024, // 256MB
             pageSize: 4096
         }
     }
@@ -314,7 +316,8 @@ export class ConfigManager {
                 performance: {
                     checkpointInterval: 300000, // 5 minutes
                     cacheSize: 2000,
-                    mmapSize: 30000000000, // 30GB
+                    mmapSize: 64 * 1024 * 1024, // 64MB
+                    maxMemory: 256 * 1024 * 1024, // 256MB
                     pageSize: 4096
                 }
             },

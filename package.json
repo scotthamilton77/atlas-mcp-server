@@ -11,14 +11,15 @@
     "build"
   ],
   "scripts": {
-    "build": "tsc && node --eval \"import('fs').then(fs => fs.promises.chmod('build/index.js', '755'))\" && (echo '# atlas-mcp-server\n' && tree -I 'node_modules|.git|.DS_Store|build' --dirsfirst -F --charset ascii) > repo-tree.md",
-    "prepare": "npm run build",
+    "build": "tsc",
+    "postbuild": "node --eval \"import('fs').then(fs => fs.promises.chmod('build/index.js', process.platform === 'win32' ? 0o666 : 0o755)).catch(console.error)\"",
     "watch": "tsc --watch",
     "inspector": "npx @modelcontextprotocol/inspector build/index.js",
-    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
-    "prestart": "npm run build",
-    "start": "node build/index.js",
-    "dev": "npm run build && concurrently \"npm run watch\" \"npm run start\""
+    "prestart": "node --expose-gc --max-old-space-size=4096 -e \"import('child_process').then(cp => cp.spawnSync('npm', ['run', 'build'], { stdio: 'inherit' }))\"",
+    "start": "node --expose-gc build/index.js",
+    "dev": "npm run build && concurrently \"npm run watch\" \"npm run start\"",
+    "tree": "echo '# atlas-mcp-server\n' > repo-tree.md && node --expose-gc scripts/generate-tree.js >> repo-tree.md",
+    "postinstall": "node --expose-gc --max-old-space-size=4096 --eval \"console.log('Atlas MCP Server installed successfully. Run npm run build to compile.')\""
   },
   "repository": {
     "type": "git",
@@ -31,9 +32,10 @@
   "homepage": "https://github.com/cyanheads/atlas-mcp-server#readme",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",
+    "@types/dotenv": "^6.1.1",
+    "@types/node": "^20.17.10",
+    "@types/sqlite3": "^3.1.11",
     "@types/uuid": "^9.0.7",
-    "@types/winston": "^2.4.4",
-    "are-we-there-yet": "^4.0.2",
     "detect-libc": "^2.0.3",
     "dotenv": "^16.4.1",
     "minimist": "^1.2.8",
@@ -41,18 +43,10 @@
     "nopt": "^8.0.0",
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7",
+    "typescript": "^5.3.3",
+    "concurrently": "^8.2.2",
     "uuid": "^11.0.0",
     "winston": "^3.11.0",
     "zod": "^3.22.4"
-  },
-  "devDependencies": {
-    "@jest/types": "^29.6.3",
-    "@types/jest": "^29.5.12",
-    "@types/node": "^20.17.10",
-    "@types/sqlite3": "^3.1.11",
-    "concurrently": "^8.2.2",
-    "jest": "^29.7.0",
-    "ts-jest": "^29.1.2",
-    "typescript": "^5.3.3"
   }
 }
