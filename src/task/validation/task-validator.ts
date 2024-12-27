@@ -11,6 +11,7 @@ import {
     UpdateTaskInput
 } from './schemas/index.js';
 import { TaskValidators } from './validators/index.js';
+import { DependencyValidationMode } from './validators/dependency-validator.js';
 
 export interface ValidationResult {
     success: boolean;
@@ -32,7 +33,10 @@ export class TaskValidator {
     /**
      * Validates task creation input
      */
-    async validateCreate(input: CreateTaskInput): Promise<void> {
+    async validateCreate(
+        input: CreateTaskInput,
+        mode: DependencyValidationMode = DependencyValidationMode.STRICT
+    ): Promise<void> {
         try {
             // Validate schema first
             const validatedInput = createTaskSchema.parse(input);
@@ -84,12 +88,23 @@ export class TaskValidator {
                 await this.validators.validateHierarchy(task, validatedInput.parentPath, this.storage.getTask.bind(this.storage));
             }
 
-            // Always validate dependencies to check for cycles
-            await this.validators.validateDependencies(
+            // Validate dependencies with specified mode
+            const dependencyResult = await this.validators.validateDependencyConstraints(
                 task,
                 validatedInput.dependencies || [],
-                this.storage.getTask.bind(this.storage)
+                this.storage.getTask.bind(this.storage),
+                mode
             );
+
+            if (!dependencyResult.valid && mode === DependencyValidationMode.STRICT) {
+                throw createError(
+                    ErrorCodes.INVALID_INPUT,
+                    dependencyResult.error || 'Dependency validation failed',
+                    'TaskValidator.validateCreate',
+                    undefined,
+                    { missingDependencies: dependencyResult.missingDependencies }
+                );
+            }
 
             // Validate metadata if provided
             if (validatedInput.metadata) {
@@ -107,7 +122,11 @@ export class TaskValidator {
     /**
      * Validates task update input
      */
-    async validateUpdate(path: string, updates: UpdateTaskInput): Promise<void> {
+    async validateUpdate(
+        path: string,
+        updates: UpdateTaskInput,
+        mode: DependencyValidationMode = DependencyValidationMode.STRICT
+    ): Promise<void> {
         try {
             // Validate schema first
             const validatedUpdates = updateTaskSchema.parse(updates);
@@ -148,13 +167,24 @@ export class TaskValidator {
                 );
             }
 
-            // Validate dependencies change
+            // Validate dependencies with specified mode
             if (validatedUpdates.dependencies) {
-                await this.validators.validateDependencies(
+                const dependencyResult = await this.validators.validateDependencyConstraints(
                     existingTask,
                     validatedUpdates.dependencies,
-                    this.storage.getTask.bind(this.storage)
+                    this.storage.getTask.bind(this.storage),
+                    mode
                 );
+
+                if (!dependencyResult.valid && mode === DependencyValidationMode.STRICT) {
+                    throw createError(
+                        ErrorCodes.INVALID_INPUT,
+                        dependencyResult.error || 'Dependency validation failed',
+                        'TaskValidator.validateUpdate',
+                        undefined,
+                        { missingDependencies: dependencyResult.missingDependencies }
+                    );
+                }
             }
 
             // Validate metadata updates
@@ -175,7 +205,7 @@ export class TaskValidator {
     }
 
     /**
-     * Validates bulk operations input
+     * Validates bulk operations input and sorts tasks by dependencies
      */
     async validateBulkOperations(input: unknown): Promise<ValidationResult> {
         try {
@@ -183,13 +213,53 @@ export class TaskValidator {
             const parsed = bulkOperationsSchema.parse(input);
             const errors: string[] = [];
 
-            // Validate each operation individually
+            // Extract create operations for dependency sorting
+            const createOps = parsed.operations
+                .filter(op => op.type === 'create')
+                .map(op => ({
+                    path: op.path,
+                    dependencies: (op.data as CreateTaskInput).dependencies || []
+                }));
+
+            try {
+                // Sort create operations by dependencies
+                if (createOps.length > 0) {
+                    const sortedPaths = await this.validators.sortTasksByDependencies(createOps);
+                    
+                    // Reorder operations based on dependency order
+                    const sortedOps = [];
+                    const updateOps = parsed.operations.filter(op => op.type !== 'create');
+                    
+                    // Add create operations in sorted order
+                    for (const path of sortedPaths) {
+                        const op = parsed.operations.find(o => o.type === 'create' && o.path === path);
+                        if (op) sortedOps.push(op);
+                    }
+                    
+                    // Add remaining operations
+                    sortedOps.push(...updateOps);
+                    parsed.operations = sortedOps;
+                }
+            } catch (sortError) {
+                this.logger.error('Failed to sort operations by dependencies', { error: sortError });
+                errors.push('Failed to sort operations: ' + (sortError instanceof Error ? sortError.message : String(sortError)));
+                return { success: false, errors };
+            }
+
+            // Validate operations in order
             for (const op of parsed.operations) {
                 try {
                     if (op.type === 'create') {
-                        await this.validateCreate(op.data as CreateTaskInput);
+                        await this.validateCreate(
+                            op.data as CreateTaskInput,
+                            DependencyValidationMode.DEFERRED
+                        );
                     } else if (op.type === 'update') {
-                        await this.validateUpdate(op.path, op.data as UpdateTaskInput);
+                        await this.validateUpdate(
+                            op.path,
+                            op.data as UpdateTaskInput,
+                            DependencyValidationMode.DEFERRED
+                        );
                     }
                 } catch (opError) {
                     this.logger.error('Operation validation failed', {

@@ -1,7 +1,14 @@
 import { Task, TaskStatus, TaskType } from '../../../types/task.js';
 import { StatusValidator } from './status-validator.js';
-import { DependencyValidator } from './dependency-validator.js';
+import { 
+    DependencyValidator,
+    DependencyValidationMode,
+    DependencyValidationResult 
+} from './dependency-validator.js';
 import { HierarchyValidator } from './hierarchy-validator.js';
+
+// Re-export dependency validation types
+export { DependencyValidationMode, DependencyValidationResult } from './dependency-validator.js';
 
 export class TaskValidators {
     private readonly statusValidator: StatusValidator;
@@ -66,13 +73,26 @@ export class TaskValidators {
     /**
      * Validates task dependencies
      */
-    async validateDependencies(
+    /**
+     * Validates task dependencies with configurable validation mode
+     */
+    async validateDependencyConstraints(
         task: Partial<Task>,
         dependencies: string[],
-        getTaskByPath: (path: string) => Promise<Task | null>
-    ): Promise<void> {
+        getTaskByPath: (path: string) => Promise<Task | null>,
+        mode: DependencyValidationMode = DependencyValidationMode.STRICT
+    ): Promise<DependencyValidationResult> {
         const validTask = this.ensureTaskArrays(task);
-        await this.dependencyValidator.validateDependencyConstraints(validTask, dependencies, getTaskByPath);
+        return this.dependencyValidator.validateDependencyConstraints(validTask, dependencies, getTaskByPath, mode);
+    }
+
+    /**
+     * Sort tasks by dependency order for bulk operations
+     */
+    async sortTasksByDependencies(
+        tasks: { path: string; dependencies: string[] }[]
+    ): Promise<string[]> {
+        return this.dependencyValidator.sortTasksByDependencies(tasks);
     }
 
     /**

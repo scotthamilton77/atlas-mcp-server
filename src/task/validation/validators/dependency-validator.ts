@@ -2,6 +2,23 @@ import { ErrorCodes, createError } from '../../../errors/index.js';
 import { Task } from '../../../types/task.js';
 
 /**
+ * Validation modes for dependency checking
+ */
+export enum DependencyValidationMode {
+    STRICT = 'strict',      // All dependencies must exist
+    DEFERRED = 'deferred'   // Allow missing dependencies for bulk operations
+}
+
+/**
+ * Result of dependency validation
+ */
+export interface DependencyValidationResult {
+    valid: boolean;
+    missingDependencies: string[];
+    error?: string;
+}
+
+/**
  * Validates task dependencies and detects cycles
  */
 export class DependencyValidator {
@@ -10,14 +27,15 @@ export class DependencyValidator {
      */
     async validateDependencies(
         dependencies: string[],
-        getTaskByPath: (path: string) => Promise<Task | null>
-    ): Promise<void> {
+        getTaskByPath: (path: string) => Promise<Task | null>,
+        mode: DependencyValidationMode = DependencyValidationMode.STRICT
+    ): Promise<DependencyValidationResult> {
         if (!Array.isArray(dependencies)) {
-            throw createError(
-                ErrorCodes.INVALID_INPUT,
-                'Dependencies must be an array',
-                'DependencyValidator.validateDependencies'
-            );
+            return {
+                valid: false,
+                missingDependencies: [],
+                error: 'Dependencies must be an array'
+            };
         }
 
         // Check for missing dependencies
@@ -29,13 +47,20 @@ export class DependencyValidator {
             }
         }
 
-        if (missingDeps.length > 0) {
-            throw createError(
-                ErrorCodes.INVALID_INPUT,
-                `Missing dependencies: ${missingDeps.join(', ')}`,
-                'DependencyValidator.validateDependencies'
-            );
+        // In strict mode, fail if any dependencies are missing
+        if (mode === DependencyValidationMode.STRICT && missingDeps.length > 0) {
+            return {
+                valid: false,
+                missingDependencies: missingDeps,
+                error: `Missing dependencies: ${missingDeps.join(', ')}`
+            };
         }
+
+        // In deferred mode, just return the missing dependencies
+        return {
+            valid: mode === DependencyValidationMode.DEFERRED || missingDeps.length === 0,
+            missingDependencies: missingDeps
+        };
     }
 
     /**
@@ -43,10 +68,10 @@ export class DependencyValidator {
      */
     async detectDependencyCycle(
         task: Task,
-        newDeps: string[],
+        dependencies: string[],
         getTaskByPath: (path: string) => Promise<Task | null>
     ): Promise<boolean> {
-        if (!Array.isArray(newDeps)) {
+        if (!Array.isArray(dependencies)) {
             throw createError(
                 ErrorCodes.INVALID_INPUT,
                 'Dependencies must be an array',
@@ -68,7 +93,7 @@ export class DependencyValidator {
             if (!current) return false;
 
             // Check both existing and new dependencies
-            const allDeps = currentPath === task.path ? newDeps : current.dependencies;
+            const allDeps = currentPath === task.path ? dependencies : current.dependencies;
             if (!Array.isArray(allDeps)) {
                 throw createError(
                     ErrorCodes.INVALID_INPUT,
@@ -94,7 +119,7 @@ export class DependencyValidator {
                 undefined,
                 {
                     taskPath: task.path,
-                    dependencies: newDeps
+                    dependencies
                 }
             );
         }
@@ -108,26 +133,97 @@ export class DependencyValidator {
     async validateDependencyConstraints(
         task: Task,
         dependencies: string[],
-        getTaskByPath: (path: string) => Promise<Task | null>
-    ): Promise<void> {
+        getTaskByPath: (path: string) => Promise<Task | null>,
+        mode: DependencyValidationMode = DependencyValidationMode.STRICT
+    ): Promise<DependencyValidationResult> {
         if (!Array.isArray(dependencies)) {
-            throw createError(
-                ErrorCodes.INVALID_INPUT,
-                'Dependencies must be an array',
-                'DependencyValidator.validateDependencyConstraints'
-            );
+            return {
+                valid: false,
+                missingDependencies: [],
+                error: 'Dependencies must be an array'
+            };
         }
 
         // Validate dependencies exist
-        await this.validateDependencies(dependencies, getTaskByPath);
+        const validationResult = await this.validateDependencies(dependencies, getTaskByPath, mode);
+        if (!validationResult.valid && mode === DependencyValidationMode.STRICT) {
+            return validationResult;
+        }
+
+        try {
+            // Check for cycles only with existing dependencies
+            const existingDeps = dependencies.filter(async dep => await getTaskByPath(dep) !== null);
+            await this.detectDependencyCycle(task, existingDeps, getTaskByPath);
+        } catch (error) {
+            return {
+                valid: false,
+                missingDependencies: validationResult.missingDependencies,
+                error: error instanceof Error ? error.message : 'Dependency cycle detected'
+            };
+        }
+
+        return validationResult;
+    }
+
+    /**
+     * Sort tasks by dependency order for bulk operations
+     */
+    async sortTasksByDependencies(
+        tasks: { path: string; dependencies: string[] }[]
+    ): Promise<string[]> {
+        const graph = new Map<string, Set<string>>();
+        const inDegree = new Map<string, number>();
+
+        // Build dependency graph
+        for (const task of tasks) {
+            if (!graph.has(task.path)) {
+                graph.set(task.path, new Set());
+                inDegree.set(task.path, 0);
+            }
+
+            for (const dep of task.dependencies) {
+                if (!graph.has(dep)) {
+                    graph.set(dep, new Set());
+                    inDegree.set(dep, 0);
+                }
+                graph.get(dep)?.add(task.path);
+                inDegree.set(task.path, (inDegree.get(task.path) || 0) + 1);
+            }
+        }
+
+        // Find tasks with no dependencies
+        const queue: string[] = [];
+        for (const [path, degree] of inDegree.entries()) {
+            if (degree === 0) {
+                queue.push(path);
+            }
+        }
+
+        // Process queue
+        const result: string[] = [];
+        while (queue.length > 0) {
+            const current = queue.shift()!;
+            result.push(current);
+
+            // Update degrees for dependent tasks
+            const dependents = graph.get(current) || new Set();
+            for (const dependent of dependents) {
+                inDegree.set(dependent, (inDegree.get(dependent) || 0) - 1);
+                if (inDegree.get(dependent) === 0) {
+                    queue.push(dependent);
+                }
+            }
+        }
 
         // Check for cycles
-        await this.detectDependencyCycle(task, dependencies, getTaskByPath);
+        if (result.length !== tasks.length) {
+            throw createError(
+                ErrorCodes.TASK_CYCLE,
+                'Circular dependencies detected in bulk task creation',
+                'DependencyValidator.sortTasksByDependencies'
+            );
+        }
 
-        // Additional dependency validations can be added here
-        // For example:
-        // - Maximum dependency depth
-        // - Cross-project dependencies
-        // - Type-based dependency rules
+        return result;
     }
 }
