@@ -6,6 +6,7 @@ import { Task, TaskStatus, TaskType, CreateTaskInput, UpdateTaskInput } from '..
 import { TaskValidator } from '../validation/task-validator.js';
 import { ErrorCodes, createError } from '../../errors/index.js';
 import { TransactionManager } from '../core/transactions/transaction-manager.js';
+import { Transaction } from '../../types/transaction.js';
 import { StatusUpdateBatch } from '../core/batch/status-update-batch.js';
 
 interface TaskEvent {
@@ -355,9 +356,69 @@ export class TaskOperations {
                 previousState: existingTask
             });
 
-            // Handle status changes in batch
+            // Handle status changes
             if (updates.status && updates.status !== existingTask.status) {
-                await this.handleStatusChange(existingTask, updatedTask);
+                // First handle the status change
+                await this.handleStatusChange(existingTask, updatedTask, transaction);
+                
+                // Then update parent status if needed
+                if (updatedTask.parentPath) {
+                    const parent = await this.storage.getTask(updatedTask.parentPath);
+                    if (parent) {
+                        const siblings = await this.storage.getSubtasks(parent.path);
+                        const now = Date.now();
+                        
+                        // Determine new parent status based on subtask states
+                        let newParentStatus = parent.status;
+                        
+                        // If any subtask is in progress, parent should be in progress
+                        if (updatedTask.status === TaskStatus.IN_PROGRESS || siblings.some(t => t.status === TaskStatus.IN_PROGRESS)) {
+                            newParentStatus = TaskStatus.IN_PROGRESS;
+                        }
+                        // If all subtasks are completed, parent should be completed
+                        else if (siblings.every(t => t.status === TaskStatus.COMPLETED)) {
+                            newParentStatus = TaskStatus.COMPLETED;
+                        }
+                        // If any subtask is blocked, parent should be blocked
+                        else if (updatedTask.status === TaskStatus.BLOCKED || siblings.some(t => t.status === TaskStatus.BLOCKED)) {
+                            newParentStatus = TaskStatus.BLOCKED;
+                        }
+                        // If any subtask has failed, parent should be failed
+                        else if (updatedTask.status === TaskStatus.FAILED || siblings.some(t => t.status === TaskStatus.FAILED)) {
+                            newParentStatus = TaskStatus.FAILED;
+                        }
+
+                        // Only update if status needs to change
+                        if (newParentStatus !== parent.status) {
+                            const updatedParent = await this.storage.updateTask(parent.path, {
+                                status: newParentStatus,
+                                metadata: {
+                                    ...parent.metadata,
+                                    statusUpdatedAt: now,
+                                    previousStatus: parent.status,
+                                    autoUpdated: true,
+                                    triggerTask: updatedTask.path,
+                                    updateReason: `Auto-updated due to subtask ${updatedTask.path} changing to ${updatedTask.status}`
+                                }
+                            });
+
+                            // Add parent update to transaction
+                            transaction.operations.push({
+                                id: `update-parent-${now}`,
+                                type: 'update',
+                                timestamp: now,
+                                path: parent.path,
+                                task: updatedParent,
+                                previousState: parent
+                            });
+
+                            // Recursively update grandparent if needed
+                            await this.handleStatusChange(parent, updatedParent, transaction);
+                        }
+                    }
+                }
+
+                // Finally execute any batched status updates
                 await this.statusUpdateBatch.execute();
             }
 
@@ -449,8 +510,10 @@ export class TaskOperations {
         }
     }
 
-    private async handleStatusChange(oldTask: Task, newTask: Task): Promise<void> {
+    private async handleStatusChange(oldTask: Task, newTask: Task, transaction: Transaction): Promise<void> {
         try {
+            const now = Date.now();
+
             // Clear cache before status updates
             if ('clearCache' in this.storage) {
                 await (this.storage as any).clearCache();
@@ -459,7 +522,7 @@ export class TaskOperations {
             // Emit status change event
             this.eventManager.emit({
                 type: EventTypes.TASK_STATUS_CHANGED,
-                timestamp: Date.now(),
+                timestamp: now,
                 taskId: newTask.path,
                 task: newTask,
                 changes: {
@@ -468,53 +531,115 @@ export class TaskOperations {
                 }
             });
 
-            // Update parent task status if needed
-            if (newTask.parentPath) {
-                const parent = await this.storage.getTask(newTask.parentPath);
-                if (parent) {
-                    const siblings = await this.storage.getSubtasks(parent.path);
-                    const allCompleted = siblings.every(t => t.status === TaskStatus.COMPLETED);
-                    const anyFailed = siblings.some(t => t.status === TaskStatus.FAILED);
-                    const anyBlocked = siblings.some(t => t.status === TaskStatus.BLOCKED);
-                    const anyInProgress = siblings.some(t => t.status === TaskStatus.IN_PROGRESS);
+            // Handle status-specific effects
+            switch (newTask.status) {
+                case TaskStatus.IN_PROGRESS:
+                    // When a task starts, parent should also be in progress
+                    if (newTask.parentPath) {
+                        const parent = await this.storage.getTask(newTask.parentPath);
+                        if (parent && parent.status === TaskStatus.PENDING) {
+                            const updatedParent = await this.storage.updateTask(parent.path, {
+                                status: TaskStatus.IN_PROGRESS,
+                                metadata: {
+                                    ...parent.metadata,
+                                    statusUpdatedAt: now,
+                                    previousStatus: parent.status,
+                                    autoUpdated: true,
+                                    triggerTask: newTask.path,
+                                    updateReason: `Auto-started due to subtask ${newTask.path}`
+                                }
+                            });
 
-                    let newParentStatus = parent.status;
-                    if (allCompleted) {
-                        newParentStatus = TaskStatus.COMPLETED;
-                    } else if (anyFailed) {
-                        newParentStatus = TaskStatus.FAILED;
-                    } else if (anyBlocked) {
-                        newParentStatus = TaskStatus.BLOCKED;
-                    } else if (anyInProgress) {
-                        newParentStatus = TaskStatus.IN_PROGRESS;
+                            // Add parent update to transaction
+                            transaction.operations.push({
+                                id: `update-parent-${now}`,
+                                type: 'update',
+                                timestamp: now,
+                                path: parent.path,
+                                task: updatedParent,
+                                previousState: parent
+                            });
+
+                            // Recursively update grandparent if needed
+                            await this.handleStatusChange(parent, updatedParent, transaction);
+                        }
                     }
+                    break;
 
-                    if (newParentStatus !== parent.status) {
-                        await this.updateTask(parent.path, {
-                            status: newParentStatus,
-                            metadata: {
-                                ...parent.metadata,
-                                statusUpdatedAt: Date.now(),
-                                previousStatus: parent.status
+                case TaskStatus.BLOCKED:
+                    await this.handleBlockedStatus(newTask);
+                    break;
+
+                case TaskStatus.COMPLETED:
+                    await this.handleCompletedStatus(newTask);
+                    // Check if all siblings are completed to complete parent
+                    if (newTask.parentPath) {
+                        const parent = await this.storage.getTask(newTask.parentPath);
+                        if (parent) {
+                            const siblings = await this.storage.getSubtasks(parent.path);
+                            if (siblings.every(t => t.status === TaskStatus.COMPLETED)) {
+                                const updatedParent = await this.storage.updateTask(parent.path, {
+                                    status: TaskStatus.COMPLETED,
+                                    metadata: {
+                                        ...parent.metadata,
+                                        statusUpdatedAt: now,
+                                        previousStatus: parent.status,
+                                        autoUpdated: true,
+                                        triggerTask: newTask.path,
+                                        updateReason: `Auto-completed as all subtasks are complete`
+                                    }
+                                });
+
+                                // Add parent update to transaction
+                                transaction.operations.push({
+                                    id: `update-parent-${now}`,
+                                    type: 'update',
+                                    timestamp: now,
+                                    path: parent.path,
+                                    task: updatedParent,
+                                    previousState: parent
+                                });
+
+                                // Recursively update grandparent if needed
+                                await this.handleStatusChange(parent, updatedParent, transaction);
                             }
-                        });
+                        }
                     }
-                }
-            }
+                    break;
 
-            // Handle blocked status
-            if (newTask.status === TaskStatus.BLOCKED) {
-                await this.handleBlockedStatus(newTask);
-            }
+                case TaskStatus.FAILED:
+                    await this.handleFailedStatus(newTask);
+                    // Update parent status to reflect failure
+                    if (newTask.parentPath) {
+                        const parent = await this.storage.getTask(newTask.parentPath);
+                        if (parent) {
+                            const updatedParent = await this.storage.updateTask(parent.path, {
+                                status: TaskStatus.FAILED,
+                                metadata: {
+                                    ...parent.metadata,
+                                    statusUpdatedAt: now,
+                                    previousStatus: parent.status,
+                                    autoUpdated: true,
+                                    triggerTask: newTask.path,
+                                    updateReason: `Auto-failed due to subtask ${newTask.path} failure`
+                                }
+                            });
 
-            // Handle completed status
-            if (newTask.status === TaskStatus.COMPLETED) {
-                await this.handleCompletedStatus(newTask);
-            }
+                            // Add parent update to transaction
+                            transaction.operations.push({
+                                id: `update-parent-${now}`,
+                                type: 'update',
+                                timestamp: now,
+                                path: parent.path,
+                                task: updatedParent,
+                                previousState: parent
+                            });
 
-            // Handle failed status
-            if (newTask.status === TaskStatus.FAILED) {
-                await this.handleFailedStatus(newTask);
+                            // Recursively update grandparent if needed
+                            await this.handleStatusChange(parent, updatedParent, transaction);
+                        }
+                    }
+                    break;
             }
         } catch (error) {
             this.logger.error('Failed to handle status change', {

@@ -1,7 +1,7 @@
 import { Database, open } from 'sqlite';
 import sqlite3 from 'sqlite3';
 import { TaskStorage } from '../../types/storage.js';
-import { Task, TaskStatus, CreateTaskInput, UpdateTaskInput } from '../../types/task.js';
+import { Task, TaskType, TaskStatus, CreateTaskInput, UpdateTaskInput } from '../../types/task.js';
 import { Logger } from '../../logging/index.js';
 import { ErrorCodes, createError } from '../../errors/index.js';
 import { TransactionScope, IsolationLevel } from '../core/transactions/scope.js';
@@ -10,6 +10,9 @@ import { TransactionScope, IsolationLevel } from '../core/transactions/scope.js'
 export const DEFAULT_PAGE_SIZE = 4096;
 export const DEFAULT_CACHE_SIZE = 2000;
 export const DEFAULT_BUSY_TIMEOUT = 5000;
+export const MAX_RETRY_ATTEMPTS = 3;
+export const RETRY_DELAY = 1000;
+export const CONNECTION_TIMEOUT = 30000;
 
 // Configuration types
 export interface SqliteConfig {
@@ -42,66 +45,97 @@ export class SqliteStorage implements TaskStorage {
     private readonly dbPath: string;
     private isInitialized = false;
     private transactionScope: TransactionScope | null = null;
+    private lastConnectionCheck: number = 0;
+    private connectionCheckInterval = 60000; // 1 minute
+    private retryCount = 0;
+    private _isClosed = false;
+
+    get isClosed(): boolean {
+        return this._isClosed;
+    }
 
     constructor(private readonly config: SqliteConfig) {
         this.logger = Logger.getInstance().child({ component: 'SqliteStorage' });
         this.dbPath = `${config.baseDir}/${config.name}.db`;
     }
 
-    async initialize(): Promise<void> {
-        // Return if already initialized
-        if (this.isInitialized) {
-            this.logger.debug('SQLite storage already initialized');
+    /** @internal Used by other methods to ensure database connection */
+    async ensureConnection(): Promise<void> {
+        const now = Date.now();
+        if (now - this.lastConnectionCheck < this.connectionCheckInterval && this.db) {
             return;
         }
 
-        // If initialization is in progress, wait for it
+        try {
+            if (!this.db) {
+                await this.initialize();
+            } else {
+                // Verify connection with a simple query
+                await this.db.get('SELECT 1');
+            }
+            this.lastConnectionCheck = now;
+            this.retryCount = 0;
+        } catch (error) {
+            this.logger.error('Connection check failed', { error });
+            
+            if (this.retryCount >= MAX_RETRY_ATTEMPTS) {
+                throw createError(
+                    ErrorCodes.STORAGE_ERROR,
+                    'Failed to ensure database connection after retries',
+                    'ensureConnection'
+                );
+            }
+
+            this.retryCount++;
+            await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+            await this.initialize();
+        }
+    }
+
+    async initialize(): Promise<void> {
+        if (this.isInitialized) {
+            return;
+        }
+
         if (SqliteStorage.initializationPromise) {
-            this.logger.debug('Waiting for existing initialization to complete');
             await SqliteStorage.initializationPromise;
             return;
         }
 
-        // Start new initialization with mutex
         SqliteStorage.initializationPromise = (async () => {
+            const initStart = Date.now();
             try {
-                // Initialize SQLite with WAL mode
+                // Ensure database directory exists with proper permissions
+                const fs = await import('fs/promises');
+                const path = await import('path');
+                const dbDir = path.dirname(this.dbPath);
+                
+                await fs.mkdir(dbDir, { 
+                    recursive: true,
+                    mode: process.platform === 'win32' ? undefined : 0o755 
+                });
+
                 this.db = await open({
                     filename: this.dbPath,
                     driver: sqlite3.Database,
                     mode: sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE
                 });
 
-                // Initialize transaction scope
                 this.transactionScope = new TransactionScope(this.db);
 
-                // Configure database with proper error handling
                 const pragmas = [
-                    // Enable WAL mode first for better concurrency
                     `PRAGMA journal_mode=${this.config.sqlite?.journalMode || 'WAL'}`,
-                    
-                    // Enable foreign keys for referential integrity
                     'PRAGMA foreign_keys=ON',
-                    
-                    // Configure synchronization and durability
                     `PRAGMA synchronous=${this.config.sqlite?.synchronous || 'NORMAL'}`,
-                    
-                    // Memory and performance settings
-                    `PRAGMA temp_store=FILE`, // Force temp storage to file instead of memory
+                    `PRAGMA temp_store=FILE`,
                     `PRAGMA page_size=${this.config.performance?.pageSize || DEFAULT_PAGE_SIZE}`,
-                    `PRAGMA cache_size=-${Math.floor((this.config.performance?.maxMemory || 256 * 1024 * 1024) / 1024)}`, // Negative value for kilobytes
+                    `PRAGMA cache_size=-${Math.floor((this.config.performance?.maxMemory || 256 * 1024 * 1024) / 1024)}`,
                     `PRAGMA mmap_size=${this.config.performance?.mmapSize || 64 * 1024 * 1024}`,
                     `PRAGMA max_page_count=${Math.floor((this.config.performance?.maxMemory || 256 * 1024 * 1024) / (this.config.performance?.pageSize || DEFAULT_PAGE_SIZE))}`,
-                    'PRAGMA soft_heap_limit=256000000', // 256MB soft heap limit
-                    
-                    // Concurrency settings
+                    'PRAGMA soft_heap_limit=256000000',
                     `PRAGMA locking_mode=${this.config.sqlite?.lockingMode || 'NORMAL'}`,
                     `PRAGMA busy_timeout=${this.config.connection?.busyTimeout || DEFAULT_BUSY_TIMEOUT}`,
-                    
-                    // Maintenance settings
                     `PRAGMA auto_vacuum=${this.config.sqlite?.autoVacuum || 'NONE'}`,
-                    
-                    // Query optimization
                     'PRAGMA optimize'
                 ];
 
@@ -109,32 +143,39 @@ export class SqliteStorage implements TaskStorage {
                     try {
                         await this.db.exec(pragma);
                     } catch (error) {
-                        this.logger.error(`Failed to set pragma: ${pragma}`, {
-                            error: error instanceof Error ? error.message : String(error)
-                        });
+                        this.logger.error(`Failed to set pragma: ${pragma}`, { error });
                         throw error;
                     }
                 }
 
-                // Verify foreign keys are enabled
                 const fkResult = await this.db.get('PRAGMA foreign_keys');
                 if (!fkResult || !fkResult['foreign_keys']) {
                     throw new Error('Failed to enable foreign key constraints');
                 }
 
-                // Create tables and set up database schema
                 await this.setupDatabase();
 
                 this.isInitialized = true;
+                const initDuration = Date.now() - initStart;
+                
+                // Log initialization metrics
                 this.logger.info('SQLite storage initialized', {
                     path: this.dbPath,
-                    config: this.config
+                    duration: initDuration,
+                    config: {
+                        journalMode: this.config.sqlite?.journalMode || 'WAL',
+                        synchronous: this.config.sqlite?.synchronous || 'NORMAL',
+                        pageSize: this.config.performance?.pageSize || DEFAULT_PAGE_SIZE,
+                        maxMemory: this.config.performance?.maxMemory || 256 * 1024 * 1024
+                    }
+                });
+
+                this.logger.info('SQLite storage initialized', {
+                    path: this.dbPath,
+                    duration: initDuration
                 });
             } catch (error) {
-                this.logger.error('Failed to initialize SQLite storage', {
-                    error: error instanceof Error ? error.message : String(error),
-                    path: this.dbPath
-                });
+                this.logger.error('Failed to initialize SQLite storage', { error });
                 throw createError(
                     ErrorCodes.STORAGE_INIT,
                     'Failed to initialize SQLite storage',
@@ -206,8 +247,6 @@ export class SqliteStorage implements TaskStorage {
         }
     }
 
-    private isClosed = false;
-
     async close(): Promise<void> {
         if (!this.db || this.isClosed) {
             return;
@@ -219,7 +258,7 @@ export class SqliteStorage implements TaskStorage {
                 await this.transactionScope.rollback();
             }
 
-            this.isClosed = true;
+            this._isClosed = true;
             await this.db.close();
             this.db = null;
             this.logger.info('SQLite connection closed');
@@ -316,22 +355,59 @@ export class SqliteStorage implements TaskStorage {
         }
 
         const now = Date.now();
-        const updatedTask: Task = {
+        
+        // Create updated task with proper type handling
+        const updatedTask = {
             ...existingTask,
             ...updates,
             // Update system fields
             updated: now,
             version: existingTask.version + 1,
+            // Handle parentPath explicitly to ensure correct type
+            parentPath: updates.parentPath === null ? undefined : updates.parentPath,
             // Keep user metadata separate
             metadata: {
                 ...existingTask.metadata,
                 ...updates.metadata
+            },
+            // Ensure arrays are initialized
+            notes: updates.notes || existingTask.notes,
+            dependencies: updates.dependencies || existingTask.dependencies,
+            subtasks: updates.subtasks || existingTask.subtasks // Allow subtasks to be updated
+        } satisfies Task;
+
+        // If this task has a parent and parentPath is being changed
+        if (updates.parentPath !== undefined && updates.parentPath !== existingTask.parentPath) {
+            // Remove from old parent's subtasks if it exists
+            if (existingTask.parentPath) {
+                const oldParent = await this.getTask(existingTask.parentPath);
+                if (oldParent) {
+                    await this.saveTask({
+                        ...oldParent,
+                        subtasks: oldParent.subtasks.filter(s => s !== path),
+                        updated: now,
+                        version: oldParent.version + 1
+                    });
+                }
             }
-        };
+
+            // Add to new parent's subtasks if it exists
+            if (updates.parentPath) {
+                const newParent = await this.getTask(updates.parentPath);
+                if (newParent) {
+                    await this.saveTask({
+                        ...newParent,
+                        subtasks: [...newParent.subtasks, path],
+                        updated: now,
+                        version: newParent.version + 1
+                    });
+                }
+            }
+        }
 
         await this.saveTask(updatedTask);
         return updatedTask;
-    }
+}
 
     async getTask(path: string): Promise<Task | null> {
         if (!this.db) throw new Error('Database not initialized');
@@ -363,12 +439,24 @@ export class SqliteStorage implements TaskStorage {
         if (!this.db) throw new Error('Database not initialized');
         
         const sqlPattern = pattern.replace(/\*/g, '%').replace(/\?/g, '_');
+        this.logger.debug('Executing pattern query', { pattern, sqlPattern });
+
+        // First verify table exists and has data
+        const tableInfo = await this.db.get('SELECT COUNT(*) as count FROM tasks');
+        this.logger.debug('Table info', { tableInfo });
+        
         const rows = await this.db.all<Record<string, unknown>[]>(
             'SELECT * FROM tasks WHERE path LIKE ?',
             sqlPattern
         );
 
-        return rows.map(row => this.rowToTask(row));
+        // Log raw row data for debugging
+        this.logger.debug('Raw query results', { rows });
+        
+        const tasks = rows.map(row => this.rowToTask(row));
+        this.logger.debug('Mapped tasks', { tasks });
+        
+        return tasks;
     }
 
     async getTasksByStatus(status: TaskStatus): Promise<Task[]> {
@@ -439,6 +527,8 @@ export class SqliteStorage implements TaskStorage {
             const existing = await this.getTask(task.path);
             
             try {
+                this.logger.debug('Saving task', { path: task.path, exists: !!existing });
+                
                 if (existing) {
                     await this.db.run(
                         `UPDATE tasks SET
@@ -510,7 +600,7 @@ export class SqliteStorage implements TaskStorage {
             // System fields
             path: String(row.path || ''),
             name: String(row.name || ''),
-            type: String(row.type || '') as Task['type'],
+            type: String(row.type || '') as TaskType,
             status: String(row.status || '') as TaskStatus,
             created: Number(row.created_at || now),
             updated: Number(row.updated_at || now),

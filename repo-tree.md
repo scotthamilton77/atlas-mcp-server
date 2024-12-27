@@ -32,6 +32,8 @@
 │   │   ├── rate-limiter.ts
 │   │   └── request-tracer.ts
 │   ├── storage/
+│   │   ├── base/
+│   │   │   └── base-storage.ts
 │   │   ├── core/
 │   │   │   ├── connection/
 │   │   │   │   ├── health.ts
@@ -54,6 +56,9 @@
 │   │   │   └── index.ts
 │   │   ├── factory/
 │   │   │   └── error-handler.ts
+│   │   ├── interfaces/
+│   │   │   ├── config.ts
+│   │   │   └── storage.ts
 │   │   ├── monitoring/
 │   │   │   ├── health.ts
 │   │   │   ├── index.ts

@@ -19,7 +19,7 @@
     "start": "node --expose-gc build/index.js",
     "dev": "npm run build && concurrently \"npm run watch\" \"npm run start\"",
     "tree": "echo '# atlas-mcp-server\n' > repo-tree.md && node --expose-gc scripts/generate-tree.js >> repo-tree.md",
-    "postinstall": "node --expose-gc --max-old-space-size=4096 --eval \"console.log('Atlas MCP Server installed successfully. Run npm run build to compile.')\""
+    "postinstall": "node --expose-gc --max-old-space-size=4096 --eval \"console.log('Atlas MCP Server installed successfully. Run npm run build to compile, then restart the MCP Client.')\""
   },
   "repository": {
     "type": "git",
