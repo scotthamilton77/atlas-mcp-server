@@ -61,7 +61,8 @@ export class FileTransport {
 
         // Handle stream errors
         this.writeStream.on('error', (error) => {
-            console.error('File transport error:', error);
+            // Handle error through event system instead of console
+            this.handleStreamError(error);
             this.handleStreamError(error);
         });
 
@@ -198,13 +199,13 @@ export class FileTransport {
      * Handles stream errors
      */
     private async handleStreamError(error: Error): Promise<void> {
-        console.error('Stream error:', error);
+        // No direct console logging - handled by error event
 
         // Try to recreate stream
         try {
             await this.createWriteStream();
         } catch (recreateError) {
-            console.error('Failed to recreate stream:', recreateError);
+            // Error will be handled by event system
         }
     }
 

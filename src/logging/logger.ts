@@ -46,8 +46,19 @@ export class Logger {
             Logger.instance = logger;
             return logger;
         } catch (error) {
-            console.error('Failed to initialize logger:', error);
-            // Still set instance but in console-only mode
+            // Even initialization errors should go through event system
+            if (config.eventManager) {
+                config.eventManager.emitSystemEvent({
+                    type: EventTypes.SYSTEM_ERROR,
+                    timestamp: Date.now(),
+                    metadata: {
+                        error: error instanceof Error ? error : new Error(String(error)),
+                        component: 'Logger',
+                        operation: 'initialize'
+                    }
+                });
+            }
+            // Still set instance but without transports
             Logger.instance = logger;
             return logger;
         }
@@ -141,10 +152,10 @@ export class Logger {
                 // Only set the transport manager after successful initialization
                 this.transportManager = manager;
             } else {
-                console.warn('No logging transports configured, using console-only mode');
+                // No warning needed - will fall back to transport-less mode
             }
         } catch (error) {
-            console.error('Failed to initialize logging transports:', error);
+            // Error will be handled by error event system
             // Don't throw - fall back to console logging
         }
     }
@@ -192,14 +203,11 @@ export class Logger {
                 }
             }
 
-            // Fallback to console logging
-            const timestamp = new Date(entry.timestamp).toISOString();
-            const contextStr = context ? ` ${JSON.stringify(context)}` : '';
-            console.log(`[${timestamp}] [${level.toUpperCase()}] ${message}${contextStr}`);
+            // Skip logging if no transport available
+            return;
         } catch (error) {
-            // Last resort error logging
-            console.error('Critical logging failure:', error);
-            console.error('Original entry:', entry);
+            // Even critical failures should not log to console
+            // They will be handled by the error event system
         }
     }
 

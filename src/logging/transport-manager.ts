@@ -136,10 +136,7 @@ export class TransportManager {
 
         // If nothing worked, write to console as last resort
         if (!written) {
-            console.error('Failed to write log entry:', entry);
-            console.error('Errors:', errors);
-
-            // Emit critical failure event if EventManager is available
+            // Critical failures are handled through event system only
             if (this.eventManager) {
                 this.eventManager.emitSystemEvent({
                     type: EventTypes.LOGGER_CRITICAL_FAILURE,
