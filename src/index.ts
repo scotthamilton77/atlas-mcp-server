@@ -205,39 +205,42 @@ try {
                             // Task CRUD operations
                             {
                                 name: 'create_task',
-                                description: 'Create a new task in the hierarchical task structure. Tasks can be organized in a tree-like structure with parent-child relationships and dependencies. Each task has a unique path identifier, metadata, and status tracking.\n\nBest Practices:\n- Use descriptive path names that reflect the task hierarchy (e.g., "project/feature/subtask")\n- Set appropriate task types (TASK for concrete work items, MILESTONE for major checkpoints)\n- Both TASK and MILESTONE types can contain subtasks\n- Include detailed descriptions for better context\n- Use metadata for custom fields like priority, tags, or deadlines\n- Consider dependencies carefully to avoid circular references\n\nExample:\n{\n  "path": "project/backend/api",\n  "name": "Implement REST API",\n  "description": "Create RESTful API endpoints with proper validation",\n  "type": "TASK",\n  "metadata": {\n    "priority": "high",\n    "estimatedDays": 14,\n    "tags": ["backend", "api", "rest"]\n  }\n}',
+                                description: 'Create a new task in the hierarchical task structure. Use create_task to organize and track work items as part of larger workflows. Be sure to think through the requirements from the user as you create tasks. Utilize reasoning and notes as needed.\n\nBest Practices:\n- Structure paths to reflect automated workflow: "system/component/action"\n- Use TASK for automated operations, MILESTONE for workflow checkpoints\n- Include clear success criteria for automated validation\n- Store execution context in metadata for other agent systems\n- Track dependencies for workflow orchestration\n\nExample 1 - API Integration Task:\n{\n  "path": "system/external-api/github/setup-webhook",\n  "name": "Configure GitHub Webhook Integration",\n  "description": "Reasoning: Webhook needed to trigger automated PR reviews\\n\\nSuccess Criteria:\\n1. Webhook endpoint configured and responding\\n2. Events being received and parsed\\n3. Response latency < 500ms\\n\\nRollback Plan:\\n1. Delete webhook configuration\\n2. Remove endpoint handlers\\n3. Clean up stored credentials",\n  "type": "TASK",\n  "dependencies": [\n    "system/external-api/github/authenticate",\n    "system/webhook-handler/initialize"\n  ],\n  "metadata": {\n    "system": "github-integration",\n    "component": "webhooks",\n    "credentials_path": "/secure/github/webhook-secret",\n    "retry_config": {\n      "max_attempts": 3,\n      "backoff_ms": 1000\n    }\n  }\n}\n\nExample 2 - Workflow Milestone:\n{\n  "path": "system/data-pipeline/daily-etl",\n  "name": "Daily ETL Pipeline Execution",\n  "description": "Reasoning: Coordinate daily data processing tasks\\n\\nCheckpoints:\\n1. Source data validation\\n2. Transform operations\\n3. Load verification\\n4. Monitoring alerts\\n\\nFailure Handling:\\n- Retry failed operations\\n- Alert on data quality issues\\n- Maintain partial progress",\n  "type": "MILESTONE",\n  "metadata": {\n    "schedule": "0 0 * * *",\n    "timeout_minutes": 120,\n    "alert_threshold": {\n      "error_rate": 0.01,\n      "latency_ms": 300000\n    }\n  }\n}',
                                 inputSchema: {
                                     type: 'object',
                                     properties: {
                                         path: { 
                                             type: 'string',
-                                            description: 'Required: Unique path identifier for the task (e.g., "project/feature/subtask")'
+                                            description: 'Required: Unique path that identifies the task in the hierarchy. Use format "system/component/action" for automated workflows or "project/feature/task" for development work. Examples:\n- "system/services/api/deploy"\n- "project/auth/implement-oauth"'
                                         },
                                         name: { 
                                             type: 'string',
-                                            description: 'Required: Display name of the task. This is the only required field'
+                                            description: 'Required: Clear, descriptive name for the task. Should indicate the specific action or goal. Examples:\n- "Deploy API Service v2"\n- "Implement OAuth Authentication"'
                                         },
                                         description: { 
                                             type: 'string',
-                                            description: 'Optional: Detailed description of the task'
+                                            description: 'Optional but recommended: Detailed explanation including:\n- Reasoning for the task\n- Success criteria\n- Implementation steps\n- Rollback procedures\n- Error handling approach'
                                         },
                                         type: { 
                                             type: 'string', 
                                             enum: ['TASK', 'MILESTONE'],
-                                            description: 'Optional: Type of task: TASK (concrete work item) or MILESTONE (major checkpoint). Both types can contain subtasks. Defaults to TASK'
+                                            description: 'Optional: Task classification:\n- TASK: Concrete work item (default)\n  Use for: API endpoints, database migrations, service deployments\n- MILESTONE: Major checkpoint\n  Use for: Release versions, feature completions, system transitions'
                                         },
                                         parentPath: { 
                                             type: 'string',
-                                            description: 'Optional: Path of the parent task if this is a subtask. Used for hierarchical organization'
+                                            description: 'Optional: Path of the parent task for hierarchical organization. Examples:\n- Child task: "system/api/endpoints/users" under "system/api/endpoints"\n- Feature task: "project/auth/oauth/google" under "project/auth/oauth"'
                                         },
                                         dependencies: { 
                                             type: 'array', 
-                                            items: { type: 'string' },
-                                            description: 'Optional: Array of task paths that must be completed before this task can start. Used for dependency tracking'
+                                            items: { 
+                                                type: 'string',
+                                                description: 'Task path that must complete before this task can start. Use valid existing paths'
+                                            },
+                                            description: 'Optional: Tasks that must complete first. Order from upstream to downstream. Examples:\n- Service dependencies: ["system/database/migrate", "system/cache/initialize"]\n- Feature dependencies: ["project/auth/core", "project/api/endpoints"]'
                                         },
                                         metadata: { 
                                             type: 'object',
-                                            description: 'Optional: Additional task metadata like priority, tags, or custom fields. Can store any JSON-serializable data'
+                                            description: 'Optional: Additional task context and configuration. Common fields:\n- priority: "high", "medium", "low"\n- owner: "team-name" or "service-name"\n- tags: ["feature", "backend", "database"]\n- timeouts: { "execution": 3600, "retry": 300 }\n- metrics: ["latency", "error_rate", "throughput"]\n- alerts: { "error_threshold": 0.01, "latency_ms": 500 }'
                                         }
                                     },
                                     required: ['path', 'name']
@@ -245,39 +248,42 @@ try {
                             },
                             {
                                 name: 'update_task',
-                                description: 'Update an existing task\'s properties including status, dependencies, and metadata. All changes are validated for consistency and dependency cycles.\n\nBest Practices:\n- Update only the fields that need to change\n- Use appropriate status values to track progress\n- Validate dependencies before updating\n- Keep metadata consistent across updates\n- Consider impact on dependent tasks\n\nExample:\n{\n  "path": "project/backend/api",\n  "updates": {\n    "status": "IN_PROGRESS",\n    "description": "Implementing core API endpoints with JWT auth",\n    "metadata": {\n      "assignee": "backend-team",\n      "progress": 35,\n      "currentPhase": "authentication"\n    }\n  }\n}',
+                                description: 'Update task properties to reflect system state changes and operation progress. Use update_task when you need to modify task status, track progress, or update metadata based on system events or user requirements. Think through the implications of each update.\n\nBest Practices:\n- Update only fields that reflect actual changes\n- Include reasoning for status changes\n- Track progress with measurable metrics\n- Maintain system state consistency\n- Consider downstream impacts\n\nExample 1 - API Integration Progress:\n{\n  "path": "system/external-api/github/setup-webhook",\n  "updates": {\n    "status": "IN_PROGRESS",\n    "description": "Reasoning: Webhook configuration partially complete\\n\\nProgress:\\n- OAuth credentials obtained\\n- Endpoint registered\\n- Pending: Event type configuration\\n\\nNext Actions:\\n1. Configure event subscriptions\\n2. Test webhook delivery\\n3. Set up error handling",\n    "metadata": {\n      "completion_steps": {\n        "oauth_setup": true,\n        "endpoint_registration": true,\n        "event_configuration": false,\n        "webhook_testing": false\n      },\n      "last_verified": "2024-01-15T10:30:00Z",\n      "remaining_steps": 2\n    }\n  }\n}\n\nExample 2 - Error Recovery:\n{\n  "path": "system/data-pipeline/daily-etl",\n  "updates": {\n    "status": "FAILED",\n    "description": "Reasoning: Source API connection timeout\\n\\nDiagnostics:\\n- 3 retry attempts failed\\n- Last error: Connection refused\\n- No data processed\\n\\nRecovery Plan:\\n1. Switch to backup API endpoint\\n2. Reduce batch size\\n3. Increase timeout window",\n    "metadata": {\n      "error_details": {\n        "type": "connection_timeout",\n        "attempts": 3,\n        "last_error": "ECONNREFUSED"\n      },\n      "recovery_action": "failover_to_backup",\n      "retry_config": {\n        "batch_size": 100,\n        "timeout_ms": 5000\n      }\n    }\n  }\n}',
                                 inputSchema: {
                                     type: 'object',
                                     properties: {
                                         path: { 
                                             type: 'string',
-                                            description: 'Required: Path of the task to update. Must be an existing task path'
+                                            description: 'Required: Path of the task to update. Must be an existing task path like "system/services/api" or "project/auth/oauth"'
                                         },
                                         updates: {
                                             type: 'object',
-                                            description: 'Required: Fields to update on the task. At least one update field must be provided',
+                                            description: 'Required: Changes to apply to the task. Include only fields that need updating. Each update should have clear reasoning',
                                             properties: {
                                                     name: { 
                                                         type: 'string',
-                                                        description: 'Optional: New display name for the task'
+                                                        description: 'Optional: New display name. Update when:\n- Clarifying task purpose\n- Reflecting changed requirements\n- Improving task identification'
                                                     },
                                                     description: { 
                                                         type: 'string',
-                                                        description: 'Optional: New detailed description for the task'
+                                                        description: 'Optional: New description. Include:\n- Update reasoning\n- Progress details\n- Changed requirements\n- Next steps\n- Error context if failed'
                                                     },
                                                     status: { 
                                                         type: 'string', 
                                                         enum: ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'BLOCKED'],
-                                                        description: 'Optional: New status for the task. Must be one of the defined status values'
+                                                        description: 'Optional: New task state:\n- PENDING: Ready but waiting to start\n- IN_PROGRESS: Actively executing\n- COMPLETED: Successfully finished\n- FAILED: Error occurred\n- BLOCKED: Dependency preventing progress'
                                                     },
                                                     dependencies: { 
                                                         type: 'array', 
-                                                        items: { type: 'string' },
-                                                        description: 'Optional: New list of dependency task paths. Replaces existing dependencies'
+                                                        items: { 
+                                                            type: 'string',
+                                                            description: 'Task path that must complete first. Use valid existing paths'
+                                                        },
+                                                        description: 'Optional: New dependency list. Common updates:\n- Adding new requirements\n- Removing completed dependencies\n- Reordering execution sequence\n- Fixing broken dependencies'
                                                     },
                                                     metadata: { 
                                                         type: 'object',
-                                                        description: 'Optional: Updated task metadata. Merges with existing metadata'
+                                                        description: 'Optional: Additional task context. Common updates:\n- Progress metrics (completion %, items processed)\n- Performance data (duration, resource usage)\n- Error details (type, count, timestamp)\n- System state (versions, configurations)\n- Alert thresholds (error rate, latency)'
                                                     }
                                             }
                                         }
@@ -287,13 +293,13 @@ try {
                             },
                             {
                                 name: 'delete_task',
-                                description: 'Delete a task and all its subtasks recursively. This operation cascades through the task hierarchy and cannot be undone.\n\nBest Practices:\n- Verify task path carefully before deletion\n- Check for dependent tasks that may be affected\n- Consider archiving important tasks instead of deletion\n- Back up task data if needed before deletion\n- Update dependent task references after deletion\n\nExample:\n{\n  "path": "project/backend"\n  // Will delete backend task and all subtasks like api, database, etc.\n}',
+                                description: 'Delete a task and all its subtasks recursively. Use delete_task when you need to remove completed workflows or clean up failed task hierarchies. Think through the impact on dependent tasks and running workflows.\n\nBest Practices:\n- Verify task completion status\n- Check dependent workflows\n- Consider archiving instead\n- Back up task data first\n- Update dependencies after\n\nExample 1 - Clean Up Completed Workflow:\n{\n  "path": "system/deployment/v1.0",\n  "reasoning": "Remove deprecated deployment tasks\\n\\nVerification:\\n- All subtasks completed\\n- New version deployed\\n- No active dependencies"\n}\n\nExample 2 - Remove Failed Pipeline:\n{\n  "path": "system/pipeline/failed-etl",\n  "reasoning": "Clean up failed ETL workflow\\n\\nChecks:\\n- Recovery attempts exhausted\\n- Data backed up\\n- Dependencies updated"\n}',
                                 inputSchema: {
                                     type: 'object',
                                     properties: {
                                         path: { 
                                             type: 'string',
-                                            description: 'Required: Path of the task to delete. Will recursively delete this task and all its subtasks'
+                                            description: 'Required: Path of task hierarchy to remove. Choose carefully as deletion:\n- Removes the specified task and ALL subtasks\n- Cannot be undone after confirmation\n- May impact dependent workflows\n- Should be verified for completion\n\nCommon targets:\n- Completed releases: "system/deployment/v1.0"\n- Failed workflows: "system/pipeline/failed-etl"\n- Deprecated features: "project/legacy/old-auth"\n- Test environments: "system/testing/integration-env"'
                                         }
                                     },
                                     required: ['path']
@@ -301,14 +307,14 @@ try {
                             },
                             {
                                 name: 'get_tasks_by_status',
-                                description: 'Retrieve all tasks with a specific status. Useful for monitoring progress, finding blocked tasks, or generating status reports.\n\nStatus Values:\n- PENDING: Not started\n- IN_PROGRESS: Currently being worked on\n- COMPLETED: Finished successfully\n- FAILED: Encountered errors/issues\n- BLOCKED: Waiting on dependencies\n\nExample:\n{\n  "status": "BLOCKED"\n  // Returns all blocked tasks for investigation\n}',
+                                description: 'Retrieve all tasks with a specific status. Use get_tasks_by_status when you need to monitor workflow progress, investigate issues, or generate system health reports. Think through which status will provide the most relevant task set.\n\nStatus Values:\n- PENDING: Tasks awaiting start conditions\n- IN_PROGRESS: Currently executing tasks\n- COMPLETED: Successfully finished tasks\n- FAILED: Tasks with execution errors\n- BLOCKED: Tasks waiting on dependencies\n\nExample 1 - Monitor Deployment Progress:\n{\n  "status": "IN_PROGRESS",\n  "reasoning": "Track active deployments\\n\\nPurpose:\\n- Identify running operations\\n- Monitor parallel deployments\\n- Detect stuck processes"\n}\n\nExample 2 - Investigate System Issues:\n{\n  "status": "FAILED",\n  "reasoning": "Analyze system failures\\n\\nGoals:\\n- Find error patterns\\n- Identify affected components\\n- Plan recovery actions"\n}',
                                 inputSchema: {
                                     type: 'object',
                                     properties: {
                                         status: { 
                                             type: 'string', 
                                             enum: ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'BLOCKED'],
-                                            description: 'Required: Status value to filter tasks by. Must be one of the defined status values'
+                                            description: 'Required: Status to filter tasks by. Choose based on monitoring needs:\n- PENDING: Find tasks ready to start or queued\n- IN_PROGRESS: Monitor active operations and progress\n- COMPLETED: Verify successful operations and cleanup\n- FAILED: Investigate errors and plan recovery\n- BLOCKED: Identify and resolve dependency issues'
                                         }
                                     },
                                     required: ['status']
@@ -316,13 +322,13 @@ try {
                             },
                             {
                                 name: 'get_tasks_by_path',
-                                description: 'Retrieve tasks matching a glob pattern. Supports flexible path matching for finding related tasks.\n\nPattern Examples:\n- "project/*": Direct children of project\n- "project/**": All tasks under project (recursive)\n- "*/api": API tasks in any project\n- "backend/db*": All database-related tasks in backend\n\nBest Practices:\n- Use specific patterns to limit results\n- Consider hierarchy depth when using **\n- Combine with status/metadata filtering\n\nExample:\n{\n  "pattern": "project/backend/**"\n  // Returns all tasks under backend hierarchy\n}',
+                                description: 'Retrieve tasks matching a glob pattern. Use get_tasks_by_path when you need to analyze workflow components, audit system areas, or gather task groups for reporting. Think through the pattern structure to target relevant tasks.\n\nPattern Types:\n- Direct Children: "system/*" (immediate tasks)\n- Full Tree: "system/**" (all nested tasks)\n- Cross-Component: "*/api" (specific task type)\n- Partial Match: "pipeline/etl*" (name prefix)\n\nBest Practices:\n- Use specific patterns\n- Consider hierarchy depth\n- Combine with filtering\n- Analyze results carefully\n- Monitor pattern impact\n\nExample 1 - Audit Service Components:\n{\n  "pattern": "system/services/**",\n  "reasoning": "Review service infrastructure\\n\\nGoals:\\n- Map service dependencies\\n- Identify shared components\\n- Locate integration points"\n}\n\nExample 2 - Monitor Pipeline Tasks:\n{\n  "pattern": "*/pipeline/*",\n  "reasoning": "Analyze data workflows\\n\\nPurpose:\\n- Find active pipelines\\n- Check pipeline health\\n- Verify data flow"\n}',
                                 inputSchema: {
                                     type: 'object',
                                     properties: {
                                         pattern: { 
                                             type: 'string',
-                                            description: 'Required: Glob pattern to match task paths. Supports * for single level and ** for recursive matching'
+                                            description: 'Required: Glob pattern to match task paths. Pattern types:\n- Single level (*): "system/*" matches immediate children\n- Recursive (**): "system/**" matches all descendants\n- Component match: "*/api/*" finds API tasks across projects\n- Name prefix: "pipeline/etl*" matches ETL-related tasks\n- Mixed depth: "system/**/health" finds health checks at any level'
                                         }
                                     },
                                     required: ['pattern']
@@ -330,13 +336,13 @@ try {
                             },
                             {
                                 name: 'get_subtasks',
-                                description: 'Retrieve all direct subtasks of a given task. Returns only immediate children, not the entire subtree.\n\nBest Practices:\n- Use for targeted task management\n- Combine with get_tasks_by_path for deep hierarchies\n- Check subtask status for progress tracking\n- Monitor subtask dependencies\n\nExample:\n{\n  "parentPath": "project/backend"\n  // Returns direct subtasks like api, database, auth, etc.\n}',
+                                description: 'Retrieve all direct subtasks of a given task. Use get_subtasks when you need to inspect workflow components, track progress of task groups, or manage task hierarchies. Think through the scope of task relationships you need to examine.\n\nBest Practices:\n- Focus on immediate children\n- Track completion status\n- Verify dependencies\n- Monitor task health\n- Consider parent context\n\nExample 1 - Monitor Service Components:\n{\n  "parentPath": "system/services/api-gateway",\n  "reasoning": "Inspect gateway components\\n\\nPurpose:\\n- Check endpoint status\\n- Verify route configs\\n- Monitor auth services"\n}\n\nExample 2 - Track Pipeline Progress:\n{\n  "parentPath": "system/pipeline/daily-etl",\n  "reasoning": "Review ETL workflow steps\\n\\nGoals:\\n- Verify step sequence\\n- Check step status\\n- Identify bottlenecks"\n}',
                                 inputSchema: {
                                     type: 'object',
                                     properties: {
                                         parentPath: { 
                                             type: 'string',
-                                            description: 'Required: Path of the parent task to get subtasks for. Must be an existing task path'
+                                            description: 'Required: Path of the parent task to inspect. Choose based on analysis needs:\n- Component inspection: "system/services/api" for API subtasks\n- Pipeline monitoring: "system/pipeline/daily-etl" for ETL steps\n- Feature tracking: "project/auth" for auth implementation tasks\n- Release management: "system/deployment/v2" for deployment steps'
                                         }
                                     },
                                     required: ['parentPath']
@@ -344,28 +350,28 @@ try {
                             },
                             {
                                 name: 'bulk_task_operations',
-                                description: 'Execute multiple task operations atomically in a single transaction. Ensures data consistency by rolling back all changes if any operation fails.\n\nSupported Operations:\n- create: Add new tasks\n- update: Modify existing tasks\n- delete: Remove tasks and subtasks\n\nBest Practices:\n- Group related changes together\n- Order operations to handle dependencies\n- Keep transactions focused and minimal\n- Include proper error handling\n- Validate data before submission\n\nExample:\n{\n  "operations": [\n    {\n      "type": "create",\n      "path": "project/backend/auth",\n      "data": {\n        "name": "Authentication Service",\n        "type": "TASK"\n      }\n    },\n    {\n      "type": "update",\n      "path": "project/backend/api",\n      "data": {\n        "status": "COMPLETED"\n      }\n    }\n  ]\n}',
+                                description: 'Execute multiple task operations atomically in a single transaction. Use bulk_task_operations when you need to coordinate multiple related changes that must succeed or fail together. Think through the sequence of operations and their dependencies.\n\nSupported Operations:\n- create: Initialize new workflow components\n- update: Progress state machines\n- delete: Clean up completed processes\n\nBest Practices:\n- Group related system changes\n- Order operations logically\n- Maintain data consistency\n- Handle failures gracefully\n- Validate before executing\n\nExample 1 - Service Deployment:\n{\n  "operations": [\n    {\n      "type": "create",\n      "path": "system/deployment/service-x/v2",\n      "data": {\n        "name": "Deploy Service X v2",\n        "description": "Reasoning: Coordinated deployment requires multiple synchronized steps\\n\\nSteps:\\n1. Health check current version\\n2. Deploy new containers\\n3. Migrate traffic\\n4. Verify metrics\\n\\nRollback Triggers:\\n- Error rate > 1%\\n- Latency p95 > 500ms",\n        "type": "MILESTONE"\n      }\n    },\n    {\n      "type": "update",\n      "path": "system/deployment/service-x/v1",\n      "data": {\n        "status": "IN_PROGRESS",\n        "metadata": {\n          "traffic_weight": 0.9,\n          "scale_down": true\n        }\n      }\n    },\n    {\n      "type": "create",\n      "path": "system/monitoring/alerts/service-x",\n      "data": {\n        "name": "Monitor Service X Deployment",\n        "type": "TASK",\n        "metadata": {\n          "metrics": ["error_rate", "latency_p95", "cpu_usage"],\n          "alert_threshold": 0.01\n        }\n      }\n    }\n  ]\n}\n\nExample 2 - Error Recovery:\n{\n  "operations": [\n    {\n      "type": "update",\n      "path": "system/services/api-gateway",\n      "data": {\n        "status": "FAILED",\n        "description": "Reasoning: Circuit breaker triggered due to downstream failures\\n\\nDiagnostics:\\n- 3 backend services unreachable\\n- Connection pool exhausted\\n- Timeout threshold exceeded\\n\\nRecovery Actions:\\n1. Activate fallback endpoints\\n2. Scale up healthy instances\\n3. Update routing rules",\n        "metadata": {\n          "circuit_breaker": "open",\n          "failing_endpoints": ["/users", "/orders", "/payments"],\n          "fallback_mode": true\n        }\n      }\n    },\n    {\n      "type": "create",\n      "path": "system/recovery/api-gateway/failover",\n      "data": {\n        "name": "API Gateway Failover",\n        "type": "TASK",\n        "description": "Reasoning: Automated recovery needed for API stability\\n\\nActions:\\n1. Route traffic to backup region\\n2. Scale backup instances\\n3. Update DNS records",\n        "metadata": {\n          "region": "backup-east",\n          "ttl": 300,\n          "max_instances": 5\n        }\n      }\n    }\n  ]\n}',
                                 inputSchema: {
                                     type: 'object',
                                     properties: {
                                         operations: {
                                             type: 'array',
-                                            description: 'Required: Array of task operations to execute atomically. Must contain at least one operation. All operations are executed in a single transaction - if any operation fails, all changes are rolled back',
+                                            description: 'Required: Batch of coordinated task operations. Group operations that:\n- Represent a single logical change\n- Must succeed or fail together\n- Share common workflow context\n- Have interdependent effects\n- Maintain system consistency\n\nAll operations execute in a single transaction for:\n- Data consistency\n- Atomic changes\n- Rollback safety\n- State preservation\n- Error handling',
                                             items: {
                                                 type: 'object',
                                                 properties: {
                                                     type: { 
                                                         type: 'string', 
                                                         enum: ['create', 'update', 'delete'],
-                                                        description: 'Type of operation to perform'
+                                                        description: 'Required: Operation type to perform:\n- create: Initialize new components\n  Use for: New services, features, workflows\n- update: Modify existing tasks\n  Use for: Progress updates, state changes, reconfigurations\n- delete: Remove tasks\n  Use for: Cleanup, deprecation, error recovery'
                                                     },
                                                     path: { 
                                                         type: 'string',
-                                                        description: 'Task path the operation applies to'
+                                                        description: 'Required: Target task path. Common patterns:\n- Service operations: "system/services/api/deploy"\n- Feature rollouts: "project/auth/oauth/enable"\n- Pipeline stages: "system/etl/transform/validate"\n- System tasks: "system/maintenance/backup/weekly"'
                                                     },
                                                     data: { 
                                                         type: 'object',
-                                                        description: 'Operation data (CreateTaskInput for create, UpdateTaskInput for update)'
+                                                        description: 'Required for create/update operations:\n\nFor create:\n- name: Clear task identifier\n- type: TASK or MILESTONE\n- description: Detailed context\n- dependencies: Required predecessors\n- metadata: Configuration data\n\nFor update:\n- status: New task state\n- description: Progress notes\n- metadata: Updated metrics\n\nNot needed for delete operations'
                                                     }
                                                 },
                                                 required: ['type', 'path']
@@ -378,13 +384,13 @@ try {
                             // Database maintenance operations
                             {
                                 name: 'clear_all_tasks',
-                                description: 'Clear all tasks from the database and reset all caches. This is a destructive operation that requires explicit confirmation.\n\nBest Practices:\n- Use only for complete system reset\n- Backup data before clearing\n- Verify confirmation requirement\n- Plan for cache rebuild time\n- Consider selective deletion instead\n\nExample:\n{\n  "confirm": true\n  // Must be explicitly set to true\n}',
+                                description: 'Clear all tasks from the database and reset all caches. Use clear_all_tasks when you need to perform a complete system reset or migrate to a new workflow structure. Think through the impact of losing all task history.\n\nBest Practices:\n- Verify no active workflows\n- Back up data before clearing\n- Plan cache rebuild strategy\n- Consider selective cleanup\n- Monitor system stability\n\nExample 1 - System Migration:\n{\n  "confirm": true,\n  "reasoning": "Preparing for workflow restructure\\n\\nPreconditions:\\n- All workflows completed\\n- Data backed up\\n- Migration plan ready"\n}\n\nExample 2 - Development Reset:\n{\n  "confirm": true,\n  "reasoning": "Reset development environment\\n\\nChecks:\\n- No production data\\n- Test workflows stopped\\n- Backup verified"\n}',
                                 inputSchema: {
                                     type: 'object',
                                     properties: {
                                         confirm: { 
                                             type: 'boolean',
-                                            description: 'Required: Must be explicitly set to true to confirm deletion. This is a safety measure for this destructive operation'
+                                            description: 'Required: Safety confirmation flag. Set to true only after verifying:\n- All workflows are completed or safely terminable\n- Critical data has been backed up\n- No active operations depend on task data\n- Cache rebuild strategy is in place\n- System can handle temporary performance impact\n\nIMPORTANT: This operation:\n- Permanently deletes ALL tasks\n- Cannot be undone\n- Clears all caches\n- May impact system performance\n- Requires cache rebuild'
                                         }
                                     },
                                     required: ['confirm']
@@ -392,54 +398,54 @@ try {
                             },
                             {
                                 name: 'vacuum_database',
-                                description: 'Optimize database storage and performance by cleaning up unused space and updating statistics.\n\nBest Practices:\n- Run during low-usage periods\n- Schedule regular maintenance\n- Monitor space reclamation\n- Update statistics for query optimization\n- Back up before major operations\n\nExample:\n{\n  "analyze": true\n  // Also updates query statistics\n}',
+                                description: 'Optimize database storage and performance. Use vacuum_database when you detect performance degradation or after bulk task operations that modify large amounts of data. Think through the impact on running workflows.\n\nBest Practices:\n- Run during system idle periods\n- Combine with analyze for query optimization\n- Monitor performance metrics\n- Back up critical data first\n- Verify system stability\n\nExample 1 - Post-Cleanup Optimization:\n{\n  "analyze": true,\n  "reasoning": "Optimize storage after bulk task deletion\\n\\nTriggers:\\n- 1000+ tasks removed\\n- Query latency increased\\n- Storage fragmentation detected"\n}\n\nExample 2 - Maintenance Window:\n{\n  "analyze": true,\n  "reasoning": "Scheduled database optimization\\n\\nChecks:\\n- System load < 10%\\n- No critical workflows\\n- Backup completed"\n}',
                                 inputSchema: {
                                     type: 'object',
                                     properties: {
                                         analyze: { 
                                             type: 'boolean',
-                                            description: 'Optional: Whether to run ANALYZE after VACUUM to update database statistics. Defaults to false'
+                                            description: 'Optional: Enable statistical analysis after vacuum. Set to true to:\n- Update query planner statistics\n- Optimize index usage patterns\n- Improve query performance\n- Generate table metrics\n- Enable smarter query plans\n\nNOTE: Analysis may:\n- Take additional time\n- Use extra CPU resources\n- Temporarily impact performance\n- Require more I/O operations\n\nDefaults to false if not specified'
                                         }
                                     }
                                 }
                             },
                             {
                                 name: 'repair_relationships',
-                                description: 'Repair parent-child relationships and fix inconsistencies in the task hierarchy. Validates and corrects task relationships, orphaned tasks, and broken dependencies.\n\nBest Practices:\n- Run in dry-run mode first\n- Fix critical paths immediately\n- Schedule regular validation\n- Monitor repair results\n- Back up before repairs\n\nExample:\n{\n  "dryRun": true,\n  "pathPattern": "project/**"\n  // Check project hierarchy without making changes\n}',
+                                description: 'Repair parent-child relationships and fix inconsistencies in the task hierarchy. Use repair_relationships when you detect task relationship issues or need to validate the integrity of workflow structures. Think through the impact of repairs on running workflows.\n\nBest Practices:\n- Always run in dry-run mode first\n- Target specific workflow paths\n- Verify repair impact\n- Back up critical paths\n- Monitor repair success\n\nExample 1 - Validate Deployment Tasks:\n{\n  "dryRun": true,\n  "pathPattern": "system/deployment/**",\n  "reasoning": "Verify deployment workflow integrity after system update"\n}\n\nExample 2 - Fix Pipeline Tasks:\n{\n  "dryRun": false,\n  "pathPattern": "system/pipeline/daily-etl/**",\n  "reasoning": "Repair ETL task relationships after component restructuring"\n}',
                                 inputSchema: {
                                     type: 'object',
                                     properties: {
                                         dryRun: { 
                                             type: 'boolean',
-                                            description: 'Optional: If true, only report issues without fixing them. Useful for safely checking what would be repaired. Defaults to false'
+                                            description: 'Optional: Safety check mode. When true:\n- Reports all detected issues\n- Shows planned repairs\n- Makes no actual changes\n- Validates repair strategy\n- Estimates repair impact\n\nRecommended workflow:\n1. Run with dryRun=true first\n2. Review reported issues\n3. Plan repair strategy\n4. Set to false for actual repairs\n\nDefaults to false if not specified'
                                         },
                                         pathPattern: { 
                                             type: 'string',
-                                            description: 'Optional: Pattern to limit which tasks to check relationships for. If not provided, checks all tasks'
+                                            description: 'Optional: Target specific task hierarchies. Pattern types:\n- Full tree: "system/**" checks all system tasks\n- Component: "system/services/*" checks direct service tasks\n- Feature: "project/*/api" checks API tasks across projects\n- Specific: "system/pipeline/etl-*" checks ETL pipelines\n\nIf not provided:\n- Checks entire task hierarchy\n- May take longer to complete\n- Uses more system resources\n- Impacts wider task scope'
                                         }
                                     }
                                 }
                             },
                             {
                                 name: 'update_task_statuses',
-                                description: 'Update statuses of multiple tasks in a single batch operation. Validates status changes against dependencies and task hierarchy.\n\nBest Practices:\n- Group related status updates together\n- Consider dependency order\n- Update parent tasks last\n- Monitor status transitions\n- Handle failed updates\n\nExample:\n{\n  "updates": [\n    {\n      "path": "project/backend/api",\n      "status": "COMPLETED"\n    },\n    {\n      "path": "project/backend/database",\n      "status": "IN_PROGRESS"\n    }\n  ]\n}',
+                                description: 'Update statuses of multiple tasks in a single batch operation. Use update_task_statuses when you need to reflect the progress of automated workflows or respond to system events. Think through the implications of each status change.\n\nBest Practices:\n- Group related status changes\n- Update in dependency order\n- Include status change reasoning\n- Maintain workflow consistency\n- Handle transition failures\n\nExample 1 - Deployment Progress:\n{\n  "updates": [\n    {\n      "path": "system/deployment/database/migration",\n      "status": "COMPLETED",\n      "metadata": {\n        "reasoning": "Database migration completed successfully\\n\\nValidation:\\n- Schema changes applied\\n- Data migrated\\n- Integrity checks passed",\n        "completion_metrics": {\n          "tables_migrated": 15,\n          "rows_processed": 50000,\n          "duration_ms": 45000\n        }\n      }\n    },\n    {\n      "path": "system/deployment/api/update",\n      "status": "IN_PROGRESS",\n      "metadata": {\n        "reasoning": "API deployment started after successful DB migration\\n\\nSteps:\\n1. Deploy new containers\\n2. Health check endpoints\\n3. Update load balancer",\n        "progress": {\n          "containers_updated": "2/5",\n          "health_checks": "pending",\n          "traffic_shifted": false\n        }\n      }\n    }\n  ]\n}\n\nExample 2 - Error Handling:\n{\n  "updates": [\n    {\n      "path": "system/monitoring/metrics/collector",\n      "status": "FAILED",\n      "metadata": {\n        "reasoning": "Metrics collection failed due to storage issues\\n\\nDiagnostics:\\n- Disk space critical\\n- Write operations failing\\n- Buffer overflow imminent\\n\\nRecovery Plan:\\n1. Clean old metrics\\n2. Expand storage\\n3. Resume collection",\n        "error_context": {\n          "disk_usage": "98%",\n          "failed_writes": 150,\n          "buffer_size": "1GB"\n        }\n      }\n    },\n    {\n      "path": "system/monitoring/alerts",\n      "status": "BLOCKED",\n      "metadata": {\n        "reasoning": "Alert processing blocked by metrics collector failure\\n\\nImpact:\\n- Real-time alerts delayed\\n- Historical data incomplete\\n- Trending analysis affected\\n\\nMitigation:\\n- Using cached metrics\\n- Critical alerts only\\n- Manual monitoring",\n        "dependencies": {\n          "blocked_by": "system/monitoring/metrics/collector",\n          "fallback_mode": true\n        }\n      }\n    }\n  ]\n}',
                                 inputSchema: {
                                     type: 'object',
                                     properties: {
                                         updates: {
                                             type: 'array',
-                                            description: 'Array of status updates to process in batch',
+                                            description: 'Required: Batch of status updates to process atomically. Group updates that:\n- Share common workflow context\n- Represent related state changes\n- Need synchronized transitions\n- Affect dependent components\n- Maintain system consistency',
                                             items: {
                                                 type: 'object',
                                                 properties: {
                                                     path: {
                                                         type: 'string',
-                                                        description: 'Path of the task to update'
+                                                        description: 'Required: Task to update status for. Common scenarios:\n- Service deployments: "system/services/api/deploy"\n- Pipeline stages: "system/etl/transform"\n- Feature rollouts: "project/auth/oauth/enable"\n- System operations: "system/maintenance/backup"'
                                                     },
                                                     status: {
                                                         type: 'string',
                                                         enum: ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'BLOCKED'],
-                                                        description: 'New status for the task'
+                                                        description: 'Required: New task state. Choose based on:\n- PENDING: Task ready but waiting\n  Use for: Queued operations, scheduled tasks\n- IN_PROGRESS: Active execution\n  Use for: Running processes, ongoing operations\n- COMPLETED: Successfully finished\n  Use for: Validated results, confirmed success\n- FAILED: Error encountered\n  Use for: System failures, validation errors\n- BLOCKED: Dependency issues\n  Use for: Missing prerequisites, resource conflicts'
                                                     }
                                                 },
                                                 required: ['path', 'status']
@@ -451,24 +457,27 @@ try {
                             },
                             {
                                 name: 'update_task_dependencies',
-                                description: 'Update dependencies of multiple tasks in a single batch operation. Validates dependency relationships and detects cycles.\n\nBest Practices:\n- Verify dependency paths exist\n- Avoid circular dependencies\n- Update related tasks together\n- Consider task hierarchy\n- Monitor dependency chains\n\nExample:\n{\n  "updates": [\n    {\n      "path": "project/backend/api",\n      "dependencies": ["project/backend/auth", "project/backend/database"]\n    },\n    {\n      "path": "project/backend/auth",\n      "dependencies": ["project/backend/database"]\n    }\n  ]\n}',
+                                description: 'Update dependencies of multiple tasks in a single batch operation. Use update_task_dependencies when you need to modify workflow dependencies based on system architecture changes or operational requirements. Think through the dependency graph implications.\n\nBest Practices:\n- Verify all paths exist before updating\n- Prevent dependency cycles\n- Update related tasks together\n- Consider system architecture\n- Monitor dependency health\n\nExample 1 - Service Dependencies:\n{\n  "updates": [\n    {\n      "path": "system/services/user-api",\n      "dependencies": [\n        "system/services/auth",\n        "system/services/database",\n        "system/services/cache"\n      ]\n    },\n    {\n      "path": "system/services/auth",\n      "dependencies": [\n        "system/services/database"\n      ]\n    }\n  ]\n}\n\nExample 2 - Pipeline Dependencies:\n{\n  "updates": [\n    {\n      "path": "system/pipeline/data-processing",\n      "dependencies": [\n        "system/pipeline/data-ingestion",\n        "system/pipeline/validation",\n        "system/pipeline/monitoring"\n      ]\n    },\n    {\n      "path": "system/pipeline/validation",\n      "dependencies": [\n        "system/pipeline/data-ingestion"\n      ]\n    }\n  ]\n}',
                                 inputSchema: {
                                     type: 'object',
                                     properties: {
                                         updates: {
                                             type: 'array',
-                                            description: 'Array of dependency updates to process in batch',
+                                            description: 'Required: Batch of dependency updates to process atomically. Group updates that:\n- Affect related components\n- Maintain system consistency\n- Share common dependencies\n- Follow logical workflow order\n- Need coordinated changes',
                                             items: {
                                                 type: 'object',
                                                 properties: {
                                                     path: {
                                                         type: 'string',
-                                                        description: 'Path of the task to update'
+                                                        description: 'Required: Task to update dependencies for. Common patterns:\n- Service paths: "system/services/api"\n- Pipeline stages: "system/pipeline/processing"\n- Feature modules: "project/auth/oauth"\n- Integration points: "system/external/payment-gateway"'
                                                     },
                                                     dependencies: {
                                                         type: 'array',
-                                                        items: { type: 'string' },
-                                                        description: 'New list of dependency task paths'
+                                                        items: { 
+                                                            type: 'string',
+                                                            description: 'Task path that must complete first. Examples:\n- Core services: "system/services/database"\n- Auth requirements: "system/auth/initialize"\n- API dependencies: "system/api/swagger-spec"\n- Shared resources: "system/cache/warm-up"'
+                                                        },
+                                                        description: 'Required: Complete dependency list that:\n- Replaces all existing dependencies\n- Orders from upstream to downstream\n- Includes all required predecessors\n- Maintains system architecture\n- Prevents circular references'
                                                     }
                                                 },
                                                 required: ['path', 'dependencies']
