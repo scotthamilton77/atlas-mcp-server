@@ -8,21 +8,18 @@
   },
   "plugins": [
     "@typescript-eslint",
-    "jest",
     "import"
   ],
   "extends": [
     "eslint:recommended",
     "plugin:@typescript-eslint/recommended",
     "plugin:@typescript-eslint/recommended-requiring-type-checking",
-    "plugin:jest/recommended",
     "plugin:import/errors",
     "plugin:import/warnings",
     "plugin:import/typescript"
   ],
   "env": {
     "node": true,
-    "jest": true,
     "es2022": true
   },
   "rules": {
@@ -74,15 +71,5 @@
         "project": "./tsconfig.json"
       }
     }
-  },
-  "overrides": [
-    {
-      "files": ["**/__tests__/**/*.[jt]s?(x)", "**/?(*.)+(spec|test).[jt]s?(x)"],
-      "extends": ["plugin:jest/recommended"],
-      "rules": {
-        "@typescript-eslint/no-explicit-any": "off",
-        "@typescript-eslint/no-non-null-assertion": "off"
-      }
-    }
-  ]
+  }
 }
