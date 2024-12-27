@@ -167,7 +167,7 @@ try {
                 type: EventTypes.SYSTEM_STARTUP,
                 timestamp: Date.now(),
                 metadata: {
-                    version: '0.1.0',
+                    version: '1.0.0',
                     environment: process.env.NODE_ENV || 'development'
                 }
             });
@@ -188,7 +188,7 @@ try {
                 server = await AtlasServer.getInstance(
                 {
                     name: 'atlas-mcp-server',
-                    version: '0.1.0',
+                    version: '1.0.0',
                     maxRequestsPerMinute: 600,
                     requestTimeout: 30000,
                     shutdownTimeout: 5000,
