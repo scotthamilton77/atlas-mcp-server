@@ -252,6 +252,17 @@ const dbPath = path.join(this.config.baseDir, `${this.config.name}.db`);
         return this.withDb(async (db) => {
             // Create tables and indexes
             await db.exec(`
+                -- Query metrics table
+                CREATE TABLE IF NOT EXISTS query_metrics (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    query TEXT NOT NULL,
+                    duration INTEGER NOT NULL,
+                    timestamp INTEGER NOT NULL,
+                    context TEXT,
+                    is_slow INTEGER DEFAULT 0
+                );
+
+                -- Main tasks table
                 CREATE TABLE IF NOT EXISTS tasks (
                     path TEXT PRIMARY KEY,
                     name TEXT NOT NULL,
@@ -392,7 +403,22 @@ const dbPath = path.join(this.config.baseDir, `${this.config.name}.db`);
         await this.saveTasks([task]);
     }
 
-    private async withDb<T>(operation: (db: Database) => Promise<T>): Promise<T> {
+    /**
+     * Sanitizes SQL parameters for logging
+     */
+    private sanitizeParams(params: unknown[]): string {
+        return params.map(p => {
+            if (typeof p === 'string') return `'${p.replace(/'/g, "''")}'`;
+            if (p === null) return 'NULL';
+            if (p === undefined) return 'NULL';
+            return String(p);
+        }).join(', ');
+    }
+
+    /**
+     * Wraps database operations with logging and metrics
+     */
+    private async withDb<T>(operation: (db: Database) => Promise<T>, context?: string): Promise<T> {
         if (!this.db) {
             throw createError(
                 ErrorCodes.STORAGE_ERROR,
@@ -400,7 +426,93 @@ const dbPath = path.join(this.config.baseDir, `${this.config.name}.db`);
                 'withDb'
             );
         }
-        return operation(this.db);
+
+        const startTime = Date.now();
+        try {
+            // Wrap the database object to intercept queries
+            const wrappedDb = new Proxy(this.db, {
+                get: (target, prop) => {
+                    if (prop === 'run' || prop === 'get' || prop === 'all') {
+                        return async (sql: string, ...params: unknown[]) => {
+                            const queryStartTime = Date.now();
+                            try {
+                                const result = await (target as any)[prop](sql, ...params);
+                                const queryDuration = Date.now() - queryStartTime;
+                                
+                                // Log query details
+                                this.logger.debug('SQL Query', {
+                                    sql,
+                                    params: this.sanitizeParams(params),
+                                    duration: queryDuration,
+                                    context,
+                                    operation: prop
+                                });
+
+                                // Store query metrics
+                                await target.run(
+                                    `INSERT INTO query_metrics (query, duration, timestamp, context, is_slow)
+                                     VALUES (?, ?, ?, ?, ?)`,
+                                    sql,
+                                    queryDuration,
+                                    Date.now(),
+                                    context,
+                                    queryDuration > 100 ? 1 : 0
+                                );
+
+                                return result;
+                            } catch (error) {
+                                const queryDuration = Date.now() - queryStartTime;
+                                this.logger.error('SQL Query Failed', {
+                                    sql,
+                                    params: this.sanitizeParams(params),
+                                    duration: queryDuration,
+                                    context,
+                                    operation: prop,
+                                    error: error instanceof Error ? {
+                                        message: error.message,
+                                        stack: error.stack
+                                    } : error
+                                });
+                                throw error;
+                            }
+                        };
+                    }
+                    return (target as any)[prop];
+                }
+            });
+
+            const result = await operation(wrappedDb);
+            const duration = Date.now() - startTime;
+            
+            // Log slow operations (over 100ms)
+            if (duration > 100) {
+                this.logger.warn('Slow database operation detected', {
+                    duration,
+                    context,
+                    operation: context || 'unknown'
+                });
+            } else {
+                this.logger.debug('Database operation completed', {
+                    duration,
+                    context,
+                    operation: context || 'unknown'
+                });
+            }
+            
+            return result;
+        } catch (error) {
+            const duration = Date.now() - startTime;
+            this.logger.error('Database operation failed', {
+                duration,
+                context,
+                operation: context || 'unknown',
+                error: error instanceof Error ? {
+                    message: error.message,
+                    stack: error.stack
+                } : error
+            });
+            throw error;
+        }
     }
 
     private transactionDepth = 0;
@@ -578,12 +690,23 @@ const dbPath = path.join(this.config.baseDir, `${this.config.name}.db`);
                     // Find least recently used entry
                     let oldestTime = Date.now();
                     let oldestKey = '';
+                    let oldestHits = 0;
                     for (const [key, entry] of this.cache.entries()) {
                         if (entry.timestamp < oldestTime) {
                             oldestTime = entry.timestamp;
                             oldestKey = key;
+                            oldestHits = entry.hits;
                         }
                     }
+                    
+                    // Log cache eviction
+                    this.logger.debug('Cache entry evicted', {
+                        key: oldestKey,
+                        age: Date.now() - oldestTime,
+                        hits: oldestHits,
+                        reason: 'cache_full'
+                    });
+                    
                     this.cache.delete(oldestKey);
                 }
                 
@@ -859,6 +982,18 @@ const dbPath = path.join(this.config.baseDir, `${this.config.name}.db`);
     }
 
     async getMetrics(): Promise<StorageMetrics & {
+        queries?: {
+            slow: number;
+            total: number;
+            averageDuration: number;
+            maxDuration: number;
+            slowQueryRatio: number;
+            topSlowQueries: Array<{
+                query: string;
+                count: number;
+                avgDuration: number;
+            }>;
+        };
         cache?: CacheStats;
         memory?: {
             heapUsed: number;
@@ -912,12 +1047,54 @@ const dbPath = path.join(this.config.baseDir, `${this.config.name}.db`);
                     return acc;
                 }, {});
 
+                // Get detailed query performance stats
+                const queryStats = await db.get<{
+                    slow_queries: number;
+                    total_queries: number;
+                    avg_duration: number;
+                    max_duration: number;
+                    slow_query_ratio: number;
+                }>(`
+                    SELECT 
+                        COUNT(*) as total_queries,
+                        SUM(CASE WHEN is_slow = 1 THEN 1 ELSE 0 END) as slow_queries,
+                        AVG(duration) as avg_duration,
+                        MAX(duration) as max_duration,
+                        CAST(SUM(CASE WHEN is_slow = 1 THEN 1 ELSE 0 END) AS FLOAT) / 
+                        COUNT(*) as slow_query_ratio
+                    FROM query_metrics
+                    WHERE timestamp > datetime('now', '-1 hour')
+                `);
+
+                // Get top slow queries
+                const slowQueries = await db.all(`
+                    SELECT query, COUNT(*) as count, AVG(duration) as avg_duration
+                    FROM query_metrics
+                    WHERE is_slow = 1
+                    AND timestamp > datetime('now', '-1 hour')
+                    GROUP BY query
+                    ORDER BY avg_duration DESC
+                    LIMIT 5
+                `);
+
                 return {
                     tasks: {
                         total: Number(taskStats?.total || 0),
                         byStatus,
                         noteCount: Number(taskStats?.noteCount || 0),
                         dependencyCount: Number(taskStats?.dependencyCount || 0)
+                    },
+                    queries: {
+                        slow: Number(queryStats?.slow_queries || 0),
+                        total: Number(queryStats?.total_queries || 0),
+                        averageDuration: Number(queryStats?.avg_duration || 0),
+                        maxDuration: Number(queryStats?.max_duration || 0),
+                        slowQueryRatio: Number(queryStats?.slow_query_ratio || 0),
+                        topSlowQueries: slowQueries.map(q => ({
+                            query: String(q.query),
+                            count: Number(q.count),
+                            avgDuration: Number(q.avg_duration)
+                        }))
                     },
                     storage: {
                         totalSize: Number(storageStats?.totalSize || 0),

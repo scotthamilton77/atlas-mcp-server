@@ -134,8 +134,8 @@ export class ToolHandler {
 
             // Check if task has subtasks and is being changed to TASK type
             if (taskType === 'TASK') {
-                const subtasks = await this.taskManager.getSubtasks(path);
-                if (subtasks.length > 0) {
+                const subtasksResponse = await this.taskManager.getSubtasks(path);
+                if (subtasksResponse.data.length > 0) {
                     throw createError(
                         ErrorCodes.INVALID_INPUT,
                         'Cannot change to TASK type while having subtasks',
@@ -146,8 +146,8 @@ export class ToolHandler {
 
             // Check if changing to GROUP with non-TASK subtasks
             if (taskType === 'GROUP') {
-                const subtasks = await this.taskManager.getSubtasks(path);
-                const invalidSubtasks = subtasks.filter((s: Task) => s.type !== TaskType.TASK);
+                const subtasksResponse = await this.taskManager.getSubtasks(path);
+                const invalidSubtasks = subtasksResponse.data.filter((s: Task) => s.type !== TaskType.TASK);
                 if (invalidSubtasks.length > 0) {
                     throw createError(
                         ErrorCodes.INVALID_INPUT,
