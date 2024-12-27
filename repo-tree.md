@@ -95,6 +95,8 @@
 |   |   |-- manager/
 |   |   |   |-- error-handler.ts
 |   |   |   |-- index.ts
+|   |   |   |-- task-cache-manager.ts
+|   |   |   |-- task-event-handler.ts
 |   |   |   `-- task-manager.ts
 |   |   |-- operations/
 |   |   |   |-- index.ts
@@ -106,7 +108,6 @@
 |   |       |   |-- index.ts
 |   |       |   |-- metadata-schema.ts
 |   |       |   `-- update-schema.ts
-|   |       |-- utils/
 |   |       |-- validators/
 |   |       |   |-- dependency-validator.ts
 |   |       |   |-- hierarchy-validator.ts
@@ -145,10 +146,10 @@
 |   |   |-- index.ts
 |   |   |-- logging.ts
 |   |   `-- path-validator.ts
-|   |-- index.ts
-|   `-- task-manager.ts
+|   `-- index.ts
 |-- LICENSE
 |-- README.md
+|-- changes.diff
 |-- improvements-v2.md
 |-- jest.config.js
 |-- package.json
@@ -156,4 +157,4 @@
 |-- repomix-output.txt
 `-- tsconfig.json
 
-34 directories, 121 files
+33 directories, 123 files

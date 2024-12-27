@@ -1,5 +1,6 @@
 export enum TaskType {
     TASK = 'TASK',
+    /** @deprecated Use TASK or MILESTONE instead. GROUP type is maintained only for backward compatibility */
     GROUP = 'GROUP',
     MILESTONE = 'MILESTONE'
 }
@@ -33,7 +34,7 @@ export interface Task {
 export interface CreateTaskInput {
     name: string;
     type?: TaskType;
-    path?: string;
+    path: string;
     parentPath?: string;
     dependencies?: string[];
     metadata?: Record<string, unknown>;

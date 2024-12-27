@@ -1,4 +1,4 @@
-import { Task, TaskStatus, CreateTaskInput, UpdateTaskInput, TaskResponse, TaskType } from '../../types/task.js';
+import { Task, TaskStatus, CreateTaskInput, UpdateTaskInput, TaskResponse } from '../../types/task.js';
 import { TaskStorage } from '../../types/storage.js';
 import { Logger } from '../../logging/index.js';
 import { ErrorCodes, createError } from '../../errors/index.js';
@@ -511,5 +511,89 @@ export class TaskManager {
 
     async close(): Promise<void> {
         await this.cleanup();
+    }
+
+    async clearCaches(): Promise<void> {
+        try {
+            await this.cacheManager.clearCaches();
+            TaskManager.logger.info('Caches cleared successfully');
+        } catch (error) {
+            TaskManager.logger.error('Failed to clear caches', { error });
+            throw error;
+        }
+    }
+
+    async bulkTaskOperations(operations: Array<{ type: 'create' | 'update' | 'delete', path: string, data?: CreateTaskInput | UpdateTaskInput }>): Promise<TaskResponse<Task[]>> {
+        try {
+            await this.storage.beginTransaction();
+            const results: Task[] = [];
+            const affectedPaths: string[] = [];
+
+            try {
+                for (const op of operations) {
+                    switch (op.type) {
+                        case 'create':
+                            if (!op.data) {
+                                throw createError(
+                                    ErrorCodes.INVALID_INPUT,
+                                    'Create operation requires data',
+                                    'bulkTaskOperations'
+                                );
+                            }
+                            const created = await this.createTask(op.data as CreateTaskInput);
+                            results.push(created.data);
+                            affectedPaths.push(created.data.path);
+                            break;
+
+                        case 'update':
+                            if (!op.data) {
+                                throw createError(
+                                    ErrorCodes.INVALID_INPUT,
+                                    'Update operation requires data',
+                                    'bulkTaskOperations'
+                                );
+                            }
+                            const updated = await this.updateTask(op.path, op.data as UpdateTaskInput);
+                            results.push(updated.data);
+                            affectedPaths.push(updated.data.path);
+                            break;
+
+                        case 'delete':
+                            await this.deleteTask(op.path);
+                            affectedPaths.push(op.path);
+                            break;
+
+                        default:
+                            throw createError(
+                                ErrorCodes.INVALID_INPUT,
+                                `Unknown operation type: ${(op as any).type}`,
+                                'bulkTaskOperations'
+                            );
+                    }
+                }
+
+                await this.storage.commitTransaction();
+
+                return {
+                    success: true,
+                    data: results,
+                    metadata: {
+                        timestamp: Date.now(),
+                        requestId: Math.random().toString(36).substring(7),
+                        projectPath: results[0]?.projectPath || affectedPaths[0]?.split('/')[0] || 'unknown',
+                        affectedPaths
+                    }
+                };
+            } catch (error) {
+                await this.storage.rollbackTransaction();
+                throw error;
+            }
+        } catch (error) {
+            TaskManager.logger.error('Failed to execute bulk operations', {
+                error,
+                operations
+            });
+            throw error;
+        }
     }
 }

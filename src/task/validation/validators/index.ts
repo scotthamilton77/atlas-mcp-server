@@ -60,9 +60,8 @@ export class TaskValidators {
      */
     async validateTypeChange(
         task: BaseTask,
-        newType: TaskType,
-        hasChildren: boolean
+        newType: TaskType
     ): Promise<void> {
-        await this.hierarchyValidator.validateTypeChange(task, newType, hasChildren);
+        await this.hierarchyValidator.validateTypeChange(task, newType);
     }
 }

@@ -25,7 +25,7 @@ export const createTaskSchema = z.object({
             },
             (path) => ({ message: pathValidator.validatePath(path).error || 'Invalid path format' })
         )
-        .optional(),
+        ,
     name: z.string().min(1).max(200),
     parentPath: z.string()
         .refine(

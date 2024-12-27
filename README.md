@@ -17,7 +17,6 @@ ATLAS (Adaptive Task & Logic Automation System) is a Model Context Protocol serv
 - [Task Structure](#task-structure)
 - [Tools](#tools)
 - [Best Practices](#best-practices)
-- [Known Issues](#known-issues)
 - [Development](#development)
 - [Contributing](#contributing)
 - [License](#license)
@@ -35,23 +34,24 @@ ATLAS implements the Model Context Protocol (MCP), created by Anthropic, which e
 
 ### Core Components
 
-- **TaskManager**: Centralized task coordination with validation and event handling
-- **TaskOperations**: ACID-compliant task operations with transaction support
-- **TaskValidator**: Comprehensive validation with Zod schemas and path validation
-- **PathValidator**: Robust path validation and sanitization
-- **TransactionScope**: Improved transaction management with isolation levels
-- **StorageManager**: SQLite-based persistence with WAL mode
-- **EventManager**: System-wide event tracking and notification
-- **BatchProcessors**: Optimized bulk operations for status and dependency updates
+- **TaskManager**: Centralized task coordination with validation, event handling, and memory management
+- **TaskOperations**: ACID-compliant task operations with transaction support and rollback
+- **TaskValidator**: Comprehensive validation with dependency cycle detection and path validation
+- **StorageManager**: SQLite-based persistence with Write-Ahead Logging (WAL) and automatic checkpointing
+- **EventManager**: System-wide event tracking with error handling and health monitoring
+- **BatchProcessors**: Optimized bulk operations with atomic transactions and dependency validation
+- **CacheManager**: Intelligent caching with memory pressure monitoring and automatic cleanup
+- **IndexManager**: Fast task retrieval with hierarchical indexing and real-time updates
 
 ## Features
 
 ### Task Organization
 - Hierarchical task structure with parent-child relationships
-- Strong type validation (TASK, GROUP, MILESTONE)
+- Strong type validation (TASK, MILESTONE)
 - Status management (PENDING, IN_PROGRESS, COMPLETED, FAILED, BLOCKED)
 - Dependency tracking with cycle detection
 - Rich metadata support with schema validation
+- Automatic subtask management
 
 ### Path Validation & Safety
 - Directory traversal prevention
@@ -63,23 +63,23 @@ ATLAS implements the Model Context Protocol (MCP), created by Anthropic, which e
 - Consistent path formatting
 
 ### Transaction Management
-- Isolation level support
-- Nested transaction handling
-- Savepoint management
-- Automatic rollback
+- ACID compliance
+- Atomic batch operations
+- Automatic rollback on failure
 - Transaction-safe operations
-- Vacuum operation support
+- Vacuum and analyze support
+- Checkpoint management
 
 ### Storage & Performance
 - SQLite backend with Write-Ahead Logging (WAL)
 - LRU caching with memory pressure monitoring
-- Transaction-based operations with rollback
 - Batch processing for bulk updates
 - Index-based fast retrieval
 - Automatic cache management
+- Memory usage optimization
 
 ### Validation & Safety
-- Zod schema validation for all inputs
+- Comprehensive input validation
 - Circular dependency prevention
 - Status transition validation
 - Metadata schema enforcement
@@ -93,6 +93,7 @@ ATLAS implements the Model Context Protocol (MCP), created by Anthropic, which e
 - Relationship repair utilities
 - Cache statistics tracking
 - Health monitoring
+- Graceful shutdown handling
 
 ### Error Handling
 - Detailed error codes and messages
@@ -100,6 +101,7 @@ ATLAS implements the Model Context Protocol (MCP), created by Anthropic, which e
 - Retryable operation support
 - Rich error context
 - Event-based error tracking
+- Cross-platform compatibility
 
 ## Installation
 
@@ -108,6 +110,11 @@ ATLAS implements the Model Context Protocol (MCP), created by Anthropic, which e
 git clone https://github.com/cyanheads/atlas-mcp-server.git
 cd atlas-mcp-server
 npm install
+```
+
+2. Build the project:
+```bash
+npm run build
 ```
 
 ## Configuration
@@ -121,38 +128,60 @@ Add to your MCP client settings:
       "command": "node",
       "args": ["/path/to/atlas-mcp-server/build/index.js"],
       "env": {
-        "ATLAS_STORAGE_DIR": "/path/to/storage/directory",
-        "ATLAS_STORAGE_NAME": "atlas-tasks",
-        "NODE_ENV": "production"
+        // Storage Configuration
+        "ATLAS_STORAGE_DIR": "/path/to/storage/directory",  // Base directory for storage and logs
+        "ATLAS_STORAGE_NAME": "atlas-tasks",                // Database name (default: atlas-tasks)
+        "NODE_ENV": "production",                           // Environment (development/production)
+
+        // Logging Configuration
+        "ATLAS_LOG_CONSOLE": "true",                       // Enable console logging (default: true)
+        "ATLAS_LOG_FILE": "true",                          // Enable file logging (default: true)
+        "ATLAS_LOG_LEVEL": "debug",                        // Log level (debug/info/warn/error)
+        "ATLAS_LOG_MAX_FILES": "5",                        // Maximum log files to keep (default: 5)
+        "ATLAS_LOG_MAX_SIZE": "5242880",                   // Max log file size in bytes (default: 5MB)
+
+        // Database Connection
+        "ATLAS_DB_MAX_RETRIES": "3",                      // Max connection retry attempts (default: 3)
+        "ATLAS_DB_RETRY_DELAY": "500",                    // Retry delay in ms (default: 500)
+        "ATLAS_DB_BUSY_TIMEOUT": "2000",                  // Busy timeout in ms (default: 2000)
+
+        // Database Performance
+        "ATLAS_DB_CHECKPOINT_INTERVAL": "60000",          // Checkpoint interval in ms (default: 60000)
+        "ATLAS_DB_CACHE_SIZE": "1000",                    // LRU cache size (default: 1000)
+        "ATLAS_DB_MMAP_SIZE": "1073741824",              // Memory map size in bytes (default: 1GB)
+        "ATLAS_DB_PAGE_SIZE": "4096"                      // Database page size (default: 4096)
       }
     }
   }
 }
 ```
 
-Advanced configuration options:
-```json
-{
-  "storage": {
-    "connection": {
-      "maxRetries": 3,
-      "retryDelay": 500,
-      "busyTimeout": 2000
-    },
-    "performance": {
-      "checkpointInterval": 60000,
-      "cacheSize": 1000,
-      "mmapSize": 1073741824,
-      "pageSize": 4096
-    }
-  },
-  "logging": {
-    "console": true,
-    "file": true,
-    "level": "debug"
-  }
-}
-```
+All environment variables are optional and will use the default values shown above if not specified. The only required variable is `ATLAS_STORAGE_DIR` which specifies where to store the database and log files.
+
+The configuration is divided into several categories:
+
+### Storage Configuration
+- `ATLAS_STORAGE_DIR`: Base directory for all storage and log files
+- `ATLAS_STORAGE_NAME`: Name of the SQLite database file
+- `NODE_ENV`: Environment setting affecting various optimizations
+
+### Logging Configuration
+- `ATLAS_LOG_CONSOLE`: Enable/disable console logging
+- `ATLAS_LOG_FILE`: Enable/disable file logging
+- `ATLAS_LOG_LEVEL`: Set logging verbosity
+- `ATLAS_LOG_MAX_FILES`: Number of log files to keep
+- `ATLAS_LOG_MAX_SIZE`: Maximum size per log file
+
+### Database Connection
+- `ATLAS_DB_MAX_RETRIES`: Connection retry attempts
+- `ATLAS_DB_RETRY_DELAY`: Delay between retries
+- `ATLAS_DB_BUSY_TIMEOUT`: SQLite busy timeout
+
+### Database Performance
+- `ATLAS_DB_CHECKPOINT_INTERVAL`: WAL checkpoint frequency
+- `ATLAS_DB_CACHE_SIZE`: LRU cache entry limit
+- `ATLAS_DB_MMAP_SIZE`: Memory map size for performance
+- `ATLAS_DB_PAGE_SIZE`: SQLite page size
 
 ## Task Structure
 
@@ -169,7 +198,7 @@ Tasks support rich content and metadata within a hierarchical structure:
   
   "name": "Implementation Task",
   "description": "Implement core functionality",
-  "type": "TASK", // TASK, GROUP, or MILESTONE
+  "type": "TASK", // TASK or MILESTONE
   "status": "PENDING",
   
   // Parent path must exist and follow same rules
@@ -181,11 +210,7 @@ Tasks support rich content and metadata within a hierarchical structure:
   // - Status transitions
   "dependencies": ["project/feature/design"],
   
-  "notes": [
-    "# Requirements\n- Feature A\n- Feature B",
-    "interface Feature {\n  name: string;\n  enabled: boolean;\n}"
-  ],
-  
+  // Metadata supports any JSON-serializable data
   "metadata": {
     "priority": "high",
     "tags": ["core", "implementation"],
@@ -214,9 +239,9 @@ Tasks support rich content and metadata within a hierarchical structure:
 Creates tasks with validation and dependency checks:
 ```typescript
 {
-  "path": "project/backend", // Must follow path rules
+  "path": "project/backend",
   "name": "Backend Development",
-  "type": "GROUP",
+  "type": "TASK",
   "description": "Implement core backend services",
   "metadata": {
     "priority": "high",
@@ -231,7 +256,7 @@ Updates tasks with status and dependency validation:
 {
   "path": "project/backend/api",
   "updates": {
-    "status": "IN_PROGRESS", // Validates dependencies
+    "status": "IN_PROGRESS",
     "dependencies": ["project/backend/database"],
     "metadata": {
       "progress": 50,
@@ -251,7 +276,7 @@ Executes multiple operations atomically:
       "path": "project/frontend",
       "data": {
         "name": "Frontend Development",
-        "type": "GROUP"
+        "type": "TASK"
       }
     },
     {
@@ -305,7 +330,7 @@ Optimize database storage and performance:
 Fix task relationship inconsistencies:
 ```typescript
 {
-  "dryRun": true, // Preview changes
+  "dryRun": true,
   "pathPattern": "project/**"
 }
 ```
@@ -318,15 +343,52 @@ Reset database with confirmation:
 }
 ```
 
+### Batch Operations
+
+#### update_task_statuses
+Update multiple task statuses atomically:
+```typescript
+{
+  "updates": [
+    {
+      "path": "project/backend/api",
+      "status": "COMPLETED"
+    },
+    {
+      "path": "project/backend/database",
+      "status": "IN_PROGRESS"
+    }
+  ]
+}
+```
+
+#### update_task_dependencies
+Update multiple task dependencies atomically:
+```typescript
+{
+  "updates": [
+    {
+      "path": "project/backend/api",
+      "dependencies": ["project/backend/auth", "project/backend/database"]
+    },
+    {
+      "path": "project/backend/auth",
+      "dependencies": ["project/backend/database"]
+    }
+  ]
+}
+```
+
 ## Best Practices
 
 ### Task Management
 - Use descriptive path names reflecting hierarchy
-- Set appropriate task types (TASK, GROUP, MILESTONE)
+- Set appropriate task types (TASK, MILESTONE)
 - Include detailed descriptions for context
 - Use metadata for custom fields
 - Consider dependencies carefully
 - Maintain clean parent-child relationships
+- Use batch operations for related changes
 
 ### Path Naming
 - Use alphanumeric characters, dash, underscore
@@ -343,6 +405,7 @@ Reset database with confirmation:
 - Monitor memory usage
 - Use appropriate batch sizes
 - Maintain proper indexes
+- Schedule regular maintenance
 
 ### Data Integrity
 - Validate inputs before operations
@@ -351,29 +414,16 @@ Reset database with confirmation:
 - Maintain metadata consistency
 - Use transactions for related changes
 - Regular database maintenance
-
-## Known Issues
-
-1. Path Depth Validation
-   - Deep paths (>5 levels) may be accepted
-   - Need stricter enforcement
-
-2. Cascading Deletion
-   - Some deep path tasks may survive parent deletion
-   - Needs improved recursive deletion
-
-3. Transaction Management
-   - Bulk operations may fail with nested transactions
-   - clear_all_tasks has transaction issues
-   - Needs proper nested transaction support
+- Monitor health metrics
 
 ## Development
 
 ```bash
-npm run build    # Build project
-npm run watch    # Watch for changes
-npm test        # Run tests
-```
+# Install dependencies
+npm install
+
+# Build project
+npm run build
 
 ## Contributing
 

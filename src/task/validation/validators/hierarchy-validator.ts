@@ -10,44 +10,25 @@ export class HierarchyValidator {
      * Validates parent-child task type relationships
      */
     validateTaskHierarchy(parentType: TaskType, childType: TaskType): void {
-        switch (parentType) {
-            case TaskType.MILESTONE:
-                // Milestones can contain tasks and groups
-                if (childType !== TaskType.TASK && childType !== TaskType.GROUP) {
-                    throw createError(
-                        ErrorCodes.INVALID_INPUT,
-                        `MILESTONE can only contain TASK or GROUP types, not ${childType}`,
-                        'HierarchyValidator.validateTaskHierarchy'
-                    );
-                }
-                break;
-
-            case TaskType.GROUP:
-                // Groups can contain tasks
-                if (childType !== TaskType.TASK) {
-                    throw createError(
-                        ErrorCodes.INVALID_INPUT,
-                        `GROUP can only contain TASK type, not ${childType}`,
-                        'HierarchyValidator.validateTaskHierarchy'
-                    );
-                }
-                break;
-
-            case TaskType.TASK:
-                // Tasks cannot contain other tasks
-                throw createError(
-                    ErrorCodes.INVALID_INPUT,
-                    `TASK type cannot contain any subtasks (attempted to add ${childType})`,
-                    'HierarchyValidator.validateTaskHierarchy'
-                );
-
-            default:
-                throw createError(
-                    ErrorCodes.INVALID_INPUT,
-                    `Unknown task type: ${parentType}`,
-                    'HierarchyValidator.validateTaskHierarchy'
-                );
+        // Validate parent type
+        if (parentType !== TaskType.TASK && parentType !== TaskType.MILESTONE) {
+            throw createError(
+                ErrorCodes.INVALID_INPUT,
+                `Invalid parent task type: ${parentType}. Must be TASK or MILESTONE`,
+                'HierarchyValidator.validateTaskHierarchy'
+            );
         }
+
+        // Validate child type
+        if (childType !== TaskType.TASK && childType !== TaskType.MILESTONE) {
+            throw createError(
+                ErrorCodes.INVALID_INPUT,
+                `Invalid child task type: ${childType}. Must be TASK or MILESTONE`,
+                'HierarchyValidator.validateTaskHierarchy'
+            );
+        }
+
+        // Both TASK and MILESTONE can contain any valid task type
     }
 
     /**
@@ -92,14 +73,13 @@ export class HierarchyValidator {
      */
     async validateTypeChange(
         task: BaseTask,
-        newType: TaskType,
-        hasChildren: boolean
+        newType: TaskType
     ): Promise<void> {
-        // Cannot change to TASK type when task has children
-        if (newType === TaskType.TASK && hasChildren) {
+        // Only allow TASK or MILESTONE types
+        if (newType !== TaskType.TASK && newType !== TaskType.MILESTONE) {
             throw createError(
                 ErrorCodes.INVALID_INPUT,
-                'Cannot change to TASK type when task has children',
+                `Invalid task type: ${newType}. Must be TASK or MILESTONE`,
                 'HierarchyValidator.validateTypeChange',
                 undefined,
                 {
@@ -110,10 +90,6 @@ export class HierarchyValidator {
             );
         }
 
-        // Additional type change validations can be added here
-        // For example:
-        // - Validate parent type constraints
-        // - Check child type constraints
-        // - Validate status constraints for type
+        // Both TASK and MILESTONE can have children, so no need to check hasChildren
     }
 }

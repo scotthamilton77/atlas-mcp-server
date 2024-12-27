@@ -34,14 +34,14 @@ export class TaskValidator {
 
             // Create dummy task for validation
             const task: BaseTask = {
-                path: input.path || '',
+                path: input.path,
                 name: input.name,
                 type: input.type || TaskType.TASK,
                 status: TaskStatus.PENDING,
                 created: Date.now(),
                 updated: Date.now(),
                 version: 1,
-                projectPath: input.path?.split('/')[0] || '',
+                projectPath: input.path.split('/')[0],
                 dependencies: input.dependencies || [],
                 subtasks: [],
                 metadata: input.metadata || {}
@@ -96,8 +96,7 @@ export class TaskValidator {
 
             // Validate type change
             if (updates.type && updates.type !== existingTask.type) {
-                const hasChildren = await this.storage.hasChildren(path);
-                await this.validators.validateTypeChange(task, updates.type, hasChildren);
+                await this.validators.validateTypeChange(task, updates.type);
             }
 
             // Validate status change

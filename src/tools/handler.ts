@@ -1,10 +1,10 @@
 /**
  * Path-based task management tools
  */
-import { TaskManager } from '../task-manager.js';
+import { TaskManager } from '../task/manager/task-manager.js';
 import { Logger } from '../logging/index.js';
 import { ErrorCodes, createError } from '../errors/index.js';
-import { TaskType, TaskStatus, CreateTaskInput, UpdateTaskInput } from '../types/task.js';
+import { Task, TaskType, TaskStatus, CreateTaskInput, UpdateTaskInput } from '../types/task.js';
 import {
     createTaskSchema,
     updateTaskSchema,
@@ -147,7 +147,7 @@ export class ToolHandler {
             // Check if changing to GROUP with non-TASK subtasks
             if (taskType === 'GROUP') {
                 const subtasks = await this.taskManager.getSubtasks(path);
-                const invalidSubtasks = subtasks.filter(s => s.type !== TaskType.TASK);
+                const invalidSubtasks = subtasks.filter((s: Task) => s.type !== TaskType.TASK);
                 if (invalidSubtasks.length > 0) {
                     throw createError(
                         ErrorCodes.INVALID_INPUT,

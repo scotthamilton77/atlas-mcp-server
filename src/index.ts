@@ -1,5 +1,5 @@
 import { Logger } from './logging/index.js';
-import { TaskManager } from './task-manager.js';
+import { TaskManager } from './task/manager/task-manager.js';
 import { createStorage } from './storage/index.js';
 import { AtlasServer } from './server/index.js';
 import { EventManager } from './events/event-manager.js';
@@ -130,13 +130,13 @@ async function main(): Promise<void> {
                             // Task CRUD operations
                             {
                                 name: 'create_task',
-                                description: 'Create a new task in the hierarchical task structure. Tasks can be organized in a tree-like structure with parent-child relationships and dependencies. Each task has a unique path identifier, metadata, and status tracking.\n\nBest Practices:\n- Use descriptive path names that reflect the task hierarchy (e.g., "project/feature/subtask")\n- Set appropriate task types (TASK for work items, GROUP for organization, MILESTONE for major checkpoints)\n- Include detailed descriptions for better context\n- Use metadata for custom fields like priority, tags, or deadlines\n- Consider dependencies carefully to avoid circular references\n\nExample:\n{\n  "path": "project/backend/api",\n  "name": "Implement REST API",\n  "description": "Create RESTful API endpoints with proper validation",\n  "type": "GROUP",\n  "metadata": {\n    "priority": "high",\n    "estimatedDays": 14,\n    "tags": ["backend", "api", "rest"]\n  }\n}',
+                                description: 'Create a new task in the hierarchical task structure. Tasks can be organized in a tree-like structure with parent-child relationships and dependencies. Each task has a unique path identifier, metadata, and status tracking.\n\nBest Practices:\n- Use descriptive path names that reflect the task hierarchy (e.g., "project/feature/subtask")\n- Set appropriate task types (TASK for concrete work items, MILESTONE for major checkpoints)\n- Both TASK and MILESTONE types can contain subtasks\n- Include detailed descriptions for better context\n- Use metadata for custom fields like priority, tags, or deadlines\n- Consider dependencies carefully to avoid circular references\n\nExample:\n{\n  "path": "project/backend/api",\n  "name": "Implement REST API",\n  "description": "Create RESTful API endpoints with proper validation",\n  "type": "TASK",\n  "metadata": {\n    "priority": "high",\n    "estimatedDays": 14,\n    "tags": ["backend", "api", "rest"]\n  }\n}',
                                 inputSchema: {
                                     type: 'object',
                                     properties: {
                                         path: { 
                                             type: 'string',
-                                            description: 'Optional: Unique path identifier for the task (e.g., "project/feature/subtask"). If not provided, will be generated from name'
+                                            description: 'Required: Unique path identifier for the task (e.g., "project/feature/subtask")'
                                         },
                                         name: { 
                                             type: 'string',
@@ -148,8 +148,8 @@ async function main(): Promise<void> {
                                         },
                                         type: { 
                                             type: 'string', 
-                                            enum: ['TASK', 'GROUP', 'MILESTONE'],
-                                            description: 'Optional: Type of task: TASK (individual task), GROUP (container), or MILESTONE (major checkpoint). Defaults to TASK'
+                                            enum: ['TASK', 'MILESTONE'],
+                                            description: 'Optional: Type of task: TASK (concrete work item) or MILESTONE (major checkpoint). Both types can contain subtasks. Defaults to TASK'
                                         },
                                         parentPath: { 
                                             type: 'string',
@@ -165,7 +165,7 @@ async function main(): Promise<void> {
                                             description: 'Optional: Additional task metadata like priority, tags, or custom fields. Can store any JSON-serializable data'
                                         }
                                     },
-                                    required: ['name']
+                                    required: ['path', 'name']
                                 }
                             },
                             {
@@ -269,7 +269,7 @@ async function main(): Promise<void> {
                             },
                             {
                                 name: 'bulk_task_operations',
-                                description: 'Execute multiple task operations atomically in a single transaction. Ensures data consistency by rolling back all changes if any operation fails.\n\nSupported Operations:\n- create: Add new tasks\n- update: Modify existing tasks\n- delete: Remove tasks and subtasks\n\nBest Practices:\n- Group related changes together\n- Order operations to handle dependencies\n- Keep transactions focused and minimal\n- Include proper error handling\n- Validate data before submission\n\nExample:\n{\n  "operations": [\n    {\n      "type": "create",\n      "path": "project/backend/auth",\n      "data": {\n        "name": "Authentication Service",\n        "type": "GROUP"\n      }\n    },\n    {\n      "type": "update",\n      "path": "project/backend/api",\n      "data": {\n        "status": "COMPLETED"\n      }\n    }\n  ]\n}',
+                                description: 'Execute multiple task operations atomically in a single transaction. Ensures data consistency by rolling back all changes if any operation fails.\n\nSupported Operations:\n- create: Add new tasks\n- update: Modify existing tasks\n- delete: Remove tasks and subtasks\n\nBest Practices:\n- Group related changes together\n- Order operations to handle dependencies\n- Keep transactions focused and minimal\n- Include proper error handling\n- Validate data before submission\n\nExample:\n{\n  "operations": [\n    {\n      "type": "create",\n      "path": "project/backend/auth",\n      "data": {\n        "name": "Authentication Service",\n        "type": "TASK"\n      }\n    },\n    {\n      "type": "update",\n      "path": "project/backend/api",\n      "data": {\n        "status": "COMPLETED"\n      }\n    }\n  ]\n}',
                                 inputSchema: {
                                     type: 'object',
                                     properties: {
