@@ -1,5 +1,5 @@
 import { ErrorCodes, createError } from '../../../errors/index.js';
-import { BaseTask } from '../schemas/index.js';
+import { Task } from '../../../types/task.js';
 
 /**
  * Validates task dependencies and detects cycles
@@ -10,8 +10,16 @@ export class DependencyValidator {
      */
     async validateDependencies(
         dependencies: string[],
-        getTaskByPath: (path: string) => Promise<BaseTask | null>
+        getTaskByPath: (path: string) => Promise<Task | null>
     ): Promise<void> {
+        if (!Array.isArray(dependencies)) {
+            throw createError(
+                ErrorCodes.INVALID_INPUT,
+                'Dependencies must be an array',
+                'DependencyValidator.validateDependencies'
+            );
+        }
+
         // Check for missing dependencies
         const missingDeps: string[] = [];
         for (const depPath of dependencies) {
@@ -34,14 +42,22 @@ export class DependencyValidator {
      * Detects circular dependencies in task relationships
      */
     async detectDependencyCycle(
-        task: BaseTask,
+        task: Task,
         newDeps: string[],
-        getTaskByPath: (path: string) => Promise<BaseTask | null>
+        getTaskByPath: (path: string) => Promise<Task | null>
     ): Promise<boolean> {
+        if (!Array.isArray(newDeps)) {
+            throw createError(
+                ErrorCodes.INVALID_INPUT,
+                'Dependencies must be an array',
+                'DependencyValidator.detectDependencyCycle'
+            );
+        }
+
         const visited = new Set<string>();
         const recursionStack = new Set<string>();
 
-        async function dfs(currentPath: string): Promise<boolean> {
+        const dfs = async (currentPath: string): Promise<boolean> => {
             if (recursionStack.has(currentPath)) return true;
             if (visited.has(currentPath)) return false;
 
@@ -53,13 +69,21 @@ export class DependencyValidator {
 
             // Check both existing and new dependencies
             const allDeps = currentPath === task.path ? newDeps : current.dependencies;
+            if (!Array.isArray(allDeps)) {
+                throw createError(
+                    ErrorCodes.INVALID_INPUT,
+                    'Task dependencies must be an array',
+                    'DependencyValidator.detectDependencyCycle'
+                );
+            }
+
             for (const depPath of allDeps) {
                 if (await dfs(depPath)) return true;
             }
 
             recursionStack.delete(currentPath);
             return false;
-        }
+        };
 
         const hasCycle = await dfs(task.path);
         if (hasCycle) {
@@ -82,10 +106,18 @@ export class DependencyValidator {
      * Validates dependency constraints between tasks
      */
     async validateDependencyConstraints(
-        task: BaseTask,
+        task: Task,
         dependencies: string[],
-        getTaskByPath: (path: string) => Promise<BaseTask | null>
+        getTaskByPath: (path: string) => Promise<Task | null>
     ): Promise<void> {
+        if (!Array.isArray(dependencies)) {
+            throw createError(
+                ErrorCodes.INVALID_INPUT,
+                'Dependencies must be an array',
+                'DependencyValidator.validateDependencyConstraints'
+            );
+        }
+
         // Validate dependencies exist
         await this.validateDependencies(dependencies, getTaskByPath);
 

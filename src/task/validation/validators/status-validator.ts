@@ -1,6 +1,5 @@
-import { TaskStatus } from '../../../types/task.js';
+import { Task, TaskStatus } from '../../../types/task.js';
 import { ErrorCodes, createError } from '../../../errors/index.js';
-import { BaseTask } from '../schemas/index.js';
 
 /**
  * Validates task status transitions and dependencies
@@ -10,22 +9,31 @@ export class StatusValidator {
      * Validates a status transition for a task
      */
     async validateStatusTransition(
-        task: BaseTask,
+        task: Task,
         newStatus: TaskStatus,
-        getTaskByPath: (path: string) => Promise<BaseTask | null>
+        getTaskByPath: (path: string) => Promise<Task | null>
     ): Promise<void> {
-        // Cannot transition from COMPLETED/FAILED back to IN_PROGRESS
-        if ((task.status === TaskStatus.COMPLETED || task.status === TaskStatus.FAILED) &&
-            newStatus === TaskStatus.IN_PROGRESS) {
+        // Define valid status transitions
+        const validTransitions: Record<TaskStatus, TaskStatus[]> = {
+            [TaskStatus.PENDING]: [TaskStatus.IN_PROGRESS, TaskStatus.BLOCKED],
+            [TaskStatus.IN_PROGRESS]: [TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.BLOCKED],
+            [TaskStatus.COMPLETED]: [], // No transitions from COMPLETED
+            [TaskStatus.FAILED]: [TaskStatus.PENDING], // Can retry from FAILED
+            [TaskStatus.BLOCKED]: [TaskStatus.PENDING, TaskStatus.IN_PROGRESS] // Can unblock
+        };
+
+        // Check if transition is valid
+        if (!validTransitions[task.status]?.includes(newStatus)) {
             throw createError(
                 ErrorCodes.TASK_STATUS,
-                `Cannot transition from ${task.status} to ${newStatus}`,
+                `Invalid status transition from ${task.status} to ${newStatus}. Valid transitions are: ${validTransitions[task.status]?.join(', ')}`,
                 'StatusValidator.validateStatusTransition',
                 undefined,
                 {
                     taskPath: task.path,
                     currentStatus: task.status,
-                    newStatus
+                    newStatus,
+                    validTransitions: validTransitions[task.status]
                 }
             );
         }
@@ -57,9 +65,17 @@ export class StatusValidator {
      * Validates that all dependencies are completed before allowing completion
      */
     private async validateCompletionDependencies(
-        task: BaseTask,
-        getTaskByPath: (path: string) => Promise<BaseTask | null>
+        task: Task,
+        getTaskByPath: (path: string) => Promise<Task | null>
     ): Promise<void> {
+        if (!Array.isArray(task.dependencies)) {
+            throw createError(
+                ErrorCodes.TASK_DEPENDENCY,
+                'Task dependencies must be an array',
+                'StatusValidator.validateCompletionDependencies'
+            );
+        }
+
         for (const depPath of task.dependencies) {
             const depTask = await getTaskByPath(depPath);
             if (!depTask || depTask.status !== TaskStatus.COMPLETED) {
@@ -82,15 +98,21 @@ export class StatusValidator {
      * Checks if a task is blocked by its dependencies
      */
     private async isBlockedByDependencies(
-        task: BaseTask,
-        getTaskByPath: (path: string) => Promise<BaseTask | null>
+        task: Task,
+        getTaskByPath: (path: string) => Promise<Task | null>
     ): Promise<boolean> {
+        if (!Array.isArray(task.dependencies)) {
+            throw createError(
+                ErrorCodes.TASK_DEPENDENCY,
+                'Task dependencies must be an array',
+                'StatusValidator.isBlockedByDependencies'
+            );
+        }
+
         for (const depPath of task.dependencies) {
             const depTask = await getTaskByPath(depPath);
             if (!depTask || 
-                depTask.status === TaskStatus.FAILED || 
-                depTask.status === TaskStatus.BLOCKED || 
-                depTask.status === TaskStatus.PENDING) {
+                [TaskStatus.FAILED, TaskStatus.BLOCKED, TaskStatus.PENDING].includes(depTask.status)) {
                 return true;
             }
         }
@@ -101,9 +123,10 @@ export class StatusValidator {
      * Validates status constraints between parent and child tasks
      */
     async validateParentChildStatus(
-        _task: BaseTask, // Prefix with underscore to indicate intentionally unused
+        task: Task,
         newStatus: TaskStatus,
-        siblings: BaseTask[]
+        siblings: Task[],
+        getTaskByPath: (path: string) => Promise<Task | null>
     ): Promise<void> {
         // Cannot complete if siblings are blocked
         if (newStatus === TaskStatus.COMPLETED && 
@@ -123,6 +146,42 @@ export class StatusValidator {
                 'Cannot start task while sibling tasks have failed',
                 'StatusValidator.validateParentChildStatus'
             );
+        }
+
+        // Check parent task status
+        if (task.parentPath) {
+            const parent = await getTaskByPath(task.parentPath);
+            if (parent) {
+                if (parent.status === TaskStatus.COMPLETED && newStatus !== TaskStatus.COMPLETED) {
+                    throw createError(
+                        ErrorCodes.TASK_STATUS,
+                        'Cannot modify subtask status when parent is completed',
+                        'StatusValidator.validateParentChildStatus'
+                    );
+                }
+
+                if (newStatus === TaskStatus.COMPLETED) {
+                    const subtasks = await Promise.all(
+                        siblings.map(s => getTaskByPath(s.path))
+                    );
+                    
+                    const incompleteSubtasks = subtasks.filter(
+                        s => s && s.status !== TaskStatus.COMPLETED
+                    );
+
+                    if (incompleteSubtasks.length > 0) {
+                        throw createError(
+                            ErrorCodes.TASK_STATUS,
+                            'Cannot complete task while other subtasks are incomplete',
+                            'StatusValidator.validateParentChildStatus',
+                            undefined,
+                            {
+                                incompleteTasks: incompleteSubtasks.map(s => s?.path)
+                            }
+                        );
+                    }
+                }
+            }
         }
     }
 }

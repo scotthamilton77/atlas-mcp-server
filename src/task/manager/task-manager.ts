@@ -9,6 +9,19 @@ import { TaskValidator } from '../validation/task-validator.js';
 import { TaskEventHandler } from './task-event-handler.js';
 import { TaskCacheManager } from './task-cache-manager.js';
 
+interface TaskManagerMetadata {
+    timestamp: number;
+    requestId: string;
+    projectPath: string;
+    affectedPaths: string[];
+    pagination?: {
+        limit: number;
+        offset: number;
+    };
+    operationCount?: number;
+    successCount?: number;
+}
+
 export class TaskManager {
     private static logger: Logger;
     private operations!: TaskOperations;
@@ -46,6 +59,7 @@ export class TaskManager {
 
     private async initializeComponents(): Promise<void> {
         this.operations = await TaskOperations.getInstance(this.storage, this.validator);
+        this.cacheManager.setStorage(this.storage);
     }
 
     static async getInstance(storage: TaskStorage): Promise<TaskManager> {
@@ -103,6 +117,46 @@ export class TaskManager {
         }
     }
 
+    private createResponse<T>(data: T, metadata: Partial<TaskManagerMetadata>): TaskResponse<T> {
+        const baseMetadata = {
+            timestamp: Date.now(),
+            requestId: Math.random().toString(36).substring(7),
+            projectPath: this.getProjectPath(data),
+            affectedPaths: this.getAffectedPaths(data),
+            ...metadata
+        };
+
+        return {
+            success: true,
+            data,
+            metadata: baseMetadata
+        };
+    }
+
+    private getProjectPath(data: unknown): string {
+        if (data && typeof data === 'object' && 'projectPath' in data) {
+            return (data as { projectPath: string }).projectPath;
+        }
+        if (Array.isArray(data) && data[0] && typeof data[0] === 'object' && 'projectPath' in data[0]) {
+            return (data[0] as { projectPath: string }).projectPath;
+        }
+        return 'unknown';
+    }
+
+    private getAffectedPaths(data: unknown): string[] {
+        if (data && typeof data === 'object' && 'path' in data) {
+            return [(data as { path: string }).path];
+        }
+        if (Array.isArray(data)) {
+            return data.map(item => 
+                item && typeof item === 'object' && 'path' in item 
+                    ? (item as { path: string }).path 
+                    : 'unknown'
+            );
+        }
+        return [];
+    }
+
     async createTask(input: CreateTaskInput): Promise<TaskResponse<Task>> {
         try {
             if (!input.name) {
@@ -124,16 +178,7 @@ export class TaskManager {
 
             this.eventHandler.emitTaskCreated(result.path, result, { input });
 
-            return {
-                success: true,
-                data: result,
-                metadata: {
-                    timestamp: Date.now(),
-                    requestId: Math.random().toString(36).substring(7),
-                    projectPath: result.projectPath,
-                    affectedPaths: [result.path]
-                }
-            };
+            return this.createResponse(result, {});
         } catch (error) {
             TaskManager.logger.error('Failed to create task', {
                 error,
@@ -171,16 +216,7 @@ export class TaskManager {
 
             this.eventHandler.emitTaskUpdated(result.path, result, oldTask);
 
-            return {
-                success: true,
-                data: result,
-                metadata: {
-                    timestamp: Date.now(),
-                    requestId: Math.random().toString(36).substring(7),
-                    projectPath: result.projectPath,
-                    affectedPaths: [result.path]
-                }
-            };
+            return this.createResponse(result, {});
         } catch (error) {
             TaskManager.logger.error('Failed to update task', {
                 error,
@@ -225,16 +261,10 @@ export class TaskManager {
                 await this.cacheManager.indexTask(task);
             }
 
-            return {
-                success: true,
-                data: tasks,
-                metadata: {
-                    timestamp: Date.now(),
-                    requestId: Math.random().toString(36).substring(7),
-                    projectPath: tasks[0]?.projectPath || 'unknown',
-                    affectedPaths: updates.map(u => u.path)
-                }
-            };
+            return this.createResponse(tasks, {
+                operationCount: updates.length,
+                successCount: tasks.length
+            });
         } catch (error) {
             TaskManager.logger.error('Failed to update task statuses', {
                 error,
@@ -275,16 +305,10 @@ export class TaskManager {
                 await this.cacheManager.indexTask(task);
             }
 
-            return {
-                success: true,
-                data: tasks,
-                metadata: {
-                    timestamp: Date.now(),
-                    requestId: Math.random().toString(36).substring(7),
-                    projectPath: tasks[0]?.projectPath || 'unknown',
-                    affectedPaths: updates.map(u => u.path)
-                }
-            };
+            return this.createResponse(tasks, {
+                operationCount: updates.length,
+                successCount: tasks.length
+            });
         } catch (error) {
             TaskManager.logger.error('Failed to update task dependencies', {
                 error,
@@ -306,17 +330,9 @@ export class TaskManager {
     async listTasks(pathPattern: string, limit: number = 100, offset: number = 0): Promise<TaskResponse<Task[]>> {
         try {
             const tasks = await this.cacheManager.getTasksByPattern(pathPattern, limit, offset);
-            return {
-                success: true,
-                data: tasks,
-                metadata: {
-                    timestamp: Date.now(),
-                    requestId: Math.random().toString(36).substring(7),
-                    projectPath: tasks[0]?.projectPath || pathPattern.split('/')[0],
-                    pagination: { limit, offset },
-                    affectedPaths: tasks.map(t => t.path)
-                }
-            };
+            return this.createResponse(tasks, {
+                pagination: { limit, offset }
+            });
         } catch (error) {
             TaskManager.logger.error('Failed to list tasks', { error, pathPattern });
             throw error;
@@ -326,17 +342,9 @@ export class TaskManager {
     async getTasksByStatus(status: TaskStatus, limit: number = 100, offset: number = 0): Promise<TaskResponse<Task[]>> {
         try {
             const tasks = await this.cacheManager.getTasksByStatus(status, undefined, limit, offset);
-            return {
-                success: true,
-                data: tasks,
-                metadata: {
-                    timestamp: Date.now(),
-                    requestId: Math.random().toString(36).substring(7),
-                    projectPath: tasks[0]?.projectPath || 'unknown',
-                    pagination: { limit, offset },
-                    affectedPaths: tasks.map(t => t.path)
-                }
-            };
+            return this.createResponse(tasks, {
+                pagination: { limit, offset }
+            });
         } catch (error) {
             TaskManager.logger.error('Failed to get tasks by status', { error, status });
             throw error;
@@ -346,17 +354,9 @@ export class TaskManager {
     async getSubtasks(parentPath: string, limit: number = 100, offset: number = 0): Promise<TaskResponse<Task[]>> {
         try {
             const tasks = await this.cacheManager.getTasksByParent(parentPath, limit, offset);
-            return {
-                success: true,
-                data: tasks,
-                metadata: {
-                    timestamp: Date.now(),
-                    requestId: Math.random().toString(36).substring(7),
-                    projectPath: parentPath.split('/')[0],
-                    pagination: { limit, offset },
-                    affectedPaths: tasks.map(t => t.path)
-                }
-            };
+            return this.createResponse(tasks, {
+                pagination: { limit, offset }
+            });
         } catch (error) {
             TaskManager.logger.error('Failed to get subtasks', { error, parentPath });
             throw error;
@@ -371,16 +371,9 @@ export class TaskManager {
                 await this.cacheManager.unindexTask(task);
             }
             await this.operations.deleteTask(path);
-            return {
-                success: true,
-                data: undefined,
-                metadata: {
-                    timestamp: Date.now(),
-                    requestId: Math.random().toString(36).substring(7),
-                    projectPath: path.split('/')[0],
-                    affectedPaths: [path]
-                }
-            };
+            return this.createResponse(undefined, {
+                affectedPaths: [path]
+            });
         } catch (error) {
             TaskManager.logger.error('Failed to delete task', {
                 error,
@@ -565,29 +558,40 @@ export class TaskManager {
                 for (const [index, op] of input.operations.entries()) {
                     try {
                         switch (op.type) {
-                            case 'create':
+                            case 'create': {
                                 const created = await this.createTask(op.data as CreateTaskInput);
-                            results.push(created.data);
-                            affectedPaths.push(created.data.path);
-                            break;
-
-                        case 'update':
-                            if (!op.data) {
-                                throw createError(
-                                    ErrorCodes.INVALID_INPUT,
-                                    'Update operation requires data',
-                                    'bulkTaskOperations'
-                                );
-                            }
-                                const updated = await this.updateTask(op.path, op.data as UpdateTaskInput);
-                                results.push(updated.data);
-                                affectedPaths.push(updated.data.path);
+                                if (created.data) {
+                                    results.push(created.data);
+                                    affectedPaths.push(created.data.path);
+                                }
                                 break;
-
-                            case 'delete':
+                            }
+                            case 'update': {
+                                if (!op.data) {
+                                    throw createError(
+                                        ErrorCodes.INVALID_INPUT,
+                                        'Update operation requires data',
+                                        'bulkTaskOperations'
+                                    );
+                                }
+                                const updated = await this.updateTask(op.path, op.data as UpdateTaskInput);
+                                if (updated.data) {
+                                    results.push(updated.data);
+                                    affectedPaths.push(updated.data.path);
+                                }
+                                break;
+                            }
+                            case 'delete': {
                                 await this.deleteTask(op.path);
                                 affectedPaths.push(op.path);
                                 break;
+                            }
+                            default:
+                                throw createError(
+                                    ErrorCodes.INVALID_INPUT,
+                                    `Invalid operation type: ${op.type}`,
+                                    'bulkTaskOperations'
+                                );
                         }
                     } catch (opError) {
                         errors.push({
@@ -608,26 +612,10 @@ export class TaskManager {
 
                 await this.storage.commitTransaction();
 
-                const response: TaskResponse<Task[]> = {
-                    success: true,
-                    data: results,
-                    metadata: {
-                        timestamp: Date.now(),
-                        requestId: Math.random().toString(36).substring(7),
-                        projectPath: results[0]?.projectPath || affectedPaths[0]?.split('/')[0] || 'unknown',
-                        affectedPaths,
-                        operationCount: input.operations.length,
-                        successCount: results.length
-                    }
-                };
-
-                TaskManager.logger.info('Bulk operations completed successfully', {
+                return this.createResponse(results, {
                     operationCount: input.operations.length,
-                    successCount: results.length,
-                    affectedPaths
+                    successCount: results.length
                 });
-
-                return response;
             } catch (error) {
                 await this.storage.rollbackTransaction();
                 throw error;

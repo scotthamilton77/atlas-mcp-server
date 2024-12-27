@@ -1,7 +1,8 @@
+/**
+ * Task type definitions
+ */
 export enum TaskType {
     TASK = 'TASK',
-    /** @deprecated Use TASK or MILESTONE instead. GROUP type is maintained only for backward compatibility */
-    GROUP = 'GROUP',
     MILESTONE = 'MILESTONE'
 }
 
@@ -13,71 +14,85 @@ export enum TaskStatus {
     BLOCKED = 'BLOCKED'
 }
 
+/**
+ * Task metadata type with required properties
+ */
+export type TaskMetadata = Record<string, any> & {
+    [key: string]: any;
+};
+
 export interface Task {
+    // Core fields
     path: string;
     name: string;
     type: TaskType;
     status: TaskStatus;
-    projectPath: string;
     created: number;
     updated: number;
     version: number;
-    metadata: Record<string, unknown>;
-    dependencies: string[];
-    subtasks: string[];
+    projectPath: string;
+
+    // Optional fields
     description?: string;
     parentPath?: string;
-    notes?: string[];
+    notes: string[];  // Required array, can be empty but not undefined
     reasoning?: string;
+    dependencies: string[];  // Required array, can be empty but not undefined
+    
+    // Required fields with explicit initialization
+    subtasks: string[];  // Required array, can be empty but not undefined
+    metadata: TaskMetadata;
 }
 
 export interface CreateTaskInput {
-    name: string;
-    type?: TaskType;
     path: string;
-    parentPath?: string;
-    dependencies?: string[];
-    metadata?: Record<string, unknown>;
+    name: string;
+    type: TaskType;
     description?: string;
-    notes?: string[];
+    parentPath?: string;
+    notes?: string[];  // Optional, will be initialized to empty array if undefined
     reasoning?: string;
+    dependencies?: string[];  // Optional, will be initialized to empty array if undefined
+    metadata?: TaskMetadata;
 }
 
 export interface UpdateTaskInput {
     name?: string;
-    status?: TaskStatus;
-    dependencies?: string[];
-    metadata?: Record<string, unknown>;
     description?: string;
-    notes?: string[];
-    reasoning?: string;
     type?: TaskType;
+    status?: TaskStatus;
+    parentPath?: string | null;  // Can be null to clear the parent
+    notes?: string[];  // Optional, will keep existing if undefined
+    reasoning?: string;
+    dependencies?: string[];  // Optional, will keep existing if undefined
+    subtasks?: string[];  // Optional, will keep existing if undefined
+    metadata?: TaskMetadata;
 }
 
-export const CONSTRAINTS = {
-    NAME_MAX_LENGTH: 255,
-    DESCRIPTION_MAX_LENGTH: 1000,
-    PATH_MAX_LENGTH: 255,
-    MAX_DEPENDENCIES: 100,
-    MAX_NOTES: 1000,
-    MAX_REASONING_LENGTH: 1000,
-    NOTE_MAX_LENGTH: 1000,
-    REASONING_MAX_LENGTH: 1000,
-    MAX_PATH_DEPTH: 10,
-    MAX_SUBTASKS: 100,
-    MAX_ARRAY_ITEMS: 100,
-    METADATA_STRING_MAX_LENGTH: 1000
-};
+export interface TaskMetrics {
+    total: number;
+    byStatus: Record<TaskStatus, number>;
+    noteCount: number;
+    dependencyCount: number;
+}
 
-export interface ValidationResult {
+export interface TaskValidationError {
+    code: string;
+    message: string;
+    field?: string;
+    details?: any;
+}
+
+export interface TaskOperationResult {
     success: boolean;
-    errors: string[];
+    task?: Task;
+    errors?: TaskValidationError[];
 }
 
-export interface PaginationMetadata {
-    limit: number;
-    offset: number;
-    total?: number;
+export interface BulkOperationResult {
+    success: boolean;
+    results: TaskOperationResult[];
+    errors?: TaskValidationError[];
 }
 
 export interface TaskResponseMetadata {
@@ -85,23 +100,42 @@ export interface TaskResponseMetadata {
     requestId: string;
     projectPath: string;
     affectedPaths: string[];
+    pagination?: {
+        limit: number;
+        offset: number;
+    };
     operationCount?: number;
     successCount?: number;
-    pagination?: PaginationMetadata;
 }
 
-export interface TaskResponse<T> {
+export interface TaskResponse<T = Task> {
     success: boolean;
-    data: T;
+    data?: T;
+    error?: {
+        code: string;
+        message: string;
+    };
     metadata: TaskResponseMetadata;
 }
 
-/**
- * Gets the parent path from a task path
- * @param path Task path (e.g., "project/feature/task")
- * @returns Parent path or undefined if no parent exists
- */
-export function getParentPath(path: string): string | undefined {
-    const parts = path.split('/');
-    return parts.length > 1 ? parts.slice(0, -1).join('/') : undefined;
-}
+export const CONSTRAINTS = {
+    // Path constraints
+    PATH_MAX_LENGTH: 255,
+    MAX_PATH_DEPTH: 10,
+    
+    // Field length constraints
+    NAME_MAX_LENGTH: 100,
+    DESCRIPTION_MAX_LENGTH: 1000,
+    REASONING_MAX_LENGTH: 1000,
+    NOTE_MAX_LENGTH: 2000,
+    METADATA_STRING_MAX_LENGTH: 1000,
+    
+    // Array size constraints
+    MAX_DEPENDENCIES: 50,
+    MAX_SUBTASKS: 100,
+    MAX_NOTES: 100,
+    MAX_ARRAY_ITEMS: 100,
+    
+    // Size constraints
+    MAX_METADATA_SIZE: 32768 // 32KB
+} as const;

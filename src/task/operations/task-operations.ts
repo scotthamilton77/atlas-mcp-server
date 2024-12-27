@@ -248,6 +248,31 @@ export class TaskOperations {
             // Create task with processed input containing defaults
             const task = await this.storage.createTask(taskInput);
 
+            // If task has a parent, update parent's subtasks array
+            if (taskInput.parentPath) {
+                const parent = await this.storage.getTask(taskInput.parentPath);
+                if (parent) {
+                    const updatedParent = await this.storage.updateTask(parent.path, {
+                        subtasks: [...parent.subtasks, task.path],
+                        metadata: {
+                            ...parent.metadata,
+                            version: parent.version + 1,
+                            updated: Date.now()
+                        }
+                    });
+                    
+                    // Add parent update to transaction
+                    transaction.operations.push({
+                        id: `update-parent-${Date.now()}`,
+                        type: 'update',
+                        timestamp: Date.now(),
+                        path: parent.path,
+                        task: updatedParent,
+                        previousState: parent
+                    });
+                }
+            }
+
             // Add operation to transaction
             transaction.operations.push({
                 id: `create-${Date.now()}`,

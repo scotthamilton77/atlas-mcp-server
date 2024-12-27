@@ -1,13 +1,7 @@
-export * from './status-validator.js';
-export * from './dependency-validator.js';
-export * from './hierarchy-validator.js';
-
-// Create a composite validator that combines all validators
+import { Task, TaskStatus, TaskType } from '../../../types/task.js';
 import { StatusValidator } from './status-validator.js';
 import { DependencyValidator } from './dependency-validator.js';
 import { HierarchyValidator } from './hierarchy-validator.js';
-import { BaseTask } from '../schemas/index.js';
-import { TaskType, TaskStatus } from '../../../types/task.js';
 
 export class TaskValidators {
     private readonly statusValidator: StatusValidator;
@@ -21,47 +15,103 @@ export class TaskValidators {
     }
 
     /**
-     * Validates task status transitions
+     * Ensures a task has all required arrays initialized
      */
-    async validateStatus(
-        task: BaseTask,
+    private ensureTaskArrays(task: Partial<Task>): Task {
+        return {
+            ...task,
+            notes: task.notes || [],
+            dependencies: task.dependencies || [],
+            subtasks: task.subtasks || [],
+            metadata: task.metadata || {},
+        } as Task;
+    }
+
+    /**
+     * Validates task status transition
+     */
+    async validateStatusTransition(
+        task: Partial<Task>,
         newStatus: TaskStatus,
-        getTaskByPath: (path: string) => Promise<BaseTask | null>,
-        siblings: BaseTask[] = []
+        getTaskByPath: (path: string) => Promise<Task | null>
     ): Promise<void> {
-        await this.statusValidator.validateStatusTransition(task, newStatus, getTaskByPath);
-        await this.statusValidator.validateParentChildStatus(task, newStatus, siblings);
+        const validTask = this.ensureTaskArrays(task);
+        
+        // First validate the basic status transition
+        await this.statusValidator.validateStatusTransition(validTask, newStatus, getTaskByPath);
+
+        // Then get siblings if there's a parent
+        let siblings: Task[] = [];
+        if (validTask.parentPath) {
+            const parent = await getTaskByPath(validTask.parentPath);
+            if (parent) {
+                const allSiblings = await Promise.all(
+                    parent.subtasks
+                        .filter(path => path !== validTask.path)
+                        .map(path => getTaskByPath(path))
+                );
+                siblings = allSiblings.filter((t): t is Task => t !== null);
+            }
+        }
+
+        // Finally validate parent-child status constraints
+        await this.statusValidator.validateParentChildStatus(
+            validTask,
+            newStatus,
+            siblings,
+            getTaskByPath
+        );
     }
 
     /**
      * Validates task dependencies
      */
     async validateDependencies(
-        task: BaseTask,
+        task: Partial<Task>,
         dependencies: string[],
-        getTaskByPath: (path: string) => Promise<BaseTask | null>
+        getTaskByPath: (path: string) => Promise<Task | null>
     ): Promise<void> {
-        await this.dependencyValidator.validateDependencyConstraints(task, dependencies, getTaskByPath);
+        const validTask = this.ensureTaskArrays(task);
+        await this.dependencyValidator.validateDependencyConstraints(validTask, dependencies, getTaskByPath);
     }
 
     /**
      * Validates task hierarchy
      */
     async validateHierarchy(
-        task: BaseTask,
+        task: Partial<Task>,
         parentPath: string | undefined,
-        getTaskByPath: (path: string) => Promise<BaseTask | null>
+        getTaskByPath: (path: string) => Promise<Task | null>
     ): Promise<void> {
-        await this.hierarchyValidator.validateParentChild(task, parentPath, getTaskByPath);
+        const validTask = this.ensureTaskArrays(task);
+        await this.hierarchyValidator.validateParentChild(validTask, parentPath, getTaskByPath);
     }
 
     /**
-     * Validates task type changes
+     * Validates task type change
      */
     async validateTypeChange(
-        task: BaseTask,
+        task: Partial<Task>,
         newType: TaskType
     ): Promise<void> {
-        await this.hierarchyValidator.validateTypeChange(task, newType);
+        const validTask = this.ensureTaskArrays(task);
+        await this.hierarchyValidator.validateTypeChange(validTask, newType);
+    }
+
+    /**
+     * Detects dependency cycles
+     */
+    async detectDependencyCycle(
+        task: Partial<Task>,
+        newDeps: string[],
+        getTaskByPath: (path: string) => Promise<Task | null>
+    ): Promise<boolean> {
+        const validTask = this.ensureTaskArrays(task);
+        return this.dependencyValidator.detectDependencyCycle(validTask, newDeps, getTaskByPath);
     }
 }
+
+// Re-export individual validators for direct use
+export { StatusValidator } from './status-validator.js';
+export { DependencyValidator } from './dependency-validator.js';
+export { HierarchyValidator } from './hierarchy-validator.js';

@@ -4,7 +4,7 @@
 import { TaskManager } from '../task/manager/task-manager.js';
 import { Logger } from '../logging/index.js';
 import { ErrorCodes, createError } from '../errors/index.js';
-import { Task, TaskType, TaskStatus, CreateTaskInput, UpdateTaskInput } from '../types/task.js';
+import { TaskType, TaskStatus, CreateTaskInput, UpdateTaskInput } from '../types/task.js';
 import {
     createTaskSchema,
     updateTaskSchema,
@@ -59,23 +59,23 @@ export class ToolHandler {
      * Validates task hierarchy rules
      */
     private async validateTaskHierarchy(args: CreateTaskInput | UpdateTaskInput & { path?: string }, operation: 'create' | 'update'): Promise<void> {
-        const taskType = (args.type || 'TASK').toString().toUpperCase();
+        const taskType = (args.type || TaskType.TASK).toString().toUpperCase();
         const parentPath = ('parentPath' in args) ? args.parentPath : undefined;
 
         // Validate task type is uppercase
         if (taskType !== taskType.toUpperCase()) {
             throw createError(
                 ErrorCodes.INVALID_INPUT,
-                'Task type must be uppercase (TASK, GROUP, or MILESTONE)',
+                'Task type must be uppercase (TASK or MILESTONE)',
                 'validateTaskHierarchy'
             );
         }
 
         // Validate task type is valid
-        if (!['TASK', 'GROUP', 'MILESTONE'].includes(taskType)) {
+        if (![TaskType.TASK, TaskType.MILESTONE].includes(taskType as TaskType)) {
             throw createError(
                 ErrorCodes.INVALID_INPUT,
-                'Invalid task type. Must be TASK, GROUP, or MILESTONE',
+                'Invalid task type. Must be TASK or MILESTONE',
                 'validateTaskHierarchy'
             );
         }
@@ -94,19 +94,10 @@ export class ToolHandler {
             // Validate parent-child type relationships
             switch (parent.type) {
                 case TaskType.MILESTONE:
-                    if (!['TASK', 'GROUP'].includes(taskType)) {
+                    if (taskType !== TaskType.TASK) {
                         throw createError(
                             ErrorCodes.INVALID_INPUT,
-                            'MILESTONE can only contain TASK or GROUP types',
-                            'validateTaskHierarchy'
-                        );
-                    }
-                    break;
-                case TaskType.GROUP:
-                    if (taskType !== 'TASK') {
-                        throw createError(
-                            ErrorCodes.INVALID_INPUT,
-                            'GROUP can only contain TASK types',
+                            'MILESTONE can only contain TASK types',
                             'validateTaskHierarchy'
                         );
                     }
@@ -133,25 +124,12 @@ export class ToolHandler {
             }
 
             // Check if task has subtasks and is being changed to TASK type
-            if (taskType === 'TASK') {
+            if (taskType === TaskType.TASK) {
                 const subtasksResponse = await this.taskManager.getSubtasks(path);
-                if (subtasksResponse.data.length > 0) {
+                if (subtasksResponse.data && subtasksResponse.data.length > 0) {
                     throw createError(
                         ErrorCodes.INVALID_INPUT,
                         'Cannot change to TASK type while having subtasks',
-                        'validateTaskHierarchy'
-                    );
-                }
-            }
-
-            // Check if changing to GROUP with non-TASK subtasks
-            if (taskType === 'GROUP') {
-                const subtasksResponse = await this.taskManager.getSubtasks(path);
-                const invalidSubtasks = subtasksResponse.data.filter((s: Task) => s.type !== TaskType.TASK);
-                if (invalidSubtasks.length > 0) {
-                    throw createError(
-                        ErrorCodes.INVALID_INPUT,
-                        'GROUP can only contain TASK type subtasks',
                         'validateTaskHierarchy'
                     );
                 }
@@ -171,17 +149,27 @@ export class ToolHandler {
                 },
                 handler: async (args: Record<string, unknown>) => {
                     // Validate hierarchy rules
-                    await this.validateTaskHierarchy(args, 'create');
-                    
-                    // Create task input with proper type casting
-                    const taskInput: CreateTaskInput = {
+                    await this.validateTaskHierarchy({
+                        path: args.path as string,
                         name: args.name as string,
-                        path: args.path as string, // Path is now required
-                        type: args.type ? (args.type as string).toUpperCase() as TaskType : undefined,
+                        type: args.type ? (args.type as string).toUpperCase() as TaskType : TaskType.TASK,
                         description: args.description as string | undefined,
                         parentPath: args.parentPath as string | undefined,
                         dependencies: Array.isArray(args.dependencies) ? args.dependencies as string[] : [],
-                        notes: Array.isArray(args.notes) ? args.notes as string[] : undefined,
+                        notes: Array.isArray(args.notes) ? args.notes as string[] : [],
+                        reasoning: args.reasoning as string | undefined,
+                        metadata: args.metadata as Record<string, unknown> || {}
+                    }, 'create');
+                    
+                    // Create task input with proper type casting
+                    const taskInput = {
+                        name: args.name as string,
+                        path: args.path as string,
+                        type: args.type ? (args.type as string).toUpperCase() as TaskType : TaskType.TASK,
+                        description: args.description as string | undefined,
+                        parentPath: args.parentPath as string | undefined,
+                        dependencies: Array.isArray(args.dependencies) ? args.dependencies as string[] : [],
+                        notes: Array.isArray(args.notes) ? args.notes as string[] : [],
                         reasoning: args.reasoning as string | undefined,
                         metadata: args.metadata as Record<string, unknown> || {}
                     };

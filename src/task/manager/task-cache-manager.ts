@@ -4,6 +4,7 @@ import { CacheOptions } from '../../types/cache.js';
 import { TaskIndexManager } from '../core/indexing/index-manager.js';
 import { TaskEventHandler } from './task-event-handler.js';
 import { Task, TaskType, TaskStatus } from '../../types/task.js';
+import { TaskStorage } from '../../types/storage.js';
 
 export class TaskCacheManager {
     private readonly logger: Logger;
@@ -140,20 +141,86 @@ export class TaskCacheManager {
         }
     }
 
+    private storage?: TaskStorage;
+
+    setStorage(storage: TaskStorage): void {
+        this.storage = storage;
+    }
+
     async getTaskByPath(path: string): Promise<Task | null> {
-        return this.indexManager.getTaskByPath(path);
+        // Try index first
+        const indexedTask = await this.indexManager.getTaskByPath(path);
+        if (indexedTask) {
+            return indexedTask;
+        }
+
+        // Fall back to storage if available
+        if (this.storage) {
+            const task = await this.storage.getTask(path);
+            if (task) {
+                await this.indexTask(task);
+                return task;
+            }
+        }
+
+        return null;
     }
 
     async getTasksByPattern(pattern: string, limit?: number, offset?: number): Promise<Task[]> {
-        return this.indexManager.getTasksByPattern(pattern, limit, offset);
+        // Try index first
+        const indexedTasks = await this.indexManager.getTasksByPattern(pattern, limit, offset);
+        if (indexedTasks.length > 0) {
+            return indexedTasks;
+        }
+
+        // Fall back to storage if available
+        if (this.storage) {
+            const tasks = await this.storage.getTasksByPattern(pattern);
+            for (const task of tasks) {
+                await this.indexTask(task);
+            }
+            return tasks;
+        }
+
+        return [];
     }
 
     async getTasksByStatus(status: TaskStatus, pattern?: string, limit?: number, offset?: number): Promise<Task[]> {
-        return this.indexManager.getTasksByStatus(status, pattern, limit, offset);
+        // Try index first
+        const indexedTasks = await this.indexManager.getTasksByStatus(status, pattern, limit, offset);
+        if (indexedTasks.length > 0) {
+            return indexedTasks;
+        }
+
+        // Fall back to storage if available
+        if (this.storage) {
+            const tasks = await this.storage.getTasksByStatus(status);
+            for (const task of tasks) {
+                await this.indexTask(task);
+            }
+            return tasks;
+        }
+
+        return [];
     }
 
     async getTasksByParent(parentPath: string, limit?: number, offset?: number): Promise<Task[]> {
-        return this.indexManager.getTasksByParent(parentPath, limit, offset);
+        // Try index first
+        const indexedTasks = await this.indexManager.getTasksByParent(parentPath, limit, offset);
+        if (indexedTasks.length > 0) {
+            return indexedTasks;
+        }
+
+        // Fall back to storage if available
+        if (this.storage) {
+            const tasks = await this.storage.getSubtasks(parentPath);
+            for (const task of tasks) {
+                await this.indexTask(task);
+            }
+            return tasks;
+        }
+
+        return [];
     }
 
     getMemoryStats(): { heapUsed: number; heapTotal: number; rss: number } {

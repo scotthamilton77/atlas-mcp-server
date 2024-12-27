@@ -387,9 +387,15 @@ const dbPath = path.join(this.config.baseDir, `${this.config.name}.db`);
         }
 
         const now = Date.now();
+        // Convert null parentPath to undefined
+        const sanitizedUpdates = {
+            ...updates,
+            parentPath: updates.parentPath === null ? undefined : updates.parentPath
+        };
+
         const updatedTask: Task = {
             ...existingTask,
-            ...updates,
+            ...sanitizedUpdates,
             // Update system fields
             updated: now,
             version: existingTask.version + 1,
@@ -1177,7 +1183,7 @@ const dbPath = path.join(this.config.baseDir, `${this.config.name}.db`);
 
             // Optional fields
             description: row.description ? String(row.description) : undefined,
-            parentPath: row.parent_path ? String(row.parent_path) : undefined,
+            parentPath: row.parent_path === null ? undefined : row.parent_path ? String(row.parent_path) : undefined,
             notes: this.parseJSON<string[]>(String(row.notes || '[]'), []),
             reasoning: row.reasoning ? String(row.reasoning) : undefined,
             dependencies: this.parseJSON<string[]>(String(row.dependencies || '[]'), []),

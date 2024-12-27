@@ -1,6 +1,6 @@
 import { Logger } from '../../logging/index.js';
 import { TaskStorage } from '../../types/storage.js';
-import { TaskType, TaskStatus, ValidationResult } from '../../types/task.js';
+import { TaskType, TaskStatus, Task } from '../../types/task.js';
 import { bulkOperationsSchema } from './schemas/bulk-operations-schema.js';
 import { ErrorCodes, createError } from '../../errors/index.js';
 import { 
@@ -8,10 +8,14 @@ import {
     createTaskSchema,
     updateTaskSchema,
     CreateTaskInput,
-    UpdateTaskInput,
-    BaseTask
+    UpdateTaskInput
 } from './schemas/index.js';
 import { TaskValidators } from './validators/index.js';
+
+export interface ValidationResult {
+    success: boolean;
+    errors: string[];
+}
 
 /**
  * Main task validator that coordinates all validation rules
@@ -30,48 +34,54 @@ export class TaskValidator {
      */
     async validateCreate(input: CreateTaskInput): Promise<void> {
         try {
-            // Check for existing task first
-            const existingTask = await this.storage.getTask(input.path);
+            // Validate schema first
+            const validatedInput = createTaskSchema.parse(input);
+
+            // Check for existing task
+            const existingTask = await this.storage.getTask(validatedInput.path);
             if (existingTask) {
                 throw createError(
                     ErrorCodes.TASK_DUPLICATE,
-                    `Task already exists at path: ${input.path}`,
+                    `Task already exists at path: ${validatedInput.path}`,
                     'TaskValidator.validateCreate',
                     'A task with this path already exists. Please use a different path.'
                 );
             }
 
-            // Validate schema
-            createTaskSchema.parse(input);
-
             // Create dummy task for validation
-            const task: BaseTask = {
-                path: input.path,
-                name: input.name,
-                type: input.type || TaskType.TASK,
+            const task: Task = {
+                path: validatedInput.path,
+                name: validatedInput.name,
+                type: validatedInput.type || TaskType.TASK,
                 status: TaskStatus.PENDING,
                 created: Date.now(),
                 updated: Date.now(),
                 version: 1,
-                projectPath: input.path.split('/')[0],
-                dependencies: input.dependencies || [],
+                projectPath: validatedInput.path.split('/')[0],
+                description: validatedInput.description,
+                parentPath: validatedInput.parentPath,
+                notes: validatedInput.notes || [],
+                reasoning: validatedInput.reasoning,
+                dependencies: validatedInput.dependencies || [],
                 subtasks: [],
-                metadata: input.metadata || {}
+                metadata: validatedInput.metadata || {}
             };
 
             // Validate hierarchy if parent path provided
-            await this.validators.validateHierarchy(task, input.parentPath, this.storage.getTask.bind(this.storage));
+            if (validatedInput.parentPath) {
+                await this.validators.validateHierarchy(task, validatedInput.parentPath, this.storage.getTask.bind(this.storage));
+            }
 
             // Always validate dependencies to check for cycles
             await this.validators.validateDependencies(
                 task,
-                input.dependencies || [],
+                validatedInput.dependencies || [],
                 this.storage.getTask.bind(this.storage)
             );
 
             // Validate metadata if provided
-            if (input.metadata) {
-                taskMetadataSchema.parse(input.metadata);
+            if (validatedInput.metadata) {
+                taskMetadataSchema.parse(validatedInput.metadata);
             }
         } catch (error) {
             this.logger.error('Task creation validation failed', {
@@ -87,6 +97,9 @@ export class TaskValidator {
      */
     async validateUpdate(path: string, updates: UpdateTaskInput): Promise<void> {
         try {
+            // Validate schema first
+            const validatedUpdates = updateTaskSchema.parse(updates);
+
             // Get existing task
             const existingTask = await this.storage.getTask(path);
             if (!existingTask) {
@@ -97,47 +110,34 @@ export class TaskValidator {
                 );
             }
 
-            // Validate schema
-            updateTaskSchema.parse(updates);
-
-            // Convert to base task type
-            const task: BaseTask = {
-                ...existingTask,
-                dependencies: existingTask.dependencies || [],
-                subtasks: existingTask.subtasks || [],
-                metadata: existingTask.metadata || {}
-            };
-
             // Validate type change
-            if (updates.type && updates.type !== existingTask.type) {
-                await this.validators.validateTypeChange(task, updates.type);
+            if (validatedUpdates.type && validatedUpdates.type !== existingTask.type) {
+                await this.validators.validateTypeChange(existingTask, validatedUpdates.type);
             }
 
             // Validate status change
-            if (updates.status && updates.status !== existingTask.status) {
-                const siblings = await this.storage.getSubtasks(existingTask.parentPath || '');
-                await this.validators.validateStatus(
-                    task,
-                    updates.status,
-                    this.storage.getTask.bind(this.storage),
-                    siblings
+            if (validatedUpdates.status && validatedUpdates.status !== existingTask.status) {
+                await this.validators.validateStatusTransition(
+                    existingTask,
+                    validatedUpdates.status,
+                    this.storage.getTask.bind(this.storage)
                 );
             }
 
             // Validate dependencies change
-            if (updates.dependencies) {
+            if (validatedUpdates.dependencies) {
                 await this.validators.validateDependencies(
-                    task,
-                    updates.dependencies,
+                    existingTask,
+                    validatedUpdates.dependencies,
                     this.storage.getTask.bind(this.storage)
                 );
             }
 
             // Validate metadata updates
-            if (updates.metadata) {
+            if (validatedUpdates.metadata) {
                 taskMetadataSchema.parse({
                     ...existingTask.metadata,
-                    ...updates.metadata
+                    ...validatedUpdates.metadata
                 });
             }
         } catch (error) {
@@ -163,9 +163,9 @@ export class TaskValidator {
             for (const op of parsed.operations) {
                 try {
                     if (op.type === 'create') {
-                        await this.validateCreate(op.data);
+                        await this.validateCreate(op.data as CreateTaskInput);
                     } else if (op.type === 'update') {
-                        await this.validateUpdate(op.path, op.data);
+                        await this.validateUpdate(op.path, op.data as UpdateTaskInput);
                     }
                 } catch (opError) {
                     this.logger.error('Operation validation failed', {

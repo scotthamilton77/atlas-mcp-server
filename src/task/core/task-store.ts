@@ -1,7 +1,7 @@
 /**
  * Path-based task storage with caching, indexing, and transaction support
  */
-import { Task, TaskStatus } from '../../types/task.js';
+import { Task, TaskStatus, CreateTaskInput } from '../../types/task.js';
 import { PathValidator } from '../../validation/index.js';
 import { TaskStorage } from '../../types/storage.js';
 import { Logger } from '../../logging/index.js';
@@ -54,10 +54,10 @@ export class TaskStore {
         this.indexManager = new TaskIndexManager();
         this.pathValidator = new PathValidator();
         this.cacheManager = CacheManager.getInstance({
-            maxSize: 500, // Reduced from 1000
-            ttl: 30000, // Reduced from 60000
-            maxTTL: 60000, // Reduced from 300000
-            cleanupInterval: 15000 // Reduced from 30000
+            maxSize: 500,
+            ttl: 30000,
+            maxTTL: 60000,
+            cleanupInterval: 15000
         });
         this.nodes = new Map();
         this.transactionManager = TransactionManager.getInstance(storage);
@@ -148,10 +148,48 @@ export class TaskStore {
     }
 
     /**
-     * Gets a task by path, checking cache first
-     * @internal Used by getTasksByPattern, getTasksByStatus, and getSubtasks
+     * Creates a new task with proper transaction handling and indexing
      */
-    /* istanbul ignore next */
+    async createTask(input: CreateTaskInput): Promise<Task> {
+        const pathResult = this.pathValidator.validatePath(input.path);
+        if (!pathResult.isValid) {
+            throw createTaskStoreError(
+                ErrorCodes.TASK_INVALID_PATH,
+                pathResult.error || `Invalid task path: ${input.path}`,
+                'createTask'
+            );
+        }
+
+        const transaction = await this.transactionManager.begin();
+
+        try {
+            // Create task in storage
+            const task = await this.storage.createTask(input);
+
+            // Update index and cache
+            await Promise.all([
+                this.indexManager.indexTask(task),
+                this.cacheManager.set(task.path, task)
+            ]);
+
+            await this.transactionManager.commit(transaction);
+            return task;
+        } catch (error) {
+            await this.transactionManager.rollback(transaction);
+            this.logger.error('Failed to create task', { error, input });
+            throw createTaskStoreError(
+                ErrorCodes.OPERATION_FAILED,
+                'Failed to create task',
+                'createTask',
+                undefined,
+                { input, error }
+            );
+        }
+    }
+
+    /**
+     * Gets a task by path, checking cache first
+     */
     protected async getTaskByPath(path: string): Promise<Task | null> {
         const pathResult = this.pathValidator.validatePath(path);
         if (!pathResult.isValid) {
