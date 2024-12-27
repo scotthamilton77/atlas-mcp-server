@@ -152,8 +152,6 @@
 │   └── index.ts
 ├── .eslintrc.json
 ├── .gitignore
-├── improvements-v2.md
-├── jest.config.js
 ├── LICENSE
 ├── package.json
 ├── README.md

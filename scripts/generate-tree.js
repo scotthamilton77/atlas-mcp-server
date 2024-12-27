@@ -27,49 +27,68 @@ let bufferIndex = 0;
 
 async function* generateTree(dir, prefix = '', isLast = true, depth = 0) {
     let dirHandle;
+    let entries = [];
     
     try {
         // Open directory
         dirHandle = await opendir(dir);
         
-        // Process entries directly without intermediate array
+        // Collect all valid entries first
         for await (const entry of dirHandle) {
             if (!IGNORE_PATTERNS.has(entry.name)) {
-                // Use preallocated buffer
-                ENTRY_BUFFER[bufferIndex] = entry;
-                bufferIndex++;
-                
-                // Process when buffer is full
-                if (bufferIndex >= CHUNK_SIZE) {
-                    yield* processEntries(ENTRY_BUFFER, bufferIndex, dir, prefix, depth);
-                    bufferIndex = 0; // Reset buffer index
-                    
-                    // Force GC after each chunk
-                    if (global.gc) {
-                        global.gc();
+                entries.push(entry);
+            }
+        }
+
+        // Sort entries (directories first, then alphabetically)
+        entries.sort((a, b) => {
+            if (a.isDirectory() !== b.isDirectory()) {
+                return b.isDirectory() ? 1 : -1;
+            }
+            return a.name.localeCompare(b.name);
+        });
+
+        // Process entries in chunks
+        for (let i = 0; i < entries.length; i += CHUNK_SIZE) {
+            const chunk = entries.slice(i, i + CHUNK_SIZE);
+            for (let j = 0; j < chunk.length; j++) {
+                const entry = chunk[j];
+                const isLastEntry = i + j === entries.length - 1;
+                const marker = isLastEntry ? '└── ' : '├── ';
+                const newPrefix = prefix + (isLastEntry ? '    ' : '│   ');
+
+                // Yield current entry
+                yield prefix + marker + entry.name + (entry.isDirectory() ? '/' : '');
+
+                // Process subdirectories (with depth limit)
+                if (entry.isDirectory() && depth < 20) {
+                    const subPath = join(dir, entry.name);
+                    try {
+                        yield* generateTree(subPath, newPrefix, isLastEntry, depth + 1);
+                    } catch (error) {
+                        if (error.code !== 'ENOENT') {
+                            console.error(`Error processing ${subPath}:`, error);
+                        }
                     }
                 }
             }
-        }
-        
-        // Process remaining entries
-        if (bufferIndex > 0) {
-            yield* processEntries(ENTRY_BUFFER, bufferIndex, dir, prefix, depth);
-            bufferIndex = 0;
+
+            // Run GC after each chunk
+            if (global.gc) {
+                global.gc();
+            }
         }
         
     } catch (error) {
-        console.error(`Error reading directory ${dir}:`, error);
+        if (error.code !== 'ENOENT') {
+            console.error(`Error reading directory ${dir}:`, error);
+        }
     } finally {
         // Clean up resources
         if (dirHandle) {
             await dirHandle.close().catch(() => {});
         }
-        
-        // Clear references
-        for (let i = 0; i < CHUNK_SIZE; i++) {
-            ENTRY_BUFFER[i] = null;
-        }
+        entries = null;
     }
 }
 
