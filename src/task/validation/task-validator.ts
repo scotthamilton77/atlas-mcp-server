@@ -48,6 +48,18 @@ export class TaskValidator {
                 );
             }
 
+            // Check for reasoning content in description
+            if (validatedInput.description) {
+                if (validatedInput.description.toLowerCase().includes('reasoning:')) {
+                    throw createError(
+                        ErrorCodes.INVALID_INPUT,
+                        'Reasoning content detected in description field',
+                        'TaskValidator.validateCreate',
+                        'Please use the separate reasoning field for task reasoning. The description field should contain technical details, implementation steps, and success criteria.'
+                    );
+                }
+            }
+
             // Create dummy task for validation
             const task: Task = {
                 path: validatedInput.path,
@@ -108,6 +120,18 @@ export class TaskValidator {
                     `Task not found: ${path}`,
                     'TaskValidator.validateUpdate'
                 );
+            }
+
+            // Check for reasoning content in description
+            if (validatedUpdates.description) {
+                if (validatedUpdates.description.toLowerCase().includes('reasoning:')) {
+                    throw createError(
+                        ErrorCodes.INVALID_INPUT,
+                        'Reasoning content detected in description field',
+                        'TaskValidator.validateUpdate',
+                        'Please use the separate reasoning field for task reasoning. The description field should contain technical details, implementation steps, and success criteria.'
+                    );
+                }
             }
 
             // Validate type change
