@@ -5,18 +5,51 @@ import { AtlasServer } from './server/index.js';
 import { EventManager } from './events/event-manager.js';
 import { EventTypes } from './types/events.js';
 import { BaseError, ErrorCodes, createError } from './errors/index.js';
+import { SerializableError } from './types/events.js';
 import { ConfigManager } from './config/index.js';
 import { join } from 'path';
 import { promises as fs } from 'fs';
 
 import { TaskStorage } from './types/storage.js';
 import { CreateTaskInput, UpdateTaskInput, TaskStatus } from './types/task.js';
+import { LogLevels, LogLevel } from './types/logging.js';
 
 let server: AtlasServer;
 let storage: TaskStorage;
 let taskManager: TaskManager;
 let eventManager: EventManager;
 let logger: Logger;
+
+// Helper function to convert Error to SerializableError
+function toSerializableError(error: unknown): SerializableError {
+    if (error instanceof Error) {
+        // Create a base serializable error with required properties
+        const serializableError: SerializableError = {
+            name: error.name,
+            message: error.message
+        };
+
+        // Add optional stack trace if available
+        if (error.stack) {
+            serializableError.stack = error.stack;
+        }
+
+        // Copy any additional enumerable properties
+        for (const key of Object.keys(error)) {
+            serializableError[key] = (error as any)[key];
+        }
+
+        return serializableError;
+    }
+
+    // For non-Error objects, create a new Error and convert it
+    const baseError = new Error(String(error));
+    return {
+        name: baseError.name,
+        message: baseError.message,
+        stack: baseError.stack
+    };
+}
 
 async function main(): Promise<void> {
     try {
@@ -38,16 +71,25 @@ async function main(): Promise<void> {
         // Create log directory with proper permissions (mode is ignored on Windows)
         await fs.mkdir(logDir, { recursive: true, ...(process.platform !== 'win32' && { mode: 0o755 }) });
 
-        // Initialize logger first
+        // Get log level from environment or default to info
+        const logLevel = process.env.ATLAS_LOG_LEVEL?.toLowerCase();
+        const validLogLevel = Object.values(LogLevels).map(l => l.toLowerCase()).includes(logLevel || '')
+            ? logLevel as LogLevel 
+            : LogLevels.INFO;
+
+        // Initialize logger first - no console logging for MCP clients
         logger = await Logger.initialize({
-            console: true,
+            console: false,
             file: true,
-            minLevel: 'debug',
+            minLevel: validLogLevel,
             logDir: logDir,
             maxFileSize: 5 * 1024 * 1024,
             maxFiles: 5,
-            noColors: false
+            noColors: true
         });
+
+        // Add debug log to verify level
+        logger.debug('Logger initialized with level', { level: validLogLevel });
 
         // Initialize event manager
         eventManager = await EventManager.initialize();
@@ -60,9 +102,9 @@ async function main(): Promise<void> {
 
         const configManager = await ConfigManager.initialize({
             logging: {
-                console: true,
+                console: false,
                 file: true,
-                level: 'debug',
+                level: validLogLevel,
                 maxFiles: 5,
                 maxSize: 5242880, // 5MB
                 dir: logDir
@@ -471,7 +513,7 @@ async function main(): Promise<void> {
                                     }]
                                 };
                             case 'bulk_task_operations':
-                                result = await taskManager.bulkTaskOperations(args.operations as Array<{ type: 'create' | 'update' | 'delete', path: string, data?: CreateTaskInput | UpdateTaskInput }>);
+                                result = await taskManager.bulkTaskOperations({ operations: args.operations as Array<{ type: 'create' | 'update' | 'delete', path: string, data?: CreateTaskInput | UpdateTaskInput }> });
                                 return {
                                     content: [{
                                         type: 'text',
@@ -530,7 +572,7 @@ async function main(): Promise<void> {
                             eventManager.emitErrorEvent({
                                 type: EventTypes.SYSTEM_ERROR,
                                 timestamp: Date.now(),
-                                error: error instanceof Error ? error : new Error(String(error)),
+                                error: toSerializableError(error),
                                 context: {
                                     component: 'ToolHandler',
                                     operation: name,
@@ -571,7 +613,7 @@ async function main(): Promise<void> {
                 type: EventTypes.SYSTEM_ERROR,
                 timestamp: Date.now(),
                 metadata: {
-                    error: error instanceof Error ? error : new Error(String(error))
+                    error: toSerializableError(error)
                 }
             });
 
@@ -702,7 +744,7 @@ async function main(): Promise<void> {
             process.on('unhandledRejection', errorHandler);
         }
     } catch (error) {
-        console.error('Failed to initialize server:', error);
+        // Don't log to console - MCP will handle the error
         process.exit(1);
     }
 }
@@ -713,8 +755,7 @@ main().catch((error: Error) => {
     try {
         logger = Logger.getInstance();
     } catch {
-        // If logger isn't initialized, log to console
-        console.error('Failed to start server:', error);
+        // Don't log to console - MCP will handle the error
         process.exit(1);
     }
 

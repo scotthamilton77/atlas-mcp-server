@@ -85,7 +85,16 @@ export class HealthMonitor {
                 timestamp: Date.now(),
                 metadata: {
                     component: 'HealthMonitor',
-                    error,
+                    error: {
+                        name: error.name,
+                        message: error.message,
+                        ...(error.stack && { stack: error.stack }),
+                        ...Object.fromEntries(
+                            Object.entries(error).filter(([key]) => 
+                                typeof (error as any)[key] === 'string'
+                            )
+                        )
+                    },
                     memoryUsage: process.memoryUsage()
                 }
             });
@@ -149,7 +158,10 @@ export class HealthMonitor {
                 component: 'HealthMonitor',
                 memoryUsage,
                 success: this.isHealthy,
-                error: this.isHealthy ? undefined : new Error(`Error threshold exceeded: ${this.errorCount}`)
+                error: this.isHealthy ? undefined : {
+                    name: 'HealthCheckError',
+                    message: `Error threshold exceeded: ${this.errorCount}`
+                }
             }
         });
 

@@ -18,11 +18,15 @@ export class EventHealthMonitor {
   private static readonly HEALTH_CHECK_INTERVAL = 60000; // 1 minute
 
   private readonly handlerStats = new Map<string, HandlerStats>();
-  private readonly logger: Logger;
+  private logger?: Logger;
   private healthCheckInterval?: NodeJS.Timeout;
 
   constructor() {
-    this.logger = Logger.getInstance().child({ component: 'EventHealthMonitor' });
+    try {
+      this.logger = Logger.getInstance().child({ component: 'EventHealthMonitor' });
+    } catch {
+      // Logger not initialized yet, which is fine
+    }
     this.startHealthCheck();
   }
 
@@ -50,7 +54,7 @@ export class EventHealthMonitor {
 
       // Check for slow handlers
       if (stats.avgResponseTime > EventHealthMonitor.RESPONSE_TIME_THRESHOLD) {
-        this.logger.warn('Slow event handler detected', {
+        this.logger?.warn('Slow event handler detected', {
           handlerId,
           avgResponseTime: stats.avgResponseTime,
           threshold: EventHealthMonitor.RESPONSE_TIME_THRESHOLD
@@ -61,7 +65,7 @@ export class EventHealthMonitor {
       if (stats.isCircuitOpen && stats.nextRetryTime && now >= stats.nextRetryTime) {
         stats.isCircuitOpen = false;
         stats.consecutiveFailures = 0;
-        this.logger.info('Circuit breaker reset', { handlerId });
+        this.logger?.info('Circuit breaker reset', { handlerId });
       }
     }
   }
@@ -120,7 +124,7 @@ export class EventHealthMonitor {
           stats.isCircuitOpen = true;
           stats.nextRetryTime = Date.now() + EventHealthMonitor.CIRCUIT_RESET_TIMEOUT;
           
-          this.logger.error('Circuit breaker opened', {
+          this.logger?.error('Circuit breaker opened', {
             handlerId,
             consecutiveFailures: stats.consecutiveFailures,
             nextRetryTime: new Date(stats.nextRetryTime).toISOString()
@@ -149,7 +153,7 @@ export class EventHealthMonitor {
       stats.nextRetryTime = undefined;
       this.handlerStats.set(handlerId, stats);
       
-      this.logger.info('Circuit breaker manually reset', { handlerId });
+      this.logger?.info('Circuit breaker manually reset', { handlerId });
     }
   }
 

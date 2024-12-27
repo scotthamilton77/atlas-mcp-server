@@ -432,27 +432,65 @@ export class SqliteStorage implements TaskStorage {
     async saveTasks(tasks: Task[]): Promise<void> {
         if (!this.db) throw new Error('Database not initialized');
         for (const task of tasks) {
-            await this.db.run(
-                `INSERT OR REPLACE INTO tasks (
-                    path, name, description, type, status,
-                    parent_path, notes, reasoning, dependencies,
-                    subtasks, metadata, created_at, updated_at, version
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                task.path,
-                task.name,
-                task.description,
-                task.type,
-                task.status,
-                task.parentPath,
-                task.notes ? JSON.stringify(task.notes) : null,
-                task.reasoning,
-                JSON.stringify(task.dependencies),
-                JSON.stringify(task.subtasks),
-                JSON.stringify(task.metadata),
-                task.created,
-                task.updated,
-                task.version
-            );
+            // Check if task exists
+            const existing = await this.getTask(task.path);
+            
+            try {
+                if (existing) {
+                    await this.db.run(
+                        `UPDATE tasks SET
+                            name = ?, description = ?, type = ?, status = ?,
+                            parent_path = ?, notes = ?, reasoning = ?, dependencies = ?,
+                            subtasks = ?, metadata = ?, created_at = ?, updated_at = ?, version = ?
+                         WHERE path = ?`,
+                        task.name,
+                        task.description,
+                        task.type,
+                        task.status,
+                        task.parentPath,
+                        task.notes ? JSON.stringify(task.notes) : null,
+                        task.reasoning,
+                        JSON.stringify(task.dependencies),
+                        JSON.stringify(task.subtasks),
+                        JSON.stringify(task.metadata),
+                        task.created,
+                        task.updated,
+                        task.version,
+                        task.path
+                    );
+                } else {
+                    await this.db.run(
+                        `INSERT INTO tasks (
+                            path, name, description, type, status,
+                            parent_path, notes, reasoning, dependencies,
+                            subtasks, metadata, created_at, updated_at, version
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                        task.path,
+                        task.name,
+                        task.description,
+                        task.type,
+                        task.status,
+                        task.parentPath,
+                        task.notes ? JSON.stringify(task.notes) : null,
+                        task.reasoning,
+                        JSON.stringify(task.dependencies),
+                        JSON.stringify(task.subtasks),
+                        JSON.stringify(task.metadata),
+                        task.created,
+                        task.updated,
+                        task.version
+                    );
+                }
+            } catch (error) {
+                if (error instanceof Error && error.message.includes('UNIQUE constraint failed')) {
+                    throw createError(
+                        ErrorCodes.TASK_DUPLICATE,
+                        `Task already exists at path: ${task.path}`,
+                        'saveTasks'
+                    );
+                }
+                throw error;
+            }
         }
     }
 

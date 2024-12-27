@@ -18,11 +18,11 @@ export class TaskIndexManager {
     private readonly dependencyIndex: Map<string, Set<string>>;
     
     // Keep track of pattern count to prevent unbounded growth
-    private readonly MAX_PATTERNS = 1000;
+    private readonly MAX_PATTERNS = 100; // Reduced from 1000
     private patternCount = 0;
 
-    // Cleanup interval
-    private readonly CLEANUP_INTERVAL = 60000; // 1 minute
+    // Memory management constants
+    private readonly CLEANUP_INTERVAL = 30000; // 30 seconds
     private cleanupTimer?: NodeJS.Timeout;
 
     constructor() {
@@ -173,13 +173,14 @@ export class TaskIndexManager {
     }
 
     /**
-     * Gets tasks by path pattern
+     * Gets tasks by path pattern with pagination
      */
-    async getTasksByPattern(pattern: string): Promise<TaskIndex[]> {
+    async getTasksByPattern(pattern: string, limit: number = 100, offset: number = 0): Promise<TaskIndex[]> {
         // First try exact pattern match from pattern index
         const exactMatches = this.patternIndex.get(pattern);
         if (exactMatches) {
             const tasks = Array.from(exactMatches)
+                .slice(offset, offset + limit) // Apply pagination
                 .map(path => this.getTaskFromWeakRef(path))
                 .filter((task): task is TaskIndex => task !== undefined);
             
@@ -218,39 +219,38 @@ export class TaskIndexManager {
     }
 
     /**
-     * Gets tasks by status with optional pattern filtering
+     * Gets tasks by status with optional pattern filtering and pagination
      */
-    async getTasksByStatus(status: TaskStatus, pattern?: string): Promise<TaskIndex[]> {
+    async getTasksByStatus(status: TaskStatus, pattern?: string, limit: number = 100, offset: number = 0): Promise<TaskIndex[]> {
         const statusPaths = this.statusIndex.get(status) || new Set<string>();
         
-        if (!pattern) {
-            return Array.from(statusPaths)
-                .map(path => this.getTaskFromWeakRef(path))
-                .filter((task): task is TaskIndex => task !== undefined);
+        let paths = Array.from(statusPaths);
+        if (pattern) {
+            paths = paths.filter(path => matchesPattern(path, pattern));
         }
 
-        // Filter by pattern if provided
-        const matchingPaths = Array.from(statusPaths)
-            .filter(path => matchesPattern(path, pattern));
+        // Apply pagination
+        paths = paths.slice(offset, offset + limit);
 
-        return matchingPaths
+        return paths
             .map(path => this.getTaskFromWeakRef(path))
             .filter((task): task is TaskIndex => task !== undefined);
     }
 
     /**
-     * Gets project tasks by pattern
+     * Gets project tasks by pattern with pagination
      */
-    async getProjectTasks(pattern: string): Promise<TaskIndex[]> {
-        return this.getTasksByPattern(pattern);
+    async getProjectTasks(pattern: string, limit: number = 100, offset: number = 0): Promise<TaskIndex[]> {
+        return this.getTasksByPattern(pattern, limit, offset);
     }
 
     /**
-     * Gets tasks by parent path
+     * Gets tasks by parent path with pagination
      */
-    async getTasksByParent(parentPath: string): Promise<TaskIndex[]> {
+    async getTasksByParent(parentPath: string, limit: number = 100, offset: number = 0): Promise<TaskIndex[]> {
         const children = this.parentIndex.get(parentPath) || new Set<string>();
         return Array.from(children)
+            .slice(offset, offset + limit)
             .map(path => this.getTaskFromWeakRef(path))
             .filter((task): task is TaskIndex => task !== undefined);
     }

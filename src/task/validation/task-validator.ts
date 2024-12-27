@@ -30,6 +30,17 @@ export class TaskValidator {
      */
     async validateCreate(input: CreateTaskInput): Promise<void> {
         try {
+            // Check for existing task first
+            const existingTask = await this.storage.getTask(input.path);
+            if (existingTask) {
+                throw createError(
+                    ErrorCodes.TASK_DUPLICATE,
+                    `Task already exists at path: ${input.path}`,
+                    'TaskValidator.validateCreate',
+                    'A task with this path already exists. Please use a different path.'
+                );
+            }
+
             // Validate schema
             createTaskSchema.parse(input);
 
@@ -51,10 +62,12 @@ export class TaskValidator {
             // Validate hierarchy if parent path provided
             await this.validators.validateHierarchy(task, input.parentPath, this.storage.getTask.bind(this.storage));
 
-            // Validate dependencies if provided
-            if (input.dependencies?.length) {
-                await this.validators.validateDependencies(task, input.dependencies, this.storage.getTask.bind(this.storage));
-            }
+            // Always validate dependencies to check for cycles
+            await this.validators.validateDependencies(
+                task,
+                input.dependencies || [],
+                this.storage.getTask.bind(this.storage)
+            );
 
             // Validate metadata if provided
             if (input.metadata) {
@@ -142,9 +155,33 @@ export class TaskValidator {
      */
     async validateBulkOperations(input: unknown): Promise<ValidationResult> {
         try {
-            bulkOperationsSchema.parse(input);
-            return { success: true, errors: [] };
+            // Parse and validate schema
+            const parsed = bulkOperationsSchema.parse(input);
+            const errors: string[] = [];
+
+            // Validate each operation individually
+            for (const op of parsed.operations) {
+                try {
+                    if (op.type === 'create') {
+                        await this.validateCreate(op.data);
+                    } else if (op.type === 'update') {
+                        await this.validateUpdate(op.path, op.data);
+                    }
+                } catch (opError) {
+                    this.logger.error('Operation validation failed', {
+                        error: opError,
+                        operation: op
+                    });
+                    errors.push(`${op.type} operation failed for path ${op.path}: ${opError instanceof Error ? opError.message : String(opError)}`);
+                }
+            }
+
+            return {
+                success: errors.length === 0,
+                errors
+            };
         } catch (error) {
+            this.logger.error('Bulk operations validation failed', { error });
             const errors = error instanceof Error ? [error.message] : ['Invalid bulk operations input'];
             return { success: false, errors };
         }

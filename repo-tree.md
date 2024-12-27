@@ -104,6 +104,7 @@
 |   |   `-- validation/
 |   |       |-- schemas/
 |   |       |   |-- base-schema.ts
+|   |       |   |-- bulk-operations-schema.ts
 |   |       |   |-- create-schema.ts
 |   |       |   |-- index.ts
 |   |       |   |-- metadata-schema.ts
@@ -137,6 +138,7 @@
 |   |   |-- task.ts
 |   |   `-- transaction.ts
 |   |-- utils/
+|   |   |-- error-utils.ts
 |   |   |-- id-generator.ts
 |   |   |-- path-utils.ts
 |   |   `-- pattern-matcher.ts
@@ -157,4 +159,4 @@
 |-- repomix-output.txt
 `-- tsconfig.json
 
-33 directories, 123 files
+33 directories, 125 files

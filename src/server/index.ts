@@ -47,14 +47,20 @@ export class AtlasServer {
     private static instance: AtlasServer;
     private static isInitializing: boolean = false;
     private static serverPromise: Promise<void> | null = null;
-    private static logger: Logger;
+    private static logger?: Logger;
     private readonly server: Server;
 
     private static initLogger(): void {
         if (!AtlasServer.logger) {
-            AtlasServer.logger = Logger.getInstance().child({ component: 'AtlasServer' });
+            try {
+                AtlasServer.logger = Logger.getInstance().child({ component: 'AtlasServer' });
+            } catch {
+                // Logger not initialized yet, which is fine
+                // All logging operations will be skipped
+            }
         }
     }
+
     private readonly rateLimiter: RateLimiter;
     private readonly healthMonitor: HealthMonitor;
     private readonly metricsCollector: MetricsCollector;
@@ -74,13 +80,17 @@ export class AtlasServer {
 
         // Return existing instance if available
         if (AtlasServer.instance?.isInitialized) {
-            AtlasServer.logger?.debug('Returning existing server instance');
+            if (AtlasServer.logger) {
+                AtlasServer.logger.debug('Returning existing server instance');
+            }
             return AtlasServer.instance;
         }
 
         // If initialization is in progress, wait for it
         if (AtlasServer.isInitializing) {
-            AtlasServer.logger?.debug('Server initialization in progress, waiting...');
+            if (AtlasServer.logger) {
+                AtlasServer.logger.debug('Server initialization in progress, waiting...');
+            }
             await AtlasServer.serverPromise;
             return AtlasServer.instance;
         }
@@ -88,7 +98,9 @@ export class AtlasServer {
         AtlasServer.isInitializing = true;
         AtlasServer.serverPromise = (async () => {
             try {
-                AtlasServer.logger?.info('Starting server initialization');
+                if (AtlasServer.logger) {
+                    AtlasServer.logger.info('Starting server initialization');
+                }
                 if (!AtlasServer.instance) {
                     AtlasServer.instance = new AtlasServer(config, toolHandler);
                 }
@@ -178,7 +190,9 @@ export class AtlasServer {
                 metrics: this.metricsCollector.getMetrics()
             };
 
-            AtlasServer.logger.error('[MCP Error]', errorContext);
+            if (AtlasServer.logger) {
+                AtlasServer.logger.error('[MCP Error]', errorContext);
+            }
         };
 
         process.on('SIGINT', async () => {
@@ -190,11 +204,13 @@ export class AtlasServer {
         });
 
         process.on('unhandledRejection', (reason, promise) => {
-            AtlasServer.logger.error('Unhandled Rejection:', {
-                reason,
-                promise,
-                metrics: this.metricsCollector.getMetrics()
-            });
+            if (AtlasServer.logger) {
+                AtlasServer.logger.error('Unhandled Rejection:', {
+                    reason,
+                    promise,
+                    metrics: this.metricsCollector.getMetrics()
+                });
+            }
         });
 
         process.on('uncaughtException', (error) => {
@@ -204,10 +220,12 @@ export class AtlasServer {
                     ? JSON.stringify(error)
                     : String(error);
             
-            AtlasServer.logger.error('Uncaught Exception:', {
-                error: errorMessage,
-                metrics: this.metricsCollector.getMetrics()
-            });
+            if (AtlasServer.logger) {
+                AtlasServer.logger.error('Uncaught Exception:', {
+                    error: errorMessage,
+                    metrics: this.metricsCollector.getMetrics()
+                });
+            }
             this.shutdown().finally(() => process.exit(1));
         });
     }
@@ -314,7 +332,9 @@ export class AtlasServer {
     private setupHealthCheck(): void {
         // Start health monitor with shutdown callback
         this.healthMonitor.start(async () => {
-            AtlasServer.logger.info('Health monitor triggered shutdown');
+            if (AtlasServer.logger) {
+                AtlasServer.logger.info('Health monitor triggered shutdown');
+            }
             await this.shutdown();
         });
 
@@ -328,7 +348,9 @@ export class AtlasServer {
                 };
                 await this.healthMonitor.check(status);
             } catch (error) {
-                AtlasServer.logger.error('Health check error:', { error });
+                if (AtlasServer.logger) {
+                    AtlasServer.logger.error('Health check error:', { error });
+                }
             }
         }, this.config.health?.checkInterval || 300000);
     }
@@ -381,10 +403,12 @@ export class AtlasServer {
                 ? JSON.stringify(error)
                 : String(error);
 
-        AtlasServer.logger.error('Unexpected error in tool handler:', {
-            error: errorDetails,
-            metrics: this.metricsCollector.getMetrics()
-        });
+        if (AtlasServer.logger) {
+            AtlasServer.logger.error('Unexpected error in tool handler:', {
+                error: errorDetails,
+                metrics: this.metricsCollector.getMetrics()
+            });
+        }
         
         throw new McpError(
             ErrorCode.InternalError,
@@ -398,7 +422,9 @@ export class AtlasServer {
      */
     private async initializeServer(): Promise<void> {
         if (this.isInitialized) {
-            AtlasServer.logger.debug('Server already initialized');
+            if (AtlasServer.logger) {
+                AtlasServer.logger.debug('Server already initialized');
+            }
             return;
         }
 
@@ -407,14 +433,18 @@ export class AtlasServer {
             await this.server.connect(transport);
             
             this.isInitialized = true;
-            AtlasServer.logger.info(`${this.config.name} v${this.config.version} running on stdio`, {
-                metrics: this.metricsCollector.getMetrics()
-            });
+            if (AtlasServer.logger) {
+                AtlasServer.logger.info(`${this.config.name} v${this.config.version} running on stdio`, {
+                    metrics: this.metricsCollector.getMetrics()
+                });
+            }
         } catch (error) {
-            AtlasServer.logger.error('Failed to start server:', {
-                error,
-                metrics: this.metricsCollector.getMetrics()
-            });
+            if (AtlasServer.logger) {
+                AtlasServer.logger.error('Failed to start server:', {
+                    error,
+                    metrics: this.metricsCollector.getMetrics()
+                });
+            }
             throw error;
         }
     }
@@ -427,22 +457,28 @@ export class AtlasServer {
             const memUsage = process.memoryUsage();
             
             // Log memory stats
-            AtlasServer.logger.debug('Memory usage:', {
-                heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
-                heapTotal: `${Math.round(memUsage.heapTotal / 1024 / 1024)}MB`,
-                rss: `${Math.round(memUsage.rss / 1024 / 1024)}MB`
-            });
+            if (AtlasServer.logger) {
+                AtlasServer.logger.debug('Memory usage:', {
+                    heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
+                    heapTotal: `${Math.round(memUsage.heapTotal / 1024 / 1024)}MB`,
+                    rss: `${Math.round(memUsage.rss / 1024 / 1024)}MB`
+                });
+            }
 
             // Trigger cleanup if memory usage is too high
             if (memUsage.heapUsed > this.MAX_MEMORY_USAGE) {
-                AtlasServer.logger.warn('High memory usage detected, triggering cleanup', {
-                    heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
-                    threshold: `${Math.round(this.MAX_MEMORY_USAGE / 1024 / 1024)}MB`
-                });
+                if (AtlasServer.logger) {
+                    AtlasServer.logger.warn('High memory usage detected, triggering cleanup', {
+                        heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
+                        threshold: `${Math.round(this.MAX_MEMORY_USAGE / 1024 / 1024)}MB`
+                    });
+                }
                 
                 // Force garbage collection if available
                 if (global.gc) {
-                    AtlasServer.logger.info('Forcing garbage collection');
+                    if (AtlasServer.logger) {
+                        AtlasServer.logger.info('Forcing garbage collection');
+                    }
                     global.gc();
                 }
 
@@ -461,7 +497,9 @@ export class AtlasServer {
         }
 
         this.isShuttingDown = true;
-        AtlasServer.logger.info('Starting graceful shutdown...');
+        if (AtlasServer.logger) {
+            AtlasServer.logger.info('Starting graceful shutdown...');
+        }
 
         try {
             // Wait for active requests to complete
@@ -470,9 +508,11 @@ export class AtlasServer {
 
             while (this.activeRequests.size > 0) {
                 if (Date.now() - shutdownStart > timeout) {
-                    AtlasServer.logger.warn('Shutdown timeout reached, forcing shutdown', {
-                        activeRequests: this.activeRequests.size
-                    });
+                    if (AtlasServer.logger) {
+                        AtlasServer.logger.warn('Shutdown timeout reached, forcing shutdown', {
+                            activeRequests: this.activeRequests.size
+                        });
+                    }
                     break;
                 }
                 await new Promise(resolve => setTimeout(resolve, 100));
@@ -493,14 +533,19 @@ export class AtlasServer {
             if (global.gc) {
                 global.gc();
             }
-            AtlasServer.logger.info('Server closed successfully', {
-                metrics: this.metricsCollector.getMetrics()
-            });
+
+            if (AtlasServer.logger) {
+                AtlasServer.logger.info('Server closed successfully', {
+                    metrics: this.metricsCollector.getMetrics()
+                });
+            }
         } catch (error) {
-            AtlasServer.logger.error('Error during shutdown:', {
-                error,
-                metrics: this.metricsCollector.getMetrics()
-            });
+            if (AtlasServer.logger) {
+                AtlasServer.logger.error('Error during shutdown:', {
+                    error,
+                    metrics: this.metricsCollector.getMetrics()
+                });
+            }
             throw error;
         }
     }

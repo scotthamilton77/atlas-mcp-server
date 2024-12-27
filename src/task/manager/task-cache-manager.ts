@@ -14,10 +14,10 @@ export class TaskCacheManager {
     private lastCleanupTime: number = 0;
 
     // Memory management constants
-    private readonly MAX_CACHE_MEMORY = 1024 * 1024 * 1024; // 1GB cache limit
-    private readonly MEMORY_CHECK_INTERVAL = 300000; // 5 minutes
-    private readonly MEMORY_PRESSURE_THRESHOLD = 0.95; // 95% of max before cleanup
-    private readonly MEMORY_CHECK_COOLDOWN = 60000; // 1 minute cooldown between cleanups
+    private readonly MAX_CACHE_MEMORY = 50 * 1024 * 1024; // 50MB cache limit
+    private readonly MEMORY_CHECK_INTERVAL = 60000; // 1 minute
+    private readonly MEMORY_PRESSURE_THRESHOLD = 0.8; // 80% of max before cleanup
+    private readonly MEMORY_CHECK_COOLDOWN = 10000; // 10 second cooldown between cleanups
 
     constructor() {
         this.logger = Logger.getInstance().child({ component: 'TaskCacheManager' });
@@ -25,8 +25,8 @@ export class TaskCacheManager {
         
         const cacheOptions: CacheOptions = {
             maxSize: this.MAX_CACHE_MEMORY,
-            ttl: 15 * 60 * 1000, // 15 minutes
-            cleanupInterval: 5 * 60 * 1000 // 5 minutes
+            ttl: 5 * 60 * 1000, // 5 minutes
+            cleanupInterval: 60 * 1000 // 1 minute
         };
         
         this.cacheManager = new CacheManager(cacheOptions);
@@ -140,16 +140,16 @@ export class TaskCacheManager {
         return this.indexManager.getTaskByPath(path);
     }
 
-    async getTasksByPattern(pattern: string): Promise<Task[]> {
-        return this.indexManager.getTasksByPattern(pattern);
+    async getTasksByPattern(pattern: string, limit?: number, offset?: number): Promise<Task[]> {
+        return this.indexManager.getTasksByPattern(pattern, limit, offset);
     }
 
-    async getTasksByStatus(status: TaskStatus): Promise<Task[]> {
-        return this.indexManager.getTasksByStatus(status);
+    async getTasksByStatus(status: TaskStatus, pattern?: string, limit?: number, offset?: number): Promise<Task[]> {
+        return this.indexManager.getTasksByStatus(status, pattern, limit, offset);
     }
 
-    async getTasksByParent(parentPath: string): Promise<Task[]> {
-        return this.indexManager.getTasksByParent(parentPath);
+    async getTasksByParent(parentPath: string, limit?: number, offset?: number): Promise<Task[]> {
+        return this.indexManager.getTasksByParent(parentPath, limit, offset);
     }
 
     getMemoryStats(): { heapUsed: number; heapTotal: number; rss: number } {

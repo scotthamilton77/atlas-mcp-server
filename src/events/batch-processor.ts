@@ -8,13 +8,17 @@ interface BatchConfig {
 }
 
 export class EventBatchProcessor {
-  private readonly logger: Logger;
+  private logger?: Logger;
   private readonly batches = new Map<EventTypes, AtlasEvent[]>();
   private readonly timers = new Map<EventTypes, NodeJS.Timeout>();
   private readonly config: BatchConfig;
 
   constructor(config: Partial<BatchConfig> = {}) {
-    this.logger = Logger.getInstance().child({ component: 'EventBatchProcessor' });
+    try {
+      this.logger = Logger.getInstance().child({ component: 'EventBatchProcessor' });
+    } catch {
+      // Logger not initialized yet, which is fine
+    }
     this.config = {
       maxBatchSize: config.maxBatchSize || 100,
       maxWaitTime: config.maxWaitTime || 1000, // 1 second
@@ -47,7 +51,7 @@ export class EventBatchProcessor {
     if (batch.length >= this.config.maxBatchSize) {
       this.flushBatch(event.type, callback as (events: AtlasEvent[]) => Promise<void>)
         .catch(error => {
-          this.logger.error('Failed to flush batch on size limit', {
+          this.logger?.error('Failed to flush batch on size limit', {
             error,
             eventType: event.type,
             batchSize: batch.length
@@ -74,12 +78,12 @@ export class EventBatchProcessor {
       // Process batch
       await callback(batch);
 
-      this.logger.debug('Batch processed successfully', {
+      this.logger?.debug('Batch processed successfully', {
         eventType: type,
         batchSize: batch.length
       });
     } catch (error) {
-      this.logger.error('Failed to process batch', {
+      this.logger?.error('Failed to process batch', {
         error,
         eventType: type,
         batchSize: batch.length
@@ -101,7 +105,7 @@ export class EventBatchProcessor {
     const types = Array.from(this.batches.keys());
     for (const type of types) {
       const callback = async (events: AtlasEvent[]) => {
-        this.logger.debug('Processing periodic flush', {
+        this.logger?.debug('Processing periodic flush', {
           eventType: type,
           batchSize: events.length
         });

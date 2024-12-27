@@ -55,9 +55,16 @@ export interface CacheEvent extends BaseEvent {
   };
 }
 
+export interface SerializableError {
+  name: string;
+  message: string;
+  stack?: string;
+  [key: string]: unknown;
+}
+
 export interface ErrorEvent extends BaseEvent {
   type: EventTypes.SYSTEM_ERROR;
-  error: Error;
+  error: SerializableError;
   context?: {
     component: string;
     operation: string;
@@ -129,7 +136,7 @@ export interface SystemEventMetadata {
     tool?: string;
     args?: unknown;
     success?: boolean;
-    error?: Error;
+    error?: SerializableError;
 
     // System info
     version?: string;

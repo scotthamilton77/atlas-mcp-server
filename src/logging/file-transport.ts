@@ -1,7 +1,7 @@
 import { promises as fs } from 'fs';
 import { dirname } from 'path';
 import { createWriteStream, WriteStream } from 'fs';
-import { LogEntry, LoggerTransportConfig } from '../types/logging.js';
+import { LogEntry, LoggerTransportConfig, LogLevel } from '../types/logging.js';
 import { ErrorFactory } from '../errors/error-factory.js';
 
 /**
@@ -63,7 +63,6 @@ export class FileTransport {
         this.writeStream.on('error', (error) => {
             // Handle error through event system instead of console
             this.handleStreamError(error);
-            this.handleStreamError(error);
         });
 
         // Update file size on write
@@ -75,7 +74,38 @@ export class FileTransport {
     /**
      * Writes a log entry to file
      */
+    /**
+     * Checks if a log level should be recorded
+     */
+    private shouldLog(level: LogLevel): boolean {
+        const levels = {
+            error: 0,
+            warn: 1,
+            info: 2,
+            http: 3,
+            debug: 4,
+            verbose: 5,
+            silly: 6
+        };
+
+        // Convert level names to lowercase for comparison
+        const normalizedLevel = level.toLowerCase() as keyof typeof levels;
+        const normalizedMinLevel = (this.config.minLevel?.toLowerCase() || 'info') as keyof typeof levels;
+
+        // Debug level (4) should log when minLevel is debug (4) or lower
+        // Info level (2) should NOT log when minLevel is debug (4)
+        return levels[normalizedLevel] >= levels[normalizedMinLevel];
+    }
+
+    /**
+     * Writes a log entry to file
+     */
     async write(entry: LogEntry): Promise<void> {
+        // Skip if below minimum level
+        if (!this.shouldLog(entry.level)) {
+            return;
+        }
+
         return new Promise<void>((resolve, reject) => {
             // Add to queue
             this.writeQueue.push({ entry, resolve, reject });
@@ -200,12 +230,13 @@ export class FileTransport {
      */
     private async handleStreamError(error: Error): Promise<void> {
         // No direct console logging - handled by error event
+        const recreateError = new Error(`Stream error occurred: ${error.message}. Attempting to recreate stream.`);
 
         // Try to recreate stream
         try {
             await this.createWriteStream();
-        } catch (recreateError) {
-            // Error will be handled by event system
+        } catch (err) {
+            throw new Error(`Failed to recreate stream after error: ${recreateError.message}. Additional error: ${err instanceof Error ? err.message : String(err)}`);
         }
     }
 

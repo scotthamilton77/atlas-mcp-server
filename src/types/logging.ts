@@ -99,6 +99,8 @@ export interface LoggerTransportConfig {
         colors?: boolean;
         /** Log format */
         format?: 'json' | 'simple' | 'pretty';
+        /** Minimum log level */
+        minLevel?: LogLevel;
     };
 }
 

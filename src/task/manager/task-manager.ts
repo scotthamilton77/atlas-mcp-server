@@ -95,23 +95,10 @@ export class TaskManager {
 
         try {
             await this.initializeComponents();
-            const tasks = await this.storage.getTasksByPattern('*');
-            
-            const batchSize = 100;
-            for (let i = 0; i < tasks.length; i += batchSize) {
-                const batch = tasks.slice(i, i + batchSize);
-                for (const task of batch) {
-                    await this.cacheManager.indexTask(task);
-                }
-                if (global.gc) {
-                    global.gc();
-                }
-            }
-            
             this.initialized = true;
-            TaskManager.logger.info('Task indexes initialized', { taskCount: tasks.length });
+            TaskManager.logger.info('Task manager initialized');
         } catch (error) {
-            TaskManager.logger.error('Failed to initialize task indexes', { error });
+            TaskManager.logger.error('Failed to initialize task manager', { error });
             throw error;
         }
     }
@@ -316,27 +303,60 @@ export class TaskManager {
         }
     }
 
-    async listTasks(pathPattern: string): Promise<Task[]> {
+    async listTasks(pathPattern: string, limit: number = 100, offset: number = 0): Promise<TaskResponse<Task[]>> {
         try {
-            return await this.cacheManager.getTasksByPattern(pathPattern);
+            const tasks = await this.cacheManager.getTasksByPattern(pathPattern, limit, offset);
+            return {
+                success: true,
+                data: tasks,
+                metadata: {
+                    timestamp: Date.now(),
+                    requestId: Math.random().toString(36).substring(7),
+                    projectPath: tasks[0]?.projectPath || pathPattern.split('/')[0],
+                    pagination: { limit, offset },
+                    affectedPaths: tasks.map(t => t.path)
+                }
+            };
         } catch (error) {
             TaskManager.logger.error('Failed to list tasks', { error, pathPattern });
             throw error;
         }
     }
 
-    async getTasksByStatus(status: TaskStatus): Promise<Task[]> {
+    async getTasksByStatus(status: TaskStatus, limit: number = 100, offset: number = 0): Promise<TaskResponse<Task[]>> {
         try {
-            return await this.cacheManager.getTasksByStatus(status);
+            const tasks = await this.cacheManager.getTasksByStatus(status, undefined, limit, offset);
+            return {
+                success: true,
+                data: tasks,
+                metadata: {
+                    timestamp: Date.now(),
+                    requestId: Math.random().toString(36).substring(7),
+                    projectPath: tasks[0]?.projectPath || 'unknown',
+                    pagination: { limit, offset },
+                    affectedPaths: tasks.map(t => t.path)
+                }
+            };
         } catch (error) {
             TaskManager.logger.error('Failed to get tasks by status', { error, status });
             throw error;
         }
     }
 
-    async getSubtasks(parentPath: string): Promise<Task[]> {
+    async getSubtasks(parentPath: string, limit: number = 100, offset: number = 0): Promise<TaskResponse<Task[]>> {
         try {
-            return await this.cacheManager.getTasksByParent(parentPath);
+            const tasks = await this.cacheManager.getTasksByParent(parentPath, limit, offset);
+            return {
+                success: true,
+                data: tasks,
+                metadata: {
+                    timestamp: Date.now(),
+                    requestId: Math.random().toString(36).substring(7),
+                    projectPath: parentPath.split('/')[0],
+                    pagination: { limit, offset },
+                    affectedPaths: tasks.map(t => t.path)
+                }
+            };
         } catch (error) {
             TaskManager.logger.error('Failed to get subtasks', { error, parentPath });
             throw error;

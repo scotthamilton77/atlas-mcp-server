@@ -1,9 +1,10 @@
-import { LogLevel, LoggerConfig, LogEntry } from '../types/logging.js';
+import { LogLevel, LoggerConfig, LogEntry, LogLevels } from '../types/logging.js';
 import { TransportManager } from './transport-manager.js';
 import { ErrorFormatter } from './error-formatter.js';
 import { EventManager } from '../events/event-manager.js';
 import { EventTypes } from '../types/events.js';
 import { ErrorFactory } from '../errors/error-factory.js';
+import { toSerializableError } from '../utils/error-utils.js';
 
 /**
  * Enhanced logger with advanced error handling and transport management
@@ -52,7 +53,7 @@ export class Logger {
                     type: EventTypes.SYSTEM_ERROR,
                     timestamp: Date.now(),
                     metadata: {
-                        error: error instanceof Error ? error : new Error(String(error)),
+                        error: toSerializableError(error),
                         component: 'Logger',
                         operation: 'initialize'
                     }
@@ -104,16 +105,7 @@ export class Logger {
         try {
             const transports: Record<string, any> = {};
 
-            // Configure console transport
-            if (this.config.console) {
-                transports.console = {
-                    type: 'console',
-                    options: {
-                        colors: !this.config.noColors,
-                        format: 'pretty'
-                    }
-                };
-            }
+            // Console transport disabled - all output must go to files for MCP
 
             // Configure file transport
             if (this.config.file && this.config.logDir) {
@@ -122,7 +114,8 @@ export class Logger {
                     options: {
                         filename: `${this.config.logDir}/combined.log`,
                         maxsize: this.config.maxFileSize || 5 * 1024 * 1024,
-                        maxFiles: this.config.maxFiles || 5
+                        maxFiles: this.config.maxFiles || 5,
+                        minLevel: this.config.minLevel
                     }
                 };
 
@@ -132,7 +125,8 @@ export class Logger {
                     options: {
                         filename: `${this.config.logDir}/error.log`,
                         maxsize: this.config.maxFileSize || 5 * 1024 * 1024,
-                        maxFiles: this.config.maxFiles || 5
+                        maxFiles: this.config.maxFiles || 5,
+                        minLevel: LogLevels.ERROR // Error log always gets errors regardless of config
                     }
                 };
             }
@@ -151,11 +145,20 @@ export class Logger {
 
                 // Only set the transport manager after successful initialization
                 this.transportManager = manager;
-            } else {
-                // No warning needed - will fall back to transport-less mode
             }
         } catch (error) {
             // Error will be handled by error event system
+            if (this.eventManager) {
+                this.eventManager.emitSystemEvent({
+                    type: EventTypes.SYSTEM_ERROR,
+                    timestamp: Date.now(),
+                    metadata: {
+                        error: toSerializableError(error),
+                        component: 'Logger',
+                        operation: 'initializeTransports'
+                    }
+                });
+            }
             // Don't throw - fall back to console logging
         }
     }
@@ -194,7 +197,7 @@ export class Logger {
                             type: EventTypes.SYSTEM_ERROR,
                             timestamp: Date.now(),
                             metadata: {
-                                error: error instanceof Error ? error : new Error(String(error)),
+                                error: toSerializableError(error),
                                 component: 'Logger',
                                 operation: 'write'
                             }
@@ -203,11 +206,22 @@ export class Logger {
                 }
             }
 
-            // Skip logging if no transport available
+            // Skip logging if no transport manager and no failover
             return;
         } catch (error) {
             // Even critical failures should not log to console
             // They will be handled by the error event system
+            if (this.eventManager) {
+                this.eventManager.emitSystemEvent({
+                    type: EventTypes.SYSTEM_ERROR,
+                    timestamp: Date.now(),
+                    metadata: {
+                        error: toSerializableError(error),
+                        component: 'Logger',
+                        operation: 'log'
+                    }
+                });
+            }
         }
     }
 
@@ -229,7 +243,9 @@ export class Logger {
         const normalizedLevel = level.toLowerCase() as keyof typeof levels;
         const normalizedMinLevel = (this.config.minLevel || 'info').toLowerCase() as keyof typeof levels;
 
-        return levels[normalizedLevel] <= levels[normalizedMinLevel];
+        // Debug level (4) should log when minLevel is debug (4) or lower
+        // Info level (2) should NOT log when minLevel is debug (4)
+        return levels[normalizedLevel] >= levels[normalizedMinLevel];
     }
 
     /**
@@ -260,7 +276,7 @@ export class Logger {
         const formattedError = error ? ErrorFormatter.format(error) : undefined;
         this.log('error', message, {
             ...context,
-            error: formattedError
+            error: formattedError ? toSerializableError(formattedError) : undefined
         });
     }
 
@@ -271,7 +287,7 @@ export class Logger {
         const formattedError = error ? ErrorFormatter.format(error, { includeStack: true }) : undefined;
         this.log('error', `FATAL: ${message}`, {
             ...context,
-            error: formattedError,
+            error: formattedError ? toSerializableError(formattedError) : undefined,
             fatal: true
         });
     }

@@ -74,6 +74,12 @@ export interface ValidationResult {
     errors: string[];
 }
 
+export interface PaginationMetadata {
+    limit: number;
+    offset: number;
+    total?: number;
+}
+
 export interface TaskResponseMetadata {
     timestamp: number;
     requestId: string;
@@ -81,6 +87,7 @@ export interface TaskResponseMetadata {
     affectedPaths: string[];
     operationCount?: number;
     successCount?: number;
+    pagination?: PaginationMetadata;
 }
 
 export interface TaskResponse<T> {

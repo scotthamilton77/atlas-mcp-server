@@ -3,6 +3,7 @@ import { LogEntry, LoggerTransportConfig, LoggerHealthStatus } from '../types/lo
 import { ErrorFactory } from '../errors/error-factory.js';
 import { EventManager } from '../events/event-manager.js';
 import { EventTypes } from '../types/events.js';
+import { toSerializableError } from '../utils/error-utils.js';
 
 /**
  * Manages multiple logging transports with failover support
@@ -36,7 +37,8 @@ export class TransportManager {
                     const transport = new FileTransport({
                         filename: config.options.filename,
                         maxsize: config.options.maxsize || 5 * 1024 * 1024, // 5MB default
-                        maxFiles: config.options.maxFiles || 5
+                        maxFiles: config.options.maxFiles || 5,
+                        minLevel: config.options.minLevel // Pass through log level
                     });
 
                     await transport.initialize();
@@ -100,7 +102,7 @@ export class TransportManager {
                         timestamp: Date.now(),
                         metadata: {
                             transport: name,
-                            error: error instanceof Error ? error : new Error(String(error))
+                            error: toSerializableError(error)
                         }
                     });
                 }
@@ -142,7 +144,7 @@ export class TransportManager {
                     type: EventTypes.LOGGER_CRITICAL_FAILURE,
                     timestamp: Date.now(),
                     metadata: {
-                        error: new Error(errors.map(e => e.message).join(', '))
+                        error: toSerializableError(new Error(errors.map(e => e.message).join(', ')))
                     }
                 });
             }
@@ -259,7 +261,7 @@ export class TransportManager {
                     timestamp: Date.now(),
                     metadata: {
                         transport: name,
-                        error: error instanceof Error ? error : new Error(String(error))
+                        error: toSerializableError(error)
                     }
                 });
             }
