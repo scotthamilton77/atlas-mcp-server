@@ -69,15 +69,24 @@ export const CONSTRAINTS = {
     METADATA_STRING_MAX_LENGTH: 1000
 };
 
+export interface ValidationResult {
+    success: boolean;
+    errors: string[];
+}
+
+export interface TaskResponseMetadata {
+    timestamp: number;
+    requestId: string;
+    projectPath: string;
+    affectedPaths: string[];
+    operationCount?: number;
+    successCount?: number;
+}
+
 export interface TaskResponse<T> {
     success: boolean;
     data: T;
-    metadata: {
-        timestamp: number;
-        requestId: string;
-        projectPath: string;
-        affectedPaths: string[];
-    };
+    metadata: TaskResponseMetadata;
 }
 
 /**

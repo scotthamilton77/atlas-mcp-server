@@ -1,6 +1,7 @@
 import { Logger } from '../../logging/index.js';
 import { TaskStorage } from '../../types/storage.js';
-import { TaskType, TaskStatus } from '../../types/task.js';
+import { TaskType, TaskStatus, ValidationResult } from '../../types/task.js';
+import { bulkOperationsSchema } from './schemas/bulk-operations-schema.js';
 import { ErrorCodes, createError } from '../../errors/index.js';
 import { 
     taskMetadataSchema,
@@ -133,6 +134,19 @@ export class TaskValidator {
                 updates
             });
             throw error;
+        }
+    }
+
+    /**
+     * Validates bulk operations input
+     */
+    async validateBulkOperations(input: unknown): Promise<ValidationResult> {
+        try {
+            bulkOperationsSchema.parse(input);
+            return { success: true, errors: [] };
+        } catch (error) {
+            const errors = error instanceof Error ? [error.message] : ['Invalid bulk operations input'];
+            return { success: false, errors };
         }
     }
 }

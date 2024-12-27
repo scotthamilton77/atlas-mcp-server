@@ -523,24 +523,30 @@ export class TaskManager {
         }
     }
 
-    async bulkTaskOperations(operations: Array<{ type: 'create' | 'update' | 'delete', path: string, data?: CreateTaskInput | UpdateTaskInput }>): Promise<TaskResponse<Task[]>> {
+    async bulkTaskOperations(input: { operations: Array<{ type: 'create' | 'update' | 'delete', path: string, data?: CreateTaskInput | UpdateTaskInput }> }): Promise<TaskResponse<Task[]>> {
         try {
+            // Validate input against schema
+            const validationResult = await this.validator.validateBulkOperations(input);
+            if (!validationResult.success) {
+                throw createError(
+                    ErrorCodes.VALIDATION_ERROR,
+                    'Invalid bulk operations input',
+                    'bulkTaskOperations',
+                    validationResult.errors.join(', ')
+                );
+            }
+
             await this.storage.beginTransaction();
             const results: Task[] = [];
             const affectedPaths: string[] = [];
+            const errors: Array<{ operation: number, error: string }> = [];
 
             try {
-                for (const op of operations) {
-                    switch (op.type) {
-                        case 'create':
-                            if (!op.data) {
-                                throw createError(
-                                    ErrorCodes.INVALID_INPUT,
-                                    'Create operation requires data',
-                                    'bulkTaskOperations'
-                                );
-                            }
-                            const created = await this.createTask(op.data as CreateTaskInput);
+                for (const [index, op] of input.operations.entries()) {
+                    try {
+                        switch (op.type) {
+                            case 'create':
+                                const created = await this.createTask(op.data as CreateTaskInput);
                             results.push(created.data);
                             affectedPaths.push(created.data.path);
                             break;
@@ -553,37 +559,55 @@ export class TaskManager {
                                     'bulkTaskOperations'
                                 );
                             }
-                            const updated = await this.updateTask(op.path, op.data as UpdateTaskInput);
-                            results.push(updated.data);
-                            affectedPaths.push(updated.data.path);
-                            break;
+                                const updated = await this.updateTask(op.path, op.data as UpdateTaskInput);
+                                results.push(updated.data);
+                                affectedPaths.push(updated.data.path);
+                                break;
 
-                        case 'delete':
-                            await this.deleteTask(op.path);
-                            affectedPaths.push(op.path);
-                            break;
-
-                        default:
-                            throw createError(
-                                ErrorCodes.INVALID_INPUT,
-                                `Unknown operation type: ${(op as any).type}`,
-                                'bulkTaskOperations'
-                            );
+                            case 'delete':
+                                await this.deleteTask(op.path);
+                                affectedPaths.push(op.path);
+                                break;
+                        }
+                    } catch (opError) {
+                        errors.push({
+                            operation: index,
+                            error: opError instanceof Error ? opError.message : String(opError)
+                        });
+                        
+                        // If any operation fails, rollback and report all errors
+                        throw createError(
+                            ErrorCodes.OPERATION_FAILED,
+                            'Bulk operation failed',
+                            'bulkTaskOperations',
+                            'One or more operations failed',
+                            { errors }
+                        );
                     }
                 }
 
                 await this.storage.commitTransaction();
 
-                return {
+                const response: TaskResponse<Task[]> = {
                     success: true,
                     data: results,
                     metadata: {
                         timestamp: Date.now(),
                         requestId: Math.random().toString(36).substring(7),
                         projectPath: results[0]?.projectPath || affectedPaths[0]?.split('/')[0] || 'unknown',
-                        affectedPaths
+                        affectedPaths,
+                        operationCount: input.operations.length,
+                        successCount: results.length
                     }
                 };
+
+                TaskManager.logger.info('Bulk operations completed successfully', {
+                    operationCount: input.operations.length,
+                    successCount: results.length,
+                    affectedPaths
+                });
+
+                return response;
             } catch (error) {
                 await this.storage.rollbackTransaction();
                 throw error;
@@ -591,7 +615,7 @@ export class TaskManager {
         } catch (error) {
             TaskManager.logger.error('Failed to execute bulk operations', {
                 error,
-                operations
+                operations: input.operations
             });
             throw error;
         }
