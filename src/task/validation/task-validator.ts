@@ -12,6 +12,7 @@ import {
 } from './schemas/index.js';
 import { TaskValidators } from './validators/index.js';
 import { DependencyValidationMode } from './validators/dependency-validator.js';
+import { HierarchyValidationMode } from './validators/hierarchy-validator.js';
 
 export interface ValidationResult {
     success: boolean;
@@ -35,7 +36,8 @@ export class TaskValidator {
      */
     async validateCreate(
         input: CreateTaskInput,
-        mode: DependencyValidationMode = DependencyValidationMode.STRICT
+        dependencyMode: DependencyValidationMode = DependencyValidationMode.STRICT,
+        hierarchyMode: HierarchyValidationMode = HierarchyValidationMode.STRICT
     ): Promise<void> {
         try {
             // Validate schema first
@@ -85,7 +87,22 @@ export class TaskValidator {
 
             // Validate hierarchy if parent path provided
             if (validatedInput.parentPath) {
-                await this.validators.validateHierarchy(task, validatedInput.parentPath, this.storage.getTask.bind(this.storage));
+                const hierarchyResult = await this.validators.validateHierarchy(
+                    task,
+                    validatedInput.parentPath,
+                    this.storage.getTask.bind(this.storage),
+                    hierarchyMode
+                );
+
+                if (!hierarchyResult.valid && hierarchyMode === HierarchyValidationMode.STRICT) {
+                    throw createError(
+                        ErrorCodes.INVALID_INPUT,
+                        hierarchyResult.error || 'Hierarchy validation failed',
+                        'TaskValidator.validateCreate',
+                        undefined,
+                        { missingParents: hierarchyResult.missingParents }
+                    );
+                }
             }
 
             // Validate dependencies with specified mode
@@ -93,10 +110,10 @@ export class TaskValidator {
                 task,
                 validatedInput.dependencies || [],
                 this.storage.getTask.bind(this.storage),
-                mode
+                dependencyMode
             );
 
-            if (!dependencyResult.valid && mode === DependencyValidationMode.STRICT) {
+            if (!dependencyResult.valid && dependencyMode === DependencyValidationMode.STRICT) {
                 throw createError(
                     ErrorCodes.INVALID_INPUT,
                     dependencyResult.error || 'Dependency validation failed',
@@ -205,6 +222,13 @@ export class TaskValidator {
     }
 
     /**
+     * Sort tasks by dependency order
+     */
+    async sortTasksByDependencies(tasks: Array<{ path: string; dependencies: string[] }>): Promise<string[]> {
+        return await this.validators.sortTasksByDependencies(tasks);
+    }
+
+    /**
      * Validates bulk operations input and sorts tasks by dependencies
      */
     async validateBulkOperations(input: unknown): Promise<ValidationResult> {
@@ -213,33 +237,63 @@ export class TaskValidator {
             const parsed = bulkOperationsSchema.parse(input);
             const errors: string[] = [];
 
-            // Extract create operations for dependency sorting
+            // Clear any existing pending parents
+            this.validators.clearPendingParents();
+
+            // Register all create operations as pending parents
             const createOps = parsed.operations
                 .filter(op => op.type === 'create')
                 .map(op => ({
                     path: op.path,
-                    dependencies: (op.data as CreateTaskInput).dependencies || []
+                    dependencies: (op.data as CreateTaskInput).dependencies || [],
+                    parentPath: (op.data as CreateTaskInput).parentPath
                 }));
 
+            // Register all tasks that will be created
+            createOps.forEach(op => {
+                this.validators.registerPendingParent(op.path);
+            });
+
+            // Also register all tasks that will be created in the hierarchy validator
+            this.validators.getHierarchyValidator().clearPendingParents();
+            createOps.forEach(op => {
+                this.validators.getHierarchyValidator().registerPendingParent(op.path);
+            });
+
             try {
-                // Sort create operations by dependencies
-                if (createOps.length > 0) {
-                    const sortedPaths = await this.validators.sortTasksByDependencies(createOps);
+                // Build dependency graph including parent-child relationships
+                const graph = new Map<string, Set<string>>();
+                
+                for (const op of createOps) {
+                    const dependencies = new Set<string>();
                     
-                    // Reorder operations based on dependency order
-                    const sortedOps = [];
-                    const updateOps = parsed.operations.filter(op => op.type !== 'create');
+                    // Add explicit dependencies
+                    op.dependencies?.forEach(dep => dependencies.add(dep));
                     
-                    // Add create operations in sorted order
-                    for (const path of sortedPaths) {
-                        const op = parsed.operations.find(o => o.type === 'create' && o.path === path);
-                        if (op) sortedOps.push(op);
+                    // Add parent as dependency if specified
+                    if (op.parentPath) {
+                        dependencies.add(op.parentPath);
                     }
                     
-                    // Add remaining operations
-                    sortedOps.push(...updateOps);
-                    parsed.operations = sortedOps;
+                    graph.set(op.path, dependencies);
                 }
+
+                // Perform topological sort
+                const sortedPaths = await this.validators.sortTasksByDependencyGraph(graph);
+                
+                // Reorder operations based on sorted paths
+                const sortedOps = [];
+                const updateOps = parsed.operations.filter(op => op.type !== 'create');
+                
+                // Add create operations in sorted order
+                for (const path of sortedPaths) {
+                    const op = parsed.operations.find(o => o.type === 'create' && o.path === path);
+                    if (op) sortedOps.push(op);
+                }
+                
+                // Add remaining operations
+                sortedOps.push(...updateOps);
+                parsed.operations = sortedOps;
             } catch (sortError) {
                 this.logger.error('Failed to sort operations by dependencies', { error: sortError });
                 errors.push('Failed to sort operations: ' + (sortError instanceof Error ? sortError.message : String(sortError)));
@@ -252,7 +306,8 @@ export class TaskValidator {
                     if (op.type === 'create') {
                         await this.validateCreate(
                             op.data as CreateTaskInput,
-                            DependencyValidationMode.DEFERRED
+                            DependencyValidationMode.DEFERRED,
+                            HierarchyValidationMode.DEFERRED
                         );
                     } else if (op.type === 'update') {
                         await this.validateUpdate(

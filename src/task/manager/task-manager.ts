@@ -8,6 +8,8 @@ import { DependencyAwareBatchProcessor } from '../core/batch/dependency-aware-ba
 import { TaskValidator } from '../validation/task-validator.js';
 import { TaskEventHandler } from './task-event-handler.js';
 import { TaskCacheManager } from './task-cache-manager.js';
+import { DependencyValidationMode } from '../validation/validators/dependency-validator.js';
+import { HierarchyValidationMode } from '../validation/validators/hierarchy-validator.js';
 
 interface TaskManagerMetadata {
     timestamp: number;
@@ -157,7 +159,13 @@ export class TaskManager {
         return [];
     }
 
-    async createTask(input: CreateTaskInput): Promise<TaskResponse<Task>> {
+    async createTask(
+        input: CreateTaskInput,
+        options: {
+            dependencyMode?: DependencyValidationMode,
+            hierarchyMode?: HierarchyValidationMode
+        } = {}
+    ): Promise<TaskResponse<Task>> {
         try {
             if (!input.name) {
                 throw createError(
@@ -167,7 +175,7 @@ export class TaskManager {
                 );
             }
 
-            const result = await this.operations.createTask(input);
+            const result = await this.operations.createTask(input, options);
             await this.cacheManager.indexTask(result);
 
             TaskManager.logger.info('Task created successfully', {
@@ -536,6 +544,18 @@ export class TaskManager {
         }
     }
 
+    /**
+     * Sort tasks by dependency order for bulk operations
+     */
+    async sortTasksByDependencies(tasks: Array<{ path: string; dependencies: string[] }>): Promise<string[]> {
+        try {
+            return await this.validator.sortTasksByDependencies(tasks);
+        } catch (error) {
+            TaskManager.logger.error('Failed to sort tasks by dependencies', { error });
+            throw error;
+        }
+    }
+
     async bulkTaskOperations(input: { operations: Array<{ type: 'create' | 'update' | 'delete', path: string, data?: CreateTaskInput | UpdateTaskInput }> }): Promise<TaskResponse<Task[]>> {
         try {
             // Validate input against schema
@@ -549,23 +569,62 @@ export class TaskManager {
                 );
             }
 
+            // Start transaction
             await this.storage.beginTransaction();
             const results: Task[] = [];
             const affectedPaths: string[] = [];
             const errors: Array<{ operation: number, error: string }> = [];
 
             try {
+            // Create tasks sequentially in order
+            for (const [index, op] of input.operations.entries()) {
+                if (op.type !== 'create') continue;
+                try {
+                    // Create task and wait for it to be stored
+                    const created = await this.createTask(op.data as CreateTaskInput, {
+                        dependencyMode: DependencyValidationMode.DEFERRED,
+                        hierarchyMode: HierarchyValidationMode.DEFERRED
+                    });
+                    
+                    if (created.data) {
+                        // Store the task in results
+                        results.push(created.data);
+                        affectedPaths.push(created.data.path);
+                        
+                        // Wait for the task to be indexed
+                        await this.cacheManager.indexTask(created.data);
+                        
+                        // Wait for any parent updates to complete
+                        if (created.data.parentPath) {
+                            const parent = await this.storage.getTask(created.data.parentPath);
+                            if (parent) {
+                                await this.storage.updateTask(parent.path, {
+                                    subtasks: [...parent.subtasks, created.data.path]
+                                });
+                            }
+                        }
+                    }
+                } catch (opError) {
+                    errors.push({
+                        operation: index,
+                        error: opError instanceof Error ? opError.message : String(opError)
+                    });
+                    throw createError(
+                        ErrorCodes.OPERATION_FAILED,
+                        'Bulk operation failed',
+                        'bulkTaskOperations',
+                        'One or more operations failed',
+                        { errors }
+                    );
+                }
+            }
+
+                // Then process updates and deletes
                 for (const [index, op] of input.operations.entries()) {
+                    if (op.type === 'create') continue;
+
                     try {
                         switch (op.type) {
-                            case 'create': {
-                                const created = await this.createTask(op.data as CreateTaskInput);
-                                if (created.data) {
-                                    results.push(created.data);
-                                    affectedPaths.push(created.data.path);
-                                }
-                                break;
-                            }
                             case 'update': {
                                 if (!op.data) {
                                     throw createError(

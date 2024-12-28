@@ -5,10 +5,15 @@ import {
     DependencyValidationMode,
     DependencyValidationResult 
 } from './dependency-validator.js';
-import { HierarchyValidator } from './hierarchy-validator.js';
+import { 
+    HierarchyValidator,
+    HierarchyValidationMode,
+    HierarchyValidationResult 
+} from './hierarchy-validator.js';
 
-// Re-export dependency validation types
+// Re-export validation types
 export { DependencyValidationMode, DependencyValidationResult } from './dependency-validator.js';
+export { HierarchyValidationMode, HierarchyValidationResult } from './hierarchy-validator.js';
 
 export class TaskValidators {
     private readonly statusValidator: StatusValidator;
@@ -19,6 +24,13 @@ export class TaskValidators {
         this.statusValidator = new StatusValidator();
         this.dependencyValidator = new DependencyValidator();
         this.hierarchyValidator = new HierarchyValidator();
+    }
+
+    /**
+     * Get the hierarchy validator instance
+     */
+    getHierarchyValidator(): HierarchyValidator {
+        return this.hierarchyValidator;
     }
 
     /**
@@ -96,15 +108,65 @@ export class TaskValidators {
     }
 
     /**
-     * Validates task hierarchy
+     * Validates task hierarchy with configurable validation mode
      */
     async validateHierarchy(
         task: Partial<Task>,
         parentPath: string | undefined,
-        getTaskByPath: (path: string) => Promise<Task | null>
-    ): Promise<void> {
+        getTaskByPath: (path: string) => Promise<Task | null>,
+        mode: HierarchyValidationMode = HierarchyValidationMode.STRICT
+    ): Promise<HierarchyValidationResult> {
         const validTask = this.ensureTaskArrays(task);
-        await this.hierarchyValidator.validateParentChild(validTask, parentPath, getTaskByPath);
+        return this.hierarchyValidator.validateParentChild(validTask, parentPath, getTaskByPath, mode);
+    }
+
+    /**
+     * Register a task that will be created in a bulk operation
+     */
+    registerPendingParent(path: string): void {
+        this.hierarchyValidator.registerPendingParent(path);
+    }
+
+    /**
+     * Clear pending parent registry
+     */
+    clearPendingParents(): void {
+        this.hierarchyValidator.clearPendingParents();
+    }
+
+    /**
+     * Sort tasks by dependency graph including parent-child relationships
+     */
+    async sortTasksByDependencyGraph(
+        graph: Map<string, Set<string>>
+    ): Promise<string[]> {
+        const visited = new Set<string>();
+        const temp = new Set<string>();
+        const order: string[] = [];
+
+        const visit = async (node: string) => {
+            if (temp.has(node)) {
+                throw new Error(`Circular dependency detected involving task: ${node}`);
+            }
+            if (!visited.has(node)) {
+                temp.add(node);
+                const deps = graph.get(node) || new Set();
+                for (const dep of deps) {
+                    await visit(dep);
+                }
+                temp.delete(node);
+                visited.add(node);
+                order.push(node);
+            }
+        };
+
+        for (const node of graph.keys()) {
+            if (!visited.has(node)) {
+                await visit(node);
+            }
+        }
+
+        return order.reverse();
     }
 
     /**

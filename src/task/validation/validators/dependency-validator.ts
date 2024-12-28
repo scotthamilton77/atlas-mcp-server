@@ -150,16 +150,19 @@ export class DependencyValidator {
             return validationResult;
         }
 
-        try {
-            // Check for cycles only with existing dependencies
-            const existingDeps = dependencies.filter(async dep => await getTaskByPath(dep) !== null);
-            await this.detectDependencyCycle(task, existingDeps, getTaskByPath);
-        } catch (error) {
-            return {
-                valid: false,
-                missingDependencies: validationResult.missingDependencies,
-                error: error instanceof Error ? error.message : 'Dependency cycle detected'
-            };
+        // Only check for cycles in STRICT mode
+        if (mode === DependencyValidationMode.STRICT) {
+            try {
+                // Check for cycles only with existing dependencies
+                const existingDeps = dependencies.filter(async dep => await getTaskByPath(dep) !== null);
+                await this.detectDependencyCycle(task, existingDeps, getTaskByPath);
+            } catch (error) {
+                return {
+                    valid: false,
+                    missingDependencies: validationResult.missingDependencies,
+                    error: error instanceof Error ? error.message : 'Dependency cycle detected'
+                };
+            }
         }
 
         return validationResult;
