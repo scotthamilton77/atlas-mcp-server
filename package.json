@@ -12,7 +12,7 @@
   ],
   "scripts": {
     "build": "tsc",
-    "postbuild": "node --eval \"import('fs').then(fs => fs.promises.chmod('build/index.js', process.platform === 'win32' ? 0o666 : 0o755)).catch(console.error)\"",
+    "postbuild": "node scripts/set-build-permissions.js",
     "watch": "tsc --watch",
     "inspector": "npx @modelcontextprotocol/inspector build/index.js",
     "prestart": "node --expose-gc --max-old-space-size=4096 -e \"import('child_process').then(cp => cp.spawnSync('npm', ['run', 'build'], { stdio: 'inherit' }))\"",
