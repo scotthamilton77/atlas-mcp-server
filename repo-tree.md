@@ -9,7 +9,8 @@
 │   │   └── task-hierarchy-full.txt
 │   └── README.md
 ├── scripts/
-│   └── generate-tree.js
+│   ├── generate-tree.js
+│   └── set-build-permissions.js
 ├── src/
 │   ├── config/
 │   │   └── index.ts
