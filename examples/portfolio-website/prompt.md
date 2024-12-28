@@ -1,4 +1,4 @@
-Create an extensive task structure using Atlas tools to fully implement the following specification:
+Create an extensive task structure using Atlas tools to fully implement the following specification; write out all milestones, tasks, and subtasks required:
 
 # Modern Developer Portfolio Requirements for Casey Hand
 
