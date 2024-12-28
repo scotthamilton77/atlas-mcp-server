@@ -59,11 +59,15 @@ ATLAS implements the Model Context Protocol (MCP), created by Anthropic, which e
   - All subtasks must complete before parent
   - Sibling status affects transitions
   - Automatic status propagation
-- Dependency validation:
+- Dependency validation modes:
+  - STRICT: All dependencies must exist (default for single operations)
+  - DEFERRED: Allows missing dependencies (used in bulk operations)
+- Dependency management:
   - Cycle detection
   - Status compatibility checks
   - Automatic dependency blocking
   - Completion requirements
+  - Dependency order sorting for bulk operations
 - Rich metadata support with schema validation
 - Automatic subtask management
 
@@ -450,24 +454,28 @@ Updates tasks with status and dependency validation:
 ```
 
 #### bulk_task_operations
-Executes multiple operations atomically:
+Executes multiple operations atomically with intelligent dependency handling:
 ```typescript
 // Request
 {
   "operations": [
     {
       "type": "create",
-      "path": "project/frontend",
+      "path": "project/backend/database",
       "data": {
-        "name": "Frontend Development",
-        "type": "TASK"
+        "name": "Database Setup",
+        "type": "TASK",
+        "description": "Set up and configure database"
       }
     },
     {
-      "type": "update",
-      "path": "project/backend",
+      "type": "create",
+      "path": "project/backend/api",
       "data": {
-        "status": "COMPLETED"
+        "name": "API Development",
+        "type": "TASK",
+        "description": "Implement REST API endpoints",
+        "dependencies": ["project/backend/database"]  // Forward-looking dependency
       }
     }
   ]
@@ -477,13 +485,25 @@ Executes multiple operations atomically:
 {
   "success": true,
   "data": [
-    // Array of created/updated tasks
+    // Tasks are created in dependency order
+    {
+      "path": "project/backend/database",
+      "name": "Database Setup",
+      // ... other fields
+    },
+    {
+      "path": "project/backend/api",
+      "name": "API Development",
+      "dependencies": ["project/backend/database"],
+      // ... other fields
+    }
   ],
   "metadata": {
     "operationCount": 2,
     "successCount": 2
   }
 }
+```
 
 // Error Response
 {
@@ -588,7 +608,15 @@ Update multiple task dependencies atomically:
 - Set appropriate task types (TASK, MILESTONE)
 - Include detailed descriptions for context
 - Use metadata for custom fields
-- Consider dependencies carefully
+- Dependency management:
+  - Plan dependency structure before creation
+  - Create tasks in dependency order when possible
+  - Use bulk operations for complex dependency chains
+  - Validate circular dependencies
+  - Consider using deferred validation for initial setup
+  - Document dependency relationships
+  - Keep dependency chains manageable
+  - Regular dependency health checks
 - Maintain clean parent-child relationships
 - Use batch operations for related changes
 - Follow status transition rules:
@@ -666,31 +694,6 @@ Update multiple task dependencies atomically:
 - Watch connection pool usage
 - Monitor task completion rates
 - Check relationship integrity
-
-## Development
-
-```bash
-# Install dependencies
-npm install
-
-# Build project
-npm run build
-
-# Run tests
-npm test
-
-# Check types
-npm run type-check
-
-# Lint code
-npm run lint
-
-# Format code
-npm run format
-
-# Run with watch mode
-npm run dev
-```
 
 ## Contributing
 

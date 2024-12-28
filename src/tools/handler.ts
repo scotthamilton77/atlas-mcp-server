@@ -18,6 +18,7 @@ import {
     repairRelationshipsSchema
 } from './schemas.js';
 import { DependencyAwareBatchProcessor } from '../task/core/batch/dependency-aware-batch-processor.js';
+import { BatchData } from '../task/core/batch/common/batch-utils.js';
 
 interface BulkOperation {
     type: 'create' | 'update' | 'delete';
@@ -264,7 +265,35 @@ export class ToolHandler {
             },
             {
                 name: 'bulk_task_operations',
-                description: bulkTaskSchema.properties.operations.description,
+                description: `Execute multiple task operations atomically in a single transaction. Operations are automatically sorted by dependencies and validated in deferred mode to allow forward-looking dependencies.
+
+Key Features:
+- Automatic dependency-based sorting
+- Deferred validation mode for dependencies
+- Atomic transaction handling
+- Proper rollback on failure
+
+Example - Creating Tasks with Dependencies:
+{
+  "operations": [
+    {
+      "type": "create",
+      "path": "project/backend/database",
+      "data": {
+        "name": "Database Setup",
+        "type": "TASK"
+      }
+    },
+    {
+      "type": "create",
+      "path": "project/backend/api",
+      "data": {
+        "name": "API Development",
+        "dependencies": ["project/backend/database"]
+      }
+    }
+  ]
+}`,
                 inputSchema: {
                     type: "object",
                     properties: bulkTaskSchema.properties,
@@ -273,13 +302,40 @@ export class ToolHandler {
                 handler: async (args: Record<string, unknown>) => {
                     const { operations } = args as { operations: BulkOperation[] };
 
-                    // Add dependencies based on operation order
-                    const operationsWithDeps = operations.map((op, index) => ({
-                        ...op,
-                        id: op.path,
-                        // Each operation depends on the previous one
-                        dependencies: index > 0 ? [operations[index - 1].path] : []
-                    }));
+                    // Extract all create operations for dependency sorting
+                    const createOps = operations
+                        .filter(op => op.type === 'create')
+                        .map(op => ({
+                            path: op.path,
+                            dependencies: (op.data?.dependencies as string[]) || []
+                        }));
+
+                    // Sort create operations by dependencies if any exist
+                    let sortedPaths: string[] = [];
+                    if (createOps.length > 0) {
+                        try {
+                            sortedPaths = await this.taskManager.sortTasksByDependencies(createOps);
+                        } catch (error) {
+                            throw createError(
+                                ErrorCodes.INVALID_INPUT,
+                                'Failed to sort operations by dependencies: ' + (error instanceof Error ? error.message : String(error)),
+                                'handleToolCall'
+                            );
+                        }
+                    }
+
+                    // Reorder operations based on dependency order
+                    const sortedOps = [];
+                    
+                    // Add create operations in sorted order
+                    for (const path of sortedPaths) {
+                        const op = operations.find(o => o.type === 'create' && o.path === path);
+                        if (op) sortedOps.push(op);
+                    }
+                    
+                    // Add remaining operations
+                    const otherOps = operations.filter(op => op.type !== 'create' || !sortedPaths.includes(op.path));
+                    sortedOps.push(...otherOps);
 
                     const batchProcessor = new DependencyAwareBatchProcessor({
                         validator: null,
@@ -294,10 +350,29 @@ export class ToolHandler {
                     
                     // Process operations sequentially with dependency ordering
                     const result = await batchProcessor.processInBatches(
-                        operationsWithDeps.map(op => ({ id: op.path, data: op })),
+                        sortedOps.map(op => ({
+                            id: op.path,
+                            data: op,
+                            task: {
+                                path: op.path,
+                                name: op.data?.name as string || op.path.split('/').pop() || '',
+                                type: (op.data?.type as string || 'TASK').toUpperCase() as TaskType,
+                                status: TaskStatus.PENDING,
+                                created: Date.now(),
+                                updated: Date.now(),
+                                version: 1,
+                                projectPath: op.path.split('/')[0],
+                                description: op.data?.description as string,
+                                dependencies: op.data?.dependencies as string[] || [],
+                                metadata: op.data?.metadata as Record<string, unknown> || {},
+                                notes: [],
+                                subtasks: []
+                            },
+                            dependencies: op.data?.dependencies as string[] || []
+                        })),
                         1,
-                        async (operation) => {
-                            const op = operation.data as BulkOperation;
+                        async (operation: BatchData) => {
+                            const op = (operation.data as { data: BulkOperation }).data;
                         try {
                             switch (op.type) {
                                 case 'create': {
@@ -365,7 +440,7 @@ export class ToolHandler {
                     });
 
                     return this.formatResponse({
-                        success: result.metadata?.successCount === operationsWithDeps.length,
+                        success: result.metadata?.successCount === sortedOps.length,
                         processedCount: result.metadata?.successCount || 0,
                         failedCount: result.metadata?.errorCount || 0,
                         errors: result.errors.map(err => ({

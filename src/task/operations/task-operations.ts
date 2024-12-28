@@ -8,6 +8,8 @@ import { ErrorCodes, createError } from '../../errors/index.js';
 import { TransactionManager } from '../core/transactions/transaction-manager.js';
 import { Transaction } from '../../types/transaction.js';
 import { StatusUpdateBatch } from '../core/batch/status-update-batch.js';
+import { DependencyValidationMode } from '../validation/validators/dependency-validator.js';
+import { HierarchyValidationMode } from '../validation/validators/hierarchy-validator.js';
 
 interface TaskEvent {
     type: EventTypes;
@@ -215,7 +217,13 @@ export class TaskOperations {
         this.logger.info(`Memory usage - ${context}`, this.getMemoryMetrics());
     }
 
-    async createTask(input: CreateTaskInput): Promise<Task> {
+    async createTask(
+        input: CreateTaskInput,
+        options: {
+            dependencyMode?: DependencyValidationMode,
+            hierarchyMode?: HierarchyValidationMode
+        } = {}
+    ): Promise<Task> {
         if (!this.initialized) {
             throw createError(
                 ErrorCodes.OPERATION_FAILED,
@@ -237,8 +245,12 @@ export class TaskOperations {
             type: input.type || TaskType.TASK // Default to TASK type if not provided
         };
 
-        // Validate input
-        await this.validator.validateCreate(taskInput);
+        // Validate input with validation modes
+        await this.validator.validateCreate(
+            taskInput,
+            options.dependencyMode,
+            options.hierarchyMode
+        );
 
         const transaction = await this.transactionManager.begin({
             timeout: 10000,

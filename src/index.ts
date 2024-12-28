@@ -275,7 +275,27 @@ try {
                                                     status: { 
                                                         type: 'string', 
                                                         enum: ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'BLOCKED'],
-                                                        description: 'Optional: New task state:\n- PENDING: Ready but waiting to start\n- IN_PROGRESS: Actively executing\n- COMPLETED: Successfully finished\n- FAILED: Error occurred\n- BLOCKED: Dependency preventing progress'
+                                                        description: 'Optional: New task state with strict transition rules:\n\n' +
+                                                                   'Status Flow:\n' +
+                                                                   '1. PENDING (Initial State)\n' +
+                                                                   '   → Can transition to: IN_PROGRESS, BLOCKED\n' +
+                                                                   '   → Cannot skip to COMPLETED (must track progress)\n\n' +
+                                                                   '2. IN_PROGRESS (Active State)\n' +
+                                                                   '   → Can transition to: COMPLETED, FAILED, BLOCKED\n' +
+                                                                   '   → Required before completion\n\n' +
+                                                                   '3. BLOCKED (Dependency State)\n' +
+                                                                   '   → Can transition to: PENDING, IN_PROGRESS\n' +
+                                                                   '   → Auto-set when dependencies incomplete\n\n' +
+                                                                   '4. COMPLETED (Terminal State)\n' +
+                                                                   '   → Must come from IN_PROGRESS\n' +
+                                                                   '   → Requires all dependencies completed\n\n' +
+                                                                   '5. FAILED (Terminal State)\n' +
+                                                                   '   → Can retry by setting to PENDING\n\n' +
+                                                                   'Best Practices:\n' +
+                                                                   '- Always start tasks as PENDING\n' +
+                                                                   '- Mark as IN_PROGRESS when work begins\n' +
+                                                                   '- Use BLOCKED for dependency issues\n' +
+                                                                   '- Complete dependencies before marking COMPLETED'
                                                     },
                                                     dependencies: { 
                                                         type: 'array', 

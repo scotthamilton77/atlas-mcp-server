@@ -175,16 +175,31 @@ export const updateTaskSchema = {
                 status: {
                     type: 'string',
                     enum: ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'BLOCKED'],
-                    description: 'Current execution state:\n' +
-                               '- PENDING: Not yet started\n' +
-                               '- IN_PROGRESS: Currently being processed\n' +
-                               '- COMPLETED: Successfully finished\n' +
-                               '- FAILED: Encountered unresolvable issues\n' +
-                               '- BLOCKED: Waiting on dependencies or external factors\n\n' +
-                               'Status Propagation Rules:\n' +
+                    description: 'Current execution state with strict transition rules:\n\n' +
+                               'Status Flow:\n' +
+                               '1. PENDING (Initial State)\n' +
+                               '   → Can transition to: IN_PROGRESS, BLOCKED\n' +
+                               '   → Cannot skip to COMPLETED (must track progress)\n\n' +
+                               '2. IN_PROGRESS (Active State)\n' +
+                               '   → Can transition to: COMPLETED, FAILED, BLOCKED\n' +
+                               '   → Required before completion\n\n' +
+                               '3. BLOCKED (Dependency State)\n' +
+                               '   → Can transition to: PENDING, IN_PROGRESS\n' +
+                               '   → Auto-set when dependencies incomplete\n\n' +
+                               '4. COMPLETED (Terminal State)\n' +
+                               '   → Must come from IN_PROGRESS\n' +
+                               '   → Requires all dependencies completed\n\n' +
+                               '5. FAILED (Terminal State)\n' +
+                               '   → Can retry by setting to PENDING\n\n' +
+                               'Status Propagation:\n' +
                                '- MILESTONE: Completed when all subtasks done\n' +
                                '- GROUP: Status based on subtask states\n' +
-                               '- TASK: Independent status management',
+                               '- TASK: Independent status management\n\n' +
+                               'Best Practices:\n' +
+                               '- Always start tasks as PENDING\n' +
+                               '- Mark as IN_PROGRESS when work begins\n' +
+                               '- Use BLOCKED for dependency issues\n' +
+                               '- Complete dependencies before marking COMPLETED',
                 },
                 dependencies: {
                     type: 'array',
@@ -360,7 +375,12 @@ export const bulkTaskSchema = {
     properties: {
         operations: {
             type: 'array',
-            description: 'Sequence of atomic task operations. Use for coordinated updates and maintaining task relationships.',
+            description: 'Sequence of atomic task operations with intelligent dependency handling:\n' +
+                        '- Operations are automatically sorted by dependencies\n' +
+                        '- Forward-looking dependencies are allowed (deferred validation)\n' +
+                        '- Dependencies are validated after all tasks are created\n' +
+                        '- Operations execute in dependency order\n' +
+                        '- Atomic transaction ensures all-or-nothing execution',
             items: {
                 type: 'object',
                 properties: {
@@ -388,10 +408,32 @@ export const bulkTaskSchema = {
                                    '- update: Fields to modify including status and dependencies\n' +
                                    '- delete: Optional deletion context\n\n' +
                                    'Dependency handling:\n' +
-                                   '- Dependencies are validated across all operations\n' +
-                                   '- Status changes respect dependency constraints\n' +
+                                   '- Dependencies can reference tasks being created in the same batch\n' +
+                                   '- Tasks are created in dependency order automatically\n' +
                                    '- Circular dependencies are prevented\n' +
-                                   '- Failed operations trigger rollback'
+                                   '- Status changes respect dependency constraints\n' +
+                                   '- Failed operations trigger rollback\n\n' +
+                                   'Example - Creating Tasks with Dependencies:\n' +
+                                   '{\n' +
+                                   '  "operations": [\n' +
+                                   '    {\n' +
+                                   '      "type": "create",\n' +
+                                   '      "path": "project/backend/database",\n' +
+                                   '      "data": {\n' +
+                                   '        "name": "Database Setup",\n' +
+                                   '        "type": "TASK"\n' +
+                                   '      }\n' +
+                                   '    },\n' +
+                                   '    {\n' +
+                                   '      "type": "create",\n' +
+                                   '      "path": "project/backend/api",\n' +
+                                   '      "data": {\n' +
+                                   '        "name": "API Development",\n' +
+                                   '        "dependencies": ["project/backend/database"]\n' +
+                                   '      }\n' +
+                                   '    }\n' +
+                                   '  ]\n' +
+                                   '}'
                     },
                 },
                 required: ['type', 'path'],
