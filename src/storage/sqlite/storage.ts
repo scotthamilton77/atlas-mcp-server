@@ -5,6 +5,7 @@ import { Task, TaskType, TaskStatus, CreateTaskInput, UpdateTaskInput } from '..
 import { Logger } from '../../logging/index.js';
 import { ErrorCodes, createError } from '../../errors/index.js';
 import { TransactionScope, IsolationLevel } from '../core/transactions/scope.js';
+import { formatTimestamp } from '../../utils/date-formatter.js';
 
 // Constants
 export const DEFAULT_PAGE_SIZE = 4096;
@@ -210,8 +211,8 @@ export class SqliteStorage implements TaskStorage {
                     dependencies TEXT,
                     subtasks TEXT,
                     metadata TEXT,
-                    created_at INTEGER NOT NULL,
-                    updated_at INTEGER NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
                     version INTEGER NOT NULL DEFAULT 1
                 );
 
@@ -320,8 +321,8 @@ export class SqliteStorage implements TaskStorage {
             name: input.name,
             type: input.type,
             status: TaskStatus.PENDING,
-            created: now,
-            updated: now,
+            created: formatTimestamp(now),
+            updated: formatTimestamp(now),
             version: 1,
             projectPath,
 
@@ -361,7 +362,7 @@ export class SqliteStorage implements TaskStorage {
             ...existingTask,
             ...updates,
             // Update system fields
-            updated: now,
+            updated: formatTimestamp(now),
             version: existingTask.version + 1,
             // Handle parentPath explicitly to ensure correct type
             parentPath: updates.parentPath === null ? undefined : updates.parentPath,
@@ -385,7 +386,7 @@ export class SqliteStorage implements TaskStorage {
                     await this.saveTask({
                         ...oldParent,
                         subtasks: oldParent.subtasks.filter(s => s !== path),
-                        updated: now,
+                        updated: formatTimestamp(now),
                         version: oldParent.version + 1
                     });
                 }
@@ -398,7 +399,7 @@ export class SqliteStorage implements TaskStorage {
                     await this.saveTask({
                         ...newParent,
                         subtasks: [...newParent.subtasks, path],
-                        updated: now,
+                        updated: formatTimestamp(now),
                         version: newParent.version + 1
                     });
                 }
@@ -407,7 +408,7 @@ export class SqliteStorage implements TaskStorage {
 
         await this.saveTask(updatedTask);
         return updatedTask;
-}
+    }
 
     async getTask(path: string): Promise<Task | null> {
         if (!this.db) throw new Error('Database not initialized');
@@ -594,7 +595,6 @@ export class SqliteStorage implements TaskStorage {
 
     private rowToTask(row: Record<string, unknown>): Task {
         const metadata = this.parseJSON(String(row.metadata || '{}'), {});
-        const now = Date.now();
         
         return {
             // System fields
@@ -602,8 +602,8 @@ export class SqliteStorage implements TaskStorage {
             name: String(row.name || ''),
             type: String(row.type || '') as TaskType,
             status: String(row.status || '') as TaskStatus,
-            created: Number(row.created_at || now),
-            updated: Number(row.updated_at || now),
+            created: String(row.created_at || ''),
+            updated: String(row.updated_at || ''),
             version: Number(row.version || 1),
             projectPath: String(row.path || '').split('/')[0],
 

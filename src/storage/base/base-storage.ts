@@ -1,4 +1,5 @@
 import { Logger } from '../../logging/index.js';
+import { formatTimestamp } from '../../utils/date-formatter.js';
 import { Task, CreateTaskInput, UpdateTaskInput, TaskStatus, TaskMetadata } from '../../types/task.js';
 import { StorageConfig, DEFAULT_CONFIG } from '../interfaces/config.js';
 import { TaskStorage } from '../interfaces/storage.js';
@@ -80,8 +81,8 @@ export abstract class BaseStorage implements TaskStorage {
             name: input.name,
             type: input.type,
             status: TaskStatus.PENDING,
-            created: now,
-            updated: now,
+            created: formatTimestamp(now),
+            updated: formatTimestamp(now),
             version: 1,
             projectPath,
             description: input.description,
@@ -135,7 +136,7 @@ export abstract class BaseStorage implements TaskStorage {
                 notes: updates.notes ?? existingTask.notes,
                 reasoning: updates.reasoning ?? existingTask.reasoning,
                 dependencies: updates.dependencies ?? existingTask.dependencies,
-                updated: now,
+                updated: formatTimestamp(now),
                 version: existingTask.version + 1,
                 subtasks: existingTask.subtasks,
                 metadata: {

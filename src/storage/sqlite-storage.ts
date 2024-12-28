@@ -11,6 +11,7 @@ import {
     CacheStats
 } from '../types/storage.js';
 import { Logger } from '../logging/index.js';
+import { formatTimestamp } from '../utils/date-formatter.js';
 import { ErrorCodes, createError } from '../errors/index.js';
 import { ConnectionManager } from './connection-manager.js';
 import { globToSqlPattern } from '../utils/pattern-matcher.js';
@@ -354,8 +355,8 @@ const dbPath = path.join(this.config.baseDir, `${this.config.name}.db`);
             name: input.name,
             type: input.type || TaskType.TASK,
             status: TaskStatus.PENDING,
-            created: now,
-            updated: now,
+            created: formatTimestamp(now),
+            updated: formatTimestamp(now),
             version: 1,
             projectPath,
 
@@ -397,7 +398,7 @@ const dbPath = path.join(this.config.baseDir, `${this.config.name}.db`);
             ...existingTask,
             ...sanitizedUpdates,
             // Update system fields
-            updated: now,
+            updated: formatTimestamp(now),
             version: existingTask.version + 1,
             // Keep user metadata separate
             metadata: {
@@ -1176,8 +1177,8 @@ const dbPath = path.join(this.config.baseDir, `${this.config.name}.db`);
             name: String(row.name || ''),
             type: String(row.type || '') as Task['type'],
             status: String(row.status || '') as Task['status'],
-            created: Number(row.created_at || now),
-            updated: Number(row.updated_at || now),
+            created: String(row.created_at || formatTimestamp(now)),
+            updated: String(row.updated_at || formatTimestamp(now)),
             version: Number(row.version || 1),
             projectPath: String(row.path || '').split('/')[0],
 
