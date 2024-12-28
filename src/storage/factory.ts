@@ -7,6 +7,7 @@ import { ConfigManager } from '../config/index.js';
 import { promises as fs } from 'fs';
 import { Logger } from '../logging/index.js';
 import { StorageFactoryErrorHandler } from './factory/error-handler.js';
+import { PlatformCapabilities } from '../utils/platform-utils.js';
 
 /**
  * Storage factory class for managing singleton storage instance
@@ -92,7 +93,7 @@ class StorageFactory {
             // Ensure base directory exists with platform-appropriate permissions
             await fs.mkdir(config.baseDir, { 
                 recursive: true, 
-                mode: process.platform === 'win32' ? undefined : 0o755 
+                mode: PlatformCapabilities.getFileMode(0o755)
             });
 
             // Apply SQLite-specific defaults

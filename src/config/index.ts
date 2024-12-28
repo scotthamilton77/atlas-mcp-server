@@ -7,7 +7,7 @@ import { ConfigError, ErrorCodes } from '../errors/index.js';
 import { LogLevel, LogLevels } from '../types/logging.js';
 import { ErrorContext, ErrorSeverity } from '../types/error.js';
 import { resolve, join } from 'path';
-import { homedir } from 'os';
+import { PlatformPaths, PlatformCapabilities } from '../utils/platform-utils.js';
 
 /**
  * Environment variable names
@@ -97,11 +97,7 @@ export const defaultConfig: AppConfig = {
     env: Environments.DEVELOPMENT,
     logging: defaultLoggingConfig,
     storage: {
-        baseDir: join(process.platform === 'win32' ? 
-            process.env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local') :
-            process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share'),
-            'atlas-mcp', 'storage'
-        ),
+        baseDir: join(PlatformPaths.getAppDataDir('atlas-mcp'), 'storage'),
         name: 'atlas-tasks',
         connection: {
             maxRetries: 3,
@@ -247,19 +243,7 @@ export class ConfigManager {
      * Gets platform-specific user data directory
      */
     private getUserDataDir(): string {
-        // Try environment variables first
-        if (process.env.LOCALAPPDATA) {
-            return process.env.LOCALAPPDATA;
-        }
-        if (process.env.XDG_DATA_HOME) {
-            return process.env.XDG_DATA_HOME;
-        }
-
-        // Fall back to platform-specific defaults
-        const home = homedir();
-        return process.platform === 'win32'
-            ? join(home, 'AppData', 'Local')
-            : join(home, '.local', 'share');
+        return PlatformPaths.getAppDataDir('atlas-mcp');
     }
 
     /**
@@ -289,8 +273,7 @@ export class ConfigManager {
             const fs = await import('fs/promises');
             await fs.mkdir(storageDir, { 
                 recursive: true,
-                // Skip mode on Windows as it's ignored
-                ...(process.platform !== 'win32' && { mode: 0o755 })
+                mode: PlatformCapabilities.getFileMode(0o755)
             });
         } catch (error) {
             throw new ConfigError(

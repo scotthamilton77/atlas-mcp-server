@@ -6,6 +6,7 @@ import { TaskIndexManager } from '../core/indexing/index-manager.js';
 import { TaskEventHandler } from './task-event-handler.js';
 import { Task, TaskType, TaskStatus } from '../../types/task.js';
 import { TaskStorage } from '../../types/storage.js';
+import { PlatformCapabilities } from '../../utils/platform-utils.js';
 
 export class TaskCacheManager {
     private readonly logger: Logger;
@@ -57,7 +58,7 @@ export class TaskCacheManager {
                 heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
                 heapTotal: `${Math.round(memUsage.heapTotal / 1024 / 1024)}MB`,
                 rss: `${Math.round(memUsage.rss / 1024 / 1024)}MB`,
-                platform: process.platform
+                platform: PlatformCapabilities.getArchInfo().platform
             };
             
             this.logger.debug('Task cache memory usage:', stats);

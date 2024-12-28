@@ -15,6 +15,7 @@ import { formatTimestamp } from '../utils/date-formatter.js';
 import { ErrorCodes, createError } from '../errors/index.js';
 import { ConnectionManager } from './connection-manager.js';
 import { globToSqlPattern } from '../utils/pattern-matcher.js';
+import { PlatformCapabilities } from '../utils/platform-utils.js';
 
 interface TaskCacheEntry {
     task: Task;
@@ -59,14 +60,14 @@ const dbPath = path.join(this.config.baseDir, `${this.config.name}.db`);
             const fs = await import('fs/promises');
             const path = await import('path');
             
+
             // Ensure storage directory exists and is writable
             const dirPath = path.dirname(dbPath);
             try {
-                // Create directory with proper permissions
+                // Create directory with platform-appropriate permissions
                 await fs.mkdir(dirPath, { 
                     recursive: true, 
-                    // Skip mode on Windows as it's ignored
-                    ...(process.platform !== 'win32' && { mode: 0o755 })
+                    mode: PlatformCapabilities.getFileMode(0o755)
                 });
 
                 // Verify directory is writable
@@ -304,9 +305,9 @@ const dbPath = path.join(this.config.baseDir, `${this.config.name}.db`);
                 const setFilePermissions = async (filePath: string) => {
                     try {
                         await fs.access(filePath);
-                        // Skip chmod on Windows as it's not fully supported
-                        if (process.platform !== 'win32') {
-                            await fs.chmod(filePath, 0o644);
+                        const fileMode = PlatformCapabilities.getFileMode(0o644);
+                        if (fileMode !== undefined) {
+                            await fs.chmod(filePath, fileMode);
                         }
                     } catch {
                         // File doesn't exist, which is fine
@@ -320,9 +321,9 @@ const dbPath = path.join(this.config.baseDir, `${this.config.name}.db`);
                     setFilePermissions(this.dbPath)
                 ]);
 
-                // Additional Windows-specific optimizations
-                if (process.platform === 'win32') {
-                    // Ensure proper file sharing on Windows
+                // Platform-specific optimizations
+                if (PlatformCapabilities.isWindows()) {
+                    // Windows-specific optimizations for file sharing
                     await db.exec('PRAGMA locking_mode = NORMAL');
                     await db.exec('PRAGMA busy_timeout = 5000');
                 }

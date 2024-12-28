@@ -6,6 +6,7 @@ import { Logger } from '../../logging/index.js';
 import { ErrorCodes, createError } from '../../errors/index.js';
 import { TransactionScope, IsolationLevel } from '../core/transactions/scope.js';
 import { formatTimestamp } from '../../utils/date-formatter.js';
+import { PlatformCapabilities } from '../../utils/platform-utils.js';
 
 // Constants
 export const DEFAULT_PAGE_SIZE = 4096;
@@ -113,7 +114,7 @@ export class SqliteStorage implements TaskStorage {
                 
                 await fs.mkdir(dbDir, { 
                     recursive: true,
-                    mode: process.platform === 'win32' ? undefined : 0o755 
+                    mode: PlatformCapabilities.getFileMode(0o755)
                 });
 
                 this.db = await open({
@@ -231,8 +232,14 @@ export class SqliteStorage implements TaskStorage {
                 
                 // Set permissions for WAL and SHM files if they exist
                 await Promise.all([
-                    fs.access(walPath).then(() => fs.chmod(walPath, 0o644)).catch(() => {}),
-                    fs.access(shmPath).then(() => fs.chmod(shmPath, 0o644)).catch(() => {})
+                    fs.access(walPath).then(() => {
+                        const fileMode = PlatformCapabilities.getFileMode(0o644);
+                        return fileMode !== undefined ? fs.chmod(walPath, fileMode) : Promise.resolve();
+                    }).catch(() => Promise.resolve()),
+                    fs.access(shmPath).then(() => {
+                        const fileMode = PlatformCapabilities.getFileMode(0o644);
+                        return fileMode !== undefined ? fs.chmod(shmPath, fileMode) : Promise.resolve();
+                    }).catch(() => Promise.resolve())
                 ]);
             } catch (error) {
                 this.logger.warn('Failed to set WAL file permissions', { error });

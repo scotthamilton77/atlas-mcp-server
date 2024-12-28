@@ -6,6 +6,7 @@ import { Logger } from '../../../logging/index.js';
 import { ErrorCodes, createError } from '../../../errors/index.js';
 import { promises as fs } from 'fs';
 import { join, basename } from 'path';
+import { PlatformCapabilities } from '../../../utils/platform-utils.js';
 
 export interface BackupMetadata {
     timestamp: number;
@@ -48,8 +49,7 @@ export class BackupManager {
             // Create backup directory if it doesn't exist with platform-appropriate permissions
             await fs.mkdir(this.backupDir, { 
                 recursive: true,
-                // Skip mode on Windows as it's ignored
-                ...(process.platform !== 'win32' && { mode: 0o755 })
+                mode: PlatformCapabilities.getFileMode(0o755)
             });
 
             // Verify backup directory is writable
@@ -275,15 +275,13 @@ export class BackupManager {
     }
 
     private async copyDatabase(source: string, destination: string): Promise<void> {
-        // On Windows, ensure source file handle is closed before copying
-        if (process.platform === 'win32') {
-            try {
-                await fs.access(destination);
-                // If destination exists, ensure it's not locked
-                await fs.unlink(destination).catch(() => {});
-            } catch (error) {
-                // Ignore if destination doesn't exist
-            }
+        // Handle file locking in a platform-agnostic way
+        try {
+            await fs.access(destination);
+            // If destination exists, ensure it's not locked
+            await fs.unlink(destination).catch(() => {});
+        } catch (error) {
+            // Ignore if destination doesn't exist
         }
         await fs.copyFile(source, destination);
     }
