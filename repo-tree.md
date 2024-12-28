@@ -1,5 +1,13 @@
 # atlas-mcp-server
 
+├── examples/
+│   ├── portfolio-website/
+│   │   ├── atlas-tasks.db
+│   │   ├── prompt.md
+│   │   ├── README.md
+│   │   ├── task-hierarchy.json
+│   │   └── task-hierarchy.txt
+│   └── README.md
 ├── scripts/
 │   └── generate-tree.js
 ├── src/

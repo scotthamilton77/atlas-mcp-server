@@ -7,7 +7,7 @@ import { EventTypes } from './types/events.js';
 import { BaseError, ErrorCodes, createError } from './errors/index.js';
 import { SerializableError } from './types/events.js';
 import { ConfigManager } from './config/index.js';
-import { join } from 'path';
+import { join, dirname } from 'path';
 import { promises as fs } from 'fs';
 
 import { TaskStorage } from './types/storage.js';
@@ -510,6 +510,35 @@ try {
                                     },
                                     required: ['updates']
                                 }
+                            },
+                            {
+                                name: 'export_task_tree',
+                                description: 'Export the complete task hierarchy in a human-readable format. This tool provides a comprehensive view of all tasks, their relationships, statuses, and metadata.\n\nBest Practices:\n- Use for system documentation\n- Analyze workflow structures\n- Audit task relationships\n- Export for reporting\n- Backup task hierarchies\n\nExample - Full System Export:\n{\n  "format": "tree",\n  "includeMetadata": true,\n  "filePath": "task-hierarchy.txt",\n  "reasoning": "Generate system documentation\\n\\nPurpose:\\n- Document task structure\\n- Analyze dependencies\\n- Verify task organization"\n}\n\nExample - Filtered Export:\n{\n  "format": "json",\n  "rootPath": "system/deployment/**",\n  "includeMetadata": true,\n  "filePath": "deployment-tasks.json",\n  "reasoning": "Audit deployment workflows\\n\\nGoals:\\n- Review deployment structure\\n- Verify task dependencies\\n- Document deployment process"',
+                                inputSchema: {
+                                    type: 'object',
+                                    properties: {
+                                        format: {
+                                            type: 'string',
+                                            enum: ['tree', 'json'],
+                                            description: 'Required: Output format:\n- tree: Human-readable tree structure\n- json: Detailed JSON hierarchy',
+                                            default: 'tree'
+                                        },
+                                        rootPath: {
+                                            type: 'string',
+                                            description: 'Optional: Root path to export. Uses glob patterns:\n- Full system: "**" (default)\n- Specific branch: "system/deployment/**"\n- Feature subset: "project/auth/**"'
+                                        },
+                                        includeMetadata: {
+                                            type: 'boolean',
+                                            description: 'Optional: Include detailed task metadata:\n- true: Full task details (status, dates, etc.)\n- false: Basic structure only\nDefaults to false',
+                                            default: false
+                                        },
+                                        filePath: {
+                                            type: 'string',
+                                            description: 'Optional: Save output to file. File will be created in the storage directory.\n- Example: "task-hierarchy.txt"\n- Example: "exports/deployment-tasks.json"'
+                                        }
+                                    },
+                                    required: []
+                                }
                             }
                         ]
                     }),
@@ -624,6 +653,119 @@ try {
                                     content: [{
                                         type: 'text',
                                         text: JSON.stringify(result, null, 2)
+                                    }]
+                                };
+                            case 'export_task_tree':
+                                // Get all tasks matching the root path pattern
+                                const pattern = args.rootPath || '**';
+                                const tasks = await taskManager.listTasks(pattern);
+                                
+                                interface TaskNode {
+                                    path: string;
+                                    name: string;
+                                    type: string;
+                                    status: string;
+                                    children: TaskNode[];
+                                    description?: string;
+                                    metadata?: Record<string, any>;
+                                    dependencies?: string[];
+                                    created?: number;
+                                    updated?: number;
+                                }
+                                
+                                // Build task hierarchy
+                                const taskMap = new Map<string, TaskNode>();
+                                const rootTasks: TaskNode[] = [];
+                                
+                                // First pass: Create task map
+                                const taskList = tasks.data || [];
+                                taskList.forEach((task) => {
+                                    taskMap.set(task.path, {
+                                        path: task.path,
+                                        name: task.name,
+                                        type: task.type,
+                                        status: task.status,
+                                        children: [],
+                                        ...(args.includeMetadata ? {
+                                            description: task.description,
+                                            metadata: task.metadata,
+                                            dependencies: task.dependencies,
+                                            created: task.created,
+                                            updated: task.updated
+                                        } : {})
+                                    });
+                                });
+                                
+                                // Second pass: Build hierarchy
+                                taskList.forEach((task) => {
+                                    const taskNode = taskMap.get(task.path);
+                                    if (taskNode && task.parentPath && taskMap.has(task.parentPath)) {
+                                        const parentNode = taskMap.get(task.parentPath);
+                                        if (parentNode) {
+                                            parentNode.children.push(taskNode);
+                                        }
+                                    } else if (taskNode) {
+                                        rootTasks.push(taskNode);
+                                    }
+                                });
+                                
+                                // Format output
+                                let output = '';
+                                if (args.format === 'json') {
+                                    output = JSON.stringify(rootTasks, null, 2);
+                                } else {
+                                    // Generate tree view
+                                    const generateTree = (nodes: TaskNode[], prefix = '') => {
+                                        let result = '';
+                                        nodes.forEach((node, index) => {
+                                            const isLast = index === nodes.length - 1;
+                                            const connector = isLast ? '└── ' : '├── ';
+                                            const childPrefix = isLast ? '    ' : '│   ';
+                                            
+                                            // Node details
+                                            result += prefix + connector + node.path + 
+                                                     ` [${node.type}] [${node.status}]` +
+                                                     (args.includeMetadata ? 
+                                                        `\n${prefix}${childPrefix}Name: ${node.name}` +
+                                                        (node.description ? `\n${prefix}${childPrefix}Description: ${node.description}` : '') +
+                                                        (node.dependencies?.length ? `\n${prefix}${childPrefix}Dependencies: ${node.dependencies.join(', ')}` : '') +
+                                                        `\n${prefix}${childPrefix}Created: ${node.created ? new Date(node.created).toISOString() : 'N/A'}` +
+                                                        `\n${prefix}${childPrefix}Updated: ${node.updated ? new Date(node.updated).toISOString() : 'N/A'}`
+                                                     : '') + '\n';
+                                            
+                                            // Process children
+                                            if (node.children.length > 0) {
+                                                result += generateTree(node.children, prefix + childPrefix);
+                                            }
+                                        });
+                                        return result;
+                                    };
+                                    output = generateTree(rootTasks);
+                                }
+
+                                // Save to file if path provided
+                                if (args.filePath) {
+                                    const storageDir = config.storage?.baseDir || join(documentsDir, 'Cline', 'mcp-workspace', 'ATLAS');
+                                    const fullPath = join(storageDir, args.filePath);
+                                    
+                                    // Ensure export directory exists
+                                    await fs.mkdir(dirname(fullPath), { recursive: true });
+                                    
+                                    // Write file
+                                    await fs.writeFile(fullPath, output, 'utf8');
+                                    
+                                    return {
+                                        content: [{
+                                            type: 'text',
+                                            text: `Task hierarchy exported to: ${fullPath}\n\n${output}`
+                                        }]
+                                    };
+                                }
+                                
+                                return {
+                                    content: [{
+                                        type: 'text',
+                                        text: output
                                     }]
                                 };
                             default:
