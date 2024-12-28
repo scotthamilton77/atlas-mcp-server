@@ -286,6 +286,11 @@ Add to your MCP client settings:
         // Environment Configuration
         "NODE_ENV": "production",                           // Environment (development/production/test)
 
+        // Platform Configuration
+        "ATLAS_PLATFORM_OVERRIDE": "",                      // Override platform detection (windows/macos/linux)
+        "ATLAS_PLATFORM_SYMLINKS": "true",                  // Enable symlink support if available
+        "ATLAS_PLATFORM_FILE_MODE": "0o755",               // Default file mode for created directories
+
         // Storage Configuration
         "ATLAS_STORAGE_DIR": "/path/to/storage/directory",  // Base directory for storage and logs
                                                            // Default: Platform-specific user data directory
@@ -333,6 +338,40 @@ Add to your MCP client settings:
 ```
 
 All environment variables are optional and will use the default values shown above if not specified. The only required variable is `ATLAS_STORAGE_DIR` which specifies where to store the database and log files.
+
+## Platform Support
+
+ATLAS is designed to be fully platform-agnostic with intelligent platform detection and capability handling:
+
+### Platform Utilities
+- Automatic platform detection and feature capability checking
+- Cross-platform path resolution for special directories
+- Platform-specific file permission handling
+- Intelligent symlink support with fallbacks
+- Process signal handling for all platforms
+- Platform-specific directory structure support
+
+### Directory Resolution
+- Windows: Uses appropriate AppData and Documents locations
+- macOS: Follows Apple directory structure guidelines
+- Linux: Supports XDG Base Directory Specification
+- Fallback paths for unsupported platforms
+
+### File System Operations
+- Platform-appropriate file permissions
+- Automatic mode selection based on OS
+- Symlink support with capability detection
+- Cross-platform path separators
+- Safe directory creation
+- Atomic file operations
+
+### Process Management
+- Windows-specific signal handling (SIGBREAK)
+- POSIX-compliant signal support
+- Graceful shutdown procedures
+- Platform-specific cleanup
+- Resource management
+- Error recovery
 
 ## Task Structure
 

@@ -13,6 +13,7 @@ import { promises as fs } from 'fs';
 import { TaskStorage } from './types/storage.js';
 import { CreateTaskInput, UpdateTaskInput, TaskStatus } from './types/task.js';
 import { LogLevels, LogLevel } from './types/logging.js';
+import { PlatformPaths, PlatformCapabilities } from './utils/platform-utils.js';
 
 let server: AtlasServer;
 let storage: TaskStorage;
@@ -61,20 +62,16 @@ async function main(): Promise<void> {
             // Ignore error if .env file doesn't exist
         }
 
-// Get home directory and documents folder in a cross-platform way
-const homeDir = process.env.HOME || process.env.USERPROFILE || '';
-const documentsDir = process.platform === 'win32' ? 
-    join(homeDir, 'Documents') :
-    join(homeDir, 'Documents');
-
+// Get platform-agnostic paths
+const documentsDir = PlatformPaths.getDocumentsDir();
 const logDir = process.env.ATLAS_STORAGE_DIR ? 
     join(process.env.ATLAS_STORAGE_DIR, 'logs') : 
     join(documentsDir, 'Cline', 'mcp-workspace', 'ATLAS', 'logs');
 
-// Create log directory with proper permissions
+// Create log directory with platform-appropriate permissions
 await fs.mkdir(logDir, { 
     recursive: true, 
-    mode: process.platform === 'win32' ? undefined : 0o755 
+    mode: PlatformCapabilities.getFileMode(0o755)
 });
 
         // Get log level from environment or default to info
@@ -135,7 +132,7 @@ await fs.mkdir(logDir, {
                 dir: logDir
             },
             storage: {
-                baseDir: process.env.ATLAS_STORAGE_DIR || join(homeDir, 'Documents', 'Cline', 'mcp-workspace', 'ATLAS'),
+                baseDir: process.env.ATLAS_STORAGE_DIR || join(PlatformPaths.getDocumentsDir(), 'Cline', 'mcp-workspace', 'ATLAS'),
                 name: process.env.ATLAS_STORAGE_NAME || 'atlas-tasks',
                 connection: {
                     maxRetries: 1,
@@ -158,7 +155,7 @@ const config = configManager.getConfig();
 const storageDir = config.storage?.baseDir || join(documentsDir, 'Cline', 'mcp-workspace', 'ATLAS');
 await fs.mkdir(storageDir, { 
     recursive: true,
-    mode: process.platform === 'win32' ? undefined : 0o755 
+    mode: PlatformCapabilities.getFileMode(0o755)
 });
 
 try {
@@ -921,8 +918,8 @@ try {
             registerShutdownHandler('SIGTERM', () => shutdown('SIGTERM'));
             registerShutdownHandler('beforeExit', () => shutdown('beforeExit'));
             
-            // Windows-specific handling for CTRL+C and other termination signals
-            if (process.platform === 'win32') {
+            // Platform-specific signal handling
+            if (PlatformCapabilities.isWindows()) {
                 const readline = (await import('readline')).createInterface({
                     input: process.stdin,
                     output: process.stdout
