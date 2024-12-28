@@ -5,8 +5,8 @@
 │   │   ├── atlas-tasks.db
 │   │   ├── prompt.md
 │   │   ├── README.md
-│   │   ├── task-hierarchy.json
-│   │   └── task-hierarchy.txt
+│   │   ├── task-hierarchy-full.json
+│   │   └── task-hierarchy-full.txt
 │   └── README.md
 ├── scripts/
 │   └── generate-tree.js
