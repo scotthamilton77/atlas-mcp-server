@@ -156,7 +156,8 @@
 │   │   ├── error-utils.ts
 │   │   ├── id-generator.ts
 │   │   ├── path-utils.ts
-│   │   └── pattern-matcher.ts
+│   │   ├── pattern-matcher.ts
+│   │   └── platform-utils.ts
 │   ├── validation/
 │   │   ├── config.ts
 │   │   ├── id-schema.ts
