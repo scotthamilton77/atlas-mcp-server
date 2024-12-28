@@ -1,4 +1,5 @@
 import { Logger } from '../../logging/index.js';
+import { formatTimestamp } from '../../utils/date-formatter.js';
 import { TaskStorage } from '../../types/storage.js';
 import { TaskType, TaskStatus, Task } from '../../types/task.js';
 import { bulkOperationsSchema } from './schemas/bulk-operations-schema.js';
@@ -72,8 +73,8 @@ export class TaskValidator {
                 name: validatedInput.name,
                 type: validatedInput.type || TaskType.TASK,
                 status: TaskStatus.PENDING,
-                created: Date.now(),
-                updated: Date.now(),
+                created: formatTimestamp(Date.now()),
+                updated: formatTimestamp(Date.now()),
                 version: 1,
                 projectPath: validatedInput.path.split('/')[0],
                 description: validatedInput.description,

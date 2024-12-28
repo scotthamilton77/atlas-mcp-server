@@ -1,4 +1,5 @@
 import { Logger } from '../../logging/index.js';
+import { formatTimestamp } from '../../utils/date-formatter.js';
 import { CacheManager } from '../core/cache/cache-manager.js';
 import { CacheOptions } from '../../types/cache.js';
 import { TaskIndexManager } from '../core/indexing/index-manager.js';
@@ -99,8 +100,8 @@ export class TaskCacheManager {
             type: task.type || TaskType.TASK,
             status: task.status || TaskStatus.PENDING,
             projectPath: task.projectPath || task.path.split('/')[0],
-            created: task.created || now,
-            updated: task.updated || now,
+            created: task.created || formatTimestamp(now),
+            updated: task.updated || formatTimestamp(now),
             version: task.version || 1,
             metadata: task.metadata || {},
             dependencies: task.dependencies || [],
