@@ -27,8 +27,9 @@ export interface Task {
     name: string;
     type: TaskType;
     status: TaskStatus;
-    created: number;
-    updated: number;
+    // Timestamps stored as formatted strings (e.g. "10:00:00 AM 1/28/2024")
+    created: string;
+    updated: string;
     version: number;
     projectPath: string;
 
