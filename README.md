@@ -168,7 +168,7 @@ Common Error Types:
   "context": {
     "operation": "updateTask",
     "severity": "CRITICAL",
-    "timestamp": 1703094689310,
+    "timestamp": "10:00:00 AM 1/28/2024",
     "originalError": {
       "name": "SqliteError",
       "message": "SQLITE_BUSY: database is locked"
@@ -183,7 +183,7 @@ Common Error Types:
   "context": {
     "operation": "getTask",
     "severity": "HIGH",
-    "timestamp": 1703094689310,
+    "timestamp": "10:00:00 AM 1/28/2024",
     "resourceType": "Task",
     "identifier": "project/backend/api"
   }
@@ -196,7 +196,7 @@ Common Error Types:
   "context": {
     "operation": "updateTaskStatus",
     "severity": "MEDIUM",
-    "timestamp": 1703094689310,
+    "timestamp": "10:00:00 AM 1/28/2024",
     "currentStatus": "BLOCKED",
     "newStatus": "COMPLETED",
     "validTransitions": ["PENDING", "IN_PROGRESS"]
@@ -210,7 +210,7 @@ Common Error Types:
   "context": {
     "operation": "bulkTaskOperations",
     "severity": "LOW",
-    "timestamp": 1703094689310,
+    "timestamp": "10:00:00 AM 1/28/2024",
     "duration": 5000
   }
 }
@@ -223,7 +223,7 @@ Common Error Types:
   "context": {
     "operation": "updateTask",
     "severity": "HIGH",
-    "timestamp": 1703094689310,
+    "timestamp": "10:00:00 AM 1/28/2024",
     "resource": "project/backend/api",
     "action": "update"
   }
@@ -237,7 +237,7 @@ Common Error Types:
   "context": {
     "operation": "validateDependencies",
     "severity": "MEDIUM",
-    "timestamp": 1703094689310
+    "timestamp": "10:00:00 AM 1/28/2024"
   }
 }
 
@@ -249,7 +249,7 @@ Common Error Types:
   "context": {
     "operation": "initializeStorage",
     "severity": "CRITICAL",
-    "timestamp": 1703094689310
+    "timestamp": "10:00:00 AM 1/28/2024"
   }
 }
 ```
@@ -375,8 +375,8 @@ Tasks support rich content and metadata within a hierarchical structure:
   },
 
   // System fields
-  "created": 1703094689310,
-  "updated": 1703094734316,
+  "created": "10:00:00 AM 1/28/2024",
+  "updated": "10:01:00 AM 1/28/2024",
   "projectPath": "project",
   "version": 1
 }

@@ -669,8 +669,8 @@ try {
                                     description?: string;
                                     metadata?: Record<string, any>;
                                     dependencies?: string[];
-                                    created?: number;
-                                    updated?: number;
+                                    created?: string;
+                                    updated?: string;
                                 }
                                 
                                 // Build task hierarchy
@@ -729,8 +729,8 @@ try {
                                                         `\n${prefix}${childPrefix}Name: ${node.name}` +
                                                         (node.description ? `\n${prefix}${childPrefix}Description: ${node.description}` : '') +
                                                         (node.dependencies?.length ? `\n${prefix}${childPrefix}Dependencies: ${node.dependencies.join(', ')}` : '') +
-                                                        `\n${prefix}${childPrefix}Created: ${node.created ? new Date(node.created).toISOString() : 'N/A'}` +
-                                                        `\n${prefix}${childPrefix}Updated: ${node.updated ? new Date(node.updated).toISOString() : 'N/A'}`
+                                            `\n${prefix}${childPrefix}Created: ${node.created || 'N/A'}` +
+                                            `\n${prefix}${childPrefix}Updated: ${node.updated || 'N/A'}`
                                                      : '') + '\n';
                                             
                                             // Process children
