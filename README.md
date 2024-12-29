@@ -6,7 +6,9 @@
 [![Status](https://img.shields.io/badge/Status-Stable-blue.svg)]()
 [![GitHub](https://img.shields.io/github/stars/cyanheads/atlas-mcp-server?style=social)](https://github.com/cyanheads/atlas-mcp-server)
 
-ATLAS (Adaptive Task & Logic Automation System) is a Model Context Protocol server that provides hierarchical task management capabilities to Large Language Models. This tool provides LLMs with the structure and context needed to manage complex tasks and dependencies.
+ATLAS (Adaptive Task & Logic Automation System) is a Model Context Protocol server that provides
+hierarchical task management capabilities to Large Language Models. This tool provides LLMs with the
+structure and context needed to manage complex tasks and dependencies.
 
 ## Table of Contents
 
@@ -23,21 +25,26 @@ ATLAS (Adaptive Task & Logic Automation System) is a Model Context Protocol serv
 
 ## Overview
 
-ATLAS implements the Model Context Protocol (MCP), created by Anthropic, which enables standardized communication between LLMs and external systems through:
+ATLAS implements the Model Context Protocol (MCP), created by Anthropic, which enables standardized
+communication between LLMs and external systems through:
+
 - **Clients** (Claude Desktop, IDEs) that maintain server connections
 - **Servers** that provide tools and resources
 - **LLMs** that interact with servers through client applications
 
 #### Dev Note:
+
 - This project is in active development and may have breaking changes.
 - This is my first time working with TypeScript and I'm learning as I go.
 
 ### Core Components
 
-- **TaskManager**: Centralized task coordination with validation, event handling, and memory management
+- **TaskManager**: Centralized task coordination with validation, event handling, and memory
+  management
 - **TaskOperations**: ACID-compliant task operations with transaction support and rollback
 - **TaskValidator**: Comprehensive validation with dependency cycle detection and path validation
-- **StorageManager**: SQLite-based persistence with Write-Ahead Logging (WAL) and automatic checkpointing
+- **StorageManager**: SQLite-based persistence with Write-Ahead Logging (WAL) and automatic
+  checkpointing
 - **EventManager**: System-wide event tracking with error handling and health monitoring
 - **BatchProcessors**: Optimized bulk operations with atomic transactions and dependency validation
 - **CacheManager**: Intelligent caching with memory pressure monitoring and automatic cleanup
@@ -46,6 +53,7 @@ ATLAS implements the Model Context Protocol (MCP), created by Anthropic, which e
 ## Features
 
 ### Task Organization
+
 - Hierarchical task structure with parent-child relationships
 - Strong type validation (TASK, MILESTONE)
 - Status management with strict transition rules:
@@ -72,6 +80,7 @@ ATLAS implements the Model Context Protocol (MCP), created by Anthropic, which e
 - Automatic subtask management
 
 ### Path Validation & Safety
+
 - Directory traversal prevention
 - Special character validation
 - Parent-child path validation
@@ -81,6 +90,7 @@ ATLAS implements the Model Context Protocol (MCP), created by Anthropic, which e
 - Consistent path formatting
 
 ### Transaction Management
+
 - ACID compliance
 - Atomic batch operations
 - Automatic rollback on failure
@@ -89,6 +99,7 @@ ATLAS implements the Model Context Protocol (MCP), created by Anthropic, which e
 - Checkpoint management
 
 ### Storage & Performance
+
 - SQLite backend with Write-Ahead Logging (WAL)
 - Caching system:
   - TTL-based expiration with adaptive extension
@@ -112,6 +123,7 @@ ATLAS implements the Model Context Protocol (MCP), created by Anthropic, which e
   - Connection pooling
 
 ### Validation & Safety
+
 - Comprehensive input validation
 - Circular dependency prevention
 - Status transition validation
@@ -120,6 +132,7 @@ ATLAS implements the Model Context Protocol (MCP), created by Anthropic, which e
 - Version tracking for concurrency
 
 ### Monitoring & Maintenance
+
 - Comprehensive event system
 - Memory usage monitoring
 - Database optimization tools
@@ -133,6 +146,7 @@ ATLAS implements the Model Context Protocol (MCP), created by Anthropic, which e
 - Health check endpoints
 
 ### Error Handling
+
 - Error severity classification:
   - CRITICAL: Database and storage errors requiring immediate attention
   - HIGH: Task not found, transaction issues impacting functionality
@@ -160,6 +174,7 @@ ATLAS implements the Model Context Protocol (MCP), created by Anthropic, which e
   - Batch operation recovery
 
 Common Error Types:
+
 ```typescript
 // CRITICAL Severity
 {
@@ -257,20 +272,53 @@ Common Error Types:
 ## Installation
 
 1. Clone the repository:
+
 ```bash
 git clone https://github.com/cyanheads/atlas-mcp-server.git
 cd atlas-mcp-server
 ```
 
 2. Install dependencies:
+
 ```bash
 npm install
 ```
 
-3. Build the project:
+3. Set up code formatting:
+
+```bash
+# Prettier and ESLint will be installed as part of dependencies
+# Husky git hooks will be automatically configured during install
+```
+
+4. Build the project:
+
 ```bash
 npm run build
 ```
+
+The project uses Prettier for code formatting with the following features:
+
+- Automatic formatting on git commit through husky pre-commit hooks
+- ESLint integration for consistent code style
+- Configuration in `.prettierrc`:
+  ```json
+  {
+    "semi": true,
+    "trailingComma": "es5",
+    "singleQuote": true,
+    "printWidth": 100,
+    "tabWidth": 2,
+    "useTabs": false,
+    "bracketSpacing": true,
+    "arrowParens": "avoid"
+  }
+  ```
+
+Available formatting commands:
+
+- `npm run format`: Manually format all source files
+- `npm run format:check`: Check if files need formatting
 
 ## Configuration
 
@@ -284,66 +332,70 @@ Add to your MCP client settings:
       "args": ["/path/to/atlas-mcp-server/build/index.js"],
       "env": {
         // Environment Configuration
-        "NODE_ENV": "production",                           // Environment (development/production/test)
+        "NODE_ENV": "production", // Environment (development/production/test)
 
         // Platform Configuration
-        "ATLAS_PLATFORM_OVERRIDE": "",                      // Override platform detection (windows/macos/linux)
-        "ATLAS_PLATFORM_SYMLINKS": "true",                  // Enable symlink support if available
-        "ATLAS_PLATFORM_FILE_MODE": "0o755",               // Default file mode for created directories
+        "ATLAS_PLATFORM_OVERRIDE": "", // Override platform detection (windows/macos/linux)
+        "ATLAS_PLATFORM_SYMLINKS": "true", // Enable symlink support if available
+        "ATLAS_PLATFORM_FILE_MODE": "0o755", // Default file mode for created directories
 
         // Storage Configuration
-        "ATLAS_STORAGE_DIR": "/path/to/storage/directory",  // Base directory for storage and logs
-                                                           // Default: Platform-specific user data directory
-                                                           // - Windows: %LOCALAPPDATA%/atlas-mcp/storage
-                                                           // - Linux: $XDG_DATA_HOME/atlas-mcp/storage
-                                                           // - macOS: ~/Library/Application Support/atlas-mcp/storage
-        "ATLAS_STORAGE_NAME": "atlas-tasks",                // Database name (default: atlas-tasks)
+        "ATLAS_STORAGE_DIR": "/path/to/storage/directory", // Base directory for storage and logs
+        // Default: Platform-specific user data directory
+        // - Windows: %LOCALAPPDATA%/atlas-mcp/storage
+        // - Linux: $XDG_DATA_HOME/atlas-mcp/storage
+        // - macOS: ~/Library/Application Support/atlas-mcp/storage
+        "ATLAS_STORAGE_NAME": "atlas-tasks", // Database name (default: atlas-tasks)
 
         // Logging Configuration
-        "ATLAS_LOG_CONSOLE": "true",                       // Enable console logging (default: true)
-        "ATLAS_LOG_FILE": "true",                          // Enable file logging (default: true)
-        "ATLAS_LOG_LEVEL": "debug",                        // Log level (debug/info/warn/error)
-        "ATLAS_LOG_MAX_FILES": "5",                        // Maximum log files to keep (default: 5)
-        "ATLAS_LOG_MAX_SIZE": "5242880",                   // Max log file size in bytes (default: 5MB)
-        "ATLAS_LOG_FORMAT": "json",                        // Log format (json/text) (default: json)
+        "ATLAS_LOG_CONSOLE": "true", // Enable console logging (default: true)
+        "ATLAS_LOG_FILE": "true", // Enable file logging (default: true)
+        "ATLAS_LOG_LEVEL": "debug", // Log level (debug/info/warn/error)
+        "ATLAS_LOG_MAX_FILES": "5", // Maximum log files to keep (default: 5)
+        "ATLAS_LOG_MAX_SIZE": "5242880", // Max log file size in bytes (default: 5MB)
+        "ATLAS_LOG_FORMAT": "json", // Log format (json/text) (default: json)
 
         // Database Connection
-        "ATLAS_DB_MAX_RETRIES": "3",                      // Max connection retry attempts (default: 3)
-        "ATLAS_DB_RETRY_DELAY": "500",                    // Retry delay in ms (default: 500)
-        "ATLAS_DB_BUSY_TIMEOUT": "2000",                  // Busy timeout in ms (default: 2000)
+        "ATLAS_DB_MAX_RETRIES": "3", // Max connection retry attempts (default: 3)
+        "ATLAS_DB_RETRY_DELAY": "500", // Retry delay in ms (default: 500)
+        "ATLAS_DB_BUSY_TIMEOUT": "2000", // Busy timeout in ms (default: 2000)
 
         // Database Performance
-        "ATLAS_DB_CHECKPOINT_INTERVAL": "300000",         // Checkpoint interval in ms (default: 300000)
-        "ATLAS_DB_CACHE_SIZE": "2000",                    // LRU cache size (default: 2000)
-        "ATLAS_DB_MMAP_SIZE": "67108864",                // Memory map size in bytes (default: 64MB)
-        "ATLAS_DB_PAGE_SIZE": "4096",                     // Database page size (default: 4096)
-        "ATLAS_DB_MAX_MEMORY": "268435456",              // Max SQLite memory in bytes (default: 256MB)
+        "ATLAS_DB_CHECKPOINT_INTERVAL": "300000", // Checkpoint interval in ms (default: 300000)
+        "ATLAS_DB_CACHE_SIZE": "2000", // LRU cache size (default: 2000)
+        "ATLAS_DB_MMAP_SIZE": "67108864", // Memory map size in bytes (default: 64MB)
+        "ATLAS_DB_PAGE_SIZE": "4096", // Database page size (default: 4096)
+        "ATLAS_DB_MAX_MEMORY": "268435456", // Max SQLite memory in bytes (default: 256MB)
 
         // Monitoring & Performance
-        "ATLAS_METRICS_ENABLED": "true",                  // Enable metrics collection (default: false)
-        "ATLAS_METRICS_INTERVAL": "60000",                // Metrics collection interval (default: 60000)
-        "ATLAS_RATE_LIMIT": "600",                        // Max requests per minute (default: 600)
-        "ATLAS_RETRY_MAX_ATTEMPTS": "3",                  // Max retry attempts (default: 3)
-        "ATLAS_RETRY_BACKOFF": "exponential",             // Retry backoff type (default: exponential)
+        "ATLAS_METRICS_ENABLED": "true", // Enable metrics collection (default: false)
+        "ATLAS_METRICS_INTERVAL": "60000", // Metrics collection interval (default: 60000)
+        "ATLAS_RATE_LIMIT": "600", // Max requests per minute (default: 600)
+        "ATLAS_RETRY_MAX_ATTEMPTS": "3", // Max retry attempts (default: 3)
+        "ATLAS_RETRY_BACKOFF": "exponential", // Retry backoff type (default: exponential)
 
         // Backup Configuration
-        "ATLAS_BACKUP_ENABLED": "true",                   // Enable automated backups (default: false)
-        "ATLAS_BACKUP_INTERVAL": "86400000",              // Backup interval in ms (default: 24h)
-        "ATLAS_BACKUP_RETENTION": "7",                    // Number of backups to keep (default: 7)
-        "ATLAS_BACKUP_DIR": "/path/to/backup/directory"   // Backup directory (default: storage_dir/backups)
+        "ATLAS_BACKUP_ENABLED": "true", // Enable automated backups (default: false)
+        "ATLAS_BACKUP_INTERVAL": "86400000", // Backup interval in ms (default: 24h)
+        "ATLAS_BACKUP_RETENTION": "7", // Number of backups to keep (default: 7)
+        "ATLAS_BACKUP_DIR": "/path/to/backup/directory" // Backup directory (default: storage_dir/backups)
       }
     }
   }
 }
 ```
 
-All environment variables are optional and will use the default values shown above if not specified. The only required variable is `ATLAS_STORAGE_DIR` which specifies where to store the database and log files.
+All environment variables are optional and will use the default values shown above if not specified.
+The only required variable is `ATLAS_STORAGE_DIR` which specifies where to store the database and
+log files.
 
 ## Platform Support
 
-ATLAS is designed to be fully platform-agnostic with intelligent platform detection and capability handling:
+ATLAS is designed to be fully platform-agnostic with intelligent platform detection and capability
+handling:
 
 ### Platform Utilities
+
 - Automatic platform detection and feature capability checking
 - Cross-platform path resolution for special directories
 - Platform-specific file permission handling
@@ -352,12 +404,14 @@ ATLAS is designed to be fully platform-agnostic with intelligent platform detect
 - Platform-specific directory structure support
 
 ### Directory Resolution
+
 - Windows: Uses appropriate AppData and Documents locations
 - macOS: Follows Apple directory structure guidelines
 - Linux: Supports XDG Base Directory Specification
 - Fallback paths for unsupported platforms
 
 ### File System Operations
+
 - Platform-appropriate file permissions
 - Automatic mode selection based on OS
 - Symlink support with capability detection
@@ -366,6 +420,7 @@ ATLAS is designed to be fully platform-agnostic with intelligent platform detect
 - Atomic file operations
 
 ### Process Management
+
 - Windows-specific signal handling (SIGBREAK)
 - POSIX-compliant signal support
 - Graceful shutdown procedures
@@ -385,21 +440,21 @@ Tasks support rich content and metadata within a hierarchical structure:
   // - Max depth of 5 levels
   // - Valid project name as first segment
   "path": "project/feature/task",
-  
+
   "name": "Implementation Task",
   "description": "Implement core functionality",
   "type": "TASK", // TASK or MILESTONE
   "status": "PENDING",
-  
+
   // Parent path must exist and follow same rules
   "parentPath": "project/feature",
-  
+
   // Dependencies are validated for:
   // - Existence
   // - No circular references
   // - Status transitions
   "dependencies": ["project/feature/design"],
-  
+
   // Metadata supports any JSON-serializable data
   "metadata": {
     "priority": "high",
@@ -426,7 +481,9 @@ Tasks support rich content and metadata within a hierarchical structure:
 ### Task Management
 
 #### create_task
+
 Creates tasks with validation and dependency checks:
+
 ```typescript
 // Request
 {
@@ -460,7 +517,9 @@ Creates tasks with validation and dependency checks:
 ```
 
 #### update_task
+
 Updates tasks with status and dependency validation:
+
 ```typescript
 // Request
 {
@@ -493,7 +552,9 @@ Updates tasks with status and dependency validation:
 ```
 
 #### bulk_task_operations
+
 Executes multiple operations atomically with intelligent dependency handling:
+
 ```typescript
 // Request
 {
@@ -544,12 +605,10 @@ Executes multiple operations atomically with intelligent dependency handling:
 }
 ```
 
-// Error Response
-{
-  "error": "Transaction failed: Invalid status transition",
-  "code": "TRANSACTION_FAILED"
-}
-```
+// Error Response { "error": "Transaction failed: Invalid status transition", "code":
+"TRANSACTION_FAILED" }
+
+````
 
 ### Task Queries
 
@@ -559,10 +618,12 @@ Retrieve tasks by execution state:
 {
   "status": "IN_PROGRESS"
 }
-```
+````
 
 #### get_tasks_by_path
+
 Search using glob patterns:
+
 ```typescript
 {
   "pattern": "project/backend/**"
@@ -570,7 +631,9 @@ Search using glob patterns:
 ```
 
 #### get_subtasks
+
 List immediate child tasks:
+
 ```typescript
 {
   "parentPath": "project/backend"
@@ -580,7 +643,9 @@ List immediate child tasks:
 ### Maintenance Tools
 
 #### vacuum_database
+
 Optimize database storage and performance:
+
 ```typescript
 {
   "analyze": true // Also updates statistics
@@ -588,7 +653,9 @@ Optimize database storage and performance:
 ```
 
 #### repair_relationships
+
 Fix task relationship inconsistencies:
+
 ```typescript
 {
   "dryRun": true,
@@ -597,7 +664,9 @@ Fix task relationship inconsistencies:
 ```
 
 #### clear_all_tasks
+
 Reset database with confirmation:
+
 ```typescript
 {
   "confirm": true
@@ -607,7 +676,9 @@ Reset database with confirmation:
 ### Batch Operations
 
 #### update_task_statuses
+
 Update multiple task statuses atomically:
+
 ```typescript
 {
   "updates": [
@@ -624,7 +695,9 @@ Update multiple task statuses atomically:
 ```
 
 #### update_task_dependencies
+
 Update multiple task dependencies atomically:
+
 ```typescript
 {
   "updates": [
@@ -643,6 +716,7 @@ Update multiple task dependencies atomically:
 ## Best Practices
 
 ### Task Management
+
 - Use descriptive path names reflecting hierarchy
 - Set appropriate task types (TASK, MILESTONE)
 - Include detailed descriptions for context
@@ -672,6 +746,7 @@ Update multiple task dependencies atomically:
 - Regularly clean up completed/failed tasks
 
 ### Path Naming
+
 - Use alphanumeric characters, dash, underscore
 - Keep paths short and meaningful
 - Start with valid project name
@@ -684,6 +759,7 @@ Update multiple task dependencies atomically:
 - Plan for future expansion
 
 ### Performance
+
 - Use bulk operations for multiple updates
 - Keep task hierarchies shallow
 - Clean up completed tasks regularly
@@ -701,6 +777,7 @@ Update multiple task dependencies atomically:
 - Use structured logging for better analysis
 
 ### Data Integrity
+
 - Validate inputs before operations
 - Handle status transitions properly
 - Check for circular dependencies
@@ -718,6 +795,7 @@ Update multiple task dependencies atomically:
 - Verify backup integrity
 
 ### Monitoring
+
 - Enable metrics collection
 - Monitor rate limit usage
 - Track retry patterns
@@ -733,6 +811,36 @@ Update multiple task dependencies atomically:
 - Watch connection pool usage
 - Monitor task completion rates
 - Check relationship integrity
+
+### Code Style & Formatting
+
+- Use Prettier for consistent code formatting
+- Run format check before submitting PRs
+- Follow TypeScript best practices
+- Maintain consistent naming conventions
+- Format rules:
+  - 100 character line length
+  - 2 space indentation
+  - Single quotes for strings
+  - Trailing commas in objects/arrays
+  - No unused imports or variables
+  - Explicit function return types
+  - Proper error handling
+- ESLint integration:
+  - Strict TypeScript checks
+  - No explicit any types
+  - Proper async/await usage
+  - Import order requirements
+  - No console.log (use logger)
+- Git commit hooks:
+  - Automatic formatting on commit
+  - ESLint checks before commit
+  - Type checking during build
+- Documentation:
+  - Keep comments up to date
+  - Document complex logic
+  - Update README for new features
+  - Include examples in docs
 
 ## Contributing
 
