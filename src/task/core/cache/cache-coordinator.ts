@@ -25,7 +25,7 @@ export class CacheCoordinator {
       maxMemory: options.maxMemory || 512 * 1024 * 1024, // 512MB
       checkInterval: options.checkInterval || 60000, // 1 minute
       pressureThreshold: options.pressureThreshold || 0.8, // 80%
-      debugMode: options.debugMode || process.env.NODE_ENV === 'development'
+      debugMode: options.debugMode || process.env.NODE_ENV === 'development',
     };
 
     this.setupEventListeners();
@@ -71,7 +71,7 @@ export class CacheCoordinator {
         heapUsed: `${Math.round(heapUsed / 1024 / 1024)}MB`,
         maxMemory: `${Math.round(this.options.maxMemory / 1024 / 1024)}MB`,
         usage: `${Math.round(usage * 100)}%`,
-        threshold: `${Math.round(this.options.pressureThreshold * 100)}%`
+        threshold: `${Math.round(this.options.pressureThreshold * 100)}%`,
       });
 
       // Emit memory pressure event
@@ -82,10 +82,10 @@ export class CacheCoordinator {
           memoryUsage: {
             heapUsed,
             heapTotal: memUsage.heapTotal,
-            rss: memUsage.rss
+            rss: memUsage.rss,
           },
-          threshold: this.options.pressureThreshold
-        }
+          threshold: this.options.pressureThreshold,
+        },
       });
 
       await this.reduceCacheSize();
@@ -96,7 +96,7 @@ export class CacheCoordinator {
         heapUsed: `${Math.round(heapUsed / 1024 / 1024)}MB`,
         usage: `${Math.round(usage * 100)}%`,
         cacheSize: this.metrics.getCacheSize(),
-        hitRatio: this.metrics.getHitRatio()
+        hitRatio: this.metrics.getHitRatio(),
       });
     }
   }
@@ -114,15 +114,15 @@ export class CacheCoordinator {
           reason: 'task_update',
           sizeBefore: before,
           sizeAfter: after,
-          reduction: before - after
-        }
+          reduction: before - after,
+        },
       });
 
       if (this.options.debugMode) {
         this.logger.debug('Cache invalidated', {
           sizeBefore: before,
           sizeAfter: after,
-          reduction: before - after
+          reduction: before - after,
         });
       }
     } catch (error) {
@@ -144,14 +144,14 @@ export class CacheCoordinator {
           reason: 'memory_pressure',
           sizeBefore: before,
           sizeAfter: after,
-          reduction: before - after
-        }
+          reduction: before - after,
+        },
       });
 
       this.logger.info('Cache size reduced', {
         before,
         after,
-        reduction: before - after
+        reduction: before - after,
       });
     } catch (error) {
       this.logger.error('Failed to reduce cache size', { error });
@@ -163,7 +163,7 @@ export class CacheCoordinator {
     try {
       const before = this.metrics.getCacheSize();
       await this.cacheManager.clear();
-      
+
       this.eventManager.emit({
         type: EventTypes.CACHE_CLEARED,
         timestamp: Date.now(),
@@ -171,8 +171,8 @@ export class CacheCoordinator {
           reason: 'manual_clear',
           sizeBefore: before,
           sizeAfter: 0,
-          reduction: before
-        }
+          reduction: before,
+        },
       });
 
       this.logger.info('Cache cleared');
@@ -187,7 +187,7 @@ export class CacheCoordinator {
       ...this.metrics.getMetrics(),
       maxMemory: this.options.maxMemory,
       pressureThreshold: this.options.pressureThreshold,
-      checkInterval: this.options.checkInterval
+      checkInterval: this.options.checkInterval,
     };
   }
 

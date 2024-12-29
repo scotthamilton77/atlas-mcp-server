@@ -1,4 +1,4 @@
- import { Task, TaskStatus } from '../../../types/task.js';
+import { Task, TaskStatus } from '../../../types/task.js';
 import { BatchData, BatchResult, ValidationResult, TaskBatchData } from './common/batch-utils.js';
 import { BaseBatchProcessor, BatchDependencies, BatchOptions } from './base-batch-processor.js';
 import { validateTaskStatusTransition } from '../../validation/index.js';
@@ -10,16 +10,13 @@ export interface TaskStatusBatchConfig extends BatchOptions {
 export class TaskStatusBatchProcessor extends BaseBatchProcessor<Task> {
   private readonly config: Required<TaskStatusBatchConfig> & Required<BatchOptions>;
 
-  constructor(
-    dependencies: BatchDependencies,
-    config: TaskStatusBatchConfig = {}
-  ) {
+  constructor(dependencies: BatchDependencies, config: TaskStatusBatchConfig = {}) {
     super(dependencies, config);
     this.config = Object.assign(
       {},
       this.defaultOptions,
       {
-        updateDependents: true
+        updateDependents: true,
       },
       config
     ) as Required<TaskStatusBatchConfig> & Required<BatchOptions>;
@@ -55,7 +52,11 @@ export class TaskStatusBatchProcessor extends BaseBatchProcessor<Task> {
 
       try {
         // Use shared validation utility for status transitions
-        await validateTaskStatusTransition(task, newStatus, this.dependencies.storage.getTask.bind(this.dependencies.storage));
+        await validateTaskStatusTransition(
+          task,
+          newStatus,
+          this.dependencies.storage.getTask.bind(this.dependencies.storage)
+        );
       } catch (error) {
         if (error instanceof Error) {
           errors.push(error.message);
@@ -77,20 +78,18 @@ export class TaskStatusBatchProcessor extends BaseBatchProcessor<Task> {
       const siblingStatuses = new Set(siblings.map((t: Task) => t.status));
 
       // Check for invalid status combinations
-      if (newStatus === TaskStatus.COMPLETED && 
-          siblingStatuses.has(TaskStatus.BLOCKED)) {
+      if (newStatus === TaskStatus.COMPLETED && siblingStatuses.has(TaskStatus.BLOCKED)) {
         errors.push(`Cannot complete task ${task.path} while sibling tasks are blocked`);
       }
 
-      if (newStatus === TaskStatus.IN_PROGRESS && 
-          siblingStatuses.has(TaskStatus.FAILED)) {
+      if (newStatus === TaskStatus.IN_PROGRESS && siblingStatuses.has(TaskStatus.FAILED)) {
         errors.push(`Cannot start task ${task.path} while sibling tasks have failed`);
       }
     }
 
     return {
       valid: errors.length === 0,
-      errors
+      errors,
     };
   }
 
@@ -114,7 +113,7 @@ export class TaskStatusBatchProcessor extends BaseBatchProcessor<Task> {
         this.logger.error('Failed to update task status', {
           error,
           taskPath: task.path,
-          newStatus: task.metadata?.newStatus
+          newStatus: task.metadata?.newStatus,
         });
       }
     }
@@ -126,8 +125,8 @@ export class TaskStatusBatchProcessor extends BaseBatchProcessor<Task> {
       metadata: {
         processingTime: endTime - startTime,
         successCount: results.length,
-        errorCount: errors.length
-      }
+        errorCount: errors.length,
+      },
     };
 
     this.logMetrics(result);
@@ -140,8 +139,8 @@ export class TaskStatusBatchProcessor extends BaseBatchProcessor<Task> {
       metadata: {
         ...task.metadata,
         statusUpdatedAt: Date.now(),
-        previousStatus: task.status
-      }
+        previousStatus: task.status,
+      },
     });
   }
 

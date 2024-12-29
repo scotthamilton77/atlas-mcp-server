@@ -13,370 +13,370 @@ import { PlatformPaths, PlatformCapabilities } from '../utils/platform-utils.js'
  * Environment variable names
  */
 export const EnvVars = {
-    NODE_ENV: 'NODE_ENV',
-    LOG_LEVEL: 'LOG_LEVEL',
-    ATLAS_STORAGE_DIR: 'ATLAS_STORAGE_DIR',
-    ATLAS_STORAGE_NAME: 'ATLAS_STORAGE_NAME'
+  NODE_ENV: 'NODE_ENV',
+  LOG_LEVEL: 'LOG_LEVEL',
+  ATLAS_STORAGE_DIR: 'ATLAS_STORAGE_DIR',
+  ATLAS_STORAGE_NAME: 'ATLAS_STORAGE_NAME',
 } as const;
 
 /**
  * Environment types
  */
 export const Environments = {
-    DEVELOPMENT: 'development',
-    PRODUCTION: 'production',
-    TEST: 'test'
+  DEVELOPMENT: 'development',
+  PRODUCTION: 'production',
+  TEST: 'test',
 } as const;
 
 /**
  * Logging configuration type
  */
 export interface LoggingConfig {
-    level: LogLevel;
-    console: boolean;
-    file: boolean;
-    dir?: string;
-    maxFiles: number;
-    maxSize: number;
+  level: LogLevel;
+  console: boolean;
+  file: boolean;
+  dir?: string;
+  maxFiles: number;
+  maxSize: number;
 }
 
 /**
  * Storage configuration type
  */
 export interface StorageConfig {
-    baseDir: string;
-    name: string;
-    connection?: {
-        maxRetries?: number;
-        retryDelay?: number;
-        busyTimeout?: number;
-    };
-    performance?: {
-        checkpointInterval?: number;
-        cacheSize?: number;
-        mmapSize?: number;
-        pageSize?: number;
-        maxMemory?: number;
-    };
+  baseDir: string;
+  name: string;
+  connection?: {
+    maxRetries?: number;
+    retryDelay?: number;
+    busyTimeout?: number;
+  };
+  performance?: {
+    checkpointInterval?: number;
+    cacheSize?: number;
+    mmapSize?: number;
+    pageSize?: number;
+    maxMemory?: number;
+  };
 }
 
 /**
  * Application configuration type
  */
 export interface AppConfig {
-    env: string;
-    logging: LoggingConfig;
-    storage: StorageConfig;
+  env: string;
+  logging: LoggingConfig;
+  storage: StorageConfig;
 }
 
 /**
  * Partial application configuration type
  */
 export interface PartialAppConfig {
-    env?: string;
-    logging?: Partial<LoggingConfig>;
-    storage?: Partial<StorageConfig>;
+  env?: string;
+  logging?: Partial<LoggingConfig>;
+  storage?: Partial<StorageConfig>;
 }
 
 /**
  * Default logging configuration
  */
 const defaultLoggingConfig: LoggingConfig = {
-    level: LogLevels.INFO,
-    console: true,
-    file: true,
-    dir: 'logs',
-    maxFiles: 5,
-    maxSize: 5242880
+  level: LogLevels.INFO,
+  console: true,
+  file: true,
+  dir: 'logs',
+  maxFiles: 5,
+  maxSize: 5242880,
 };
 
 /**
  * Default configuration values
  */
 export const defaultConfig: AppConfig = {
-    env: Environments.DEVELOPMENT,
-    logging: defaultLoggingConfig,
-    storage: {
-        baseDir: join(PlatformPaths.getAppDataDir('atlas-mcp'), 'storage'),
-        name: 'atlas-tasks',
-        connection: {
-            maxRetries: 3,
-            retryDelay: 1000,
-            busyTimeout: 5000
-        },
-        performance: {
-            checkpointInterval: 300000, // 5 minutes
-            cacheSize: 2000,
-            mmapSize: 64 * 1024 * 1024, // 64MB
-            maxMemory: 256 * 1024 * 1024, // 256MB
-            pageSize: 4096
-        }
-    }
+  env: Environments.DEVELOPMENT,
+  logging: defaultLoggingConfig,
+  storage: {
+    baseDir: join(PlatformPaths.getAppDataDir('atlas-mcp'), 'storage'),
+    name: 'atlas-tasks',
+    connection: {
+      maxRetries: 3,
+      retryDelay: 1000,
+      busyTimeout: 5000,
+    },
+    performance: {
+      checkpointInterval: 300000, // 5 minutes
+      cacheSize: 2000,
+      mmapSize: 64 * 1024 * 1024, // 64MB
+      maxMemory: 256 * 1024 * 1024, // 256MB
+      pageSize: 4096,
+    },
+  },
 };
 
 /**
  * Configuration manager class
  */
 export class ConfigManager {
-    private static instance: ConfigManager | null = null;
-    private static initializationPromise: Promise<ConfigManager> | null = null;
-    private config: AppConfig;
-    private initialized = false;
+  private static instance: ConfigManager | null = null;
+  private static initializationPromise: Promise<ConfigManager> | null = null;
+  private config: AppConfig;
+  private initialized = false;
 
-    private constructor() {
-        this.config = defaultConfig;
+  private constructor() {
+    this.config = defaultConfig;
+  }
+
+  /**
+   * Creates an error context
+   */
+  private static createErrorContext(
+    operation: string,
+    metadata?: Record<string, unknown>
+  ): ErrorContext {
+    return {
+      operation,
+      timestamp: Date.now(),
+      severity: ErrorSeverity.HIGH,
+      metadata,
+      stackTrace: new Error().stack,
+    };
+  }
+
+  /**
+   * Gets the configuration manager instance
+   */
+  static getInstance(): ConfigManager {
+    if (!ConfigManager.instance || !ConfigManager.instance.initialized) {
+      throw new ConfigError(
+        ErrorCodes.CONFIG_INVALID,
+        'Configuration not initialized. Call ConfigManager.initialize() first.',
+        this.createErrorContext('ConfigManager.getInstance')
+      );
+    }
+    return ConfigManager.instance;
+  }
+
+  /**
+   * Initializes the configuration manager with custom config
+   */
+  static async initialize(config?: PartialAppConfig): Promise<ConfigManager> {
+    // Return existing instance if available
+    if (ConfigManager.instance && ConfigManager.instance.initialized) {
+      return ConfigManager.instance;
     }
 
-    /**
-     * Creates an error context
-     */
-    private static createErrorContext(
-        operation: string,
-        metadata?: Record<string, unknown>
-    ): ErrorContext {
-        return {
-            operation,
-            timestamp: Date.now(),
-            severity: ErrorSeverity.HIGH,
-            metadata,
-            stackTrace: new Error().stack
-        };
+    // If initialization is in progress, wait for it
+    if (ConfigManager.initializationPromise) {
+      return ConfigManager.initializationPromise;
     }
 
-    /**
-     * Gets the configuration manager instance
-     */
-    static getInstance(): ConfigManager {
-        if (!ConfigManager.instance || !ConfigManager.instance.initialized) {
-            throw new ConfigError(
-                ErrorCodes.CONFIG_INVALID,
-                'Configuration not initialized. Call ConfigManager.initialize() first.',
-                this.createErrorContext('ConfigManager.getInstance')
-            );
-        }
-        return ConfigManager.instance;
-    }
-
-    /**
-     * Initializes the configuration manager with custom config
-     */
-    static async initialize(config?: PartialAppConfig): Promise<ConfigManager> {
-        // Return existing instance if available
+    // Start new initialization with mutex
+    ConfigManager.initializationPromise = (async () => {
+      try {
+        // Double-check instance hasn't been created while waiting
         if (ConfigManager.instance && ConfigManager.instance.initialized) {
-            return ConfigManager.instance;
+          return ConfigManager.instance;
         }
 
-        // If initialization is in progress, wait for it
-        if (ConfigManager.initializationPromise) {
-            return ConfigManager.initializationPromise;
+        ConfigManager.instance = new ConfigManager();
+        if (config) {
+          await ConfigManager.instance.updateConfig(config);
         }
+        ConfigManager.instance.initialized = true;
+        return ConfigManager.instance;
+      } catch (error) {
+        throw new ConfigError(
+          ErrorCodes.CONFIG_INVALID,
+          `Failed to initialize configuration: ${error instanceof Error ? error.message : String(error)}`,
+          this.createErrorContext('ConfigManager.initialize', { error })
+        );
+      } finally {
+        ConfigManager.initializationPromise = null;
+      }
+    })();
 
-        // Start new initialization with mutex
-        ConfigManager.initializationPromise = (async () => {
-            try {
-                // Double-check instance hasn't been created while waiting
-                if (ConfigManager.instance && ConfigManager.instance.initialized) {
-                    return ConfigManager.instance;
-                }
+    return ConfigManager.initializationPromise;
+  }
 
-                ConfigManager.instance = new ConfigManager();
-                if (config) {
-                    await ConfigManager.instance.updateConfig(config);
-                }
-                ConfigManager.instance.initialized = true;
-                return ConfigManager.instance;
-            } catch (error) {
-                throw new ConfigError(
-                    ErrorCodes.CONFIG_INVALID,
-                    `Failed to initialize configuration: ${error instanceof Error ? error.message : String(error)}`,
-                    this.createErrorContext('ConfigManager.initialize', { error })
-                );
-            } finally {
-                ConfigManager.initializationPromise = null;
-            }
-        })();
+  /**
+   * Gets the current configuration
+   */
+  getConfig(): AppConfig {
+    return { ...this.config };
+  }
 
-        return ConfigManager.initializationPromise;
+  /**
+   * Updates the configuration
+   */
+  async updateConfig(updates: PartialAppConfig): Promise<void> {
+    const newConfig = {
+      ...this.config,
+      ...updates,
+      logging: {
+        ...this.config.logging,
+        ...(updates.logging || {}),
+      },
+      storage: {
+        ...this.config.storage,
+        ...(updates.storage || {}),
+      },
+    };
+
+    // Load environment config and create directories
+    const envConfig = await this.loadEnvConfig(newConfig);
+
+    // Merge with environment config
+    const finalConfig = {
+      ...newConfig,
+      storage: {
+        ...newConfig.storage,
+        ...envConfig.storage,
+      },
+    };
+
+    this.validateConfig(finalConfig);
+    this.config = finalConfig;
+  }
+
+  /**
+   * Gets platform-specific user data directory
+   */
+  private getUserDataDir(): string {
+    return PlatformPaths.getAppDataDir('atlas-mcp');
+  }
+
+  /**
+   * Loads configuration from environment variables and ensures directories exist
+   */
+  private async loadEnvConfig(customConfig: PartialAppConfig): Promise<AppConfig> {
+    const currentEnv = process.env[EnvVars.NODE_ENV];
+    const currentLogLevel = process.env[EnvVars.LOG_LEVEL];
+
+    // Handle storage directory with platform-agnostic paths
+    let storageDir = customConfig.storage?.baseDir || process.env[EnvVars.ATLAS_STORAGE_DIR];
+    let storageName = customConfig.storage?.name || process.env[EnvVars.ATLAS_STORAGE_NAME];
+
+    // Use defaults if env vars not provided
+    if (!storageDir) {
+      const userDataDir = this.getUserDataDir();
+      storageDir = join(userDataDir, 'atlas-mcp', 'storage');
     }
 
-    /**
-     * Gets the current configuration
-     */
-    getConfig(): AppConfig {
-        return { ...this.config };
+    if (!storageName) {
+      storageName = 'atlas-tasks';
     }
 
-    /**
-     * Updates the configuration
-     */
-    async updateConfig(updates: PartialAppConfig): Promise<void> {
-        const newConfig = {
-            ...this.config,
-            ...updates,
-            logging: {
-                ...this.config.logging,
-                ...(updates.logging || {})
-            },
-            storage: {
-                ...this.config.storage,
-                ...(updates.storage || {})
-            }
-        };
-
-        // Load environment config and create directories
-        const envConfig = await this.loadEnvConfig(newConfig);
-        
-        // Merge with environment config
-        const finalConfig = {
-            ...newConfig,
-            storage: {
-                ...newConfig.storage,
-                ...envConfig.storage
-            }
-        };
-
-        this.validateConfig(finalConfig);
-        this.config = finalConfig;
+    // Ensure absolute path and create directory if needed
+    storageDir = resolve(storageDir);
+    try {
+      const fs = await import('fs/promises');
+      await fs.mkdir(storageDir, {
+        recursive: true,
+        mode: PlatformCapabilities.getFileMode(0o755),
+      });
+    } catch (error) {
+      throw new ConfigError(
+        ErrorCodes.CONFIG_INVALID,
+        `Failed to create storage directory: ${error instanceof Error ? error.message : String(error)}`,
+        ConfigManager.createErrorContext('ConfigManager.loadEnvConfig', {
+          storageDir,
+          error,
+        })
+      );
     }
 
-    /**
-     * Gets platform-specific user data directory
-     */
-    private getUserDataDir(): string {
-        return PlatformPaths.getAppDataDir('atlas-mcp');
+    const config: AppConfig = {
+      env: currentEnv || Environments.DEVELOPMENT,
+      storage: {
+        baseDir: storageDir,
+        name: storageName,
+        connection: {
+          maxRetries: 3,
+          retryDelay: 1000,
+          busyTimeout: 5000,
+        },
+        performance: {
+          checkpointInterval: 300000, // 5 minutes
+          cacheSize: 2000,
+          mmapSize: 64 * 1024 * 1024, // 64MB
+          maxMemory: 256 * 1024 * 1024, // 256MB
+          pageSize: 4096,
+        },
+      },
+      logging: { ...defaultLoggingConfig },
+    };
+
+    if (currentEnv) {
+      if (!Object.values(Environments).includes(currentEnv as any)) {
+        throw new ConfigError(
+          ErrorCodes.CONFIG_INVALID,
+          'Invalid environment',
+          ConfigManager.createErrorContext('ConfigManager.loadEnvConfig', {
+            currentEnv,
+          })
+        );
+      }
+      config.env = currentEnv;
     }
 
-    /**
-     * Loads configuration from environment variables and ensures directories exist
-     */
-    private async loadEnvConfig(customConfig: PartialAppConfig): Promise<AppConfig> {
-        const currentEnv = process.env[EnvVars.NODE_ENV];
-        const currentLogLevel = process.env[EnvVars.LOG_LEVEL];
-        
-        // Handle storage directory with platform-agnostic paths
-        let storageDir = customConfig.storage?.baseDir || process.env[EnvVars.ATLAS_STORAGE_DIR];
-        let storageName = customConfig.storage?.name || process.env[EnvVars.ATLAS_STORAGE_NAME];
-        
-        // Use defaults if env vars not provided
-        if (!storageDir) {
-            const userDataDir = this.getUserDataDir();
-            storageDir = join(userDataDir, 'atlas-mcp', 'storage');
-        }
-
-        if (!storageName) {
-            storageName = 'atlas-tasks';
-        }
-
-        // Ensure absolute path and create directory if needed
-        storageDir = resolve(storageDir);
-        try {
-            const fs = await import('fs/promises');
-            await fs.mkdir(storageDir, { 
-                recursive: true,
-                mode: PlatformCapabilities.getFileMode(0o755)
-            });
-        } catch (error) {
-            throw new ConfigError(
-                ErrorCodes.CONFIG_INVALID,
-                `Failed to create storage directory: ${error instanceof Error ? error.message : String(error)}`,
-                ConfigManager.createErrorContext('ConfigManager.loadEnvConfig', {
-                    storageDir,
-                    error
-                })
-            );
-        }
-
-        const config: AppConfig = {
-            env: currentEnv || Environments.DEVELOPMENT,
-            storage: {
-                baseDir: storageDir,
-                name: storageName,
-                connection: {
-                    maxRetries: 3,
-                    retryDelay: 1000,
-                    busyTimeout: 5000
-                },
-                performance: {
-                    checkpointInterval: 300000, // 5 minutes
-                    cacheSize: 2000,
-                    mmapSize: 64 * 1024 * 1024, // 64MB
-                    maxMemory: 256 * 1024 * 1024, // 256MB
-                    pageSize: 4096
-                }
-            },
-            logging: { ...defaultLoggingConfig }
-        };
-
-        if (currentEnv) {
-            if (!Object.values(Environments).includes(currentEnv as any)) {
-                throw new ConfigError(
-                    ErrorCodes.CONFIG_INVALID,
-                    'Invalid environment',
-                    ConfigManager.createErrorContext('ConfigManager.loadEnvConfig', {
-                        currentEnv
-                    })
-                );
-            }
-            config.env = currentEnv;
-        }
-
-        if (currentLogLevel) {
-            const level = currentLogLevel.toLowerCase();
-            if (!Object.values(LogLevels).includes(level as any)) {
-                throw new ConfigError(
-                    ErrorCodes.CONFIG_INVALID,
-                    'Invalid log level',
-                    ConfigManager.createErrorContext('ConfigManager.loadEnvConfig', {
-                        currentLogLevel
-                    })
-                );
-            }
-            config.logging.level = level as LogLevel;
-        }
-
-        return config;
+    if (currentLogLevel) {
+      const level = currentLogLevel.toLowerCase();
+      if (!Object.values(LogLevels).includes(level as any)) {
+        throw new ConfigError(
+          ErrorCodes.CONFIG_INVALID,
+          'Invalid log level',
+          ConfigManager.createErrorContext('ConfigManager.loadEnvConfig', {
+            currentLogLevel,
+          })
+        );
+      }
+      config.logging.level = level as LogLevel;
     }
 
-    /**
-     * Validates configuration against schema
-     */
-    private validateConfig(config: AppConfig): void {
-        if (!config.storage?.baseDir) {
-            throw new ConfigError(
-                ErrorCodes.CONFIG_MISSING,
-                'Storage directory must be provided',
-                ConfigManager.createErrorContext('ConfigManager.validateConfig', {
-                    config
-                })
-            );
-        }
+    return config;
+  }
 
-        if (!config.storage?.name) {
-            throw new ConfigError(
-                ErrorCodes.CONFIG_MISSING,
-                'Storage name must be provided',
-                ConfigManager.createErrorContext('ConfigManager.validateConfig', {
-                    config
-                })
-            );
-        }
-
-        if (config.logging?.level && !Object.values(LogLevels).includes(config.logging.level)) {
-            throw new ConfigError(
-                ErrorCodes.CONFIG_INVALID,
-                'Invalid log level',
-                ConfigManager.createErrorContext('ConfigManager.validateConfig', {
-                    level: config.logging.level,
-                    validLevels: Object.values(LogLevels)
-                })
-            );
-        }
+  /**
+   * Validates configuration against schema
+   */
+  private validateConfig(config: AppConfig): void {
+    if (!config.storage?.baseDir) {
+      throw new ConfigError(
+        ErrorCodes.CONFIG_MISSING,
+        'Storage directory must be provided',
+        ConfigManager.createErrorContext('ConfigManager.validateConfig', {
+          config,
+        })
+      );
     }
+
+    if (!config.storage?.name) {
+      throw new ConfigError(
+        ErrorCodes.CONFIG_MISSING,
+        'Storage name must be provided',
+        ConfigManager.createErrorContext('ConfigManager.validateConfig', {
+          config,
+        })
+      );
+    }
+
+    if (config.logging?.level && !Object.values(LogLevels).includes(config.logging.level)) {
+      throw new ConfigError(
+        ErrorCodes.CONFIG_INVALID,
+        'Invalid log level',
+        ConfigManager.createErrorContext('ConfigManager.validateConfig', {
+          level: config.logging.level,
+          validLevels: Object.values(LogLevels),
+        })
+      );
+    }
+  }
 }
 
 /**
  * Creates a default configuration manager
  */
 export function createDefaultConfig(): ConfigManager {
-    return ConfigManager.getInstance();
+  return ConfigManager.getInstance();
 }

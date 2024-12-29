@@ -32,7 +32,7 @@ export class CacheMetrics {
     this.invalidations++;
     this.lastCleanup = Date.now();
     this.logger.debug('Cache invalidation recorded', {
-      invalidations: this.invalidations
+      invalidations: this.invalidations,
     });
   }
 
@@ -40,14 +40,14 @@ export class CacheMetrics {
     this.clears++;
     this.lastCleanup = Date.now();
     this.logger.debug('Cache clear recorded', {
-      clears: this.clears
+      clears: this.clears,
     });
   }
 
   updateMemoryUsage(bytes: number): void {
     this.memoryUsage = bytes;
     this.logger.debug('Memory usage updated', {
-      memoryUsage: `${Math.round(bytes / 1024 / 1024)}MB`
+      memoryUsage: `${Math.round(bytes / 1024 / 1024)}MB`,
     });
   }
 
@@ -69,7 +69,7 @@ export class CacheMetrics {
       lastCleanup: this.lastCleanup,
       invalidations: this.invalidations,
       clears: this.clears,
-      memoryUsage: this.memoryUsage
+      memoryUsage: this.memoryUsage,
     };
 
     this.logger.debug('Cache metrics retrieved', metrics);

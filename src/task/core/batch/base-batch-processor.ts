@@ -24,14 +24,17 @@ export abstract class BaseBatchProcessor<T = unknown> {
     retryDelay: 1000,
     timeout: 30000,
     validateBeforeProcess: true,
-    concurrentBatches: 1
+    concurrentBatches: 1,
   };
 
   private activeTimeouts: Set<NodeJS.Timeout> = new Set();
-  private activeBatches: Map<string, { 
-    startTime: number;
-    results: WeakRef<any[]>;
-  }> = new Map();
+  private activeBatches: Map<
+    string,
+    {
+      startTime: number;
+      results: WeakRef<any[]>;
+    }
+  > = new Map();
   private isShuttingDown = false;
   private cleanupInterval?: NodeJS.Timeout;
   private readonly CLEANUP_INTERVAL = 300000; // 5 minutes
@@ -44,15 +47,15 @@ export abstract class BaseBatchProcessor<T = unknown> {
     protected readonly dependencies: BatchDependencies,
     protected readonly options: BatchOptions = {}
   ) {
-    this.logger = Logger.getInstance().child({ 
-      component: this.constructor.name 
+    this.logger = Logger.getInstance().child({
+      component: this.constructor.name,
     });
     this.options = { ...this.defaultOptions, ...options };
 
     // Start monitoring and cleanup
     this.startMemoryMonitoring();
     this.startPeriodicCleanup();
-    
+
     // Log initial memory state
     this.logMemoryUsage('Initialization');
   }
@@ -68,7 +71,7 @@ export abstract class BaseBatchProcessor<T = unknown> {
     const batchId = `batch-${Date.now()}-${Math.random()}`;
     this.activeBatches.set(batchId, {
       startTime: Date.now(),
-      results: new WeakRef([])
+      results: new WeakRef([]),
     });
 
     try {
@@ -92,10 +95,7 @@ export abstract class BaseBatchProcessor<T = unknown> {
       });
 
       // Process the batch with timeout
-      const processResult = await Promise.race([
-        this.process(batch),
-        timeoutPromise
-      ]);
+      const processResult = await Promise.race([this.process(batch), timeoutPromise]);
 
       // Clear timeout if it was set
       if (timeoutId) {
@@ -142,7 +142,7 @@ export abstract class BaseBatchProcessor<T = unknown> {
           .map(batch => this.processBatch(batch, processor));
 
         const batchResults = await Promise.all(batchPromises);
-        
+
         for (const result of batchResults) {
           results.push(...result.results);
           errors.push(...result.errors);
@@ -156,8 +156,8 @@ export abstract class BaseBatchProcessor<T = unknown> {
         metadata: {
           processingTime: endTime - startTime,
           successCount: results.length,
-          errorCount: errors.length
-        }
+          errorCount: errors.length,
+        },
       };
     } catch (error) {
       this.logger.error('Batch processing failed', { error });
@@ -207,22 +207,19 @@ export abstract class BaseBatchProcessor<T = unknown> {
     // Track this sub-batch
     this.activeBatches.set(batchId, {
       startTime,
-      results: new WeakRef([])
+      results: new WeakRef([]),
     });
 
     try {
       for (const item of batch) {
         try {
-          const result = await this.withRetry(
-            () => processor(item),
-            `Processing item ${item.id}`
-          );
+          const result = await this.withRetry(() => processor(item), `Processing item ${item.id}`);
           results.push(result);
         } catch (error) {
           errors.push(error as Error);
           this.logger.error('Failed to process batch item', {
             error,
-            itemId: item.id
+            itemId: item.id,
           });
         }
       }
@@ -235,8 +232,8 @@ export abstract class BaseBatchProcessor<T = unknown> {
           processingTime: endTime - startTime,
           successCount: results.length,
           errorCount: errors.length,
-          batchId
-        }
+          batchId,
+        },
       };
 
       // Update batch results reference
@@ -255,10 +252,7 @@ export abstract class BaseBatchProcessor<T = unknown> {
   /**
    * Helper method to handle retries
    */
-  protected async withRetry<R>(
-    operation: () => Promise<R>,
-    context: string
-  ): Promise<R> {
+  protected async withRetry<R>(operation: () => Promise<R>, context: string): Promise<R> {
     const maxRetries = this.options.maxRetries || this.defaultOptions.maxRetries;
     const delay = this.options.retryDelay || this.defaultOptions.retryDelay;
     let lastError: Error | undefined;
@@ -268,10 +262,10 @@ export abstract class BaseBatchProcessor<T = unknown> {
         return await operation();
       } catch (error) {
         lastError = error as Error;
-        this.logger.warn(`${context} failed, attempt ${attempt}/${maxRetries}`, { 
+        this.logger.warn(`${context} failed, attempt ${attempt}/${maxRetries}`, {
           error,
           attempt,
-          maxRetries 
+          maxRetries,
         });
 
         if (attempt < maxRetries) {
@@ -291,7 +285,7 @@ export abstract class BaseBatchProcessor<T = unknown> {
       processingTime: result.metadata?.processingTime,
       successCount: result.metadata?.successCount,
       errorCount: result.metadata?.errorCount,
-      totalItems: result.results.length + result.errors.length
+      totalItems: result.results.length + result.errors.length,
     });
   }
 
@@ -309,19 +303,19 @@ export abstract class BaseBatchProcessor<T = unknown> {
         heapTotal: `${Math.round(memoryUsage.heapTotal / 1024 / 1024)}MB`,
         rss: `${Math.round(memoryUsage.rss / 1024 / 1024)}MB`,
         external: `${Math.round(memoryUsage.external / 1024 / 1024)}MB`,
-        arrayBuffers: `${Math.round(memoryUsage.arrayBuffers / 1024 / 1024)}MB`
+        arrayBuffers: `${Math.round(memoryUsage.arrayBuffers / 1024 / 1024)}MB`,
       });
 
       if (heapUsed > this.HEAP_THRESHOLD) {
         this.logger.warn('High memory usage detected', {
           heapUsed: `${(heapUsed * 100).toFixed(1)}%`,
           activeTimeouts: this.activeTimeouts.size,
-          activeBatches: this.activeBatches.size
+          activeBatches: this.activeBatches.size,
         });
-        
+
         // Force cleanup when memory pressure is high
         this.cleanupExpiredBatches(true);
-        
+
         // Force GC if available
         if (global.gc) {
           this.logger.info('Forcing garbage collection');
@@ -379,7 +373,7 @@ export abstract class BaseBatchProcessor<T = unknown> {
       cleanedCount,
       remainingBatches: this.activeBatches.size,
       forced: force,
-      memoryUsage: this.getMemoryMetrics()
+      memoryUsage: this.getMemoryMetrics(),
     });
   }
 
@@ -391,7 +385,7 @@ export abstract class BaseBatchProcessor<T = unknown> {
       rss: `${Math.round(memoryUsage.rss / 1024 / 1024)}MB`,
       external: `${Math.round(memoryUsage.external / 1024 / 1024)}MB`,
       arrayBuffers: `${Math.round(memoryUsage.arrayBuffers / 1024 / 1024)}MB`,
-      heapUsedPercentage: `${((memoryUsage.heapUsed / memoryUsage.heapTotal) * 100).toFixed(1)}%`
+      heapUsedPercentage: `${((memoryUsage.heapUsed / memoryUsage.heapTotal) * 100).toFixed(1)}%`,
     };
   }
 
@@ -423,19 +417,19 @@ export abstract class BaseBatchProcessor<T = unknown> {
     // Wait for active batches to complete with timeout
     if (this.activeBatches.size > 0) {
       this.logger.info('Waiting for active batches to complete', {
-        count: this.activeBatches.size
+        count: this.activeBatches.size,
       });
 
       const timeout = 5000;
       const startTime = Date.now();
-      
+
       while (this.activeBatches.size > 0 && Date.now() - startTime < timeout) {
         await new Promise(resolve => setTimeout(resolve, 100));
       }
 
       if (this.activeBatches.size > 0) {
         this.logger.warn('Some batches did not complete before timeout', {
-          remainingBatches: this.activeBatches.size
+          remainingBatches: this.activeBatches.size,
         });
       }
     }
@@ -443,7 +437,7 @@ export abstract class BaseBatchProcessor<T = unknown> {
     // Force final cleanup
     this.cleanupExpiredBatches(true);
     this.activeBatches.clear();
-    
+
     // Force garbage collection
     if (global.gc) {
       this.logger.info('Forcing final garbage collection');
@@ -455,8 +449,8 @@ export abstract class BaseBatchProcessor<T = unknown> {
       finalMetrics: {
         activeTimeouts: this.activeTimeouts.size,
         activeBatches: this.activeBatches.size,
-        ...this.getMemoryMetrics()
-      }
+        ...this.getMemoryMetrics(),
+      },
     });
   }
 }

@@ -9,26 +9,30 @@ import { ID_CONSTANTS } from '../utils/id-generator.js';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 // Base ID schema for reuse across different entity types
-export const baseIdSchema = z.string().regex(
+export const baseIdSchema = z
+  .string()
+  .regex(
     ID_CONSTANTS.PATTERN,
     `Task/Entity ID must be exactly ${ID_CONSTANTS.LENGTH} characters long and contain only alphanumeric characters [${ID_CONSTANTS.ALPHABET}]. Example: "xK7cPq2Z". You cannot use descriptive names like "Project Setup" as IDs.`
-);
+  );
 
 // Helper function to validate ID format
 export function validateIdFormat(id: string, context: string = 'ID'): void {
-    if (!ID_CONSTANTS.PATTERN.test(id)) {
-        throw new Error(
-            `Invalid ${context}: Must be exactly ${ID_CONSTANTS.LENGTH} characters long and contain only alphanumeric characters [${ID_CONSTANTS.ALPHABET}]. ` +
-            `Received: "${id}". Example valid ID: "xK7cPq2Z"`
-        );
-    }
+  if (!ID_CONSTANTS.PATTERN.test(id)) {
+    throw new Error(
+      `Invalid ${context}: Must be exactly ${ID_CONSTANTS.LENGTH} characters long and contain only alphanumeric characters [${ID_CONSTANTS.ALPHABET}]. ` +
+        `Received: "${id}". Example valid ID: "xK7cPq2Z"`
+    );
+  }
 }
 
 // Transitional schema that accepts both short IDs and UUIDs
-export const transitionalIdSchema = z.string().refine(
-    (val) => ID_CONSTANTS.PATTERN.test(val) || UUID_PATTERN.test(val),
+export const transitionalIdSchema = z
+  .string()
+  .refine(
+    val => ID_CONSTANTS.PATTERN.test(val) || UUID_PATTERN.test(val),
     `ID must be either ${ID_CONSTANTS.LENGTH} characters long containing only [${ID_CONSTANTS.ALPHABET}] or a valid UUID`
-);
+  );
 
 // Specific entity ID schemas with custom error messages
 export const taskIdSchema = baseIdSchema.describe('Task ID');
@@ -43,17 +47,17 @@ export const optionalIdSchema = baseIdSchema.optional();
 
 // Example usage in a task schema:
 export const taskReferenceSchema = z.object({
-    id: taskIdSchema,
-    parentId: optionalIdSchema,
-    dependencies: idArraySchema.default([]),
-    subtasks: idArraySchema.default([])
+  id: taskIdSchema,
+  parentId: optionalIdSchema,
+  dependencies: idArraySchema.default([]),
+  subtasks: idArraySchema.default([]),
 });
 
 // Example usage in a session schema:
 export const sessionReferenceSchema = z.object({
-    id: sessionIdSchema,
-    activeTaskListId: optionalIdSchema,
-    taskListIds: idArraySchema.default([])
+  id: sessionIdSchema,
+  activeTaskListId: optionalIdSchema,
+  taskListIds: idArraySchema.default([]),
 });
 
 // Export types for use in other modules

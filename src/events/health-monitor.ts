@@ -47,7 +47,7 @@ export class EventHealthMonitor {
     const now = Date.now();
     for (const [handlerId, stats] of this.handlerStats.entries()) {
       // Check for stale handlers
-      if (stats.lastExecuted && (now - stats.lastExecuted > 24 * 60 * 60 * 1000)) {
+      if (stats.lastExecuted && now - stats.lastExecuted > 24 * 60 * 60 * 1000) {
         this.handlerStats.delete(handlerId);
         continue;
       }
@@ -57,7 +57,7 @@ export class EventHealthMonitor {
         this.logger?.warn('Slow event handler detected', {
           handlerId,
           avgResponseTime: stats.avgResponseTime,
-          threshold: EventHealthMonitor.RESPONSE_TIME_THRESHOLD
+          threshold: EventHealthMonitor.RESPONSE_TIME_THRESHOLD,
         });
       }
 
@@ -82,7 +82,7 @@ export class EventHealthMonitor {
         errorCount: 0,
         avgResponseTime: 0,
         consecutiveFailures: 0,
-        isCircuitOpen: false
+        isCircuitOpen: false,
       });
     }
 
@@ -102,12 +102,12 @@ export class EventHealthMonitor {
       const startTime = Date.now();
       try {
         await handler(event);
-        
+
         // Update success stats
         stats.successCount++;
         stats.consecutiveFailures = 0;
         stats.lastExecuted = Date.now();
-        
+
         // Update response time with exponential moving average
         const executionTime = Date.now() - startTime;
         stats.avgResponseTime = stats.avgResponseTime * 0.8 + executionTime * 0.2;
@@ -123,11 +123,11 @@ export class EventHealthMonitor {
         if (stats.consecutiveFailures >= EventHealthMonitor.CIRCUIT_BREAKER_THRESHOLD) {
           stats.isCircuitOpen = true;
           stats.nextRetryTime = Date.now() + EventHealthMonitor.CIRCUIT_RESET_TIMEOUT;
-          
+
           this.logger?.error('Circuit breaker opened', {
             handlerId,
             consecutiveFailures: stats.consecutiveFailures,
-            nextRetryTime: new Date(stats.nextRetryTime).toISOString()
+            nextRetryTime: new Date(stats.nextRetryTime).toISOString(),
           });
         }
 
@@ -152,7 +152,7 @@ export class EventHealthMonitor {
       stats.consecutiveFailures = 0;
       stats.nextRetryTime = undefined;
       this.handlerStats.set(handlerId, stats);
-      
+
       this.logger?.info('Circuit breaker manually reset', { handlerId });
     }
   }

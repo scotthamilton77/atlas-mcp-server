@@ -9,10 +9,4 @@ export * from './create-schema.js';
 export * from './update-schema.js';
 
 // Re-export types for convenience
-export type {
-    TaskMetadata,
-    BaseTask,
-    TaskResponse,
-    CreateTaskInput,
-    UpdateTaskInput
-};
+export type { TaskMetadata, BaseTask, TaskResponse, CreateTaskInput, UpdateTaskInput };

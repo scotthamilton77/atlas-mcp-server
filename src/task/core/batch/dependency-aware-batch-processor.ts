@@ -11,13 +11,10 @@ interface TaskBatchData extends BatchData {
 export class DependencyAwareBatchProcessor extends BaseBatchProcessor {
   private dependencyGraph: Record<string, Set<string>> = {};
 
-  constructor(
-    dependencies: BatchDependencies,
-    options: BatchOptions = {}
-  ) {
+  constructor(dependencies: BatchDependencies, options: BatchOptions = {}) {
     super(dependencies, {
       ...options,
-      validateBeforeProcess: true // Always validate dependencies
+      validateBeforeProcess: true, // Always validate dependencies
     });
   }
 
@@ -81,15 +78,13 @@ export class DependencyAwareBatchProcessor extends BaseBatchProcessor {
       for (const task of tasks) {
         const blockedDeps = await this.findBlockedDependencies(task);
         if (blockedDeps.length > 0) {
-          errors.push(
-            `Task ${task.id} has blocked dependencies: ${blockedDeps.join(', ')}`
-          );
+          errors.push(`Task ${task.id} has blocked dependencies: ${blockedDeps.join(', ')}`);
         }
       }
 
       return {
         valid: errors.length === 0,
-        errors
+        errors,
       };
     } catch (error) {
       this.logger.error('Dependency validation failed', { error });
@@ -107,7 +102,7 @@ export class DependencyAwareBatchProcessor extends BaseBatchProcessor {
     try {
       // Process tasks in dependency order
       const processingOrder = this.getProcessingOrder();
-      
+
       for (const taskId of processingOrder) {
         const task = tasks.find(t => t.id === taskId);
         if (!task) continue;
@@ -118,17 +113,17 @@ export class DependencyAwareBatchProcessor extends BaseBatchProcessor {
             async () => this.processTask(task),
             `Processing task ${task.id}`
           );
-          
+
           results.push(result as T);
-          
+
           this.logger.debug('Task processed successfully', {
             taskId: task.id,
-            dependencies: task.dependencies
+            dependencies: task.dependencies,
           });
         } catch (error) {
           this.logger.error('Failed to process task', {
             error,
-            taskId: task.id
+            taskId: task.id,
           });
           errors.push(error as Error);
         }
@@ -141,8 +136,8 @@ export class DependencyAwareBatchProcessor extends BaseBatchProcessor {
         metadata: {
           processingTime: endTime - startTime,
           successCount: results.length,
-          errorCount: errors.length
-        }
+          errorCount: errors.length,
+        },
       };
 
       this.logMetrics(result);
@@ -158,12 +153,12 @@ export class DependencyAwareBatchProcessor extends BaseBatchProcessor {
 
   private buildDependencyGraph(tasks: TaskBatchData[]): void {
     this.dependencyGraph = {};
-    
+
     for (const task of tasks) {
       if (!this.dependencyGraph[task.id]) {
         this.dependencyGraph[task.id] = new Set();
       }
-      
+
       for (const dep of task.dependencies) {
         this.dependencyGraph[task.id].add(dep);
       }
@@ -172,27 +167,27 @@ export class DependencyAwareBatchProcessor extends BaseBatchProcessor {
 
   private async findMissingDependencies(task: TaskBatchData): Promise<string[]> {
     const missing: string[] = [];
-    
+
     for (const depId of task.dependencies) {
       const depTask = await this.dependencies.storage.getTask(depId);
       if (!depTask) {
         missing.push(depId);
       }
     }
-    
+
     return missing;
   }
 
   private async findBlockedDependencies(task: TaskBatchData): Promise<string[]> {
     const blocked: string[] = [];
-    
+
     for (const depId of task.dependencies) {
       const depTask = await this.dependencies.storage.getTask(depId);
       if (depTask && depTask.status === TaskStatus.BLOCKED) {
         blocked.push(depId);
       }
     }
-    
+
     return blocked;
   }
 
@@ -230,7 +225,7 @@ export class DependencyAwareBatchProcessor extends BaseBatchProcessor {
       // Check dependencies are complete
       const incompleteDeps: string[] = [];
       const failedDeps: string[] = [];
-      
+
       for (const depId of task.dependencies) {
         const depTask = await this.dependencies.storage.getTask(depId);
         if (!depTask) {
@@ -245,56 +240,47 @@ export class DependencyAwareBatchProcessor extends BaseBatchProcessor {
       // Handle dependency issues
       if (failedDeps.length > 0) {
         // If any dependencies failed, mark this task as failed
-        return await this.dependencies.storage.updateTask(
-          task.task.path,
-          {
-            status: TaskStatus.FAILED,
-            metadata: {
-              ...currentTask.metadata,
-              failureReason: `Dependencies failed: ${failedDeps.join(', ')}`,
-              updated: Date.now(),
-              version: currentTask.metadata.version + 1
-            }
-          }
-        );
+        return await this.dependencies.storage.updateTask(task.task.path, {
+          status: TaskStatus.FAILED,
+          metadata: {
+            ...currentTask.metadata,
+            failureReason: `Dependencies failed: ${failedDeps.join(', ')}`,
+            updated: Date.now(),
+            version: currentTask.metadata.version + 1,
+          },
+        });
       }
 
       if (incompleteDeps.length > 0) {
         // If dependencies are incomplete, mark as blocked
-        return await this.dependencies.storage.updateTask(
-          task.task.path,
-          {
-            status: TaskStatus.BLOCKED,
-            metadata: {
-              ...currentTask.metadata,
-              blockedBy: incompleteDeps,
-              updated: Date.now(),
-              version: currentTask.metadata.version + 1
-            }
-          }
-        );
+        return await this.dependencies.storage.updateTask(task.task.path, {
+          status: TaskStatus.BLOCKED,
+          metadata: {
+            ...currentTask.metadata,
+            blockedBy: incompleteDeps,
+            updated: Date.now(),
+            version: currentTask.metadata.version + 1,
+          },
+        });
       }
 
       // All dependencies complete, process the task
-      const processedTask = await this.dependencies.storage.updateTask(
-        task.task.path,
-        {
-          status: TaskStatus.COMPLETED,
-          metadata: {
-            ...currentTask.metadata,
-            completedAt: Date.now(),
-            updated: Date.now(),
-            version: currentTask.metadata.version + 1
-          }
-        }
-      );
+      const processedTask = await this.dependencies.storage.updateTask(task.task.path, {
+        status: TaskStatus.COMPLETED,
+        metadata: {
+          ...currentTask.metadata,
+          completedAt: Date.now(),
+          updated: Date.now(),
+          version: currentTask.metadata.version + 1,
+        },
+      });
 
       return processedTask;
     } catch (error) {
       this.logger.error('Failed to process task', {
         error,
         taskPath: task.task.path,
-        dependencies: task.dependencies
+        dependencies: task.dependencies,
       });
       throw error;
     }

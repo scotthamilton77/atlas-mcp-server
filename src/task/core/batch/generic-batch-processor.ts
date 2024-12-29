@@ -13,13 +13,10 @@ export class GenericBatchProcessor<T> extends BaseBatchProcessor<T> {
     ...this.defaultOptions,
     validateItems: true,
     stopOnError: false,
-    itemTimeout: 5000
+    itemTimeout: 5000,
   };
 
-  constructor(
-    dependencies: BatchDependencies,
-    config: GenericBatchConfig = {}
-  ) {
+  constructor(dependencies: BatchDependencies, config: GenericBatchConfig = {}) {
     super(dependencies, config);
     this.config = { ...this.defaultConfig, ...config };
   }
@@ -47,7 +44,7 @@ export class GenericBatchProcessor<T> extends BaseBatchProcessor<T> {
 
     return {
       valid: errors.length === 0,
-      errors
+      errors,
     };
   }
 
@@ -58,27 +55,24 @@ export class GenericBatchProcessor<T> extends BaseBatchProcessor<T> {
 
     for (const item of batch) {
       try {
-        const result = await this.processWithTimeout(
-          item,
-          this.config.itemTimeout
-        );
+        const result = await this.processWithTimeout(item, this.config.itemTimeout);
         results.push(result);
 
         this.logger.debug('Processed batch item', {
           itemId: item.id,
-          duration: Date.now() - startTime
+          duration: Date.now() - startTime,
         });
       } catch (error) {
         this.logger.error('Failed to process batch item', {
           error,
-          itemId: item.id
+          itemId: item.id,
         });
         errors.push(error as Error);
 
         if (this.config.stopOnError) {
           this.logger.warn('Stopping batch processing due to error', {
             itemId: item.id,
-            remainingItems: batch.length - results.length - 1
+            remainingItems: batch.length - results.length - 1,
           });
           break;
         }
@@ -92,18 +86,15 @@ export class GenericBatchProcessor<T> extends BaseBatchProcessor<T> {
       metadata: {
         processingTime: endTime - startTime,
         successCount: results.length,
-        errorCount: errors.length
-      }
+        errorCount: errors.length,
+      },
     };
 
     this.logMetrics(result);
     return result;
   }
 
-  private async processWithTimeout(
-    item: BatchData,
-    timeout: number
-  ): Promise<T> {
+  private async processWithTimeout(item: BatchData, timeout: number): Promise<T> {
     return new Promise((resolve, reject) => {
       const timeoutId = setTimeout(() => {
         reject(new Error(`Processing timed out for item ${item.id}`));

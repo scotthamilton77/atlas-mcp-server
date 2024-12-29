@@ -8,7 +8,7 @@
  * @returns Formatted response string
  */
 export function formatResponse(response: unknown): string {
-    return JSON.stringify(response, null, 2);
+  return JSON.stringify(response, null, 2);
 }
 
 /**
@@ -18,11 +18,11 @@ export function formatResponse(response: unknown): string {
  * @throws Error if any required parameter is missing
  */
 export function validateRequiredParams(params: Record<string, unknown>, required: string[]): void {
-    for (const param of required) {
-        if (!(param in params)) {
-            throw new Error(`Missing required parameter: ${param}`);
-        }
+  for (const param of required) {
+    if (!(param in params)) {
+      throw new Error(`Missing required parameter: ${param}`);
     }
+  }
 }
 
 /**
@@ -31,7 +31,7 @@ export function validateRequiredParams(params: Record<string, unknown>, required
  * @returns Sanitized string
  */
 export function sanitizeString(input: string): string {
-    return input.trim();
+  return input.trim();
 }
 
 /**
@@ -42,7 +42,7 @@ export function sanitizeString(input: string): string {
  * @throws Error if string exceeds maximum length
  */
 export function validateStringLength(input: string, maxLength: number, fieldName: string): void {
-    if (input.length > maxLength) {
-        throw new Error(`${fieldName} exceeds maximum length of ${maxLength} characters`);
-    }
+  if (input.length > maxLength) {
+    throw new Error(`${fieldName} exceeds maximum length of ${maxLength} characters`);
+  }
 }

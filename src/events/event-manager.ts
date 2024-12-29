@@ -14,7 +14,7 @@ import {
   TransactionEvent,
   SystemEvent,
   EventHandlerOptions,
-  SerializableError
+  SerializableError,
 } from '../types/events.js';
 
 export class EventManager {
@@ -26,12 +26,15 @@ export class EventManager {
   private readonly debugMode: boolean = false; // Force debug mode off for MCP compatibility
   private initialized = false;
   private readonly activeSubscriptions = new Set<EventSubscription>();
-  private readonly eventStats = new Map<EventTypes | '*', {
-    emitted: number;
-    handled: number;
-    errors: number;
-    lastEmitted?: number;
-  }>();
+  private readonly eventStats = new Map<
+    EventTypes | '*',
+    {
+      emitted: number;
+      handled: number;
+      errors: number;
+      lastEmitted?: number;
+    }
+  >();
   private readonly healthMonitor: EventHealthMonitor;
   private readonly batchProcessor: EventBatchProcessor;
   private cleanupTimeout?: NodeJS.Timeout;
@@ -51,7 +54,7 @@ export class EventManager {
     this.batchProcessor = new EventBatchProcessor({
       maxBatchSize: 100,
       maxWaitTime: 1000,
-      flushInterval: 5000
+      flushInterval: 5000,
     });
     this.setupErrorHandling();
     this.startCleanupInterval();
@@ -91,7 +94,7 @@ export class EventManager {
     const STALE_THRESHOLD = 24 * 60 * 60 * 1000; // 24 hours
 
     for (const [type, stats] of this.eventStats.entries()) {
-      if (stats.lastEmitted && (now - stats.lastEmitted > STALE_THRESHOLD)) {
+      if (stats.lastEmitted && now - stats.lastEmitted > STALE_THRESHOLD) {
         this.eventStats.delete(type);
       }
     }
@@ -121,7 +124,9 @@ export class EventManager {
         EventManager.instance = instance;
         return EventManager.instance;
       } catch (error) {
-        throw new Error(`Failed to initialize EventManager: ${error instanceof Error ? error.message : String(error)}`);
+        throw new Error(
+          `Failed to initialize EventManager: ${error instanceof Error ? error.message : String(error)}`
+        );
       } finally {
         EventManager.initializationPromise = null;
       }
@@ -139,34 +144,34 @@ export class EventManager {
 
   emit<T extends AtlasEvent>(event: T, options?: { batch?: boolean }): boolean {
     try {
-        if (this.debugMode && EventManager.logger) {
-          try {
-            const debugInfo: Record<string, unknown> = {
-              type: event.type,
-              timestamp: event.timestamp,
-              batch: options?.batch
-            };
+      if (this.debugMode && EventManager.logger) {
+        try {
+          const debugInfo: Record<string, unknown> = {
+            type: event.type,
+            timestamp: event.timestamp,
+            batch: options?.batch,
+          };
 
-            // Handle different event types' metadata/context
-            if ('metadata' in event) {
-              // Ensure metadata is serializable
-              debugInfo.metadata = JSON.parse(JSON.stringify(event.metadata));
-            } else if ('context' in event) {
-              // Ensure context is serializable
-              debugInfo.context = JSON.parse(JSON.stringify(event.context));
-            }
-
-            EventManager.logger.debug('Emitting event', debugInfo);
-          } catch (debugError) {
-            // If debug logging fails, log a simpler message
-            const safeDebugInfo = {
-              type: event.type,
-              timestamp: event.timestamp,
-              error: 'Failed to stringify event details'
-            };
-            EventManager.logger.debug('Emitting event (simplified)', safeDebugInfo);
+          // Handle different event types' metadata/context
+          if ('metadata' in event) {
+            // Ensure metadata is serializable
+            debugInfo.metadata = JSON.parse(JSON.stringify(event.metadata));
+          } else if ('context' in event) {
+            // Ensure context is serializable
+            debugInfo.context = JSON.parse(JSON.stringify(event.context));
           }
+
+          EventManager.logger.debug('Emitting event', debugInfo);
+        } catch (debugError) {
+          // If debug logging fails, log a simpler message
+          const safeDebugInfo = {
+            type: event.type,
+            timestamp: event.timestamp,
+            error: 'Failed to stringify event details',
+          };
+          EventManager.logger.debug('Emitting event (simplified)', safeDebugInfo);
         }
+      }
 
       // Add timestamp if not present
       if (!event.timestamp) {
@@ -181,13 +186,15 @@ export class EventManager {
 
       // Check if event should be batched
       if (options?.batch) {
-        this.batchProcessor.addEvent(event, async (events) => {
-          const results = await Promise.all(events.map(e => {
-            const typeResult = this.emitter.emit(e.type, e);
-            const wildcardResult = this.emitter.emit('*', e);
-            return typeResult || wildcardResult;
-          }));
-          
+        this.batchProcessor.addEvent(event, async events => {
+          const results = await Promise.all(
+            events.map(e => {
+              const typeResult = this.emitter.emit(e.type, e);
+              const wildcardResult = this.emitter.emit('*', e);
+              return typeResult || wildcardResult;
+            })
+          );
+
           // Update stats for batched events
           const successCount = results.filter(Boolean).length;
           if (successCount > 0) {
@@ -214,14 +221,14 @@ export class EventManager {
           event: {
             type: event.type,
             timestamp: event.timestamp,
-            batch: options?.batch
-          }
+            batch: options?.batch,
+          },
         });
 
         // Emit error event
         this.emitError('event_emission_failed', error as Error, {
           eventType: event.type,
-          batch: options?.batch
+          batch: options?.batch,
         });
       }
       return false;
@@ -253,9 +260,9 @@ export class EventManager {
           const handlerPromise = monitoredHandler(event);
           await Promise.race([
             handlerPromise,
-            new Promise((_, reject) => 
+            new Promise((_, reject) =>
               setTimeout(() => reject(new Error('Handler timeout')), timeout)
-            )
+            ),
           ]);
           break;
         } catch (error) {
@@ -269,7 +276,7 @@ export class EventManager {
               error,
               eventType: type,
               attempt: attempts,
-              handlerId
+              handlerId,
             });
           }
 
@@ -277,7 +284,7 @@ export class EventManager {
             this.emitError('event_handler_error', error as Error, {
               eventType: type,
               attempts,
-              handlerId
+              handlerId,
             });
           }
         }
@@ -292,16 +299,16 @@ export class EventManager {
         this.emitter.off(type, wrappedHandler);
         this.activeSubscriptions.delete(subscription);
         if (this.debugMode && EventManager.logger) {
-          EventManager.logger.debug('Removed event listener', { 
+          EventManager.logger.debug('Removed event listener', {
             type,
             handlerId,
             remainingListeners: this.listenerCount(type),
-            totalSubscriptions: this.activeSubscriptions.size
+            totalSubscriptions: this.activeSubscriptions.size,
           });
         }
       },
       type,
-      createdAt: Date.now()
+      createdAt: Date.now(),
     };
 
     this.activeSubscriptions.add(subscription);
@@ -333,9 +340,9 @@ export class EventManager {
           const handlerPromise = monitoredHandler(event);
           await Promise.race([
             handlerPromise,
-            new Promise((_, reject) => 
+            new Promise((_, reject) =>
               setTimeout(() => reject(new Error('Handler timeout')), timeout)
-            )
+            ),
           ]);
           break;
         } catch (error) {
@@ -349,7 +356,7 @@ export class EventManager {
               error,
               eventType: type,
               attempt: attempts,
-              handlerId
+              handlerId,
             });
           }
 
@@ -358,7 +365,7 @@ export class EventManager {
               eventType: type,
               oneTime: true,
               attempts,
-              handlerId
+              handlerId,
             });
           }
         }
@@ -373,16 +380,16 @@ export class EventManager {
         this.emitter.off(type, wrappedHandler);
         this.activeSubscriptions.delete(subscription);
         if (this.debugMode && EventManager.logger) {
-          EventManager.logger.debug('Removed one-time event listener', { 
+          EventManager.logger.debug('Removed one-time event listener', {
             type,
             handlerId,
             remainingListeners: this.listenerCount(type),
-            totalSubscriptions: this.activeSubscriptions.size
+            totalSubscriptions: this.activeSubscriptions.size,
           });
         }
       },
       type,
-      createdAt: Date.now()
+      createdAt: Date.now(),
     };
 
     this.activeSubscriptions.add(subscription);
@@ -406,7 +413,7 @@ export class EventManager {
     if (this.debugMode && EventManager.logger) {
       EventManager.logger.debug('Removed listeners', {
         type: type || 'all',
-        remainingSubscriptions: this.activeSubscriptions.size
+        remainingSubscriptions: this.activeSubscriptions.size,
       });
     }
   }
@@ -414,12 +421,15 @@ export class EventManager {
   /**
    * Gets event statistics for monitoring and debugging
    */
-  getEventStats(): Map<EventTypes | '*', {
-    emitted: number;
-    handled: number;
-    errors: number;
-    lastEmitted?: number;
-  }> {
+  getEventStats(): Map<
+    EventTypes | '*',
+    {
+      emitted: number;
+      handled: number;
+      errors: number;
+      lastEmitted?: number;
+    }
+  > {
     return new Map(this.eventStats);
   }
 
@@ -435,22 +445,25 @@ export class EventManager {
     return Array.from(this.activeSubscriptions).map(sub => ({
       type: sub.type,
       createdAt: sub.createdAt,
-      age: now - sub.createdAt
+      age: now - sub.createdAt,
     }));
   }
 
   /**
    * Gets health statistics for event handlers
    */
-  getHandlerHealthStats(): Map<string, {
-    successCount: number;
-    errorCount: number;
-    avgResponseTime: number;
-    lastExecuted?: number;
-    consecutiveFailures: number;
-    isCircuitOpen: boolean;
-    nextRetryTime?: number;
-  }> {
+  getHandlerHealthStats(): Map<
+    string,
+    {
+      successCount: number;
+      errorCount: number;
+      avgResponseTime: number;
+      lastExecuted?: number;
+      consecutiveFailures: number;
+      isCircuitOpen: boolean;
+      nextRetryTime?: number;
+    }
+  > {
     return this.healthMonitor.getAllHandlerStats();
   }
 
@@ -492,23 +505,19 @@ export class EventManager {
       if (EventManager.logger) {
         EventManager.logger.error('Unhandled promise rejection in event handler', {
           reason,
-          promise
+          promise,
         });
       }
     });
   }
 
-  private emitError(
-    context: string,
-    error: Error,
-    metadata?: Record<string, unknown>
-  ): void {
+  private emitError(context: string, error: Error, metadata?: Record<string, unknown>): void {
     try {
       // Convert Error to SerializableError
       const serializableError: SerializableError = {
         name: error.name,
         message: error.message,
-        stack: error.stack
+        stack: error.stack,
       };
 
       // Add any additional enumerable properties
@@ -525,9 +534,7 @@ export class EventManager {
       }
 
       // Ensure metadata is serializable
-      const safeMetadata = metadata ? 
-        JSON.parse(JSON.stringify(metadata)) : 
-        {};
+      const safeMetadata = metadata ? JSON.parse(JSON.stringify(metadata)) : {};
 
       const errorEvent: ErrorEvent = {
         type: EventTypes.SYSTEM_ERROR,
@@ -536,8 +543,8 @@ export class EventManager {
         context: {
           component: 'EventManager',
           operation: context,
-          ...safeMetadata
-        }
+          ...safeMetadata,
+        },
       };
 
       this.emitter.emit(EventTypes.SYSTEM_ERROR, errorEvent);
@@ -548,7 +555,7 @@ export class EventManager {
           errorMessage: error.message,
           errorName: error.name,
           context,
-          emitErrorMessage: emitError instanceof Error ? emitError.message : String(emitError)
+          emitErrorMessage: emitError instanceof Error ? emitError.message : String(emitError),
         });
       }
     }

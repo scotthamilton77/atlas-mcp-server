@@ -28,7 +28,7 @@ export interface BatchResult<T> {
 export class BatchUtils {
   static validateBatch(batch: BatchData[]): ValidationResult {
     const errors: string[] = [];
-    
+
     if (!Array.isArray(batch)) {
       errors.push('Batch must be an array');
       return { valid: false, errors };
@@ -51,7 +51,7 @@ export class BatchUtils {
 
     return {
       valid: errors.length === 0,
-      errors
+      errors,
     };
   }
 
@@ -62,7 +62,7 @@ export class BatchUtils {
     const results: T[] = [];
     const errors: Error[] = [];
     const startTime = Date.now();
-    
+
     for (const item of batch) {
       try {
         const result = await processor(item);
@@ -73,15 +73,15 @@ export class BatchUtils {
     }
 
     const endTime = Date.now();
-    
+
     return {
       results,
       errors,
       metadata: {
         processingTime: endTime - startTime,
         successCount: results.length,
-        errorCount: errors.length
-      }
+        errorCount: errors.length,
+      },
     };
   }
 
@@ -103,14 +103,12 @@ export class BatchUtils {
       }
 
       const retryResult = await this.processBatch(itemsToRetry, processor);
-      
+
       // Add successful results
       results.push(...retryResult.results);
-      
+
       // Update items to retry
-      itemsToRetry = itemsToRetry.filter((_, index) => 
-        retryResult.errors[index] !== undefined
-      );
+      itemsToRetry = itemsToRetry.filter((_, index) => retryResult.errors[index] !== undefined);
 
       if (currentRetry === maxRetries - 1) {
         // On last attempt, add remaining errors
@@ -126,15 +124,12 @@ export class BatchUtils {
       metadata: {
         processingTime: 0, // Not tracking total time for retries
         successCount: results.length,
-        errorCount: errors.length
-      }
+        errorCount: errors.length,
+      },
     };
   }
 
-  static splitBatchBySize<T extends BatchData>(
-    batch: T[],
-    maxBatchSize: number
-  ): T[][] {
+  static splitBatchBySize<T extends BatchData>(batch: T[], maxBatchSize: number): T[][] {
     if (maxBatchSize <= 0) {
       throw new Error('maxBatchSize must be greater than 0');
     }

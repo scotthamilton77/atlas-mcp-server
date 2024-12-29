@@ -1,25 +1,30 @@
 # Error Handling System
 
-This directory contains the error handling system for the Atlas Task Manager. The system provides a consistent way to create, handle, and propagate errors throughout the application.
+This directory contains the error handling system for the Atlas Task Manager. The system provides a
+consistent way to create, handle, and propagate errors throughout the application.
 
 ## Architecture
 
 The error handling system is built around several key components:
 
 ### Base Error Class (`BaseError`)
+
 - Extends the native `Error` class
 - Provides common error properties and methods
 - Supports error codes, context, and metadata
 - Enables consistent error formatting and logging
 
 ### Specialized Error Classes
+
 - `TaskError`: Task-related errors (validation, not found, etc.)
 - `StorageError`: Database and storage operations errors
 - `ConfigError`: Configuration and initialization errors
 - `ToolError`: Tool execution and integration errors
 
 ### Error Handlers
+
 Each major component has its own error handler that:
+
 - Provides domain-specific error handling methods
 - Integrates with the logging system
 - Ensures consistent error creation and propagation
@@ -28,6 +33,7 @@ Each major component has its own error handler that:
 ## Error Types
 
 ### Task Errors
+
 ```typescript
 // Operation failures
 TaskError.operationFailed(
@@ -74,73 +80,62 @@ TaskError.bulkOperationFailed(
 ```
 
 ### Error Context
+
 All errors include context information:
+
 ```typescript
 interface ErrorContext {
-    operation: string;        // Operation that failed
-    timestamp: number;        // When the error occurred
-    severity: ErrorSeverity;  // Error severity level
-    metadata?: Record<string, unknown>; // Additional context
-    stackTrace?: string;      // Error stack trace
+  operation: string; // Operation that failed
+  timestamp: number; // When the error occurred
+  severity: ErrorSeverity; // Error severity level
+  metadata?: Record<string, unknown>; // Additional context
+  stackTrace?: string; // Error stack trace
 }
 ```
 
 ## Usage Examples
 
 ### Creating Task Errors
+
 ```typescript
 // Operation failed
 throw TaskError.operationFailed(
-    'TaskManager',
-    'createTask',
-    'Failed to create task: Invalid input',
-    { input }
+  'TaskManager',
+  'createTask',
+  'Failed to create task: Invalid input',
+  { input }
 );
 
 // Validation error
-throw TaskError.validationFailed(
-    'validateTask',
-    'Task name is required',
-    { input }
-);
+throw TaskError.validationFailed('validateTask', 'Task name is required', { input });
 
 // Not found error
-throw TaskError.notFound(
-    taskPath,
-    'getTask',
-    { query }
-);
+throw TaskError.notFound(taskPath, 'getTask', { query });
 ```
 
 ### Using Error Handlers
+
 ```typescript
 class TaskManager {
-    private readonly errorHandler = getErrorHandler();
+  private readonly errorHandler = getErrorHandler();
 
-    async createTask(input: CreateTaskInput): Promise<Task> {
-        try {
-            // Validate input
-            if (!input.name) {
-                this.errorHandler.handleValidationError(
-                    'Task name is required',
-                    'createTask',
-                    { input }
-                );
-            }
+  async createTask(input: CreateTaskInput): Promise<Task> {
+    try {
+      // Validate input
+      if (!input.name) {
+        this.errorHandler.handleValidationError('Task name is required', 'createTask', { input });
+      }
 
-            // Create task...
-        } catch (error) {
-            this.errorHandler.handleOperationError(
-                error,
-                'createTask',
-                { input }
-            );
-        }
+      // Create task...
+    } catch (error) {
+      this.errorHandler.handleOperationError(error, 'createTask', { input });
     }
+  }
 }
 ```
 
 ### Error Handler Features
+
 - Automatic logging of errors with context
 - Consistent error creation and formatting
 - Integration with monitoring and metrics
@@ -150,23 +145,27 @@ class TaskManager {
 ## Best Practices
 
 1. **Use Specialized Error Types**
+
    - Create specific error types for different domains
    - Use appropriate error codes and severities
    - Include relevant context and metadata
 
 2. **Proper Error Handling**
+
    - Always catch and handle errors appropriately
    - Use error handlers for consistent behavior
    - Maintain error context through the call stack
    - Clean up resources in error cases
 
 3. **Error Context**
+
    - Include operation name and timestamp
    - Add relevant metadata for debugging
    - Preserve error stack traces
    - Use appropriate severity levels
 
 4. **Error Recovery**
+
    - Implement cleanup and rollback logic
    - Handle partial failures in bulk operations
    - Maintain system consistency on errors
@@ -181,6 +180,7 @@ class TaskManager {
 ## Testing
 
 The error system includes comprehensive tests:
+
 - Error creation and properties
 - Error handler behavior
 - Context preservation
@@ -188,17 +188,15 @@ The error system includes comprehensive tests:
 - Logging integration
 
 Example test:
+
 ```typescript
 describe('TaskManagerErrorHandler', () => {
-    it('should handle validation errors', () => {
-        const handler = new TaskManagerErrorHandler();
-        
-        expect(() => {
-            handler.handleValidationError(
-                'Invalid input',
-                'validate',
-                { field: 'name' }
-            );
-        }).toThrow(TaskError);
-    });
+  it('should handle validation errors', () => {
+    const handler = new TaskManagerErrorHandler();
+
+    expect(() => {
+      handler.handleValidationError('Invalid input', 'validate', { field: 'name' });
+    }).toThrow(TaskError);
+  });
 });
+```

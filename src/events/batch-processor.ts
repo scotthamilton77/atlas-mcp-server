@@ -22,7 +22,7 @@ export class EventBatchProcessor {
     this.config = {
       maxBatchSize: config.maxBatchSize || 100,
       maxWaitTime: config.maxWaitTime || 1000, // 1 second
-      flushInterval: config.flushInterval || 5000 // 5 seconds
+      flushInterval: config.flushInterval || 5000, // 5 seconds
     };
 
     // Start periodic flush
@@ -49,18 +49,22 @@ export class EventBatchProcessor {
 
     // Flush if batch size exceeded
     if (batch.length >= this.config.maxBatchSize) {
-      this.flushBatch(event.type, callback as (events: AtlasEvent[]) => Promise<void>)
-        .catch(error => {
+      this.flushBatch(event.type, callback as (events: AtlasEvent[]) => Promise<void>).catch(
+        error => {
           this.logger?.error('Failed to flush batch on size limit', {
             error,
             eventType: event.type,
-            batchSize: batch.length
+            batchSize: batch.length,
           });
-        });
+        }
+      );
     }
   }
 
-  private async flushBatch(type: EventTypes, callback: (events: AtlasEvent[]) => Promise<void>): Promise<void> {
+  private async flushBatch(
+    type: EventTypes,
+    callback: (events: AtlasEvent[]) => Promise<void>
+  ): Promise<void> {
     const batch = this.batches.get(type);
     if (!batch?.length) {
       return;
@@ -80,13 +84,13 @@ export class EventBatchProcessor {
 
       this.logger?.debug('Batch processed successfully', {
         eventType: type,
-        batchSize: batch.length
+        batchSize: batch.length,
       });
     } catch (error) {
       this.logger?.error('Failed to process batch', {
         error,
         eventType: type,
-        batchSize: batch.length
+        batchSize: batch.length,
       });
 
       // Requeue failed events with exponential backoff
@@ -94,7 +98,7 @@ export class EventBatchProcessor {
       setTimeout(() => {
         const retriedEvents = batch.map(event => ({
           ...event,
-          retryCount: (event.retryCount || 0) + 1
+          retryCount: (event.retryCount || 0) + 1,
         }));
         retriedEvents.forEach(event => this.addEvent(event, callback));
       }, retryDelay);
@@ -107,7 +111,7 @@ export class EventBatchProcessor {
       const callback = async (events: AtlasEvent[]) => {
         this.logger?.debug('Processing periodic flush', {
           eventType: type,
-          batchSize: events.length
+          batchSize: events.length,
         });
       };
       await this.flushBatch(type, callback);

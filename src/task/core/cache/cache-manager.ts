@@ -26,7 +26,7 @@ export class CacheManager {
       ttl: options.ttl || 60 * 1000, // 1 minute default TTL
       cleanupInterval: options.cleanupInterval || 15 * 1000, // 15 seconds cleanup
       baseTTL: options.baseTTL || 30 * 1000, // 30 seconds base TTL
-      maxTTL: options.maxTTL || 2 * 60 * 1000 // 2 minutes max TTL
+      maxTTL: options.maxTTL || 2 * 60 * 1000, // 2 minutes max TTL
     };
 
     this.startCleanupInterval();
@@ -66,14 +66,14 @@ export class CacheManager {
     // Update last accessed time and extend TTL if needed
     const now = Date.now();
     entry.lastAccessed = now;
-    
+
     // Extend TTL if more than half has elapsed
     const elapsed = now - (entry.expires - this.options.ttl);
     if (elapsed > this.options.ttl / 2) {
       const newTTL = Math.min(this.options.ttl * 1.5, this.options.maxTTL);
       entry.expires = now + newTTL;
     }
-    
+
     this.metrics.recordHit();
     return entry.value;
   }
@@ -88,12 +88,12 @@ export class CacheManager {
     }
 
     const expires = Date.now() + (ttl || this.options.ttl);
-    
+
     this.cache.set(key, {
       value,
       expires,
       lastAccessed: Date.now(),
-      size: this.estimateSize(value)
+      size: this.estimateSize(value),
     });
 
     this.updateMetrics();
@@ -127,8 +127,8 @@ export class CacheManager {
         pattern,
         entriesRemoved: removedCount,
         entriesRemaining: this.cache.size,
-        duration: Date.now() - startTime
-      }
+        duration: Date.now() - startTime,
+      },
     });
   }
 
@@ -136,15 +136,15 @@ export class CacheManager {
     const startSize = this.cache.size;
     const targetSize = Math.floor(startSize * (1 - percentage));
     await this.evictEntries(startSize - targetSize);
-    
+
     const endSize = this.cache.size;
     this.updateMetrics();
-    
+
     this.logger.info('Cache reduced', {
       startSize,
       endSize,
       reduction: startSize - endSize,
-      targetReduction: startSize - targetSize
+      targetReduction: startSize - targetSize,
     });
   }
 
@@ -167,8 +167,8 @@ export class CacheManager {
       batchId: `cache_clear_${Date.now()}`,
       metadata: {
         entriesCleared: startSize,
-        reason: 'manual_clear'
-      }
+        reason: 'manual_clear',
+      },
     });
   }
 
@@ -177,7 +177,7 @@ export class CacheManager {
       ...this.metrics.getMetrics(),
       currentSize: this.cache.size,
       maxSize: this.options.maxSize,
-      usage: Math.round((this.cache.size / this.options.maxSize) * 100)
+      usage: Math.round((this.cache.size / this.options.maxSize) * 100),
     };
   }
 
@@ -204,14 +204,15 @@ export class CacheManager {
   private checkCacheSize(): void {
     const currentSize = this.cache.size;
     const maxSize = this.options.maxSize;
-    
-    if (currentSize > maxSize * 0.7) { // Over 70% capacity for VSCode
+
+    if (currentSize > maxSize * 0.7) {
+      // Over 70% capacity for VSCode
       this.logger.warn('Cache near capacity', {
         currentSize,
         maxSize,
-        usage: `${Math.round((currentSize / maxSize) * 100)}%`
+        usage: `${Math.round((currentSize / maxSize) * 100)}%`,
       });
-      
+
       // More aggressive reduction for VSCode environment
       this.reduce(0.4).catch(error => {
         this.logger.error('Failed to reduce cache size', { error });
@@ -247,7 +248,7 @@ export class CacheManager {
       this.logger.debug('Cache cleanup completed', {
         entriesRemoved: removed,
         remainingEntries: this.cache.size,
-        totalSize: `${Math.round(totalSize / 1024)}KB`
+        totalSize: `${Math.round(totalSize / 1024)}KB`,
       });
     }
   }
@@ -270,13 +271,12 @@ export class CacheManager {
 
   private async evictEntries(count: number): Promise<void> {
     // Sort entries by last accessed time and size
-    const entries = Array.from(this.cache.entries())
-      .sort(([, a], [, b]) => {
-        // Prioritize removing larger, older entries
-        const ageDiff = a.lastAccessed - b.lastAccessed;
-        const sizeDiff = (b.size || 0) - (a.size || 0);
-        return ageDiff + sizeDiff;
-      });
+    const entries = Array.from(this.cache.entries()).sort(([, a], [, b]) => {
+      // Prioritize removing larger, older entries
+      const ageDiff = a.lastAccessed - b.lastAccessed;
+      const sizeDiff = (b.size || 0) - (a.size || 0);
+      return ageDiff + sizeDiff;
+    });
 
     // Remove entries
     let removed = 0;
@@ -295,7 +295,7 @@ export class CacheManager {
     try {
       // More accurate size estimation for VSCode environment
       let size = 0;
-      
+
       if (typeof value === 'string') {
         size = value.length * 2; // UTF-16 characters
       } else if (typeof value === 'number') {
@@ -307,10 +307,12 @@ export class CacheManager {
       } else if (Array.isArray(value)) {
         size = value.reduce((acc, item) => acc + this.estimateSize(item), 0);
       } else if (typeof value === 'object') {
-        size = Object.entries(value).reduce((acc, [key, val]) => 
-          acc + (key.length * 2) + this.estimateSize(val), 0);
+        size = Object.entries(value).reduce(
+          (acc, [key, val]) => acc + key.length * 2 + this.estimateSize(val),
+          0
+        );
       }
-      
+
       // Add overhead for object structure
       return size + 32; // Base object overhead
     } catch {
@@ -334,9 +336,9 @@ export class CacheManager {
     this.cache.clear();
     this.metrics.recordClear();
     this.updateMetrics();
-    
+
     this.logger.info('Cache manager stopped', {
-      finalMetrics: this.getMetrics()
+      finalMetrics: this.getMetrics(),
     });
   }
 }

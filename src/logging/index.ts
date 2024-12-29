@@ -16,13 +16,13 @@ export { LoggerHealthMonitor } from './health-monitor.js';
 
 // Re-export types
 export type {
-    LogLevel,
-    LoggerConfig,
-    LogEntry,
-    LogMetadata,
-    LoggerTransportConfig,
-    LoggerHealthStatus,
-    LoggerRecoveryOptions
+  LogLevel,
+  LoggerConfig,
+  LogEntry,
+  LogMetadata,
+  LoggerTransportConfig,
+  LoggerHealthStatus,
+  LoggerRecoveryOptions,
 } from '../types/logging.js';
 
 // Export log levels

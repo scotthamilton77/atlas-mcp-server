@@ -3,7 +3,8 @@ import { z } from 'zod';
 /**
  * Task metadata schema (user-defined fields only)
  */
-export const taskMetadataSchema = z.object({
+export const taskMetadataSchema = z
+  .object({
     priority: z.enum(['low', 'medium', 'high']).optional(),
     tags: z.array(z.string().max(100)).max(100).optional(),
     reasoning: z.string().max(2000).optional(),
@@ -16,7 +17,8 @@ export const taskMetadataSchema = z.object({
     blockedBy: z.string().optional(),
     blockReason: z.string().optional(),
     blockTimestamp: z.number().optional(),
-    unblockTimestamp: z.number().optional()
-}).passthrough();
+    unblockTimestamp: z.number().optional(),
+  })
+  .passthrough();
 
 export type TaskMetadata = z.infer<typeof taskMetadataSchema>;
