@@ -8,6 +8,7 @@ import { join } from 'path';
 import { promises as fs } from 'fs';
 import { PlatformPaths, PlatformCapabilities } from './utils/platform-utils.js';
 import { LogLevels } from './types/logging.js';
+import { ToolHandler } from './tools/handler.js';
 
 async function main(): Promise<void> {
   try {
@@ -138,6 +139,9 @@ async function main(): Promise<void> {
       // Initialize task manager
       const taskManager = await TaskManager.getInstance(storage);
 
+      // Initialize tool handler
+      const toolHandler = new ToolHandler(taskManager);
+
       // Run maintenance
       await storage.vacuum();
       await storage.analyze();
@@ -160,18 +164,21 @@ async function main(): Promise<void> {
         },
         {
           listTools: async () => {
-            const result = await taskManager.listTools();
+            const result = await toolHandler.listTools();
             return result;
           },
           handleToolCall: async request => {
-            if (!request.params) {
-              throw new Error('Missing params in tool call request');
+            if (
+              !request.params ||
+              typeof request.params.name !== 'string' ||
+              !request.params.arguments
+            ) {
+              throw new Error('Invalid tool call request parameters');
             }
-            const result = await taskManager.handleToolCall({
-              method: 'call_tool',
+            const result = await toolHandler.handleToolCall({
               params: {
-                name: request.params.name,
-                arguments: request.params.arguments,
+                name: request.params.name as string,
+                arguments: request.params.arguments as Record<string, any>,
               },
             });
             return result;

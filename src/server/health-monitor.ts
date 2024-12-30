@@ -165,7 +165,7 @@ export class HealthMonitor {
             [TaskStatus.PENDING]: 0,
             [TaskStatus.IN_PROGRESS]: 0,
             [TaskStatus.COMPLETED]: 0,
-            [TaskStatus.FAILED]: 0,
+            [TaskStatus.CANCELLED]: 0,
             [TaskStatus.BLOCKED]: 0,
           },
           noteCount: 0,
