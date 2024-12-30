@@ -28,7 +28,7 @@ export const SCHEMA: SqliteSchema = {
       path TEXT NOT NULL UNIQUE,
       name TEXT NOT NULL,
       type TEXT NOT NULL CHECK (type IN ('TASK', 'MILESTONE')),
-      status TEXT NOT NULL CHECK (status IN ('PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'BLOCKED')),
+      status TEXT NOT NULL CHECK (status IN ('PENDING', 'IN_PROGRESS', 'COMPLETED', 'BLOCKED', 'CANCELLED')),
       version INTEGER NOT NULL DEFAULT 1,
       project_path TEXT NOT NULL,
       description TEXT,
@@ -38,6 +38,11 @@ export const SCHEMA: SqliteSchema = {
       updated_at INTEGER NOT NULL,
       status_metadata TEXT,
       metadata TEXT,
+      notes TEXT,
+      planning_notes TEXT,
+      progress_notes TEXT,
+      completion_notes TEXT,
+      troubleshooting_notes TEXT,
       FOREIGN KEY (parent_path) REFERENCES tasks(path) ON DELETE SET NULL
     )
   `,

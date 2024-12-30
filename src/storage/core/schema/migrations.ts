@@ -53,7 +53,7 @@ export class SchemaManager {
                             name TEXT NOT NULL,
                             description TEXT,
                             type TEXT NOT NULL CHECK(type IN ('TASK', 'GROUP', 'MILESTONE')),
-                            status TEXT NOT NULL CHECK(status IN ('PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'BLOCKED')),
+                            status TEXT NOT NULL CHECK(status IN ('PENDING', 'IN_PROGRESS', 'COMPLETED', 'BLOCKED', 'CANCELLED')),
                             parent_path TEXT REFERENCES tasks(path) ON DELETE CASCADE,
                             notes TEXT,
                             reasoning TEXT,
