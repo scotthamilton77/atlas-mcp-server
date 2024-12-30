@@ -1,219 +1,148 @@
-import { BaseError } from './base-error.js';
-import { ConfigError } from './config-error.js';
-import { TaskError } from './task-error.js';
-import { StorageError } from './storage-error.js';
-import { ToolError } from './tool-error.js';
-import { ErrorFactory } from './error-factory.js';
-import { ErrorCode, ErrorCodes as TypedErrorCodes } from '../types/error.js';
+export * from './base-error.js';
+export * from './config-error.js';
+export * from './storage-error.js';
+export * from './task-error.js';
+export * from './tool-error.js';
+export * from './logging-error.js';
+export * from './error-factory.js';
 
-// Re-export error types and utilities
-export { BaseError, ConfigError, TaskError, StorageError, ToolError, ErrorFactory };
+// Re-export error types
+export { ErrorCode, ErrorCodes, ErrorContext, ErrorSeverity } from '../types/error.js';
 
-// Export error codes enum
-export const ErrorCodes = TypedErrorCodes;
-
-// Export error code type
-export type { ErrorCode };
-
-// Export error factory function
-export const createError = ErrorFactory.createError.bind(ErrorFactory);
-
-// Export error utilities
-export const isBaseError = (error: unknown): error is BaseError => {
-  return error instanceof BaseError;
-};
-
-export const isConfigError = (error: unknown): error is ConfigError => {
-  return error instanceof ConfigError;
-};
-
-export const isTaskError = (error: unknown): error is TaskError => {
-  return error instanceof TaskError;
-};
-
-export const isStorageError = (error: unknown): error is StorageError => {
-  return error instanceof StorageError;
-};
-
-export const isToolError = (error: unknown): error is ToolError => {
-  return error instanceof ToolError;
-};
-
-export const formatError = (error: unknown): Record<string, unknown> => {
-  if (error instanceof BaseError) {
-    return {
-      code: error.code,
-      message: error.message,
-      operation: error.getOperation(),
-      userMessage: error.getUserMessage(),
-      metadata: error.getMetadata(),
-      stack: error.stack,
-    };
-  }
-
-  if (error instanceof Error) {
-    return {
-      message: error.message,
-      name: error.name,
-      stack: error.stack,
-    };
-  }
-
-  return { error };
-};
-
-export const getErrorCode = (error: unknown): ErrorCode => {
-  if (error instanceof BaseError) {
-    return error.code;
-  }
-  return ErrorCodes.INTERNAL_ERROR;
-};
-
-export const getErrorMessage = (error: unknown): string => {
-  if (error instanceof BaseError) {
-    return error.getUserMessage() || error.message;
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return String(error);
-};
-
-// Export error creation helpers
-export const createTaskError = TaskError;
-export const createConfigError = ConfigError;
-export const createStorageError = StorageError;
-export const createToolError = ToolError;
-
-// Define error code arrays with proper typing
-const taskErrorCodes = [
-  ErrorCodes.TASK_NOT_FOUND,
-  ErrorCodes.TASK_VALIDATION,
-  ErrorCodes.TASK_DEPENDENCY,
-  ErrorCodes.TASK_STATUS,
-  ErrorCodes.TASK_DUPLICATE,
-  ErrorCodes.TASK_INVALID_TYPE,
-  ErrorCodes.TASK_INVALID_STATUS,
-  ErrorCodes.TASK_INVALID_PARENT,
-  ErrorCodes.TASK_OPERATION_FAILED,
-  ErrorCodes.TASK_INVALID_PATH,
-  ErrorCodes.TASK_PARENT_NOT_FOUND,
-  ErrorCodes.TASK_PARENT_TYPE,
-  ErrorCodes.TASK_CYCLE,
-] as const;
-
-const configErrorCodes = [
-  ErrorCodes.CONFIG_MISSING,
-  ErrorCodes.CONFIG_INVALID,
-  ErrorCodes.CONFIG_TYPE,
-  ErrorCodes.CONFIG_VALIDATION,
-  ErrorCodes.CONFIG_REQUIRED,
-] as const;
-
-const storageErrorCodes = [
-  ErrorCodes.STORAGE_READ,
-  ErrorCodes.STORAGE_WRITE,
-  ErrorCodes.STORAGE_INIT,
-  ErrorCodes.STORAGE_DELETE,
-  ErrorCodes.STORAGE_PERMISSION,
-  ErrorCodes.STORAGE_NOT_FOUND,
-  ErrorCodes.STORAGE_TRANSACTION,
-  ErrorCodes.STORAGE_ROLLBACK,
-  ErrorCodes.STORAGE_COMMIT,
-  ErrorCodes.STORAGE_ERROR,
-  ErrorCodes.DATABASE_ERROR,
-] as const;
-
-const toolErrorCodes = [
-  ErrorCodes.TOOL_NOT_FOUND,
-  ErrorCodes.TOOL_EXECUTION,
-  ErrorCodes.TOOL_VALIDATION,
-  ErrorCodes.TOOL_TIMEOUT,
-  ErrorCodes.TOOL_PERMISSION,
-] as const;
-
-const systemErrorCodes = [
-  ErrorCodes.INTERNAL_ERROR,
-  ErrorCodes.INVALID_INPUT,
-  ErrorCodes.OPERATION_FAILED,
-  ErrorCodes.VALIDATION_ERROR,
-  ErrorCodes.PERMISSION_DENIED,
-  ErrorCodes.NOT_IMPLEMENTED,
-  ErrorCodes.TIMEOUT,
-  ErrorCodes.TIMEOUT_ERROR,
-  ErrorCodes.CONCURRENCY_ERROR,
-] as const;
-
-// Export error categories
+// Error code categories for grouping and filtering
 export const ErrorCategories = {
-  TASK: taskErrorCodes,
-  CONFIG: configErrorCodes,
-  STORAGE: storageErrorCodes,
-  TOOL: toolErrorCodes,
-  SYSTEM: systemErrorCodes,
+  TASK: 'TASK',
+  STORAGE: 'STORAGE',
+  CONFIG: 'CONFIG',
+  TOOL: 'TOOL',
+  SYSTEM: 'SYSTEM',
+  LOGGING: 'LOGGING',
+  VALIDATION: 'VALIDATION',
+  AUTH: 'AUTH',
+  IO: 'IO',
+  CACHE: 'CACHE',
+  EVENT: 'EVENT',
+  GENERIC: 'GENERIC',
 } as const;
 
-export type ErrorCategory = keyof typeof ErrorCategories;
+export type ErrorCategory = (typeof ErrorCategories)[keyof typeof ErrorCategories];
 
-// Export error category helpers
-export const getErrorCategory = (code: ErrorCode): ErrorCategory | undefined => {
-  for (const [category, codes] of Object.entries(ErrorCategories)) {
-    if ((codes as readonly ErrorCode[]).includes(code)) {
-      return category as ErrorCategory;
-    }
-  }
-  return undefined;
+// Map error codes to categories
+export const errorCodeCategories: Record<string, ErrorCategory> = {
+  // Task errors
+  TASK_NOT_FOUND: ErrorCategories.TASK,
+  TASK_VALIDATION: ErrorCategories.TASK,
+  TASK_DEPENDENCY: ErrorCategories.TASK,
+  TASK_STATUS: ErrorCategories.TASK,
+  TASK_OPERATION_FAILED: ErrorCategories.TASK,
+  TASK_INITIALIZATION: ErrorCategories.TASK,
+  TASK_DUPLICATE: ErrorCategories.TASK,
+  TASK_INVALID_TYPE: ErrorCategories.TASK,
+  TASK_INVALID_STATUS: ErrorCategories.TASK,
+  TASK_INVALID_PARENT: ErrorCategories.TASK,
+  TASK_INVALID_PATH: ErrorCategories.TASK,
+  TASK_PARENT_NOT_FOUND: ErrorCategories.TASK,
+  TASK_PARENT_TYPE: ErrorCategories.TASK,
+  TASK_CYCLE: ErrorCategories.TASK,
+
+  // Storage errors
+  STORAGE_INIT: ErrorCategories.STORAGE,
+  STORAGE_CONNECTION: ErrorCategories.STORAGE,
+  STORAGE_QUERY: ErrorCategories.STORAGE,
+  STORAGE_TRANSACTION: ErrorCategories.STORAGE,
+  STORAGE_MIGRATION: ErrorCategories.STORAGE,
+  STORAGE_BACKUP: ErrorCategories.STORAGE,
+  STORAGE_INTEGRITY: ErrorCategories.STORAGE,
+  STORAGE_READ: ErrorCategories.STORAGE,
+  STORAGE_WRITE: ErrorCategories.STORAGE,
+  STORAGE_DELETE: ErrorCategories.STORAGE,
+  STORAGE_ROLLBACK: ErrorCategories.STORAGE,
+  STORAGE_COMMIT: ErrorCategories.STORAGE,
+  STORAGE_PERMISSION: ErrorCategories.STORAGE,
+  STORAGE_NOT_FOUND: ErrorCategories.STORAGE,
+  STORAGE_ERROR: ErrorCategories.STORAGE,
+  DATABASE_ERROR: ErrorCategories.STORAGE,
+
+  // Config errors
+  CONFIG_INVALID: ErrorCategories.CONFIG,
+  CONFIG_MISSING: ErrorCategories.CONFIG,
+  CONFIG_TYPE: ErrorCategories.CONFIG,
+  CONFIG_VALIDATION: ErrorCategories.CONFIG,
+  CONFIG_REQUIRED: ErrorCategories.CONFIG,
+
+  // Tool errors
+  TOOL_NOT_FOUND: ErrorCategories.TOOL,
+  TOOL_EXECUTION: ErrorCategories.TOOL,
+  TOOL_TIMEOUT: ErrorCategories.TOOL,
+  TOOL_VALIDATION: ErrorCategories.TOOL,
+  TOOL_INITIALIZATION: ErrorCategories.TOOL,
+  TOOL_PERMISSION: ErrorCategories.TOOL,
+
+  // System errors
+  SYSTEM_RESOURCE: ErrorCategories.SYSTEM,
+  SYSTEM_MEMORY: ErrorCategories.SYSTEM,
+  SYSTEM_DISK: ErrorCategories.SYSTEM,
+  SYSTEM_NETWORK: ErrorCategories.SYSTEM,
+  SYSTEM_TIMEOUT: ErrorCategories.SYSTEM,
+  TIMEOUT: ErrorCategories.SYSTEM,
+  TIMEOUT_ERROR: ErrorCategories.SYSTEM,
+  CONCURRENCY_ERROR: ErrorCategories.SYSTEM,
+
+  // Logging errors
+  LOGGING_INIT: ErrorCategories.LOGGING,
+  LOGGING_WRITE: ErrorCategories.LOGGING,
+  LOGGING_READ: ErrorCategories.LOGGING,
+  LOGGING_ROTATION: ErrorCategories.LOGGING,
+  LOGGING_TRANSPORT: ErrorCategories.LOGGING,
+  LOGGING_CONFIG: ErrorCategories.LOGGING,
+  LOGGING_LEVEL: ErrorCategories.LOGGING,
+  LOGGING_FORMAT: ErrorCategories.LOGGING,
+  LOGGING_PERMISSION: ErrorCategories.LOGGING,
+  LOGGING_DIRECTORY: ErrorCategories.LOGGING,
+
+  // IO errors
+  IO_READ: ErrorCategories.IO,
+  IO_WRITE: ErrorCategories.IO,
+  IO_PERMISSION: ErrorCategories.IO,
+  IO_NOT_FOUND: ErrorCategories.IO,
+
+  // Cache errors
+  CACHE_MISS: ErrorCategories.CACHE,
+  CACHE_INVALID: ErrorCategories.CACHE,
+  CACHE_FULL: ErrorCategories.CACHE,
+  CACHE_CORRUPTION: ErrorCategories.CACHE,
+
+  // Event errors
+  EVENT_INVALID: ErrorCategories.EVENT,
+  EVENT_HANDLER: ErrorCategories.EVENT,
+  EVENT_DISPATCH: ErrorCategories.EVENT,
+  EVENT_SUBSCRIPTION: ErrorCategories.EVENT,
+
+  // Validation errors
+  VALIDATION_TYPE: ErrorCategories.VALIDATION,
+  VALIDATION_RANGE: ErrorCategories.VALIDATION,
+  VALIDATION_FORMAT: ErrorCategories.VALIDATION,
+  VALIDATION_CONSTRAINT: ErrorCategories.VALIDATION,
+  VALIDATION_ERROR: ErrorCategories.VALIDATION,
+
+  // Auth errors
+  AUTH_INVALID: ErrorCategories.AUTH,
+  AUTH_EXPIRED: ErrorCategories.AUTH,
+  AUTH_MISSING: ErrorCategories.AUTH,
+  AUTH_FORBIDDEN: ErrorCategories.AUTH,
+  PERMISSION_DENIED: ErrorCategories.AUTH,
+
+  // Generic errors
+  INVALID_INPUT: ErrorCategories.GENERIC,
+  INVALID_STATE: ErrorCategories.GENERIC,
+  OPERATION_FAILED: ErrorCategories.GENERIC,
+  NOT_IMPLEMENTED: ErrorCategories.GENERIC,
+  INTERNAL_ERROR: ErrorCategories.GENERIC,
 };
 
-export const isTaskErrorCode = (code: ErrorCode): boolean => {
-  return taskErrorCodes.includes(code as (typeof taskErrorCodes)[number]);
-};
-
-export const isConfigErrorCode = (code: ErrorCode): boolean => {
-  return configErrorCodes.includes(code as (typeof configErrorCodes)[number]);
-};
-
-export const isStorageErrorCode = (code: ErrorCode): boolean => {
-  return storageErrorCodes.includes(code as (typeof storageErrorCodes)[number]);
-};
-
-export const isToolErrorCode = (code: ErrorCode): boolean => {
-  return toolErrorCodes.includes(code as (typeof toolErrorCodes)[number]);
-};
-
-export const isSystemErrorCode = (code: ErrorCode): boolean => {
-  return systemErrorCodes.includes(code as (typeof systemErrorCodes)[number]);
-};
-
-// Export error type guards
-export const isTaskNotFoundError = (error: unknown): error is TaskError => {
-  return isTaskError(error) && error.code === ErrorCodes.TASK_NOT_FOUND;
-};
-
-export const isTaskValidationError = (error: unknown): error is TaskError => {
-  return isTaskError(error) && error.code === ErrorCodes.TASK_VALIDATION;
-};
-
-export const isStorageInitError = (error: unknown): error is StorageError => {
-  return isStorageError(error) && error.code === ErrorCodes.STORAGE_INIT;
-};
-
-export const isDatabaseError = (error: unknown): error is StorageError => {
-  return isStorageError(error) && error.code === ErrorCodes.DATABASE_ERROR;
-};
-
-export const isConfigValidationError = (error: unknown): error is ConfigError => {
-  return isConfigError(error) && error.code === ErrorCodes.CONFIG_VALIDATION;
-};
-
-export const isToolExecutionError = (error: unknown): error is ToolError => {
-  return isToolError(error) && error.code === ErrorCodes.TOOL_EXECUTION;
-};
-
-export const isToolTimeoutError = (error: unknown): error is ToolError => {
-  return isToolError(error) && error.code === ErrorCodes.TOOL_TIMEOUT;
-};
-
-export const isPermissionError = (error: unknown): error is BaseError => {
-  return isBaseError(error) && error.code === ErrorCodes.PERMISSION_DENIED;
-};
+/**
+ * Gets the category for an error code
+ */
+export function getErrorCategory(code: string): ErrorCategory {
+  return errorCodeCategories[code] || ErrorCategories.GENERIC;
+}

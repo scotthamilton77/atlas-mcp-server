@@ -1,5 +1,10 @@
 import { FileTransport } from './file-transport.js';
-import { LogEntry, LoggerTransportConfig, LoggerHealthStatus } from '../types/logging.js';
+import {
+  LogEntry,
+  LoggerTransportConfig,
+  LoggerHealthStatus,
+  ITransportManager,
+} from '../types/logging.js';
 import { ErrorFactory } from '../errors/error-factory.js';
 import { EventManager } from '../events/event-manager.js';
 import { EventTypes } from '../types/events.js';
@@ -8,7 +13,7 @@ import { toSerializableError } from '../utils/error-utils.js';
 /**
  * Manages multiple logging transports with failover support
  */
-export class TransportManager {
+export class TransportManager implements ITransportManager {
   private transports: Map<string, FileTransport> = new Map();
   private failoverTransport?: FileTransport;
   private eventManager?: EventManager;
@@ -82,8 +87,9 @@ export class TransportManager {
 
   /**
    * Writes a log entry to all transports
+   * @implements {ITransportManager}
    */
-  async write(entry: LogEntry): Promise<void> {
+  public async write(entry: LogEntry): Promise<void> {
     const errors: Error[] = [];
     let written = false;
 

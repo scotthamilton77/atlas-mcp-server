@@ -173,3 +173,4 @@ coverage/
 .history/
 build/
 repomix*
+.backup

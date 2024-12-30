@@ -23,6 +23,6 @@
     "removeComments": false,
     "preserveConstEnums": true
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "eslint.config.js"],
   "exclude": ["node_modules", "build", "**/*.test.ts"]
 }

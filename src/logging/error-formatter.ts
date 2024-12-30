@@ -1,6 +1,29 @@
 import { BaseError } from '../errors/base-error.js';
 import { LogMetadata } from '../types/logging.js';
 
+interface ErrorFormatterOptions {
+  includeStack: boolean;
+  redactSensitive: boolean;
+  maxDepth: number;
+  currentDepth: number;
+  seen: WeakSet<object>;
+}
+
+type FormattedError = NonNullable<LogMetadata['error']>;
+
+/**
+ * Creates a new options object with updated depth
+ */
+function incrementDepth(options: ErrorFormatterOptions): ErrorFormatterOptions {
+  return {
+    includeStack: options.includeStack,
+    redactSensitive: options.redactSensitive,
+    maxDepth: options.maxDepth,
+    currentDepth: options.currentDepth + 1,
+    seen: options.seen,
+  };
+}
+
 /**
  * Handles error formatting for logging with advanced features
  */
@@ -39,7 +62,7 @@ export class ErrorFormatter {
       redactSensitive?: boolean;
       maxDepth?: number;
     } = {}
-  ): LogMetadata['error'] {
+  ): FormattedError {
     const {
       includeStack = true,
       redactSensitive = true,
@@ -82,16 +105,7 @@ export class ErrorFormatter {
   /**
    * Formats an error object with proper type handling
    */
-  private static formatErrorObject(
-    error: unknown,
-    options: {
-      includeStack: boolean;
-      redactSensitive: boolean;
-      maxDepth: number;
-      currentDepth: number;
-      seen: WeakSet<object>;
-    }
-  ): LogMetadata['error'] {
+  private static formatErrorObject(error: unknown, options: ErrorFormatterOptions): FormattedError {
     const { includeStack, redactSensitive, maxDepth, currentDepth, seen } = options;
 
     // Check depth limit
@@ -104,25 +118,52 @@ export class ErrorFormatter {
 
     // Handle BaseError instances
     if (error instanceof BaseError) {
-      return {
+      const formatted: FormattedError = {
         name: error.name,
         message: error.message,
         code: error.code,
-        details: this.sanitizeErrorDetails(error.details, {
-          ...options,
-          currentDepth: currentDepth + 1,
-        }),
         stack: includeStack ? error.stack : undefined,
       };
+
+      const details = this.sanitizeErrorDetails(error.details, incrementDepth(options));
+      if (details !== undefined) {
+        formatted.details = details;
+      }
+
+      return formatted;
     }
 
     // Handle standard Error instances
     if (error instanceof Error) {
-      return {
+      const formatted: FormattedError = {
         name: error.name,
         message: error.message,
         stack: includeStack ? error.stack : undefined,
       };
+
+      // Handle SQLite errors
+      const sqliteError = error as any;
+      if (
+        sqliteError.code &&
+        typeof sqliteError.code === 'string' &&
+        sqliteError.code.startsWith('SQLITE_')
+      ) {
+        formatted.code = sqliteError.code;
+        formatted.details = {
+          errno: sqliteError.errno,
+          sqliteCode: sqliteError.code,
+          sqlMessage: sqliteError.message,
+        };
+      }
+
+      // Add any additional properties
+      const additionalProps = this.extractErrorProperties(error, options);
+      if (Object.keys(additionalProps).length > 0) {
+        formatted.details = formatted.details || {};
+        Object.assign(formatted.details as Record<string, unknown>, additionalProps);
+      }
+
+      return formatted;
     }
 
     // Handle plain objects
@@ -138,10 +179,7 @@ export class ErrorFormatter {
       seen.add(error as object);
 
       // Convert object to sanitized format
-      const sanitized = this.sanitizeObject(error, {
-        ...options,
-        currentDepth: currentDepth + 1,
-      });
+      const sanitized = this.sanitizeObject(error, incrementDepth(options));
 
       return {
         name: 'ObjectError',
@@ -162,17 +200,39 @@ export class ErrorFormatter {
   }
 
   /**
+   * Extracts additional properties from an error object
+   */
+  private static extractErrorProperties(
+    error: Error,
+    options: ErrorFormatterOptions
+  ): Record<string, unknown> {
+    const result: Record<string, unknown> = {};
+    const seen = new Set(['name', 'message', 'stack', 'code', 'errno']);
+
+    // Get all properties including non-enumerable ones
+    const props = Object.getOwnPropertyNames(error);
+    for (const prop of props) {
+      if (seen.has(prop)) continue;
+
+      const value = (error as any)[prop];
+      if (value === undefined || typeof value === 'function') continue;
+
+      if (value instanceof Error) {
+        result[prop] = this.formatErrorObject(value, incrementDepth(options));
+      } else if (typeof value === 'object' && value !== null) {
+        result[prop] = this.sanitizeObject(value, incrementDepth(options));
+      } else {
+        result[prop] = value;
+      }
+    }
+
+    return result;
+  }
+
+  /**
    * Sanitizes error details by handling circular references and sensitive data
    */
-  private static sanitizeErrorDetails(
-    details: unknown,
-    options: {
-      redactSensitive: boolean;
-      maxDepth: number;
-      currentDepth: number;
-      seen: WeakSet<object>;
-    }
-  ): unknown {
+  private static sanitizeErrorDetails(details: unknown, options: ErrorFormatterOptions): unknown {
     if (!details || typeof details !== 'object') {
       return details;
     }
@@ -187,15 +247,7 @@ export class ErrorFormatter {
   /**
    * Sanitizes an object by handling sensitive data and circular references
    */
-  private static sanitizeObject(
-    obj: unknown,
-    options: {
-      redactSensitive: boolean;
-      maxDepth: number;
-      currentDepth: number;
-      seen: WeakSet<object>;
-    }
-  ): unknown {
+  private static sanitizeObject(obj: unknown, options: ErrorFormatterOptions): unknown {
     if (!obj || typeof obj !== 'object') {
       return obj;
     }
@@ -209,12 +261,7 @@ export class ErrorFormatter {
 
     // Handle arrays
     if (Array.isArray(obj)) {
-      return obj.map(item =>
-        this.sanitizeObject(item, {
-          ...options,
-          currentDepth: currentDepth + 1,
-        })
-      );
+      return obj.map(item => this.sanitizeObject(item, incrementDepth(options)));
     }
 
     // Handle objects
@@ -227,11 +274,14 @@ export class ErrorFormatter {
         continue;
       }
 
+      // Handle Error objects specially
+      if (value instanceof Error) {
+        result[key] = this.formatErrorObject(value, incrementDepth(options));
+        continue;
+      }
+
       // Recursively sanitize value
-      result[key] = this.sanitizeObject(value, {
-        ...options,
-        currentDepth: currentDepth + 1,
-      });
+      result[key] = this.sanitizeObject(value, incrementDepth(options));
     }
 
     return result;
@@ -266,7 +316,12 @@ export class ErrorFormatter {
     if (!formatted) {
       return 'Unknown error';
     }
+
     const { name = 'UnknownError', message = 'No message', code } = formatted;
-    return `${name}: ${message}${code ? ` (${code})` : ''}`;
+    const sqliteError = error as any;
+    if (sqliteError?.code?.startsWith?.('SQLITE_')) {
+      return `${name} [${sqliteError.code}]: ${message}`;
+    }
+    return `${name}${code ? ` [${code}]` : ''}: ${message}`;
   }
 }

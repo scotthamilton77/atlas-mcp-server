@@ -82,12 +82,12 @@ export interface PartialAppConfig {
  * Default logging configuration
  */
 const defaultLoggingConfig: LoggingConfig = {
-  level: LogLevels.INFO,
-  console: true,
+  level: LogLevels.DEBUG, // Set default to debug for more comprehensive logging
+  console: false, // Disable console logging by default
   file: true,
   dir: 'logs',
-  maxFiles: 5,
-  maxSize: 5242880,
+  maxFiles: 10, // Keep more log history
+  maxSize: 10 * 1024 * 1024, // 10MB per file
 };
 
 /**
@@ -138,8 +138,10 @@ export class ConfigManager {
       operation,
       timestamp: Date.now(),
       severity: ErrorSeverity.HIGH,
-      metadata,
-      stackTrace: new Error().stack,
+      metadata: {
+        ...metadata,
+        stackTrace: new Error().stack,
+      },
     };
   }
 
@@ -180,12 +182,30 @@ export class ConfigManager {
         }
 
         ConfigManager.instance = new ConfigManager();
+
+        // Validate and apply custom config
         if (config) {
+          // Pre-validate logging level
+          if (config.logging?.level && !Object.values(LogLevels).includes(config.logging.level)) {
+            throw new ConfigError(
+              ErrorCodes.CONFIG_INVALID,
+              'Invalid log level',
+              this.createErrorContext('ConfigManager.initialize', {
+                level: config.logging.level,
+                validLevels: Object.values(LogLevels),
+              })
+            );
+          }
           await ConfigManager.instance.updateConfig(config);
         }
+
         ConfigManager.instance.initialized = true;
         return ConfigManager.instance;
       } catch (error) {
+        // Ensure error is properly formatted with context
+        if (error instanceof ConfigError) {
+          throw error;
+        }
         throw new ConfigError(
           ErrorCodes.CONFIG_INVALID,
           `Failed to initialize configuration: ${error instanceof Error ? error.message : String(error)}`,
@@ -203,6 +223,13 @@ export class ConfigManager {
    * Gets the current configuration
    */
   getConfig(): AppConfig {
+    if (!this.initialized) {
+      throw new ConfigError(
+        ErrorCodes.CONFIG_INVALID,
+        'Configuration not initialized',
+        ConfigManager.createErrorContext('ConfigManager.getConfig')
+      );
+    }
     return { ...this.config };
   }
 
@@ -210,33 +237,56 @@ export class ConfigManager {
    * Updates the configuration
    */
   async updateConfig(updates: PartialAppConfig): Promise<void> {
-    const newConfig = {
-      ...this.config,
-      ...updates,
-      logging: {
-        ...this.config.logging,
-        ...(updates.logging || {}),
-      },
-      storage: {
-        ...this.config.storage,
-        ...(updates.storage || {}),
-      },
-    };
+    try {
+      // Pre-validate logging configuration
+      if (updates.logging?.level && !Object.values(LogLevels).includes(updates.logging.level)) {
+        throw new ConfigError(
+          ErrorCodes.CONFIG_INVALID,
+          'Invalid log level',
+          ConfigManager.createErrorContext('ConfigManager.updateConfig', {
+            level: updates.logging.level,
+            validLevels: Object.values(LogLevels),
+          })
+        );
+      }
 
-    // Load environment config and create directories
-    const envConfig = await this.loadEnvConfig(newConfig);
+      const newConfig = {
+        ...this.config,
+        ...updates,
+        logging: {
+          ...this.config.logging,
+          ...(updates.logging || {}),
+        },
+        storage: {
+          ...this.config.storage,
+          ...(updates.storage || {}),
+        },
+      };
 
-    // Merge with environment config
-    const finalConfig = {
-      ...newConfig,
-      storage: {
-        ...newConfig.storage,
-        ...envConfig.storage,
-      },
-    };
+      // Load environment config and create directories
+      const envConfig = await this.loadEnvConfig(newConfig);
 
-    this.validateConfig(finalConfig);
-    this.config = finalConfig;
+      // Merge with environment config
+      const finalConfig = {
+        ...newConfig,
+        storage: {
+          ...newConfig.storage,
+          ...envConfig.storage,
+        },
+      };
+
+      this.validateConfig(finalConfig);
+      this.config = finalConfig;
+    } catch (error) {
+      if (error instanceof ConfigError) {
+        throw error;
+      }
+      throw new ConfigError(
+        ErrorCodes.CONFIG_INVALID,
+        `Failed to update configuration: ${error instanceof Error ? error.message : String(error)}`,
+        ConfigManager.createErrorContext('ConfigManager.updateConfig', { error })
+      );
+    }
   }
 
   /**
@@ -250,125 +300,149 @@ export class ConfigManager {
    * Loads configuration from environment variables and ensures directories exist
    */
   private async loadEnvConfig(customConfig: PartialAppConfig): Promise<AppConfig> {
-    const currentEnv = process.env[EnvVars.NODE_ENV];
-    const currentLogLevel = process.env[EnvVars.LOG_LEVEL];
-
-    // Handle storage directory with platform-agnostic paths
-    let storageDir = customConfig.storage?.baseDir || process.env[EnvVars.ATLAS_STORAGE_DIR];
-    let storageName = customConfig.storage?.name || process.env[EnvVars.ATLAS_STORAGE_NAME];
-
-    // Use defaults if env vars not provided
-    if (!storageDir) {
-      const userDataDir = this.getUserDataDir();
-      storageDir = join(userDataDir, 'atlas-mcp', 'storage');
-    }
-
-    if (!storageName) {
-      storageName = 'atlas-tasks';
-    }
-
-    // Ensure absolute path and create directory if needed
-    storageDir = resolve(storageDir);
     try {
-      const fs = await import('fs/promises');
-      await fs.mkdir(storageDir, {
-        recursive: true,
-        mode: PlatformCapabilities.getFileMode(0o755),
-      });
+      const currentEnv = process.env[EnvVars.NODE_ENV];
+      const currentLogLevel = process.env[EnvVars.LOG_LEVEL];
+
+      // Handle storage directory with platform-agnostic paths
+      let storageDir = customConfig.storage?.baseDir || process.env[EnvVars.ATLAS_STORAGE_DIR];
+      let storageName = customConfig.storage?.name || process.env[EnvVars.ATLAS_STORAGE_NAME];
+
+      // Use defaults if env vars not provided
+      if (!storageDir) {
+        const userDataDir = this.getUserDataDir();
+        storageDir = join(userDataDir, 'atlas-mcp', 'storage');
+      }
+
+      if (!storageName) {
+        storageName = 'atlas-tasks';
+      }
+
+      // Ensure absolute path and create directory if needed
+      storageDir = resolve(storageDir);
+      try {
+        const fs = await import('fs/promises');
+        await fs.mkdir(storageDir, {
+          recursive: true,
+          mode: PlatformCapabilities.getFileMode(0o755),
+        });
+      } catch (error) {
+        throw new ConfigError(
+          ErrorCodes.CONFIG_INVALID,
+          `Failed to create storage directory: ${error instanceof Error ? error.message : String(error)}`,
+          ConfigManager.createErrorContext('ConfigManager.loadEnvConfig', {
+            storageDir,
+            error,
+          })
+        );
+      }
+
+      const config: AppConfig = {
+        env: currentEnv || Environments.DEVELOPMENT,
+        storage: {
+          baseDir: storageDir,
+          name: storageName,
+          connection: {
+            maxRetries: 3,
+            retryDelay: 1000,
+            busyTimeout: 5000,
+          },
+          performance: {
+            checkpointInterval: 300000, // 5 minutes
+            cacheSize: 2000,
+            mmapSize: 64 * 1024 * 1024, // 64MB
+            maxMemory: 256 * 1024 * 1024, // 256MB
+            pageSize: 4096,
+          },
+        },
+        logging: { ...defaultLoggingConfig },
+      };
+
+      if (currentEnv) {
+        if (!Object.values(Environments).includes(currentEnv as any)) {
+          throw new ConfigError(
+            ErrorCodes.CONFIG_INVALID,
+            'Invalid environment',
+            ConfigManager.createErrorContext('ConfigManager.loadEnvConfig', {
+              currentEnv,
+              validEnvs: Object.values(Environments),
+            })
+          );
+        }
+        config.env = currentEnv;
+      }
+
+      if (currentLogLevel) {
+        const level = currentLogLevel.toLowerCase();
+        if (!Object.values(LogLevels).includes(level as any)) {
+          throw new ConfigError(
+            ErrorCodes.CONFIG_INVALID,
+            'Invalid log level',
+            ConfigManager.createErrorContext('ConfigManager.loadEnvConfig', {
+              currentLogLevel,
+              validLevels: Object.values(LogLevels),
+            })
+          );
+        }
+        config.logging.level = level as LogLevel;
+      }
+
+      return config;
     } catch (error) {
+      if (error instanceof ConfigError) {
+        throw error;
+      }
       throw new ConfigError(
         ErrorCodes.CONFIG_INVALID,
-        `Failed to create storage directory: ${error instanceof Error ? error.message : String(error)}`,
-        ConfigManager.createErrorContext('ConfigManager.loadEnvConfig', {
-          storageDir,
-          error,
-        })
+        `Failed to load environment config: ${error instanceof Error ? error.message : String(error)}`,
+        ConfigManager.createErrorContext('ConfigManager.loadEnvConfig', { error })
       );
     }
-
-    const config: AppConfig = {
-      env: currentEnv || Environments.DEVELOPMENT,
-      storage: {
-        baseDir: storageDir,
-        name: storageName,
-        connection: {
-          maxRetries: 3,
-          retryDelay: 1000,
-          busyTimeout: 5000,
-        },
-        performance: {
-          checkpointInterval: 300000, // 5 minutes
-          cacheSize: 2000,
-          mmapSize: 64 * 1024 * 1024, // 64MB
-          maxMemory: 256 * 1024 * 1024, // 256MB
-          pageSize: 4096,
-        },
-      },
-      logging: { ...defaultLoggingConfig },
-    };
-
-    if (currentEnv) {
-      if (!Object.values(Environments).includes(currentEnv as any)) {
-        throw new ConfigError(
-          ErrorCodes.CONFIG_INVALID,
-          'Invalid environment',
-          ConfigManager.createErrorContext('ConfigManager.loadEnvConfig', {
-            currentEnv,
-          })
-        );
-      }
-      config.env = currentEnv;
-    }
-
-    if (currentLogLevel) {
-      const level = currentLogLevel.toLowerCase();
-      if (!Object.values(LogLevels).includes(level as any)) {
-        throw new ConfigError(
-          ErrorCodes.CONFIG_INVALID,
-          'Invalid log level',
-          ConfigManager.createErrorContext('ConfigManager.loadEnvConfig', {
-            currentLogLevel,
-          })
-        );
-      }
-      config.logging.level = level as LogLevel;
-    }
-
-    return config;
   }
 
   /**
    * Validates configuration against schema
    */
   private validateConfig(config: AppConfig): void {
-    if (!config.storage?.baseDir) {
-      throw new ConfigError(
-        ErrorCodes.CONFIG_MISSING,
-        'Storage directory must be provided',
-        ConfigManager.createErrorContext('ConfigManager.validateConfig', {
-          config,
-        })
-      );
-    }
+    try {
+      if (!config.storage?.baseDir) {
+        throw new ConfigError(
+          ErrorCodes.CONFIG_MISSING,
+          'Storage directory must be provided',
+          ConfigManager.createErrorContext('ConfigManager.validateConfig', {
+            config,
+          })
+        );
+      }
 
-    if (!config.storage?.name) {
-      throw new ConfigError(
-        ErrorCodes.CONFIG_MISSING,
-        'Storage name must be provided',
-        ConfigManager.createErrorContext('ConfigManager.validateConfig', {
-          config,
-        })
-      );
-    }
+      if (!config.storage?.name) {
+        throw new ConfigError(
+          ErrorCodes.CONFIG_MISSING,
+          'Storage name must be provided',
+          ConfigManager.createErrorContext('ConfigManager.validateConfig', {
+            config,
+          })
+        );
+      }
 
-    if (config.logging?.level && !Object.values(LogLevels).includes(config.logging.level)) {
+      if (config.logging?.level && !Object.values(LogLevels).includes(config.logging.level)) {
+        throw new ConfigError(
+          ErrorCodes.CONFIG_INVALID,
+          'Invalid log level',
+          ConfigManager.createErrorContext('ConfigManager.validateConfig', {
+            level: config.logging.level,
+            validLevels: Object.values(LogLevels),
+          })
+        );
+      }
+    } catch (error) {
+      if (error instanceof ConfigError) {
+        throw error;
+      }
       throw new ConfigError(
         ErrorCodes.CONFIG_INVALID,
-        'Invalid log level',
-        ConfigManager.createErrorContext('ConfigManager.validateConfig', {
-          level: config.logging.level,
-          validLevels: Object.values(LogLevels),
-        })
+        `Failed to validate configuration: ${error instanceof Error ? error.message : String(error)}`,
+        ConfigManager.createErrorContext('ConfigManager.validateConfig', { error })
       );
     }
   }

@@ -21,7 +21,7 @@ export class EventManager {
   private static instance: EventManager | null = null;
   private static initializationPromise: Promise<EventManager> | null = null;
   private readonly emitter: EventEmitter;
-  private static logger: Logger;
+  private static logger: Logger | null = null;
   private readonly maxListeners: number = 100;
   private readonly debugMode: boolean = false; // Force debug mode off for MCP compatibility
   private initialized = false;
@@ -41,7 +41,9 @@ export class EventManager {
   private readonly CLEANUP_INTERVAL = 60000; // 1 minute
 
   setLogger(logger: Logger): void {
-    EventManager.logger = logger.child({ component: 'EventManager' });
+    if (!EventManager.logger) {
+      EventManager.logger = logger.child({ component: 'EventManager' });
+    }
   }
 
   private constructor() {
@@ -144,7 +146,7 @@ export class EventManager {
 
   emit<T extends AtlasEvent>(event: T, options?: { batch?: boolean }): boolean {
     try {
-      if (this.debugMode && EventManager.logger) {
+      if (this.debugMode && EventManager.logger !== null) {
         try {
           const debugInfo: Record<string, unknown> = {
             type: event.type,

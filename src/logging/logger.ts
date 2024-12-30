@@ -1,17 +1,23 @@
-import { LogLevel, LoggerConfig, LogEntry, LogLevels } from '../types/logging.js';
+import { promises as fs } from 'fs';
+import {
+  LogLevel,
+  LoggerConfig,
+  LogEntry,
+  LogLevels,
+  ITransportManager,
+} from '../types/logging.js';
 import { TransportManager } from './transport-manager.js';
 import { ErrorFormatter } from './error-formatter.js';
 import { EventManager } from '../events/event-manager.js';
 import { EventTypes } from '../types/events.js';
 import { ErrorFactory } from '../errors/error-factory.js';
-import { toSerializableError } from '../utils/error-utils.js';
 
 /**
  * Enhanced logger with advanced error handling and transport management
  */
 export class Logger {
   private static instance: Logger;
-  private transportManager?: TransportManager;
+  private transportManager: ITransportManager | undefined;
   private eventManager?: EventManager;
   private readonly component?: string;
 
@@ -19,10 +25,7 @@ export class Logger {
     private readonly config: LoggerConfig,
     private readonly context: Record<string, unknown> = {}
   ) {
-    // Initialize event manager from config if provided
-    if (config.eventManager) {
-      this.eventManager = config.eventManager;
-    }
+    // Don't initialize event manager in constructor to avoid circular dependency
   }
 
   /**
@@ -39,27 +42,11 @@ export class Logger {
       // Initialize transports first
       await logger.initializeTransports();
 
-      // Set event manager in transport manager if both are available
-      if (logger.eventManager && logger.transportManager) {
-        logger.transportManager.setEventManager(logger.eventManager);
-      }
-
       Logger.instance = logger;
       return logger;
     } catch (error) {
-      // Even initialization errors should go through event system
-      if (config.eventManager) {
-        config.eventManager.emitSystemEvent({
-          type: EventTypes.SYSTEM_ERROR,
-          timestamp: Date.now(),
-          metadata: {
-            error: toSerializableError(error),
-            component: 'Logger',
-            operation: 'initialize',
-          },
-        });
-      }
-      // Still set instance but without transports
+      // Log error to console during initialization
+      console.error('Failed to initialize logger:', ErrorFormatter.summarize(error));
       Logger.instance = logger;
       return logger;
     }
@@ -109,13 +96,16 @@ export class Logger {
 
       // Configure file transport
       if (this.config.file && this.config.logDir) {
+        // Ensure log directory exists with proper permissions
+        await fs.mkdir(this.config.logDir, { recursive: true, mode: 0o755 });
+
         transports.file = {
           type: 'file',
           options: {
             filename: `${this.config.logDir}/combined.log`,
             maxsize: this.config.maxFileSize || 5 * 1024 * 1024,
             maxFiles: this.config.maxFiles || 5,
-            minLevel: this.config.minLevel,
+            minLevel: this.config.minLevel || LogLevels.DEBUG, // Default to debug
           },
         };
 
@@ -129,12 +119,18 @@ export class Logger {
             minLevel: LogLevels.ERROR, // Error log always gets errors regardless of config
           },
         };
+
+        // Verify files are writable
+        await Promise.all([
+          fs.access(`${this.config.logDir}/combined.log`, fs.constants.W_OK).catch(() => {}),
+          fs.access(`${this.config.logDir}/error.log`, fs.constants.W_OK).catch(() => {}),
+        ]);
       }
 
       // Only create transport manager if we have transports configured
       if (Object.keys(transports).length > 0) {
         // Initialize transport manager with failover
-        const manager = new TransportManager(transports, {
+        const manager: ITransportManager = new TransportManager(transports, {
           enableFailover: true,
           failoverPath: this.config.logDir ? `${this.config.logDir}/failover.log` : undefined,
           healthChecks: true,
@@ -153,7 +149,7 @@ export class Logger {
           type: EventTypes.SYSTEM_ERROR,
           timestamp: Date.now(),
           metadata: {
-            error: toSerializableError(error),
+            error: ErrorFormatter.format(error),
             component: 'Logger',
             operation: 'initializeTransports',
           },
@@ -190,28 +186,50 @@ export class Logger {
 
     try {
       // Try transport manager first if available
-      if (this.transportManager) {
+      const manager = this.transportManager;
+      if (manager) {
         try {
-          await this.transportManager.write(entry);
+          await manager.write(entry);
           return;
         } catch (error) {
-          // Transport failed, emit error and fall back to console
+          // Transport failed, emit error and attempt recovery
           if (this.eventManager) {
             this.eventManager.emitSystemEvent({
               type: EventTypes.SYSTEM_ERROR,
               timestamp: Date.now(),
               metadata: {
-                error: toSerializableError(error),
+                error: ErrorFormatter.format(error),
                 component: 'Logger',
                 operation: 'write',
               },
             });
           }
+
+          // Attempt to reinitialize transports
+          await this.initializeTransports();
+
+          // Retry write after recovery
+          const recoveredManager = this.transportManager;
+          if (recoveredManager) {
+            await recoveredManager.write(entry);
+            return;
+          }
+        }
+      } else {
+        // No transport manager, attempt to initialize
+        await this.initializeTransports();
+        const newManager = this.transportManager;
+        if (newManager) {
+          await newManager.write(entry);
+          return;
         }
       }
 
-      // Skip logging if no transport manager and no failover
-      return;
+      // If all else fails, write to failover log directly
+      if (this.config.logDir) {
+        const failoverPath = `${this.config.logDir}/failover.log`;
+        await fs.appendFile(failoverPath, JSON.stringify(entry) + '\n');
+      }
     } catch (error) {
       // Even critical failures should not log to console
       // They will be handled by the error event system
@@ -220,7 +238,7 @@ export class Logger {
           type: EventTypes.SYSTEM_ERROR,
           timestamp: Date.now(),
           metadata: {
-            error: toSerializableError(error),
+            error: ErrorFormatter.format(error),
             component: 'Logger',
             operation: 'log',
           },
@@ -233,46 +251,44 @@ export class Logger {
    * Checks if a log level should be recorded
    */
   private shouldLog(level: LogLevel): boolean {
-    const levels = {
-      error: 0,
-      warn: 1,
-      info: 2,
-      http: 3,
-      debug: 4,
-      verbose: 5,
-      silly: 6,
+    // Map log levels to numeric values (higher = more severe)
+    const levelValues: Record<LogLevel, number> = {
+      [LogLevels.ERROR]: 50,
+      [LogLevels.WARN]: 40,
+      [LogLevels.INFO]: 30,
+      [LogLevels.HTTP]: 20,
+      [LogLevels.DEBUG]: 10,
+      [LogLevels.VERBOSE]: 5,
+      [LogLevels.SILLY]: 1,
     };
 
-    // Convert level names to lowercase for comparison
-    const normalizedLevel = level.toLowerCase() as keyof typeof levels;
-    const normalizedMinLevel = (
-      this.config.minLevel || 'info'
-    ).toLowerCase() as keyof typeof levels;
+    const configLevel = this.config.minLevel || LogLevels.DEBUG;
+    const minLevelValue = levelValues[configLevel] || levelValues[LogLevels.DEBUG];
+    const currentLevelValue = levelValues[level];
 
-    // Debug level (4) should log when minLevel is debug (4) or lower
-    // Info level (2) should NOT log when minLevel is debug (4)
-    return levels[normalizedLevel] >= levels[normalizedMinLevel];
+    // Log if current level is equal or more severe than min level
+    return currentLevelValue >= minLevelValue;
   }
 
   /**
    * Logs a debug message
    */
   debug(message: string, context?: Record<string, unknown>): void {
-    this.log('debug', message, context);
+    this.log(LogLevels.DEBUG, message, context);
   }
 
   /**
    * Logs an info message
    */
   info(message: string, context?: Record<string, unknown>): void {
-    this.log('info', message, context);
+    this.log(LogLevels.INFO, message, context);
   }
 
   /**
    * Logs a warning message
    */
   warn(message: string, context?: Record<string, unknown>): void {
-    this.log('warn', message, context);
+    this.log(LogLevels.WARN, message, context);
   }
 
   /**
@@ -280,9 +296,9 @@ export class Logger {
    */
   error(message: string, error?: unknown, context?: Record<string, unknown>): void {
     const formattedError = error ? ErrorFormatter.format(error) : undefined;
-    this.log('error', message, {
+    this.log(LogLevels.ERROR, message, {
       ...context,
-      error: formattedError ? toSerializableError(formattedError) : undefined,
+      error: formattedError,
     });
   }
 
@@ -291,9 +307,9 @@ export class Logger {
    */
   fatal(message: string, error?: unknown, context?: Record<string, unknown>): void {
     const formattedError = error ? ErrorFormatter.format(error, { includeStack: true }) : undefined;
-    this.log('error', `FATAL: ${message}`, {
+    this.log(LogLevels.ERROR, `FATAL: ${message}`, {
       ...context,
-      error: formattedError ? toSerializableError(formattedError) : undefined,
+      error: formattedError,
       fatal: true,
     });
   }

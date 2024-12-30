@@ -1,164 +1,227 @@
 import { promises as fs } from 'fs';
 import { dirname } from 'path';
 import { createWriteStream, WriteStream } from 'fs';
-import { LogEntry, LoggerTransportConfig, LogLevel } from '../types/logging.js';
-import { ErrorFactory } from '../errors/error-factory.js';
+import { LogEntry, LoggerTransportConfig, LogLevel, LogLevels } from '../types/logging.js';
+import { LoggingErrorFactory } from '../errors/logging-error.js';
 
 /**
- * Manages file-based logging with advanced features
+ * Queue entry for log writes
+ */
+interface QueueEntry {
+  entry: LogEntry;
+  resolve: () => void;
+  reject: (error: Error) => void;
+}
+
+/**
+ * Transport state
+ */
+interface TransportState {
+  isInitialized: boolean;
+  isClosed: boolean;
+  isProcessingQueue: boolean;
+  currentFileSize: number;
+  lastRotateCheck: number;
+}
+
+/**
+ * File transport for logging with advanced features
  */
 export class FileTransport {
   private writeStream?: WriteStream;
-  private writeQueue: Array<{
-    entry: LogEntry;
-    resolve: () => void;
-    reject: (error: Error) => void;
-  }> = [];
-  private isProcessingQueue = false;
-  private lastRotateCheck = 0;
-  private currentFileSize = 0;
+  private writeQueue: QueueEntry[] = [];
+  private initializePromise?: Promise<void>;
   private readonly ROTATE_CHECK_INTERVAL = 5000; // 5 seconds
+
+  private state: TransportState = {
+    isInitialized: false,
+    isClosed: false,
+    isProcessingQueue: false,
+    currentFileSize: 0,
+    lastRotateCheck: 0,
+  };
 
   constructor(
     private readonly config: LoggerTransportConfig['options'] & {
-      filename: string; // Make filename required
-      maxsize: number; // Make maxsize required
+      filename: string;
+      maxsize: number;
     }
   ) {}
 
   /**
-   * Initializes the file transport
+   * Determines if a log level should be recorded based on minimum level
    */
-  async initialize(): Promise<void> {
+  private shouldLog(level: LogLevel): boolean {
+    const levelValues: Record<LogLevel, number> = {
+      [LogLevels.ERROR]: 50,
+      [LogLevels.WARN]: 40,
+      [LogLevels.INFO]: 30,
+      [LogLevels.HTTP]: 20,
+      [LogLevels.DEBUG]: 10,
+      [LogLevels.VERBOSE]: 5,
+      [LogLevels.SILLY]: 1,
+    };
+
+    const configLevel = this.config.minLevel?.toLowerCase() || LogLevels.DEBUG;
+    const minLevelValue = levelValues[configLevel as LogLevel] || levelValues[LogLevels.DEBUG];
+    const currentLevelValue = levelValues[level];
+
+    return currentLevelValue >= minLevelValue;
+  }
+
+  /**
+   * Ensures the log directory exists
+   */
+  private async ensureDirectory(dir: string): Promise<void> {
     try {
-      // Ensure directory exists
-      await fs.mkdir(dirname(this.config.filename), { recursive: true });
-
-      // Get current file size if exists
-      try {
-        const stats = await fs.stat(this.config.filename);
-        this.currentFileSize = stats.size;
-      } catch {
-        this.currentFileSize = 0;
-      }
-
-      // Create write stream
-      await this.createWriteStream();
+      await fs.mkdir(dir, { recursive: true });
     } catch (error) {
-      throw ErrorFactory.createDatabaseError(
-        'FileTransport.initialize',
+      throw LoggingErrorFactory.createDirectoryError(
+        'FileTransport.ensureDirectory',
+        dir,
         error instanceof Error ? error : new Error(String(error))
       );
     }
   }
 
   /**
+   * Gets current file size if exists
+   */
+  private async getCurrentFileSize(): Promise<number> {
+    try {
+      const stats = await fs.stat(this.config.filename);
+      return stats.size;
+    } catch {
+      return 0;
+    }
+  }
+
+  /**
+   * Initializes the transport
+   */
+  async initialize(): Promise<void> {
+    if (this.initializePromise) {
+      return this.initializePromise;
+    }
+
+    this.initializePromise = (async () => {
+      try {
+        const dir = dirname(this.config.filename);
+        await this.ensureDirectory(dir);
+        this.state.currentFileSize = await this.getCurrentFileSize();
+        await this.createWriteStream();
+        this.state.isInitialized = true;
+      } catch (error) {
+        throw LoggingErrorFactory.createInitError(
+          'FileTransport.initialize',
+          error instanceof Error ? error : new Error(String(error))
+        );
+      }
+    })();
+
+    return this.initializePromise;
+  }
+
+  /**
    * Creates or recreates the write stream
    */
   private async createWriteStream(): Promise<void> {
-    // Close existing stream if any
-    if (this.writeStream) {
-      await this.closeStream();
+    try {
+      if (this.writeStream) {
+        await this.closeStream();
+      }
+
+      await this.ensureDirectory(dirname(this.config.filename));
+      this.writeStream = createWriteStream(this.config.filename, { flags: 'a' });
+
+      this.writeStream.on('error', error => {
+        this.handleStreamError(error).catch(err => {
+          throw LoggingErrorFactory.createTransportError(
+            'FileTransport.createWriteStream',
+            new Error(error.message + ' - ' + (err instanceof Error ? err.message : String(err)))
+          );
+        });
+      });
+
+      this.writeStream.on('finish', () => {
+        this.state.currentFileSize = 0;
+      });
+    } catch (error) {
+      throw LoggingErrorFactory.createTransportError(
+        'FileTransport.createWriteStream',
+        error instanceof Error ? error : new Error(String(error))
+      );
     }
-
-    this.writeStream = createWriteStream(this.config.filename, { flags: 'a' });
-
-    // Handle stream errors
-    this.writeStream.on('error', error => {
-      // Handle error through event system instead of console
-      this.handleStreamError(error);
-    });
-
-    // Update file size on write
-    this.writeStream.on('finish', () => {
-      this.currentFileSize = 0;
-    });
   }
 
   /**
-   * Writes a log entry to file
-   */
-  /**
-   * Checks if a log level should be recorded
-   */
-  private shouldLog(level: LogLevel): boolean {
-    const levels = {
-      error: 0,
-      warn: 1,
-      info: 2,
-      http: 3,
-      debug: 4,
-      verbose: 5,
-      silly: 6,
-    };
-
-    // Convert level names to lowercase for comparison
-    const normalizedLevel = level.toLowerCase() as keyof typeof levels;
-    const normalizedMinLevel = (this.config.minLevel?.toLowerCase() ||
-      'info') as keyof typeof levels;
-
-    // Debug level (4) should log when minLevel is debug (4) or lower
-    // Info level (2) should NOT log when minLevel is debug (4)
-    return levels[normalizedLevel] >= levels[normalizedMinLevel];
-  }
-
-  /**
-   * Writes a log entry to file
+   * Writes a log entry
    */
   async write(entry: LogEntry): Promise<void> {
-    // Skip if below minimum level
-    if (!this.shouldLog(entry.level)) {
+    if (this.state.isClosed) {
+      throw LoggingErrorFactory.createTransportError(
+        'FileTransport.write',
+        new Error('Transport is closed')
+      );
+    }
+
+    if (entry.level !== LogLevels.ERROR && !this.shouldLog(entry.level)) {
       return;
+    }
+
+    if (!this.writeStream) {
+      await this.initialize();
     }
 
     return new Promise<void>((resolve, reject) => {
-      // Add to queue
       this.writeQueue.push({ entry, resolve, reject });
-
-      // Start processing if not already running
-      if (!this.isProcessingQueue) {
-        this.processQueue().catch(reject);
-      }
+      this.processQueueAsync().catch(reject);
     });
   }
 
   /**
-   * Processes the write queue
+   * Processes the write queue asynchronously
    */
-  private async processQueue(): Promise<void> {
-    if (this.isProcessingQueue || this.writeQueue.length === 0) {
+  private async processQueueAsync(): Promise<void> {
+    if (this.state.isProcessingQueue || this.writeQueue.length === 0) {
       return;
     }
 
-    this.isProcessingQueue = true;
+    this.state.isProcessingQueue = true;
 
     try {
       while (this.writeQueue.length > 0) {
-        // Check if rotation needed
         await this.checkRotation();
 
         const { entry, resolve, reject } = this.writeQueue[0];
-
         try {
           await this.writeEntry(entry);
-          this.writeQueue.shift(); // Remove processed entry
+          this.writeQueue.shift();
           resolve();
         } catch (error) {
-          this.writeQueue.shift(); // Remove failed entry
-          reject(error instanceof Error ? error : new Error(String(error)));
+          this.writeQueue.shift();
+          reject(
+            LoggingErrorFactory.createWriteError(
+              'FileTransport.processQueue',
+              error instanceof Error ? error : new Error(String(error))
+            )
+          );
         }
       }
     } finally {
-      this.isProcessingQueue = false;
+      this.state.isProcessingQueue = false;
     }
   }
 
   /**
-   * Writes a single log entry
+   * Writes a single entry
    */
   private async writeEntry(entry: LogEntry): Promise<void> {
     if (!this.writeStream) {
-      throw new Error('Write stream not initialized');
+      throw LoggingErrorFactory.createTransportError(
+        'FileTransport.writeEntry',
+        new Error('Write stream not initialized')
+      );
     }
 
     const line = JSON.stringify(entry) + '\n';
@@ -166,17 +229,22 @@ export class FileTransport {
 
     return new Promise<void>((resolve, reject) => {
       if (!this.writeStream) {
-        reject(new Error('Write stream not initialized'));
+        reject(
+          LoggingErrorFactory.createTransportError(
+            'FileTransport.writeEntry',
+            new Error('Write stream not initialized')
+          )
+        );
         return;
       }
 
-      this.writeStream.write(buffer, error => {
-        if (error) {
-          reject(error);
+      this.writeStream.write(buffer, writeError => {
+        if (writeError) {
+          reject(LoggingErrorFactory.createWriteError('FileTransport.writeEntry', writeError));
           return;
         }
 
-        this.currentFileSize += buffer.length;
+        this.state.currentFileSize += buffer.length;
         resolve();
       });
     });
@@ -187,15 +255,13 @@ export class FileTransport {
    */
   private async checkRotation(): Promise<void> {
     const now = Date.now();
-
-    // Only check periodically
-    if (now - this.lastRotateCheck < this.ROTATE_CHECK_INTERVAL) {
+    if (now - this.state.lastRotateCheck < this.ROTATE_CHECK_INTERVAL) {
       return;
     }
 
-    this.lastRotateCheck = now;
+    this.state.lastRotateCheck = now;
 
-    if (this.currentFileSize >= this.config.maxsize) {
+    if (this.state.currentFileSize >= this.config.maxsize) {
       await this.rotateLog();
     }
   }
@@ -208,41 +274,42 @@ export class FileTransport {
       return;
     }
 
-    // Close current stream
-    await this.closeStream();
+    try {
+      await this.closeStream();
 
-    // Rotate files
-    for (let i = this.config.maxFiles || 5; i > 0; i--) {
-      const fromFile = i === 1 ? this.config.filename : `${this.config.filename}.${i - 1}`;
-      const toFile = `${this.config.filename}.${i}`;
+      for (let i = this.config.maxFiles || 5; i > 0; i--) {
+        const fromFile = i === 1 ? this.config.filename : `${this.config.filename}.${i - 1}`;
+        const toFile = `${this.config.filename}.${i}`;
 
-      try {
-        await fs.rename(fromFile, toFile);
-      } catch {
-        // Ignore errors if files don't exist
+        try {
+          await fs.rename(fromFile, toFile);
+        } catch {
+          // Ignore errors if files don't exist
+        }
       }
-    }
 
-    // Create new stream
-    await this.createWriteStream();
-    this.currentFileSize = 0;
+      await this.createWriteStream();
+      this.state.currentFileSize = 0;
+    } catch (error) {
+      throw LoggingErrorFactory.createRotationError(
+        'FileTransport.rotateLog',
+        error instanceof Error ? error : new Error(String(error))
+      );
+    }
   }
 
   /**
    * Handles stream errors
    */
   private async handleStreamError(error: Error): Promise<void> {
-    // No direct console logging - handled by error event
-    const recreateError = new Error(
-      `Stream error occurred: ${error.message}. Attempting to recreate stream.`
-    );
-
-    // Try to recreate stream
     try {
       await this.createWriteStream();
     } catch (err) {
-      throw new Error(
-        `Failed to recreate stream after error: ${recreateError.message}. Additional error: ${err instanceof Error ? err.message : String(err)}`
+      throw LoggingErrorFactory.createTransportError(
+        'FileTransport.handleStreamError',
+        new Error(
+          error.message + ' - ' + (err instanceof Error ? err : new Error(String(err))).message
+        )
       );
     }
   }
@@ -262,8 +329,9 @@ export class FileTransport {
         resolve();
       });
 
-      // Handle potential errors during close
-      this.writeStream.on('error', reject);
+      this.writeStream.on('error', error => {
+        reject(LoggingErrorFactory.createTransportError('FileTransport.closeStream', error));
+      });
     });
   }
 
@@ -271,13 +339,23 @@ export class FileTransport {
    * Closes the transport
    */
   async close(): Promise<void> {
-    // Process remaining entries
-    if (this.writeQueue.length > 0) {
-      await this.processQueue();
+    if (this.state.isClosed) {
+      return;
     }
 
-    // Close stream
-    await this.closeStream();
+    try {
+      if (this.writeQueue.length > 0) {
+        await this.processQueueAsync();
+      }
+
+      await this.closeStream();
+      this.state.isClosed = true;
+    } catch (error) {
+      throw LoggingErrorFactory.createTransportError(
+        'FileTransport.close',
+        error instanceof Error ? error : new Error(String(error))
+      );
+    }
   }
 
   /**
@@ -296,12 +374,11 @@ export class FileTransport {
         currentFileSize: stats.size,
         queueLength: this.writeQueue.length,
       };
-    } catch (error) {
+    } catch {
       return {
         active: false,
         currentFileSize: 0,
         queueLength: this.writeQueue.length,
-        error: error instanceof Error ? error.message : String(error),
       };
     }
   }
