@@ -82,7 +82,7 @@ export class TaskStatusBatchProcessor extends BaseBatchProcessor<Task> {
         errors.push(`Cannot complete task ${task.path} while sibling tasks are blocked`);
       }
 
-      if (newStatus === TaskStatus.IN_PROGRESS && siblingStatuses.has(TaskStatus.FAILED)) {
+      if (newStatus === TaskStatus.IN_PROGRESS && siblingStatuses.has(TaskStatus.CANCELLED)) {
         errors.push(`Cannot start task ${task.path} while sibling tasks have failed`);
       }
     }
@@ -148,7 +148,7 @@ export class TaskStatusBatchProcessor extends BaseBatchProcessor<Task> {
     const dependentTasks = await this.dependencies.storage.getDependentTasks(task.path);
 
     for (const depTask of dependentTasks) {
-      if (task.status === TaskStatus.BLOCKED || task.status === TaskStatus.FAILED) {
+      if (task.status === TaskStatus.BLOCKED || task.status === TaskStatus.CANCELLED) {
         await this.updateTaskStatus(depTask, TaskStatus.BLOCKED);
       } else if (task.status === TaskStatus.COMPLETED) {
         const allDepsCompleted = await this.areAllDependenciesCompleted(depTask);

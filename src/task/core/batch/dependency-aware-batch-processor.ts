@@ -230,7 +230,7 @@ export class DependencyAwareBatchProcessor extends BaseBatchProcessor {
         const depTask = await this.dependencies.storage.getTask(depId);
         if (!depTask) {
           incompleteDeps.push(depId);
-        } else if (depTask.status === TaskStatus.FAILED) {
+        } else if (depTask.status === TaskStatus.CANCELLED) {
           failedDeps.push(depId);
         } else if (depTask.status !== TaskStatus.COMPLETED) {
           incompleteDeps.push(depId);
@@ -241,7 +241,7 @@ export class DependencyAwareBatchProcessor extends BaseBatchProcessor {
       if (failedDeps.length > 0) {
         // If any dependencies failed, mark this task as failed
         return await this.dependencies.storage.updateTask(task.task.path, {
-          status: TaskStatus.FAILED,
+          status: TaskStatus.CANCELLED,
           metadata: {
             ...currentTask.metadata,
             failureReason: `Dependencies failed: ${failedDeps.join(', ')}`,

@@ -16,9 +16,9 @@ export class StatusValidator {
     // Define valid status transitions
     const validTransitions: Record<TaskStatus, TaskStatus[]> = {
       [TaskStatus.PENDING]: [TaskStatus.IN_PROGRESS, TaskStatus.BLOCKED],
-      [TaskStatus.IN_PROGRESS]: [TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.BLOCKED],
+      [TaskStatus.IN_PROGRESS]: [TaskStatus.COMPLETED, TaskStatus.CANCELLED, TaskStatus.BLOCKED],
       [TaskStatus.COMPLETED]: [], // No transitions from COMPLETED
-      [TaskStatus.FAILED]: [TaskStatus.PENDING], // Can retry from FAILED
+      [TaskStatus.CANCELLED]: [TaskStatus.PENDING], // Can retry from CANCELLED
       [TaskStatus.BLOCKED]: [TaskStatus.PENDING, TaskStatus.IN_PROGRESS], // Can unblock
     };
 
@@ -113,7 +113,7 @@ export class StatusValidator {
       const depTask = await getTaskByPath(depPath);
       if (
         !depTask ||
-        [TaskStatus.FAILED, TaskStatus.BLOCKED, TaskStatus.PENDING].includes(depTask.status)
+        [TaskStatus.CANCELLED, TaskStatus.BLOCKED, TaskStatus.PENDING].includes(depTask.status)
       ) {
         return true;
       }
@@ -142,7 +142,7 @@ export class StatusValidator {
     // Cannot start if siblings have failed
     if (
       newStatus === TaskStatus.IN_PROGRESS &&
-      siblings.some(s => s.status === TaskStatus.FAILED)
+      siblings.some(s => s.status === TaskStatus.CANCELLED)
     ) {
       throw createError(
         ErrorCodes.TASK_STATUS,

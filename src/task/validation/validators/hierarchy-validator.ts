@@ -94,7 +94,7 @@ export class HierarchyValidator {
     if (task.type === TaskType.MILESTONE && newType === TaskType.TASK) {
       throw createError(
         ErrorCodes.VALIDATION_ERROR,
-        'Cannot change MILESTONE to TASK if it has subtasks',
+        'Cannot change MILESTONE to TASK if it has child tasks',
         'validateTypeChange'
       );
     }

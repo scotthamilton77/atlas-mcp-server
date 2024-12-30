@@ -36,7 +36,6 @@ const ensureTaskArrays = (task: Partial<Task>): Task =>
     ...task,
     notes: task.notes || [],
     dependencies: task.dependencies || [],
-    subtasks: task.subtasks || [],
     metadata: task.metadata || {},
   }) as Task;
 

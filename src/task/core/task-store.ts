@@ -1,474 +1,313 @@
-/**
- * Path-based task storage with caching, indexing, and transaction support
- */
-import { Task, TaskStatus, CreateTaskInput } from '../../types/task.js';
-import { PathValidator } from '../../validation/index.js';
-import { TaskStorage } from '../../types/storage.js';
 import { Logger } from '../../logging/index.js';
+import { TaskStorage } from '../../types/storage.js';
+import { Task, TaskStatus, CreateTaskInput, UpdateTaskInput } from '../../types/task.js';
 import { TaskIndexManager } from './indexing/index-manager.js';
-import { CacheManager } from './cache/cache-manager.js';
+import { TaskCacheManager } from '../manager/task-cache-manager.js';
 import { TaskErrorFactory } from '../../errors/task-error.js';
-import { TransactionManager } from './transactions/transaction-manager.js';
 
-const BATCH_SIZE = 50; // Maximum number of tasks to process in parallel
-
+/**
+ * Core task store implementation
+ */
 export class TaskStore {
   private readonly logger: Logger;
   private readonly indexManager: TaskIndexManager;
-  private readonly cacheManager: CacheManager;
-  private readonly pathValidator: PathValidator;
-  private nodes: Map<
-    string,
-    {
-      path: string;
-      dependencies: Set<string>;
-      dependents: Set<string>;
-      visited: boolean;
-      inPath: boolean;
-      ref: WeakRef<object>;
-    }
-  >;
-  private readonly transactionManager: TransactionManager;
-  private readonly HIGH_MEMORY_THRESHOLD = 0.7; // 70% memory pressure threshold
-  private readonly MEMORY_CHECK_INTERVAL = 10000; // 10 seconds
-  private memoryCheckInterval?: NodeJS.Timeout;
+  private readonly cacheManager: TaskCacheManager;
 
   constructor(private readonly storage: TaskStorage) {
     this.logger = Logger.getInstance().child({ component: 'TaskStore' });
     this.indexManager = new TaskIndexManager();
-    this.pathValidator = new PathValidator();
-    this.cacheManager = CacheManager.getInstance({
-      maxSize: 500,
-      ttl: 30000,
-      maxTTL: 60000,
-      cleanupInterval: 15000,
-    });
-    this.nodes = new Map();
-    this.transactionManager = TransactionManager.getInstance(storage);
-
-    // Start memory monitoring
-    this.startMemoryMonitoring();
-  }
-
-  private startMemoryMonitoring(): void {
-    this.memoryCheckInterval = setInterval(() => {
-      const memoryUsage = process.memoryUsage();
-      const heapUsed = memoryUsage.heapUsed / memoryUsage.heapTotal;
-
-      this.logger.debug('Memory usage', {
-        heapUsed: `${(heapUsed * 100).toFixed(1)}%`,
-        heapTotal: `${Math.round(memoryUsage.heapTotal / 1024 / 1024)}MB`,
-        rss: `${Math.round(memoryUsage.rss / 1024 / 1024)}MB`,
-        external: `${Math.round(memoryUsage.external / 1024 / 1024)}MB`,
-        arrayBuffers: `${Math.round(memoryUsage.arrayBuffers / 1024 / 1024)}MB`,
-        nodeCount: this.nodes.size,
-        activeNodes: Array.from(this.nodes.keys()).length,
-      });
-
-      if (heapUsed > this.HIGH_MEMORY_THRESHOLD) {
-        this.logger.warn('High memory usage detected in TaskStore', {
-          heapUsed: `${(heapUsed * 100).toFixed(1)}%`,
-        });
-
-        // Force cleanup
-        this.cleanupResources(true);
-
-        // Force GC if available
-        if (global.gc) {
-          global.gc();
-        }
-      }
-    }, this.MEMORY_CHECK_INTERVAL);
-
-    // Ensure cleanup on process exit
-    process.once('beforeExit', () => {
-      if (this.memoryCheckInterval) {
-        clearInterval(this.memoryCheckInterval);
-        this.memoryCheckInterval = undefined;
-      }
-    });
-  }
-
-  private async cleanupResources(force: boolean = false): Promise<void> {
-    try {
-      const startTime = Date.now();
-      let cleanedCount = 0;
-
-      // Clean up nodes whose refs have been collected
-      for (const [path, node] of this.nodes.entries()) {
-        if (!node.ref.deref() || force) {
-          this.nodes.delete(path);
-          cleanedCount++;
-        }
-      }
-
-      // Force garbage collection if needed
-      if (global.gc && (force || cleanedCount > 0)) {
-        global.gc();
-      }
-
-      const endTime = Date.now();
-      this.logger.info('Resource cleanup completed', {
-        duration: endTime - startTime,
-        cleanedCount,
-        remainingNodes: this.nodes.size,
-        memoryUsage: this.getMemoryMetrics(),
-      });
-    } catch (error) {
-      this.logger.error('Error during resource cleanup', { error });
-    }
-  }
-
-  private getMemoryMetrics(): Record<string, string> {
-    const memoryUsage = process.memoryUsage();
-    return {
-      heapUsed: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)}MB`,
-      heapTotal: `${Math.round(memoryUsage.heapTotal / 1024 / 1024)}MB`,
-      rss: `${Math.round(memoryUsage.rss / 1024 / 1024)}MB`,
-      external: `${Math.round(memoryUsage.external / 1024 / 1024)}MB`,
-      arrayBuffers: `${Math.round(memoryUsage.arrayBuffers / 1024 / 1024)}MB`,
-      heapUsedPercentage: `${((memoryUsage.heapUsed / memoryUsage.heapTotal) * 100).toFixed(1)}%`,
-    };
+    this.cacheManager = new TaskCacheManager();
   }
 
   /**
-   * Creates a new task with proper transaction handling and indexing
+   * Initialize store
+   */
+  async initialize(): Promise<void> {
+    try {
+      await this.storage.initialize();
+      this.logger.info('Task store initialized');
+    } catch (error) {
+      this.logger.error('Failed to initialize task store', { error });
+      throw TaskErrorFactory.createTaskOperationError(
+        'TaskStore.initialize',
+        'Failed to initialize task store'
+      );
+    }
+  }
+
+  /**
+   * Create a new task
    */
   async createTask(input: CreateTaskInput): Promise<Task> {
-    const pathResult = this.pathValidator.validatePath(input.path);
-    if (!pathResult.isValid) {
-      throw TaskErrorFactory.createTaskValidationError(
-        'TaskStore.createTask',
-        pathResult.error || `Invalid task path: ${input.path}`,
-        { input }
-      );
-    }
-
-    const transaction = await this.transactionManager.begin();
-
     try {
-      // Create task in storage
       const task = await this.storage.createTask(input);
-
-      // Update index and cache
-      await Promise.all([
-        this.indexManager.indexTask(task),
-        this.cacheManager.set(task.path, task),
-      ]);
-
-      await this.transactionManager.commit(transaction);
+      await this.indexManager.indexTask(task);
+      this.cacheManager.set(task);
       return task;
     } catch (error) {
-      await this.transactionManager.rollback(transaction);
-      this.logger.error('Failed to create task', { error, input });
-      throw TaskErrorFactory.createTaskCreationError(
-        'TaskStore.createTask',
-        error instanceof Error ? error : new Error(String(error)),
-        { input }
-      );
+      this.logger.error('Failed to create task', {
+        error,
+        context: { input },
+      });
+      throw error;
     }
   }
 
   /**
-   * Gets a task by path, checking cache first
+   * Update an existing task
    */
-  protected async getTaskByPath(path: string): Promise<Task | null> {
-    const pathResult = this.pathValidator.validatePath(path);
-    if (!pathResult.isValid) {
-      throw TaskErrorFactory.createTaskValidationError(
-        'TaskStore.getTaskByPath',
-        pathResult.error || `Invalid task path: ${path}`,
-        { path }
-      );
-    }
-
-    // Check cache first
-    const cachedTask = await this.cacheManager.get<Task>(path);
-    if (cachedTask) {
-      return cachedTask;
-    }
-
-    // Check index
-    const indexedTask = await this.indexManager.getTaskByPath(path);
-    if (indexedTask) {
-      await this.cacheManager.set(path, indexedTask);
-      return indexedTask;
-    }
-
-    // Load from storage
-    const task = await this.storage.getTask(path);
-    if (task) {
-      await this.cacheManager.set(path, task);
+  async updateTask(path: string, updates: UpdateTaskInput): Promise<Task> {
+    try {
+      const task = await this.storage.updateTask(path, updates);
       await this.indexManager.indexTask(task);
+      this.cacheManager.set(task);
+      return task;
+    } catch (error) {
+      this.logger.error('Failed to update task', {
+        error,
+        context: { path, updates },
+      });
+      throw error;
     }
-
-    return task;
   }
 
   /**
-   * Gets tasks by path pattern with efficient caching
+   * Get a task by path
+   */
+  async getTask(path: string): Promise<Task | null> {
+    try {
+      // Check cache first
+      const cached = this.cacheManager.get(path);
+      if (cached) {
+        return cached;
+      }
+
+      // Check index
+      const indexed = this.indexManager.getTask(path);
+      if (indexed) {
+        const task = await this.storage.getTask(path);
+        if (task) {
+          this.cacheManager.set(task);
+          return task;
+        }
+      }
+
+      // Get from storage
+      const task = await this.storage.getTask(path);
+      if (task) {
+        await this.indexManager.indexTask(task);
+        this.cacheManager.set(task);
+      }
+
+      return task;
+    } catch (error) {
+      this.logger.error('Failed to get task', {
+        error,
+        context: { path },
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Get multiple tasks by paths
+   */
+  async getTasks(paths: string[]): Promise<Task[]> {
+    try {
+      const tasks: Task[] = [];
+      const uncached: string[] = [];
+
+      // Check cache first
+      for (const path of paths) {
+        const cached = this.cacheManager.get(path);
+        if (cached) {
+          tasks.push(cached);
+        } else {
+          uncached.push(path);
+        }
+      }
+
+      // Get remaining from storage
+      if (uncached.length > 0) {
+        const fromStorage = await this.storage.getTasks(uncached);
+        for (const task of fromStorage) {
+          await this.indexManager.indexTask(task);
+          this.cacheManager.set(task);
+          tasks.push(task);
+        }
+      }
+
+      return tasks;
+    } catch (error) {
+      this.logger.error('Failed to get tasks', {
+        error,
+        context: { paths },
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Get tasks by pattern
    */
   async getTasksByPattern(pattern: string): Promise<Task[]> {
     try {
-      // Get indexed tasks first
-      const indexedTasks = await this.indexManager.getProjectTasks(pattern);
-
-      // Batch process cache checks
-      const tasks: Task[] = [];
-      const missingPaths: string[] = [];
-
-      await this.processBatch(indexedTasks, async indexedTask => {
-        const cachedTask = await this.cacheManager.get<Task>(indexedTask.path);
-        if (cachedTask) {
-          tasks.push(cachedTask);
-        } else {
-          missingPaths.push(indexedTask.path);
-        }
-      });
-
-      // If all tasks were cached, return them
-      if (missingPaths.length === 0) {
-        return tasks;
+      // Check index first
+      const indexed = this.indexManager.getTasksByPattern(pattern);
+      if (indexed.length > 0) {
+        return await this.getTasks(indexed.map(t => t.path));
       }
 
-      // Load missing tasks from storage
-      const storageTasks = await this.storage.getTasksByPattern(pattern);
-
-      // Update cache and indexes for missing tasks
-      await this.processBatch(storageTasks, async task => {
+      // Get from storage
+      const tasks = await this.storage.getTasksByPattern(pattern);
+      for (const task of tasks) {
         await this.indexManager.indexTask(task);
-        await this.cacheManager.set(task.path, task);
-        tasks.push(task);
-      });
+        this.cacheManager.set(task);
+      }
 
       return tasks;
     } catch (error) {
-      this.logger.error('Failed to get tasks by pattern', { error, pattern });
-      throw TaskErrorFactory.createTaskStorageError(
-        'TaskStore.getTasksByPattern',
-        error instanceof Error ? error : new Error(String(error)),
-        { pattern }
-      );
+      this.logger.error('Failed to get tasks by pattern', {
+        error,
+        context: { pattern },
+      });
+      throw error;
     }
   }
 
   /**
-   * Gets tasks by status with efficient caching
+   * Get tasks by status
    */
   async getTasksByStatus(status: TaskStatus): Promise<Task[]> {
     try {
-      // Get indexed tasks first
-      const indexedTasks = await this.indexManager.getTasksByStatus(status, '');
-
-      // Batch process cache checks
-      const tasks: Task[] = [];
-      const missingPaths: string[] = [];
-
-      await this.processBatch(indexedTasks, async indexedTask => {
-        const cachedTask = await this.cacheManager.get<Task>(indexedTask.path);
-        if (cachedTask) {
-          tasks.push(cachedTask);
-        } else {
-          missingPaths.push(indexedTask.path);
-        }
-      });
-
-      // If all tasks were cached, return them
-      if (missingPaths.length === 0) {
-        return tasks;
+      // Check index first
+      const indexed = this.indexManager.getTasksByStatus(status);
+      if (indexed.length > 0) {
+        return await this.getTasks(indexed.map(t => t.path));
       }
 
-      // Load missing tasks from storage
-      const storageTasks = await this.storage.getTasksByStatus(status);
-
-      // Update cache and indexes for missing tasks
-      await this.processBatch(storageTasks, async task => {
+      // Get from storage
+      const tasks = await this.storage.getTasksByStatus(status);
+      for (const task of tasks) {
         await this.indexManager.indexTask(task);
-        await this.cacheManager.set(task.path, task);
-        tasks.push(task);
-      });
+        this.cacheManager.set(task);
+      }
 
       return tasks;
     } catch (error) {
-      this.logger.error('Failed to get tasks by status', { error, status });
-      throw TaskErrorFactory.createTaskStorageError(
-        'TaskStore.getTasksByStatus',
-        error instanceof Error ? error : new Error(String(error)),
-        { status }
-      );
+      this.logger.error('Failed to get tasks by status', {
+        error,
+        context: { status },
+      });
+      throw error;
     }
   }
 
   /**
-   * Gets subtasks of a task with efficient caching
+   * Get child tasks
    */
-  async getSubtasks(parentPath: string): Promise<Task[]> {
-    const pathResult = this.pathValidator.validatePath(parentPath);
-    if (!pathResult.isValid) {
-      throw TaskErrorFactory.createTaskValidationError(
-        'TaskStore.getSubtasks',
-        pathResult.error || `Invalid parent path: ${parentPath}`,
-        { parentPath }
-      );
-    }
-
+  async getChildren(parentPath: string): Promise<Task[]> {
     try {
-      // Get indexed tasks first
-      const indexedTasks = await this.indexManager.getTasksByParent(parentPath);
-
-      // Batch process cache checks
-      const tasks: Task[] = [];
-      const missingPaths: string[] = [];
-
-      await this.processBatch(indexedTasks, async indexedTask => {
-        const cachedTask = await this.cacheManager.get<Task>(indexedTask.path);
-        if (cachedTask) {
-          tasks.push(cachedTask);
-        } else {
-          missingPaths.push(indexedTask.path);
-        }
-      });
-
-      // If all tasks were cached, return them
-      if (missingPaths.length === 0) {
-        return tasks;
+      // Check index first
+      const indexed = this.indexManager.getChildren(parentPath);
+      if (indexed.length > 0) {
+        return await this.getTasks(indexed.map(t => t.path));
       }
 
-      // Load missing tasks from storage
-      const storageTasks = await this.storage.getSubtasks(parentPath);
-
-      // Update cache and indexes for missing tasks
-      await this.processBatch(storageTasks, async task => {
+      // Get from storage
+      const tasks = await this.storage.getChildren(parentPath);
+      for (const task of tasks) {
         await this.indexManager.indexTask(task);
-        await this.cacheManager.set(task.path, task);
-        tasks.push(task);
-      });
+        this.cacheManager.set(task);
+      }
 
       return tasks;
     } catch (error) {
-      this.logger.error('Failed to get subtasks', { error, parentPath });
-      throw TaskErrorFactory.createTaskStorageError(
-        'TaskStore.getSubtasks',
-        error instanceof Error ? error : new Error(String(error)),
-        { parentPath }
-      );
+      this.logger.error('Failed to get child tasks', {
+        error,
+        context: { parentPath },
+      });
+      throw error;
     }
   }
 
   /**
-   * Processes tasks in batches with memory-efficient processing
+   * Delete a task
    */
-  private async processBatch<T>(items: T[], processor: (item: T) => Promise<void>): Promise<void> {
-    // Process in smaller chunks to avoid memory spikes
-    const chunkSize = Math.min(BATCH_SIZE, 10);
-    for (let i = 0; i < items.length; i += chunkSize) {
-      const chunk = items.slice(i, i + chunkSize);
-
-      // Process items sequentially in chunk to reduce memory pressure
-      for (const item of chunk) {
-        await processor(item);
-      }
-
-      // Allow GC between chunks
-      if (i > 0 && i % (chunkSize * 5) === 0) {
-        if (global.gc) {
-          global.gc();
-        }
-      }
-    }
-  }
-
-  /**
-   * Clears all tasks and resets indexes
-   */
-  async clearAllTasks(confirm: boolean): Promise<void> {
-    if (!confirm) {
-      throw TaskErrorFactory.createTaskValidationError(
-        'TaskStore.clearAllTasks',
-        'Must explicitly confirm task deletion',
-        { confirm }
-      );
-    }
-
-    const transaction = await this.transactionManager.begin();
-
+  async deleteTask(path: string): Promise<void> {
     try {
-      // Clear all tasks from storage
+      await this.storage.deleteTask(path);
+      await this.indexManager.removeTask(path);
+      this.cacheManager.delete(path);
+    } catch (error) {
+      this.logger.error('Failed to delete task', {
+        error,
+        context: { path },
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Delete multiple tasks
+   */
+  async deleteTasks(paths: string[]): Promise<void> {
+    try {
+      await this.storage.deleteTasks(paths);
+      for (const path of paths) {
+        await this.indexManager.removeTask(path);
+        this.cacheManager.delete(path);
+      }
+    } catch (error) {
+      this.logger.error('Failed to delete tasks', {
+        error,
+        context: { paths },
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Clear all tasks
+   */
+  async clearAllTasks(): Promise<void> {
+    try {
       await this.storage.clearAllTasks();
-
-      // Clear cache and indexes
-      await Promise.all([this.indexManager.clear(), this.cacheManager.clear()]);
-
-      await this.transactionManager.commit(transaction);
-      this.logger.info('All tasks and indexes cleared');
+      await this.indexManager.clearIndex();
+      this.cacheManager.clear();
     } catch (error) {
-      await this.transactionManager.rollback(transaction);
-      this.logger.error('Failed to clear tasks', { error });
-      throw TaskErrorFactory.createTaskOperationError(
-        'TaskStore.clearAllTasks',
-        'Failed to clear all tasks',
-        { error }
-      );
+      this.logger.error('Failed to clear all tasks', { error });
+      throw error;
     }
   }
 
   /**
-   * Optimizes database storage and performance
+   * Get store metrics
    */
-  async vacuumDatabase(analyze: boolean = true): Promise<void> {
-    try {
-      await this.storage.vacuum();
-      if (analyze) {
-        await this.storage.analyze();
-      }
-      await this.storage.checkpoint();
-      this.logger.info('Database optimized', { analyzed: analyze });
-    } catch (error) {
-      this.logger.error('Failed to optimize database', { error });
-      throw TaskErrorFactory.createTaskStorageError(
-        'TaskStore.vacuumDatabase',
-        error instanceof Error ? error : new Error(String(error)),
-        { analyze }
-      );
-    }
-  }
+  async getMetrics(): Promise<{
+    tasks: {
+      totalTasks: number;
+      byStatus: Record<TaskStatus, number>;
+      byType: Record<string, number>;
+      dependencyCount: number;
+    };
+    cache: {
+      hitRate: number;
+      memoryUsage: number;
+      entryCount: number;
+    };
+  }> {
+    const indexMetrics = this.indexManager.getMetrics();
+    const cacheMetrics = this.cacheManager.getMetrics();
 
-  /**
-   * Repairs parent-child relationships and fixes inconsistencies
-   */
-  async repairRelationships(
-    dryRun: boolean = false,
-    pathPattern?: string
-  ): Promise<{ fixed: number; issues: string[] }> {
-    const transaction = await this.transactionManager.begin();
-
-    try {
-      // Get tasks to repair
-      const tasks = pathPattern
-        ? await this.getTasksByPattern(pathPattern)
-        : await this.storage.getTasks([]);
-
-      // Clear cache for affected tasks
-      await Promise.all(tasks.map(task => this.cacheManager.delete(task.path)));
-
-      // Repair relationships
-      const result = await this.storage.repairRelationships(dryRun);
-
-      if (!dryRun) {
-        // Reindex all tasks after repair
-        await Promise.all(tasks.map(task => this.indexManager.indexTask(task)));
-      }
-
-      await this.transactionManager.commit(transaction);
-      return result;
-    } catch (error) {
-      await this.transactionManager.rollback(transaction);
-      this.logger.error('Failed to repair relationships', { error });
-      throw TaskErrorFactory.createTaskOperationError(
-        'TaskStore.repairRelationships',
-        'Failed to repair relationships',
-        { dryRun, pathPattern, error }
-      );
-    }
+    return {
+      tasks: {
+        totalTasks: indexMetrics.totalTasks,
+        byStatus: indexMetrics.byStatus,
+        byType: indexMetrics.byType,
+        dependencyCount: indexMetrics.dependencyCount,
+      },
+      cache: cacheMetrics,
+    };
   }
 }

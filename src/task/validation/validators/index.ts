@@ -41,7 +41,6 @@ export class TaskValidators {
       ...task,
       notes: task.notes || [],
       dependencies: task.dependencies || [],
-      subtasks: task.subtasks || [],
       metadata: task.metadata || {},
     } as Task;
   }
@@ -64,10 +63,13 @@ export class TaskValidators {
     if (validTask.parentPath) {
       const parent = await getTaskByPath(validTask.parentPath);
       if (parent) {
-        const allSiblings = await Promise.all(
-          parent.subtasks.filter(path => path !== validTask.path).map(path => getTaskByPath(path))
-        );
-        siblings = allSiblings.filter((t): t is Task => t !== null);
+        const result = await getTaskByPath(parent.path);
+        if (result) {
+          const tasks = Array.isArray(result) ? result : [result];
+          siblings = tasks.filter(
+            (task): task is Task => task !== null && task.path !== validTask.path
+          );
+        }
       }
     }
 

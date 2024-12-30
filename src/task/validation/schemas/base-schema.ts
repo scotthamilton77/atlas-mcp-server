@@ -13,7 +13,6 @@ const VALIDATION_CONSTRAINTS = {
   MAX_NOTE_LENGTH: 1000,
   MAX_NOTES: 100,
   MAX_DEPENDENCIES: 50,
-  MAX_SUBTASKS: 100,
   MAX_REASONING_LENGTH: 2000,
 } as const;
 
@@ -32,7 +31,7 @@ const TaskStatusEnum = z.enum([
   TaskStatus.PENDING,
   TaskStatus.IN_PROGRESS,
   TaskStatus.COMPLETED,
-  TaskStatus.FAILED,
+  TaskStatus.CANCELLED,
   TaskStatus.BLOCKED,
 ]);
 
@@ -65,7 +64,6 @@ export const baseTaskSchema = z.object({
     .optional(),
   reasoning: z.string().max(VALIDATION_CONSTRAINTS.MAX_REASONING_LENGTH).optional(),
   dependencies: z.array(z.string()).max(VALIDATION_CONSTRAINTS.MAX_DEPENDENCIES),
-  subtasks: z.array(z.string()).max(VALIDATION_CONSTRAINTS.MAX_SUBTASKS),
 
   // User-defined metadata
   metadata: taskMetadataSchema,
