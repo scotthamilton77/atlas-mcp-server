@@ -10,14 +10,41 @@ export enum TaskStatus {
   PENDING = 'PENDING',
   IN_PROGRESS = 'IN_PROGRESS',
   COMPLETED = 'COMPLETED',
-  FAILED = 'FAILED',
   BLOCKED = 'BLOCKED',
+  CANCELLED = 'CANCELLED',
+}
+
+/**
+ * Core identification fields
+ */
+export interface CoreIdentification {
+  id: string;
+  path: string;
+  name: string;
+  type: TaskType;
+  version: number;
+  projectPath: string;
+}
+
+/**
+ * Documentation fields
+ */
+export interface Documentation {
+  description?: string;
+  reasoning?: string;
+  planningNotes: string[];
+  progressNotes: string[];
+  completionNotes: string[];
+  troubleshootingNotes: string[];
 }
 
 /**
  * Status-specific metadata
  */
 export interface StatusMetadata {
+  // Common fields
+  lastUpdated?: string;
+
   // IN_PROGRESS
   assignee?: string;
   progress_indicators?: string[];
@@ -91,47 +118,23 @@ export interface TaskMetadata
 }
 
 /**
- * Note categories
+ * Main task interface
  */
-export interface TaskNotes {
-  planningNotes: string[];
-  progressNotes: string[];
-  completionNotes: string[];
-  troubleshootingNotes: string[];
-}
-
-export interface Task {
-  // Core fields
-  path: string;
-  name: string;
-  type: TaskType;
+export interface Task extends CoreIdentification, Documentation {
+  // Status
   status: TaskStatus;
+  statusMetadata: StatusMetadata;
+
   // Timestamps stored as formatted strings (e.g. "10:00:00 AM 1/28/2024")
   created: string;
   updated: string;
-  version: number;
-  projectPath: string;
-
-  // Optional fields
-  description?: string;
-  parentPath?: string;
-  reasoning?: string;
-
-  // Status metadata
-  statusMetadata: StatusMetadata;
-
-  // Notes - organized by category
-  planningNotes: string[];
-  progressNotes: string[];
-  completionNotes: string[];
-  troubleshootingNotes: string[];
 
   // Legacy notes field for backward compatibility
   notes: string[]; // Required array, can be empty but not undefined
 
   // Relationships
+  parentPath?: string;
   dependencies: string[]; // Required array, can be empty but not undefined
-  subtasks: string[]; // Required array, can be empty but not undefined
 
   // Rich metadata
   metadata: TaskMetadata;
@@ -186,7 +189,6 @@ export interface UpdateTaskInput {
 
   // Relationships
   dependencies?: string[]; // Optional, will keep existing if undefined
-  subtasks?: string[]; // Optional, will keep existing if undefined
 
   // Rich metadata
   metadata?: Partial<TaskMetadata>;
@@ -244,10 +246,10 @@ export interface TaskResponse<T = Task> {
 export const CONSTRAINTS = {
   // Path constraints
   PATH_MAX_LENGTH: 255,
-  MAX_PATH_DEPTH: 7, // Reduced to match new validation rules
+  MAX_PATH_DEPTH: 7,
 
   // Field length constraints
-  NAME_MAX_LENGTH: 200, // Increased to match new validation rules
+  NAME_MAX_LENGTH: 200,
   DESCRIPTION_MAX_LENGTH: 2000,
   REASONING_MAX_LENGTH: 2000,
   NOTE_MAX_LENGTH: 2000,
@@ -255,7 +257,6 @@ export const CONSTRAINTS = {
 
   // Array size constraints
   MAX_DEPENDENCIES: 50,
-  MAX_SUBTASKS: 100,
   MAX_NOTES: 25, // Per note category
   MAX_ARRAY_ITEMS: 100,
   MAX_TAGS: 10,
