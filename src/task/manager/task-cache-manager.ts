@@ -1,254 +1,145 @@
-import { Logger } from '../../logging/index.js';
-import { formatTimestamp } from '../../utils/date-formatter.js';
-import { CacheManager } from '../core/cache/cache-manager.js';
-import { CacheOptions } from '../../types/cache.js';
-import { TaskIndexManager } from '../core/indexing/index-manager.js';
-import { TaskEventHandler } from './task-event-handler.js';
-import { Task, TaskType, TaskStatus } from '../../types/task.js';
-import { TaskStorage } from '../../types/storage.js';
-import { PlatformCapabilities } from '../../utils/platform-utils.js';
+import { Task } from '../../types/task.js';
+import { createError, ErrorCodes } from '../../errors/index.js';
 
+/**
+ * Cache entry with metadata
+ */
+interface CacheEntry {
+  task: Task;
+  timestamp: number;
+}
+
+/**
+ * Cache metrics
+ */
+interface CacheMetrics {
+  hits: number;
+  misses: number;
+  size: number;
+  maxSize: number;
+}
+
+/**
+ * Task cache manager
+ */
 export class TaskCacheManager {
-  private readonly logger: Logger;
-  private readonly cacheManager: CacheManager;
-  private readonly indexManager: TaskIndexManager;
-  private readonly eventHandler: TaskEventHandler;
-  private memoryMonitor?: NodeJS.Timeout;
-  private lastCleanupTime: number = 0;
+  private readonly cache: Map<string, CacheEntry>;
+  private readonly metrics: CacheMetrics;
 
-  // Memory management constants
-  private readonly MAX_CACHE_MEMORY = 16 * 1024 * 1024; // 16MB cache limit for VSCode extension
-  private readonly MEMORY_CHECK_INTERVAL = 5000; // 5 seconds
-  private readonly MEMORY_PRESSURE_THRESHOLD = 0.6; // 60% of max before cleanup
-  private readonly MEMORY_CHECK_COOLDOWN = 2000; // 2 second cooldown between cleanups
-
-  constructor() {
-    this.logger = Logger.getInstance().child({ component: 'TaskCacheManager' });
-    this.eventHandler = new TaskEventHandler();
-
-    const cacheOptions: CacheOptions = {
-      maxSize: this.MAX_CACHE_MEMORY,
-      ttl: 60 * 1000, // 1 minute
-      cleanupInterval: 15 * 1000, // 15 seconds
+  constructor(private readonly maxSize: number = 1000) {
+    this.cache = new Map();
+    this.metrics = {
+      hits: 0,
+      misses: 0,
+      size: 0,
+      maxSize,
     };
-
-    this.cacheManager = CacheManager.getInstance(cacheOptions);
-    this.indexManager = new TaskIndexManager();
-
-    this.setupMemoryMonitoring();
   }
 
-  private setupMemoryMonitoring(): void {
-    if (this.memoryMonitor) {
-      clearInterval(this.memoryMonitor);
+  /**
+   * Get task from cache
+   */
+  get(path: string): Task | null {
+    const entry = this.cache.get(path);
+    if (!entry) {
+      this.metrics.misses++;
+      return null;
     }
 
-    const weakThis = new WeakRef(this);
+    this.metrics.hits++;
+    return entry.task;
+  }
 
-    this.memoryMonitor = setInterval(async () => {
-      const instance = weakThis.deref();
-      if (!instance) {
-        clearInterval(this.memoryMonitor);
-        return;
-      }
+  /**
+   * Set task in cache
+   */
+  set(task: Task): void {
+    if (!task.path) {
+      throw createError(ErrorCodes.VALIDATION_ERROR, 'Task path is required', 'set');
+    }
 
-      const memUsage = process.memoryUsage();
+    // Evict if cache is full
+    if (this.cache.size >= this.maxSize) {
+      this.evictOldest();
+    }
 
-      const stats = {
-        heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
-        heapTotal: `${Math.round(memUsage.heapTotal / 1024 / 1024)}MB`,
-        rss: `${Math.round(memUsage.rss / 1024 / 1024)}MB`,
-        platform: PlatformCapabilities.getArchInfo().platform,
-      };
-
-      this.logger.debug('Task cache memory usage:', stats);
-
-      // More aggressive memory monitoring for VSCode
-      const memoryUsageRatio = Math.max(
-        memUsage.heapUsed / instance.MAX_CACHE_MEMORY,
-        memUsage.heapUsed / memUsage.heapTotal
-      );
-
-      const now = Date.now();
-      if (
-        memoryUsageRatio > instance.MEMORY_PRESSURE_THRESHOLD &&
-        now - instance.lastCleanupTime >= instance.MEMORY_CHECK_COOLDOWN
-      ) {
-        instance.lastCleanupTime = now;
-
-        this.eventHandler.emitMemoryPressure(memUsage, instance.MAX_CACHE_MEMORY);
-
-        this.logger.warn('Cache memory threshold exceeded, clearing caches', {
-          heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
-          threshold: `${Math.round(instance.MAX_CACHE_MEMORY / 1024 / 1024)}MB`,
-        });
-
-        await instance.clearCaches(true);
-      }
-    }, this.MEMORY_CHECK_INTERVAL);
-
-    process.on('beforeExit', () => {
-      if (this.memoryMonitor) {
-        clearInterval(this.memoryMonitor);
-      }
+    this.cache.set(task.path, {
+      task: {
+        ...task,
+        dependencies: task.dependencies || [],
+        notes: task.notes || [],
+        planningNotes: task.planningNotes || [],
+        progressNotes: task.progressNotes || [],
+        completionNotes: task.completionNotes || [],
+        troubleshootingNotes: task.troubleshootingNotes || [],
+      },
+      timestamp: Date.now(),
     });
+
+    this.metrics.size = this.cache.size;
   }
 
-  async indexTask(task: Task): Promise<void> {
-    const now = Date.now();
-    const fullTask: Task = {
-      ...task,
-      path: task.path,
-      name: task.name,
-      type: task.type || TaskType.TASK,
-      status: task.status || TaskStatus.PENDING,
-      projectPath: task.projectPath || task.path.split('/')[0],
-      created: task.created || formatTimestamp(now),
-      updated: task.updated || formatTimestamp(now),
-      version: task.version || 1,
-      metadata: task.metadata || {},
-      dependencies: task.dependencies || [],
-      subtasks: task.subtasks || [],
-      description: task.description,
-      parentPath: task.parentPath,
-      notes: task.notes,
-      reasoning: task.reasoning,
-    };
-    await this.indexManager.indexTask(fullTask);
+  /**
+   * Delete task from cache
+   */
+  delete(path: string): void {
+    this.cache.delete(path);
+    this.metrics.size = this.cache.size;
   }
 
-  async unindexTask(task: Task): Promise<void> {
-    await this.indexManager.unindexTask(task);
+  /**
+   * Clear cache
+   */
+  clear(): void {
+    this.cache.clear();
+    this.metrics.size = 0;
   }
 
-  async clearCaches(forceClean: boolean = false): Promise<void> {
-    try {
-      await this.cacheManager.clear();
-      this.indexManager.clear();
+  /**
+   * Get cache metrics
+   */
+  getMetrics(): {
+    hitRate: number;
+    memoryUsage: number;
+    entryCount: number;
+  } {
+    const total = this.metrics.hits + this.metrics.misses;
+    const hitRate = total === 0 ? 0 : this.metrics.hits / total;
 
-      if (global.gc) {
-        global.gc();
-
-        const afterGC = process.memoryUsage();
-        if (
-          forceClean &&
-          afterGC.heapUsed > this.MAX_CACHE_MEMORY * this.MEMORY_PRESSURE_THRESHOLD
-        ) {
-          this.logger.warn('Memory usage remains high after cleanup', {
-            heapUsed: `${Math.round(afterGC.heapUsed / 1024 / 1024)}MB`,
-            threshold: `${Math.round(this.MAX_CACHE_MEMORY / 1024 / 1024)}MB`,
-          });
-        }
-      }
-
-      this.logger.info('Caches cleared successfully');
-    } catch (error) {
-      this.logger.error('Failed to clear caches', { error });
-      throw error;
-    }
-  }
-
-  private storage?: TaskStorage;
-
-  setStorage(storage: TaskStorage): void {
-    this.storage = storage;
-  }
-
-  async getTaskByPath(path: string): Promise<Task | null> {
-    // Try index first
-    const indexedTask = await this.indexManager.getTaskByPath(path);
-    if (indexedTask) {
-      return indexedTask;
-    }
-
-    // Fall back to storage if available
-    if (this.storage) {
-      const task = await this.storage.getTask(path);
-      if (task) {
-        await this.indexTask(task);
-        return task;
-      }
-    }
-
-    return null;
-  }
-
-  async getTasksByPattern(pattern: string, limit?: number, offset?: number): Promise<Task[]> {
-    // Try index first
-    const indexedTasks = await this.indexManager.getTasksByPattern(pattern, limit, offset);
-    if (indexedTasks.length > 0) {
-      return indexedTasks;
-    }
-
-    // Fall back to storage if available
-    if (this.storage) {
-      const tasks = await this.storage.getTasksByPattern(pattern);
-      for (const task of tasks) {
-        await this.indexTask(task);
-      }
-      return tasks;
-    }
-
-    return [];
-  }
-
-  async getTasksByStatus(
-    status: TaskStatus,
-    pattern?: string,
-    limit?: number,
-    offset?: number
-  ): Promise<Task[]> {
-    // Try index first
-    const indexedTasks = await this.indexManager.getTasksByStatus(status, pattern, limit, offset);
-    if (indexedTasks.length > 0) {
-      return indexedTasks;
-    }
-
-    // Fall back to storage if available
-    if (this.storage) {
-      const tasks = await this.storage.getTasksByStatus(status);
-      for (const task of tasks) {
-        await this.indexTask(task);
-      }
-      return tasks;
-    }
-
-    return [];
-  }
-
-  async getTasksByParent(parentPath: string, limit?: number, offset?: number): Promise<Task[]> {
-    // Try index first
-    const indexedTasks = await this.indexManager.getTasksByParent(parentPath, limit, offset);
-    if (indexedTasks.length > 0) {
-      return indexedTasks;
-    }
-
-    // Fall back to storage if available
-    if (this.storage) {
-      const tasks = await this.storage.getSubtasks(parentPath);
-      for (const task of tasks) {
-        await this.indexTask(task);
-      }
-      return tasks;
-    }
-
-    return [];
-  }
-
-  getMemoryStats(): { heapUsed: number; heapTotal: number; rss: number } {
-    const memUsage = process.memoryUsage();
     return {
-      heapUsed: memUsage.heapUsed,
-      heapTotal: memUsage.heapTotal,
-      rss: memUsage.rss,
+      hitRate,
+      memoryUsage: this.estimateMemoryUsage(),
+      entryCount: this.cache.size,
     };
   }
 
-  cleanup(): void {
-    if (this.memoryMonitor) {
-      clearInterval(this.memoryMonitor);
-      this.memoryMonitor = undefined;
+  /**
+   * Evict oldest entries
+   */
+  private evictOldest(): void {
+    const entries = Array.from(this.cache.entries());
+    entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
+
+    // Remove oldest 10% of entries
+    const toRemove = Math.max(1, Math.floor(entries.length * 0.1));
+    entries.slice(0, toRemove).forEach(([path]) => this.cache.delete(path));
+
+    this.metrics.size = this.cache.size;
+  }
+
+  /**
+   * Estimate memory usage
+   */
+  private estimateMemoryUsage(): number {
+    let total = 0;
+
+    for (const [path, entry] of this.cache.entries()) {
+      // Rough estimation of memory usage in bytes
+      total += path.length * 2; // String characters (2 bytes each)
+      total += 8; // Timestamp (8 bytes)
+      total += JSON.stringify(entry.task).length * 2; // Task object serialized
     }
-    this.eventHandler.removeAllListeners();
+
+    return total;
   }
 }
