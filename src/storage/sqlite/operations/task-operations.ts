@@ -37,6 +37,7 @@ export class TaskOperations {
 
       const task: Task = {
         // System fields
+        id: `task_${now}_${Math.random().toString(36).substr(2, 9)}`,
         path: input.path,
         name: input.name,
         type: input.type,
@@ -51,7 +52,6 @@ export class TaskOperations {
         parentPath: input.parentPath,
         reasoning: input.reasoning,
         dependencies: input.dependencies || [],
-        subtasks: [],
 
         // Status metadata
         statusMetadata: input.statusMetadata || {},
@@ -132,7 +132,6 @@ export class TaskOperations {
         },
         // Ensure arrays are initialized
         dependencies: updates.dependencies || existingTask.dependencies,
-        subtasks: updates.subtasks || existingTask.subtasks,
         notes: updates.notes || existingTask.notes,
 
         // Note categories
@@ -184,6 +183,7 @@ export class TaskOperations {
   async getTask(path: string): Promise<Task | null> {
     try {
       return await this.connection.execute(async db => {
+        // Get task data
         const row = await db.get<Record<string, unknown>>(
           'SELECT * FROM tasks WHERE path = ?',
           path
@@ -193,6 +193,16 @@ export class TaskOperations {
           this.logger.debug('Task not found', { path });
           return null;
         }
+
+        // Get dependencies
+        const dependencies = await db.all<{ dependency_path: string }[]>(
+          'SELECT dependency_path FROM task_dependencies WHERE task_id = ?',
+          row.id
+        );
+
+        // Add dependencies to row data
+        row.dependencies = JSON.stringify(dependencies.map(d => d.dependency_path));
+
         return this.rowToTask(row);
       }, 'getTask');
     } catch (error) {
@@ -218,13 +228,40 @@ export class TaskOperations {
     try {
       return await this.connection.execute(async db => {
         const placeholders = paths.map(() => '?').join(',');
+
+        // Get tasks
         const rows = await db.all<Record<string, unknown>[]>(
           `SELECT * FROM tasks WHERE path IN (${placeholders})`,
           ...paths
         );
 
+        // Get task IDs for dependency lookup
+        const taskIds = rows.map(row => String(row.id));
+
+        // Get dependencies for all tasks
+        const dependencies = await db.all<{ task_id: string; dependency_path: string }[]>(
+          `SELECT task_id, dependency_path FROM task_dependencies WHERE task_id IN (${placeholders})`,
+          ...taskIds
+        );
+
+        // Group dependencies by task
+        const dependenciesByTask = dependencies.reduce(
+          (acc, dep) => {
+            acc[dep.task_id] = acc[dep.task_id] || [];
+            acc[dep.task_id].push(dep.dependency_path);
+            return acc;
+          },
+          {} as Record<string, string[]>
+        );
+
+        // Add dependencies to each row
+        const rowsWithDeps = rows.map(row => ({
+          ...row,
+          dependencies: JSON.stringify(dependenciesByTask[String(row.id)] || []),
+        }));
+
         this.logger.debug('Retrieved multiple tasks', { count: rows.length });
-        return rows.map(row => this.rowToTask(row));
+        return rowsWithDeps.map(row => this.rowToTask(row));
       }, 'getTasks');
     } catch (error) {
       this.logger.error('Failed to get tasks', {
@@ -247,13 +284,45 @@ export class TaskOperations {
     try {
       return await this.connection.execute(async db => {
         const sqlPattern = pattern.replace(/\*/g, '%').replace(/\?/g, '_');
+
+        // Get tasks matching pattern
         const rows = await db.all<Record<string, unknown>[]>(
           'SELECT * FROM tasks WHERE path LIKE ?',
           sqlPattern
         );
 
+        // Get task IDs for dependency lookup
+        const taskIds = rows.map(row => String(row.id));
+
+        if (taskIds.length === 0) {
+          return [];
+        }
+
+        // Get dependencies for matched tasks
+        const placeholders = taskIds.map(() => '?').join(',');
+        const dependencies = await db.all<{ task_id: string; dependency_path: string }[]>(
+          `SELECT task_id, dependency_path FROM task_dependencies WHERE task_id IN (${placeholders})`,
+          ...taskIds
+        );
+
+        // Group dependencies by task
+        const dependenciesByTask = dependencies.reduce(
+          (acc, dep) => {
+            acc[dep.task_id] = acc[dep.task_id] || [];
+            acc[dep.task_id].push(dep.dependency_path);
+            return acc;
+          },
+          {} as Record<string, string[]>
+        );
+
+        // Add dependencies to each row
+        const rowsWithDeps = rows.map(row => ({
+          ...row,
+          dependencies: JSON.stringify(dependenciesByTask[String(row.id)] || []),
+        }));
+
         this.logger.debug('Retrieved tasks by pattern', { pattern, count: rows.length });
-        return rows.map(row => this.rowToTask(row));
+        return rowsWithDeps.map(row => this.rowToTask(row));
       }, 'getTasksByPattern');
     } catch (error) {
       this.logger.error('Failed to get tasks by pattern', {
@@ -275,13 +344,44 @@ export class TaskOperations {
   async getTasksByStatus(status: TaskStatus): Promise<Task[]> {
     try {
       return await this.connection.execute(async db => {
+        // Get tasks with status
         const rows = await db.all<Record<string, unknown>[]>(
           'SELECT * FROM tasks WHERE status = ?',
           status
         );
 
+        // Get task IDs for dependency lookup
+        const taskIds = rows.map(row => String(row.id));
+
+        if (taskIds.length === 0) {
+          return [];
+        }
+
+        // Get dependencies for matched tasks
+        const placeholders = taskIds.map(() => '?').join(',');
+        const dependencies = await db.all<{ task_id: string; dependency_path: string }[]>(
+          `SELECT task_id, dependency_path FROM task_dependencies WHERE task_id IN (${placeholders})`,
+          ...taskIds
+        );
+
+        // Group dependencies by task
+        const dependenciesByTask = dependencies.reduce(
+          (acc, dep) => {
+            acc[dep.task_id] = acc[dep.task_id] || [];
+            acc[dep.task_id].push(dep.dependency_path);
+            return acc;
+          },
+          {} as Record<string, string[]>
+        );
+
+        // Add dependencies to each row
+        const rowsWithDeps = rows.map(row => ({
+          ...row,
+          dependencies: JSON.stringify(dependenciesByTask[String(row.id)] || []),
+        }));
+
         this.logger.debug('Retrieved tasks by status', { status, count: rows.length });
-        return rows.map(row => this.rowToTask(row));
+        return rowsWithDeps.map(row => this.rowToTask(row));
       }, 'getTasksByStatus');
     } catch (error) {
       this.logger.error('Failed to get tasks by status', {
@@ -298,27 +398,58 @@ export class TaskOperations {
   }
 
   /**
-   * Get subtasks of a task
+   * Get child tasks of a task
    */
-  async getSubtasks(parentPath: string): Promise<Task[]> {
+  async getChildren(parentPath: string): Promise<Task[]> {
     try {
       return await this.connection.execute(async db => {
+        // Get child tasks
         const rows = await db.all<Record<string, unknown>[]>(
           'SELECT * FROM tasks WHERE parent_path = ?',
           parentPath
         );
 
-        this.logger.debug('Retrieved subtasks', { parentPath, count: rows.length });
-        return rows.map(row => this.rowToTask(row));
-      }, 'getSubtasks');
+        // Get task IDs for dependency lookup
+        const taskIds = rows.map(row => String(row.id));
+
+        if (taskIds.length === 0) {
+          return [];
+        }
+
+        // Get dependencies for child tasks
+        const placeholders = taskIds.map(() => '?').join(',');
+        const dependencies = await db.all<{ task_id: string; dependency_path: string }[]>(
+          `SELECT task_id, dependency_path FROM task_dependencies WHERE task_id IN (${placeholders})`,
+          ...taskIds
+        );
+
+        // Group dependencies by task
+        const dependenciesByTask = dependencies.reduce(
+          (acc, dep) => {
+            acc[dep.task_id] = acc[dep.task_id] || [];
+            acc[dep.task_id].push(dep.dependency_path);
+            return acc;
+          },
+          {} as Record<string, string[]>
+        );
+
+        // Add dependencies to each row
+        const rowsWithDeps = rows.map(row => ({
+          ...row,
+          dependencies: JSON.stringify(dependenciesByTask[String(row.id)] || []),
+        }));
+
+        this.logger.debug('Retrieved child tasks', { parentPath, count: rows.length });
+        return rowsWithDeps.map(row => this.rowToTask(row));
+      }, 'getChildren');
     } catch (error) {
-      this.logger.error('Failed to get subtasks', {
+      this.logger.error('Failed to get child tasks', {
         error,
         context: { parentPath },
       });
 
       throw TaskErrorFactory.createTaskStorageError(
-        'TaskOperations.getSubtasks',
+        'TaskOperations.getChildren',
         error instanceof Error ? error : new Error(String(error)),
         { parentPath }
       );
@@ -422,10 +553,11 @@ export class TaskOperations {
    * Save a task to the database
    */
   private async saveTaskToDb(db: Database, task: Task): Promise<void> {
+    // First save the task without dependencies
     const sql = `
       INSERT OR REPLACE INTO tasks (
-        path, name, description, type, status,
-        parent_path, reasoning, dependencies, subtasks,
+        id, path, name, description, type, status,
+        parent_path, reasoning, project_path,
         metadata, status_metadata, notes,
         planning_notes, progress_notes, completion_notes, troubleshooting_notes,
         created_at, updated_at, version
@@ -433,6 +565,7 @@ export class TaskOperations {
     `;
 
     await db.run(sql, [
+      task.id,
       task.path,
       task.name,
       task.description,
@@ -440,8 +573,7 @@ export class TaskOperations {
       task.status,
       task.parentPath,
       task.reasoning,
-      JSON.stringify(task.dependencies),
-      JSON.stringify(task.subtasks),
+      task.projectPath,
       JSON.stringify(task.metadata),
       JSON.stringify(task.statusMetadata),
       JSON.stringify(task.notes),
@@ -453,6 +585,21 @@ export class TaskOperations {
       task.updated,
       task.version,
     ]);
+
+    // Then handle dependencies separately using the task_dependencies table
+    // First delete existing dependencies
+    await db.run('DELETE FROM task_dependencies WHERE task_id = ?', task.id);
+
+    // Then insert new dependencies
+    if (task.dependencies && task.dependencies.length > 0) {
+      const now = Date.now();
+      const values = task.dependencies.map(dep => `('${task.id}', '${dep}', ${now})`).join(',');
+
+      await db.run(`
+        INSERT INTO task_dependencies (task_id, dependency_path, created_at)
+        VALUES ${values}
+      `);
+    }
   }
 
   /**
@@ -464,13 +611,12 @@ export class TaskOperations {
     newParentPath: string | undefined
   ): Promise<void> {
     try {
-      // Remove from old parent's subtasks if it exists
+      // Update old parent if it exists
       if (oldParentPath) {
         const oldParent = await this.getTask(oldParentPath);
         if (oldParent) {
           await this.internalSaveTask({
             ...oldParent,
-            subtasks: oldParent.subtasks.filter(s => s !== taskPath),
             updated: formatTimestamp(Date.now()),
             version: oldParent.version + 1,
           });
@@ -478,13 +624,12 @@ export class TaskOperations {
         }
       }
 
-      // Add to new parent's subtasks if it exists
+      // Update new parent if it exists
       if (newParentPath) {
         const newParent = await this.getTask(newParentPath);
         if (newParent) {
           await this.internalSaveTask({
             ...newParent,
-            subtasks: [...newParent.subtasks, taskPath],
             updated: formatTimestamp(Date.now()),
             version: newParent.version + 1,
           });
@@ -511,6 +656,7 @@ export class TaskOperations {
   protected rowToTask(row: Record<string, unknown>): Task {
     return {
       // System fields
+      id: String(row.id || ''),
       path: String(row.path || ''),
       name: String(row.name || ''),
       type: String(row.type || '') as TaskType,
@@ -525,7 +671,6 @@ export class TaskOperations {
       parentPath: row.parent_path ? String(row.parent_path) : undefined,
       reasoning: row.reasoning ? String(row.reasoning) : undefined,
       dependencies: this.parseJSON<string[]>(String(row.dependencies || '[]'), []),
-      subtasks: this.parseJSON<string[]>(String(row.subtasks || '[]'), []),
 
       // Legacy notes field
       notes: this.parseJSON<string[]>(String(row.notes || '[]'), []),

@@ -87,13 +87,15 @@ export class TaskValidator {
       }
 
       // Create dummy task for validation
+      const now = Date.now();
       const task: Task = {
+        id: `task_${now}_${Math.random().toString(36).substr(2, 9)}`,
         path: validatedInput.path,
         name: validatedInput.name,
         type: validatedInput.type || TaskType.TASK,
         status: TaskStatus.PENDING,
-        created: formatTimestamp(Date.now()),
-        updated: formatTimestamp(Date.now()),
+        created: formatTimestamp(now),
+        updated: formatTimestamp(now),
         version: 1,
         projectPath: validatedInput.path.split('/')[0],
         description: validatedInput.description,
@@ -101,7 +103,6 @@ export class TaskValidator {
         notes: validatedInput.notes || [],
         reasoning: validatedInput.reasoning,
         dependencies: validatedInput.dependencies || [],
-        subtasks: [],
         metadata: validatedInput.metadata || {},
         // Initialize new required fields
         statusMetadata: validatedInput.statusMetadata || {},
