@@ -7,7 +7,7 @@ import {
 } from '../../types/task.js';
 import { TaskStorage } from '../../types/storage.js';
 import { Logger } from '../../logging/index.js';
-import { ErrorCodes, createError } from '../../errors/index.js';
+import { TaskErrorFactory } from '../../errors/task-error.js';
 import { TaskOperations } from '../operations/task-operations.js';
 import { TaskStatusBatchProcessor } from '../core/batch/task-status-batch-processor.js';
 import { DependencyAwareBatchProcessor } from '../core/batch/dependency-aware-batch-processor.js';
@@ -16,6 +16,7 @@ import { TaskEventHandler } from './task-event-handler.js';
 import { TaskCacheManager } from './task-cache-manager.js';
 import { DependencyValidationMode } from '../validation/validators/dependency-validator.js';
 import { HierarchyValidationMode } from '../validation/validators/hierarchy-validator.js';
+import { ToolHandler } from '../../tools/handler.js';
 
 interface TaskManagerMetadata {
   timestamp: number;
@@ -42,6 +43,7 @@ export class TaskManager {
   private initialized = false;
   private static initializationMutex = new Set<string>();
   private static instanceId = Math.random().toString(36).substr(2, 9);
+  private toolHandler!: ToolHandler;
 
   private constructor(readonly storage: TaskStorage) {
     TaskManager.initLogger();
@@ -61,13 +63,25 @@ export class TaskManager {
 
   private static initLogger(): void {
     if (!TaskManager.logger) {
-      TaskManager.logger = Logger.getInstance().child({ component: 'TaskManager' });
+      TaskManager.logger = Logger.getInstance().child({
+        component: 'TaskManager',
+        context: {
+          instanceId: TaskManager.instanceId,
+        },
+      });
     }
   }
 
   private async initializeComponents(): Promise<void> {
+    // Initialize tool handler first to ensure tools are available
+    this.toolHandler = new ToolHandler(this);
+
+    // Then initialize other components
     this.operations = await TaskOperations.getInstance(this.storage, this.validator);
     this.cacheManager.setStorage(this.storage);
+
+    // Wait for tool handler to be ready
+    await new Promise(resolve => setTimeout(resolve, 100));
   }
 
   static async getInstance(storage: TaskStorage): Promise<TaskManager> {
@@ -99,10 +113,9 @@ export class TaskManager {
       return TaskManager.instance;
     } catch (error) {
       TaskManager.instance = null;
-      throw createError(
-        ErrorCodes.STORAGE_INIT,
-        `Failed to initialize TaskManager: ${error instanceof Error ? error.message : String(error)}`,
-        'getInstance'
+      throw TaskErrorFactory.createTaskInitializationError(
+        'TaskManager.getInstance',
+        error instanceof Error ? error : new Error(String(error))
       );
     } finally {
       TaskManager.initializationMutex.delete(mutexKey);
@@ -116,12 +129,29 @@ export class TaskManager {
     }
 
     try {
+      TaskManager.logger.info('Initializing task manager components', {
+        context: {
+          operation: 'initialize',
+          timestamp: Date.now(),
+        },
+      });
+
       await this.initializeComponents();
       this.initialized = true;
-      TaskManager.logger.info('Task manager initialized');
+
+      TaskManager.logger.info('Task manager initialization completed', {
+        context: {
+          operation: 'initialize',
+          timestamp: Date.now(),
+          components: ['toolHandler', 'operations', 'cacheManager'],
+        },
+      });
     } catch (error) {
       TaskManager.logger.error('Failed to initialize task manager', { error });
-      throw error;
+      throw TaskErrorFactory.createTaskInitializationError(
+        'TaskManager.initialize',
+        error instanceof Error ? error : new Error(String(error))
+      );
     }
   }
 
@@ -174,7 +204,11 @@ export class TaskManager {
   ): Promise<TaskResponse<Task>> {
     try {
       if (!input.name) {
-        throw createError(ErrorCodes.VALIDATION_ERROR, 'Task name is required', 'createTask');
+        throw TaskErrorFactory.createTaskValidationError(
+          'TaskManager.createTask',
+          'Task name is required',
+          { input }
+        );
       }
 
       const result = await this.operations.createTask(input, options);
@@ -207,7 +241,7 @@ export class TaskManager {
     try {
       const oldTask = await this.cacheManager.getTaskByPath(path);
       if (!oldTask) {
-        throw createError(ErrorCodes.TASK_NOT_FOUND, `Task not found: ${path}`, 'updateTask');
+        throw TaskErrorFactory.createTaskNotFoundError('TaskManager.updateTask', path);
       }
 
       const result = await this.operations.updateTask(path, updates);
@@ -251,11 +285,9 @@ export class TaskManager {
       const result = await this.statusBatchProcessor.execute(batch);
 
       if (result.errors.length > 0) {
-        throw createError(
-          ErrorCodes.TASK_STATUS,
+        throw TaskErrorFactory.createTaskStatusError(
+          'TaskManager.updateTaskStatuses',
           'Failed to update task statuses',
-          'updateTaskStatuses',
-          undefined,
           {
             errors: result.errors,
             updates,
@@ -297,11 +329,9 @@ export class TaskManager {
       const result = await this.dependencyBatchProcessor.execute(batch);
 
       if (result.errors.length > 0) {
-        throw createError(
-          ErrorCodes.TASK_DEPENDENCY,
+        throw TaskErrorFactory.createTaskDependencyError(
+          'TaskManager.updateTaskDependencies',
           'Failed to update task dependencies',
-          'updateTaskDependencies',
-          undefined,
           {
             errors: result.errors,
             updates,
@@ -333,7 +363,11 @@ export class TaskManager {
       return await this.cacheManager.getTaskByPath(path);
     } catch (error) {
       TaskManager.logger.error('Failed to get task by path', { error, path });
-      throw error;
+      throw TaskErrorFactory.createTaskStorageError(
+        'TaskManager.getTaskByPath',
+        error instanceof Error ? error : new Error(String(error)),
+        { path }
+      );
     }
   }
 
@@ -349,7 +383,11 @@ export class TaskManager {
       });
     } catch (error) {
       TaskManager.logger.error('Failed to list tasks', { error, pathPattern });
-      throw error;
+      throw TaskErrorFactory.createTaskStorageError(
+        'TaskManager.listTasks',
+        error instanceof Error ? error : new Error(String(error)),
+        { pathPattern, limit, offset }
+      );
     }
   }
 
@@ -365,7 +403,11 @@ export class TaskManager {
       });
     } catch (error) {
       TaskManager.logger.error('Failed to get tasks by status', { error, status });
-      throw error;
+      throw TaskErrorFactory.createTaskStorageError(
+        'TaskManager.getTasksByStatus',
+        error instanceof Error ? error : new Error(String(error)),
+        { status, limit, offset }
+      );
     }
   }
 
@@ -381,7 +423,11 @@ export class TaskManager {
       });
     } catch (error) {
       TaskManager.logger.error('Failed to get subtasks', { error, parentPath });
-      throw error;
+      throw TaskErrorFactory.createTaskStorageError(
+        'TaskManager.getSubtasks',
+        error instanceof Error ? error : new Error(String(error)),
+        { parentPath, limit, offset }
+      );
     }
   }
 
@@ -404,17 +450,19 @@ export class TaskManager {
           operation: 'deleteTask',
         },
       });
-      throw error;
+      throw TaskErrorFactory.createTaskOperationError(
+        'TaskManager.deleteTask',
+        'Failed to delete task',
+        { path, error }
+      );
     }
   }
 
   async clearAllTasks(confirm: boolean): Promise<void> {
     if (!confirm) {
-      throw createError(
-        ErrorCodes.INVALID_INPUT,
+      throw TaskErrorFactory.createTaskValidationError(
+        'TaskManager.clearAllTasks',
         'Must explicitly confirm task deletion',
-        'clearAllTasks',
-        'Set confirm parameter to true to proceed with clearing all tasks. This operation cannot be undone.',
         {
           context: 'Clear all tasks',
           required: 'explicit confirmation',
@@ -465,7 +513,11 @@ export class TaskManager {
           confirm,
         },
       });
-      throw error;
+      throw TaskErrorFactory.createTaskOperationError(
+        'TaskManager.clearAllTasks',
+        'Failed to clear all tasks',
+        { confirm, error }
+      );
     }
   }
 
@@ -479,7 +531,11 @@ export class TaskManager {
       TaskManager.logger.info('Database optimized', { analyzed: analyze });
     } catch (error) {
       TaskManager.logger.error('Failed to optimize database', { error });
-      throw error;
+      throw TaskErrorFactory.createTaskStorageError(
+        'TaskManager.vacuumDatabase',
+        error instanceof Error ? error : new Error(String(error)),
+        { analyze }
+      );
     }
   }
 
@@ -501,7 +557,11 @@ export class TaskManager {
       return result;
     } catch (error) {
       TaskManager.logger.error('Failed to repair relationships', { error });
-      throw error;
+      throw TaskErrorFactory.createTaskOperationError(
+        'TaskManager.repairRelationships',
+        'Failed to repair relationships',
+        { dryRun, pathPattern, error }
+      );
     }
   }
 
@@ -543,12 +603,44 @@ export class TaskManager {
       TaskManager.logger.info('Task manager cleanup completed');
     } catch (error) {
       TaskManager.logger.error('Failed to cleanup task manager', { error });
-      throw error;
+      throw TaskErrorFactory.createTaskOperationError(
+        'TaskManager.cleanup',
+        'Failed to cleanup task manager',
+        { error }
+      );
     }
   }
 
   async close(): Promise<void> {
     await this.cleanup();
+  }
+
+  async listTools() {
+    if (!this.toolHandler) {
+      // Ensure tool handler is initialized
+      this.toolHandler = new ToolHandler(this);
+      // Wait for tool handler to be ready
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    return this.toolHandler.listTools();
+  }
+
+  async handleToolCall(request: { method: string; params?: any }) {
+    if (!request.params) {
+      throw TaskErrorFactory.createTaskValidationError(
+        'TaskManager.handleToolCall',
+        'Missing params in tool call request',
+        { request }
+      );
+    }
+    // Transform the request to match ToolHandler's expected format
+    const toolRequest = {
+      params: {
+        name: request.params.name as string,
+        arguments: request.params.arguments as Record<string, unknown> | undefined,
+      },
+    };
+    return this.toolHandler.handleToolCall(toolRequest);
   }
 
   async clearCaches(): Promise<void> {
@@ -557,7 +649,11 @@ export class TaskManager {
       TaskManager.logger.info('Caches cleared successfully');
     } catch (error) {
       TaskManager.logger.error('Failed to clear caches', { error });
-      throw error;
+      throw TaskErrorFactory.createTaskOperationError(
+        'TaskManager.clearCaches',
+        'Failed to clear caches',
+        { error }
+      );
     }
   }
 
@@ -571,7 +667,11 @@ export class TaskManager {
       return await this.validator.sortTasksByDependencies(tasks);
     } catch (error) {
       TaskManager.logger.error('Failed to sort tasks by dependencies', { error });
-      throw error;
+      throw TaskErrorFactory.createTaskDependencyError(
+        'TaskManager.sortTasksByDependencies',
+        'Failed to sort tasks by dependencies',
+        { tasks, error }
+      );
     }
   }
 
@@ -586,11 +686,10 @@ export class TaskManager {
       // Validate input against schema
       const validationResult = await this.validator.validateBulkOperations(input);
       if (!validationResult.success) {
-        throw createError(
-          ErrorCodes.VALIDATION_ERROR,
+        throw TaskErrorFactory.createTaskValidationError(
+          'TaskManager.bulkTaskOperations',
           'Invalid bulk operations input',
-          'bulkTaskOperations',
-          validationResult.errors.join(', ')
+          { errors: validationResult.errors }
         );
       }
 
@@ -634,10 +733,8 @@ export class TaskManager {
               operation: index,
               error: opError instanceof Error ? opError.message : String(opError),
             });
-            throw createError(
-              ErrorCodes.OPERATION_FAILED,
-              'Bulk operation failed',
-              'bulkTaskOperations',
+            throw TaskErrorFactory.createTaskOperationError(
+              'TaskManager.bulkTaskOperations',
               'One or more operations failed',
               { errors }
             );
@@ -652,10 +749,10 @@ export class TaskManager {
             switch (op.type) {
               case 'update': {
                 if (!op.data) {
-                  throw createError(
-                    ErrorCodes.INVALID_INPUT,
+                  throw TaskErrorFactory.createTaskValidationError(
+                    'TaskManager.bulkTaskOperations',
                     'Update operation requires data',
-                    'bulkTaskOperations'
+                    { operation: op }
                   );
                 }
                 const updated = await this.updateTask(op.path, op.data as UpdateTaskInput);
@@ -671,10 +768,10 @@ export class TaskManager {
                 break;
               }
               default:
-                throw createError(
-                  ErrorCodes.INVALID_INPUT,
+                throw TaskErrorFactory.createTaskValidationError(
+                  'TaskManager.bulkTaskOperations',
                   `Invalid operation type: ${op.type}`,
-                  'bulkTaskOperations'
+                  { operation: op }
                 );
             }
           } catch (opError) {
@@ -684,10 +781,8 @@ export class TaskManager {
             });
 
             // If any operation fails, rollback and report all errors
-            throw createError(
-              ErrorCodes.OPERATION_FAILED,
-              'Bulk operation failed',
-              'bulkTaskOperations',
+            throw TaskErrorFactory.createTaskOperationError(
+              'TaskManager.bulkTaskOperations',
               'One or more operations failed',
               { errors }
             );

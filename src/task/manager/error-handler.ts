@@ -1,4 +1,4 @@
-import { TaskError } from '../../errors/task-error.js';
+import { TaskErrorFactory } from '../../errors/task-error.js';
 import { Logger } from '../../logging/index.js';
 
 /**
@@ -21,10 +21,9 @@ export class TaskManagerErrorHandler {
       context,
     });
 
-    throw TaskError.operationFailed(
-      'TaskManager',
-      operation,
-      `Failed to ${operation}: ${errorMessage}`,
+    throw TaskErrorFactory.createTaskInitializationError(
+      `TaskManager.${operation}`,
+      error instanceof Error ? error : new Error(errorMessage),
       context
     );
   }
@@ -43,7 +42,7 @@ export class TaskManagerErrorHandler {
       context,
     });
 
-    throw TaskError.validationFailed(operation, message, context);
+    throw TaskErrorFactory.createTaskValidationError(`TaskManager.${operation}`, message, context);
   }
 
   /**
@@ -56,7 +55,7 @@ export class TaskManagerErrorHandler {
       context,
     });
 
-    throw TaskError.notFound(path, operation, context);
+    throw TaskErrorFactory.createTaskNotFoundError(`TaskManager.${operation}`, path);
   }
 
   /**
@@ -73,7 +72,7 @@ export class TaskManagerErrorHandler {
       context,
     });
 
-    throw TaskError.dependencyError(operation, message, context);
+    throw TaskErrorFactory.createTaskDependencyError(`TaskManager.${operation}`, message, context);
   }
 
   /**
@@ -86,7 +85,7 @@ export class TaskManagerErrorHandler {
       context,
     });
 
-    throw TaskError.statusError(operation, message, context);
+    throw TaskErrorFactory.createTaskStatusError(`TaskManager.${operation}`, message, context);
   }
 
   /**
@@ -103,7 +102,11 @@ export class TaskManagerErrorHandler {
       context,
     });
 
-    throw TaskError.operationFailed('TaskManager', operation, errorMessage, context);
+    throw TaskErrorFactory.createTaskOperationError(
+      `TaskManager.${operation}`,
+      errorMessage,
+      context
+    );
   }
 
   /**
@@ -120,7 +123,14 @@ export class TaskManagerErrorHandler {
       context,
     });
 
-    throw TaskError.bulkOperationFailed(operation, errors, context);
+    throw TaskErrorFactory.createTaskOperationError(
+      `TaskManager.${operation}`,
+      'Bulk operation failed',
+      {
+        ...context,
+        errors: errors.map(e => e.message),
+      }
+    );
   }
 
   /**
@@ -137,6 +147,6 @@ export class TaskManagerErrorHandler {
       context,
     });
 
-    throw TaskError.validationFailed(operation, message, context);
+    throw TaskErrorFactory.createTaskValidationError(`TaskManager.${operation}`, message, context);
   }
 }

@@ -7,23 +7,10 @@ import { TaskStorage } from '../../types/storage.js';
 import { Logger } from '../../logging/index.js';
 import { TaskIndexManager } from './indexing/index-manager.js';
 import { CacheManager } from './cache/cache-manager.js';
-import { ErrorCodes, createError, type ErrorCode } from '../../errors/index.js';
+import { TaskErrorFactory } from '../../errors/task-error.js';
 import { TransactionManager } from './transactions/transaction-manager.js';
 
 const BATCH_SIZE = 50; // Maximum number of tasks to process in parallel
-
-/**
- * Helper function to create errors with consistent operation naming
- */
-function createTaskStoreError(
-  code: ErrorCode,
-  message: string,
-  operation: string = 'TaskStore',
-  userMessage?: string,
-  metadata?: Record<string, unknown>
-): Error {
-  return createError(code, message, `TaskStore.${operation}`, userMessage, metadata);
-}
 
 export class TaskStore {
   private readonly logger: Logger;
@@ -150,10 +137,10 @@ export class TaskStore {
   async createTask(input: CreateTaskInput): Promise<Task> {
     const pathResult = this.pathValidator.validatePath(input.path);
     if (!pathResult.isValid) {
-      throw createTaskStoreError(
-        ErrorCodes.TASK_INVALID_PATH,
+      throw TaskErrorFactory.createTaskValidationError(
+        'TaskStore.createTask',
         pathResult.error || `Invalid task path: ${input.path}`,
-        'createTask'
+        { input }
       );
     }
 
@@ -174,12 +161,10 @@ export class TaskStore {
     } catch (error) {
       await this.transactionManager.rollback(transaction);
       this.logger.error('Failed to create task', { error, input });
-      throw createTaskStoreError(
-        ErrorCodes.OPERATION_FAILED,
-        'Failed to create task',
-        'createTask',
-        undefined,
-        { input, error }
+      throw TaskErrorFactory.createTaskCreationError(
+        'TaskStore.createTask',
+        error instanceof Error ? error : new Error(String(error)),
+        { input }
       );
     }
   }
@@ -190,10 +175,10 @@ export class TaskStore {
   protected async getTaskByPath(path: string): Promise<Task | null> {
     const pathResult = this.pathValidator.validatePath(path);
     if (!pathResult.isValid) {
-      throw createTaskStoreError(
-        ErrorCodes.TASK_INVALID_PATH,
+      throw TaskErrorFactory.createTaskValidationError(
+        'TaskStore.getTaskByPath',
         pathResult.error || `Invalid task path: ${path}`,
-        'getTaskByPath'
+        { path }
       );
     }
 
@@ -259,12 +244,10 @@ export class TaskStore {
       return tasks;
     } catch (error) {
       this.logger.error('Failed to get tasks by pattern', { error, pattern });
-      throw createTaskStoreError(
-        ErrorCodes.OPERATION_FAILED,
-        'Failed to get tasks by pattern',
-        'getTasksByPattern',
-        undefined,
-        { pattern, error }
+      throw TaskErrorFactory.createTaskStorageError(
+        'TaskStore.getTasksByPattern',
+        error instanceof Error ? error : new Error(String(error)),
+        { pattern }
       );
     }
   }
@@ -308,12 +291,10 @@ export class TaskStore {
       return tasks;
     } catch (error) {
       this.logger.error('Failed to get tasks by status', { error, status });
-      throw createTaskStoreError(
-        ErrorCodes.OPERATION_FAILED,
-        'Failed to get tasks by status',
-        'getTasksByStatus',
-        undefined,
-        { status, error }
+      throw TaskErrorFactory.createTaskStorageError(
+        'TaskStore.getTasksByStatus',
+        error instanceof Error ? error : new Error(String(error)),
+        { status }
       );
     }
   }
@@ -324,10 +305,10 @@ export class TaskStore {
   async getSubtasks(parentPath: string): Promise<Task[]> {
     const pathResult = this.pathValidator.validatePath(parentPath);
     if (!pathResult.isValid) {
-      throw createTaskStoreError(
-        ErrorCodes.TASK_INVALID_PATH,
+      throw TaskErrorFactory.createTaskValidationError(
+        'TaskStore.getSubtasks',
         pathResult.error || `Invalid parent path: ${parentPath}`,
-        'getSubtasks'
+        { parentPath }
       );
     }
 
@@ -366,12 +347,10 @@ export class TaskStore {
       return tasks;
     } catch (error) {
       this.logger.error('Failed to get subtasks', { error, parentPath });
-      throw createTaskStoreError(
-        ErrorCodes.OPERATION_FAILED,
-        'Failed to get subtasks',
-        'getSubtasks',
-        undefined,
-        { parentPath, error }
+      throw TaskErrorFactory.createTaskStorageError(
+        'TaskStore.getSubtasks',
+        error instanceof Error ? error : new Error(String(error)),
+        { parentPath }
       );
     }
   }
@@ -404,11 +383,10 @@ export class TaskStore {
    */
   async clearAllTasks(confirm: boolean): Promise<void> {
     if (!confirm) {
-      throw createTaskStoreError(
-        ErrorCodes.OPERATION_FAILED,
+      throw TaskErrorFactory.createTaskValidationError(
+        'TaskStore.clearAllTasks',
         'Must explicitly confirm task deletion',
-        'clearAllTasks',
-        'Set confirm parameter to true to proceed with clearing all tasks'
+        { confirm }
       );
     }
 
@@ -426,11 +404,9 @@ export class TaskStore {
     } catch (error) {
       await this.transactionManager.rollback(transaction);
       this.logger.error('Failed to clear tasks', { error });
-      throw createTaskStoreError(
-        ErrorCodes.OPERATION_FAILED,
+      throw TaskErrorFactory.createTaskOperationError(
+        'TaskStore.clearAllTasks',
         'Failed to clear all tasks',
-        'clearAllTasks',
-        undefined,
         { error }
       );
     }
@@ -449,12 +425,10 @@ export class TaskStore {
       this.logger.info('Database optimized', { analyzed: analyze });
     } catch (error) {
       this.logger.error('Failed to optimize database', { error });
-      throw createTaskStoreError(
-        ErrorCodes.OPERATION_FAILED,
-        'Failed to optimize database',
-        'vacuumDatabase',
-        undefined,
-        { analyze, error }
+      throw TaskErrorFactory.createTaskStorageError(
+        'TaskStore.vacuumDatabase',
+        error instanceof Error ? error : new Error(String(error)),
+        { analyze }
       );
     }
   }
@@ -490,11 +464,9 @@ export class TaskStore {
     } catch (error) {
       await this.transactionManager.rollback(transaction);
       this.logger.error('Failed to repair relationships', { error });
-      throw createTaskStoreError(
-        ErrorCodes.OPERATION_FAILED,
+      throw TaskErrorFactory.createTaskOperationError(
+        'TaskStore.repairRelationships',
         'Failed to repair relationships',
-        'repairRelationships',
-        undefined,
         { dryRun, pathPattern, error }
       );
     }

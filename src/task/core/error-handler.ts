@@ -1,18 +1,5 @@
-import { ErrorCodes, createError, type ErrorCode } from '../../errors/index.js';
+import { TaskErrorFactory } from '../../errors/task-error.js';
 import { Logger } from '../../logging/index.js';
-
-/**
- * Helper function to create task errors with consistent operation naming
- */
-export function createTaskError(
-  code: ErrorCode,
-  message: string,
-  operation: string = 'TaskManager',
-  userMessage?: string,
-  metadata?: Record<string, unknown>
-): Error {
-  return createError(code, message, `TaskManager.${operation}`, userMessage, metadata);
-}
 
 /**
  * Helper class to handle task errors with logging
@@ -44,11 +31,9 @@ export class TaskErrorHandler {
       context,
     });
 
-    throw createTaskError(
-      ErrorCodes.OPERATION_FAILED,
-      `Failed to ${operation}`,
-      operation,
-      `Task operation failed: ${errorMessage}`,
+    throw TaskErrorFactory.createTaskOperationError(
+      `TaskManager.${operation}`,
+      `Failed to ${operation}: ${errorMessage}`,
       {
         ...context,
         error: errorDetails,
@@ -69,13 +54,7 @@ export class TaskErrorHandler {
       context,
     });
 
-    throw createTaskError(
-      ErrorCodes.TASK_VALIDATION,
-      message,
-      operation,
-      'Task validation failed',
-      context
-    );
+    throw TaskErrorFactory.createTaskValidationError(`TaskManager.${operation}`, message, context);
   }
 
   /**
@@ -92,16 +71,7 @@ export class TaskErrorHandler {
       context,
     });
 
-    throw createTaskError(
-      ErrorCodes.TASK_NOT_FOUND,
-      `Task not found: ${taskPath}`,
-      operation,
-      'The requested task could not be found',
-      {
-        taskPath,
-        ...context,
-      }
-    );
+    throw TaskErrorFactory.createTaskNotFoundError(`TaskManager.${operation}`, taskPath);
   }
 
   /**
@@ -118,13 +88,7 @@ export class TaskErrorHandler {
       context,
     });
 
-    throw createTaskError(
-      ErrorCodes.TASK_DEPENDENCY,
-      message,
-      operation,
-      'Task dependency validation failed',
-      context
-    );
+    throw TaskErrorFactory.createTaskDependencyError(`TaskManager.${operation}`, message, context);
   }
 
   /**
@@ -137,13 +101,7 @@ export class TaskErrorHandler {
       context,
     });
 
-    throw createTaskError(
-      ErrorCodes.TASK_STATUS,
-      message,
-      operation,
-      'Invalid task status transition',
-      context
-    );
+    throw TaskErrorFactory.createTaskStatusError(`TaskManager.${operation}`, message, context);
   }
 
   /**
@@ -156,12 +114,10 @@ export class TaskErrorHandler {
       context,
     });
 
-    throw createTaskError(
-      ErrorCodes.TASK_CYCLE,
-      message,
-      operation,
-      'Circular dependency detected in task relationships',
-      context
-    );
+    throw TaskErrorFactory.createTaskOperationError(`TaskManager.${operation}`, message, {
+      ...context,
+      errorType: 'TASK_CYCLE',
+      userMessage: 'Circular dependency detected in task relationships',
+    });
   }
 }

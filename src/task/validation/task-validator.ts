@@ -3,7 +3,7 @@ import { formatTimestamp } from '../../utils/date-formatter.js';
 import { TaskStorage } from '../../types/storage.js';
 import { TaskType, TaskStatus, Task } from '../../types/task.js';
 import { bulkOperationsSchema } from './schemas/bulk-operations-schema.js';
-import { ErrorCodes, createError } from '../../errors/index.js';
+import { TaskErrorFactory } from '../../errors/task-error.js';
 import {
   taskMetadataSchema,
   createTaskSchema,
@@ -33,6 +33,27 @@ export class TaskValidator {
   }
 
   /**
+   * Get the create task schema
+   */
+  getCreateTaskSchema(): any {
+    return createTaskSchema;
+  }
+
+  /**
+   * Get the update task schema
+   */
+  getUpdateTaskSchema(): any {
+    return updateTaskSchema;
+  }
+
+  /**
+   * Get the bulk operations schema
+   */
+  getBulkOperationsSchema(): any {
+    return bulkOperationsSchema;
+  }
+
+  /**
    * Validates task creation input
    */
   async validateCreate(
@@ -47,22 +68,20 @@ export class TaskValidator {
       // Check for existing task
       const existingTask = await this.storage.getTask(validatedInput.path);
       if (existingTask) {
-        throw createError(
-          ErrorCodes.TASK_DUPLICATE,
-          `Task already exists at path: ${validatedInput.path}`,
+        throw TaskErrorFactory.createTaskValidationError(
           'TaskValidator.validateCreate',
-          'A task with this path already exists. Please use a different path.'
+          `Task already exists at path: ${validatedInput.path}`,
+          { input }
         );
       }
 
       // Check for reasoning content in description
       if (validatedInput.description) {
         if (validatedInput.description.toLowerCase().includes('reasoning:')) {
-          throw createError(
-            ErrorCodes.INVALID_INPUT,
-            'Reasoning content detected in description field',
+          throw TaskErrorFactory.createTaskValidationError(
             'TaskValidator.validateCreate',
-            'Please use the separate reasoning field for task reasoning. The description field should contain technical details, implementation steps, and success criteria.'
+            'Reasoning content detected in description field. Please use the separate reasoning field.',
+            { input }
           );
         }
       }
@@ -89,7 +108,7 @@ export class TaskValidator {
         planningNotes: validatedInput.planningNotes || [],
         progressNotes: validatedInput.progressNotes || [],
         completionNotes: validatedInput.completionNotes || [],
-        troubleshootingNotes: validatedInput.troubleshootingNotes || []
+        troubleshootingNotes: validatedInput.troubleshootingNotes || [],
       };
 
       // Validate hierarchy if parent path provided
@@ -102,11 +121,9 @@ export class TaskValidator {
         );
 
         if (!hierarchyResult.valid && hierarchyMode === HierarchyValidationMode.STRICT) {
-          throw createError(
-            ErrorCodes.INVALID_INPUT,
-            hierarchyResult.error || 'Hierarchy validation failed',
+          throw TaskErrorFactory.createTaskValidationError(
             'TaskValidator.validateCreate',
-            undefined,
+            hierarchyResult.error || 'Hierarchy validation failed',
             { missingParents: hierarchyResult.missingParents }
           );
         }
@@ -121,11 +138,9 @@ export class TaskValidator {
       );
 
       if (!dependencyResult.valid && dependencyMode === DependencyValidationMode.STRICT) {
-        throw createError(
-          ErrorCodes.INVALID_INPUT,
-          dependencyResult.error || 'Dependency validation failed',
+        throw TaskErrorFactory.createTaskDependencyError(
           'TaskValidator.validateCreate',
-          undefined,
+          dependencyResult.error || 'Dependency validation failed',
           { missingDependencies: dependencyResult.missingDependencies }
         );
       }
@@ -158,21 +173,16 @@ export class TaskValidator {
       // Get existing task
       const existingTask = await this.storage.getTask(path);
       if (!existingTask) {
-        throw createError(
-          ErrorCodes.TASK_NOT_FOUND,
-          `Task not found: ${path}`,
-          'TaskValidator.validateUpdate'
-        );
+        throw TaskErrorFactory.createTaskNotFoundError('TaskValidator.validateUpdate', path);
       }
 
       // Check for reasoning content in description
       if (validatedUpdates.description) {
         if (validatedUpdates.description.toLowerCase().includes('reasoning:')) {
-          throw createError(
-            ErrorCodes.INVALID_INPUT,
-            'Reasoning content detected in description field',
+          throw TaskErrorFactory.createTaskValidationError(
             'TaskValidator.validateUpdate',
-            'Please use the separate reasoning field for task reasoning. The description field should contain technical details, implementation steps, and success criteria.'
+            'Reasoning content detected in description field. Please use the separate reasoning field.',
+            { updates }
           );
         }
       }
@@ -201,11 +211,9 @@ export class TaskValidator {
         );
 
         if (!dependencyResult.valid && mode === DependencyValidationMode.STRICT) {
-          throw createError(
-            ErrorCodes.INVALID_INPUT,
-            dependencyResult.error || 'Dependency validation failed',
+          throw TaskErrorFactory.createTaskDependencyError(
             'TaskValidator.validateUpdate',
-            undefined,
+            dependencyResult.error || 'Dependency validation failed',
             { missingDependencies: dependencyResult.missingDependencies }
           );
         }

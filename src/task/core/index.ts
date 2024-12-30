@@ -1,5 +1,5 @@
 export { TaskStore } from './task-store.js';
-export { TaskErrorHandler, createTaskError } from './error-handler.js';
+export { TaskErrorHandler } from './error-handler.js';
 
 // Re-export batch processors
 export {
