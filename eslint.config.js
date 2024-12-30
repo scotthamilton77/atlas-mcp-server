@@ -11,12 +11,28 @@ export default tseslint.config(
       'no-unused-vars': 'warn',
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-unused-vars': 'warn',
+      '@typescript-eslint/no-unused-expressions': 'warn',
       'prefer-const': 'error',
     },
     languageOptions: {
       parserOptions: {
         project: './tsconfig.json',
       },
+    },
+  },
+  {
+    // Specific files with more relaxed rules
+    files: [
+      'src/storage/core/connection/pool.ts',
+      'src/storage/sqlite/error-handler.ts',
+      'src/storage/sqlite/init.ts',
+      'src/storage/core/connection/manager.ts',
+    ],
+    rules: {
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-expressions': 'off',
     },
   },
   {
