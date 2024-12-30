@@ -55,8 +55,26 @@ export class ToolHandler {
   > = new Map();
 
   constructor(private readonly taskManager: TaskManager) {
-    this.logger = Logger.getInstance().child({ component: 'ToolHandler' });
+    this.logger = Logger.getInstance().child({
+      component: 'ToolHandler',
+      context: {
+        operation: 'initialization',
+      },
+    });
+
+    // Register tools immediately but ensure they're ready before use
     this.registerDefaultTools();
+
+    // Log registered tools with detailed context
+    this.logger.info('Tool registration completed', {
+      count: this.tools.size,
+      tools: Array.from(this.tools.keys()),
+      handlers: Array.from(this.toolHandlers.keys()),
+      context: {
+        operation: 'registerDefaultTools',
+        timestamp: Date.now(),
+      },
+    });
   }
 
   /**
@@ -534,17 +552,41 @@ Example - Creating Tasks with Dependencies:
     const { handler, ...toolDef } = tool;
     this.tools.set(tool.name, toolDef);
     this.toolHandlers.set(tool.name, handler);
-    this.logger.debug('Registered tool', { name: tool.name });
+    this.logger.debug('Tool registered', {
+      name: tool.name,
+      schema: toolDef.inputSchema,
+      context: {
+        operation: 'registerTool',
+        timestamp: Date.now(),
+      },
+    });
   }
 
   async listTools(): Promise<{ tools: Tool[] }> {
+    // Ensure all tools are registered
+    if (this.tools.size === 0) {
+      this.logger.warn('No tools registered, attempting registration', {
+        context: {
+          operation: 'listTools',
+          timestamp: Date.now(),
+        },
+      });
+      this.registerDefaultTools();
+      // Wait for registration to complete
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
     const tools = Array.from(this.tools.values());
-    this.logger.info('Listed tools', {
+    this.logger.info('Tools listed', {
       count: tools.length,
       tools: tools.map(t => ({
         name: t.name,
         schema: t.inputSchema,
       })),
+      context: {
+        operation: 'listTools',
+        timestamp: Date.now(),
+      },
     });
     return { tools };
   }

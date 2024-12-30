@@ -5,17 +5,17 @@ import { TaskStatus, CONSTRAINTS } from '../types/task.js';
 
 // Schema validation messages
 const VALIDATION_MESSAGES = {
-  PATH_FORMAT: 'Path can only contain alphanumeric characters, underscores, dots, and hyphens',
-  PATH_DEPTH: `Path depth cannot exceed ${CONSTRAINTS.MAX_PATH_DEPTH} levels`,
-  NAME_LENGTH: `Name cannot exceed ${CONSTRAINTS.NAME_MAX_LENGTH} characters`,
-  DESC_LENGTH: `Description cannot exceed ${CONSTRAINTS.DESCRIPTION_MAX_LENGTH} characters`,
-  NOTE_LENGTH: `Notes cannot exceed ${CONSTRAINTS.NOTE_MAX_LENGTH} characters each`,
-  REASONING_LENGTH: `Reasoning cannot exceed ${CONSTRAINTS.REASONING_MAX_LENGTH} characters`,
-  DEPENDENCIES_SIZE: `Cannot have more than ${CONSTRAINTS.MAX_DEPENDENCIES} dependencies`,
-  SUBTASKS_SIZE: `Cannot have more than ${CONSTRAINTS.MAX_SUBTASKS} subtasks`,
-  NOTES_SIZE: `Cannot have more than ${CONSTRAINTS.MAX_NOTES} notes`,
-  METADATA_LENGTH: `Metadata string fields cannot exceed ${CONSTRAINTS.METADATA_STRING_MAX_LENGTH} characters`,
-  METADATA_ARRAY: `Metadata arrays cannot exceed ${CONSTRAINTS.MAX_ARRAY_ITEMS} items`,
+  PATH_FORMAT: 'Use alphanumeric characters, underscores, dots, and hyphens for clear paths',
+  PATH_DEPTH: `Keep path depth within ${CONSTRAINTS.MAX_PATH_DEPTH} levels for good organization`,
+  NAME_LENGTH: `Use concise names up to ${CONSTRAINTS.NAME_MAX_LENGTH} characters`,
+  DESC_LENGTH: `Provide clear descriptions within ${CONSTRAINTS.DESCRIPTION_MAX_LENGTH} characters`,
+  NOTE_LENGTH: `Write focused notes up to ${CONSTRAINTS.NOTE_MAX_LENGTH} characters each`,
+  REASONING_LENGTH: `Document reasoning clearly within ${CONSTRAINTS.REASONING_MAX_LENGTH} characters`,
+  DEPENDENCIES_SIZE: `Maintain up to ${CONSTRAINTS.MAX_DEPENDENCIES} well-defined dependencies`,
+  SUBTASKS_SIZE: `Organize with up to ${CONSTRAINTS.MAX_SUBTASKS} focused subtasks`,
+  NOTES_SIZE: `Track progress with up to ${CONSTRAINTS.MAX_NOTES} detailed notes`,
+  METADATA_LENGTH: `Keep metadata fields concise within ${CONSTRAINTS.METADATA_STRING_MAX_LENGTH} characters`,
+  METADATA_ARRAY: `Use up to ${CONSTRAINTS.MAX_ARRAY_ITEMS} items for effective categorization`,
 };
 
 /** Creates a new task with path-based hierarchy and validation */
@@ -42,10 +42,11 @@ export const createTaskSchema = {
     parentPath: {
       type: 'string',
       description:
-        'Path of the parent task. Parent must be MILESTONE or GROUP type.\n' +
-        'Examples:\n' +
-        '- "project/backend" (under project backend milestone)\n' +
-        '- "project/backend/auth" (under auth group)',
+        'Path of the parent task. Parent should be a MILESTONE for effective organization.\n' +
+        'Best Practices:\n' +
+        '• Use descriptive milestone names (e.g., "project/backend")\n' +
+        '• Keep paths clear and meaningful\n' +
+        '• Structure tasks logically under milestones',
     },
     description: {
       type: 'string',
@@ -60,30 +61,30 @@ export const createTaskSchema = {
     },
     type: {
       type: 'string',
-      enum: ['TASK', 'MILESTONE', 'GROUP'],
+      enum: ['TASK', 'MILESTONE'],
       description:
-        '⚠️ Task Type Hierarchy Rules (MUST BE UPPERCASE):\n\n' +
-        '1. MILESTONE (Top Level Container):\n' +
-        '   • CAN contain: TASK and GROUP types\n' +
-        '   • Purpose: Project phases, major deliverables\n' +
-        '   • Example: "Backend Development", "Security Hardening"\n' +
-        '   • Status: Completed when all subtasks done\n\n' +
-        '2. GROUP (Middle Level Container):\n' +
-        '   • CAN contain: Only TASK types\n' +
-        '   • CANNOT contain: Other GROUPs or MILESTONEs\n' +
-        '   • Purpose: Feature sets, related task collections\n' +
-        '   • Example: "Authentication Features", "API Endpoints"\n' +
-        '   • Status: Reflects aggregate of subtask states\n\n' +
-        '3. TASK (Leaf Level):\n' +
-        '   • CANNOT contain any subtasks\n' +
-        '   • Purpose: Atomic units of work\n' +
-        '   • Example: "Implement JWT", "Add Rate Limiting"\n' +
-        '   • Status: Independently managed\n\n' +
-        'Common Errors to Avoid:\n' +
-        '- Adding subtasks to TASK type\n' +
-        '- Adding non-TASK items under GROUP\n' +
-        '- Creating circular dependencies\n' +
-        '- Exceeding path depth limits',
+        'Task Type Guide - Building Effective Task Hierarchies:\n\n' +
+        '1. MILESTONE - Project Organization:\n' +
+        '   • Organizes work into meaningful phases\n' +
+        '   • Groups related tasks under clear objectives\n' +
+        '   • Examples: "Backend Development", "Security Hardening"\n' +
+        '   • Best Practices:\n' +
+        '     - Use descriptive, goal-oriented names\n' +
+        '     - Keep task groupings focused and cohesive\n' +
+        '     - Track progress through task completion\n\n' +
+        '2. TASK - Unit of Work:\n' +
+        '   • Represents concrete, achievable actions\n' +
+        '   • Focuses on specific implementation details\n' +
+        '   • Examples: "Implement JWT", "Add Rate Limiting"\n' +
+        '   • Best Practices:\n' +
+        '     - Define clear success criteria\n' +
+        '     - Use action-oriented names\n' +
+        '     - Keep scope focused and manageable\n\n' +
+        'Hierarchy Best Practices:\n' +
+        '• Structure tasks logically under relevant milestones\n' +
+        '• Use meaningful path segments for easy navigation\n' +
+        '• Maintain clear dependencies between related tasks\n' +
+        '• Keep hierarchy depth reasonable for good organization',
     },
     dependencies: {
       type: 'array',
@@ -178,13 +179,15 @@ export const updateTaskSchema = {
         },
         type: {
           type: 'string',
-          enum: ['TASK', 'MILESTONE', 'GROUP'],
+          enum: ['TASK', 'MILESTONE'],
           description:
-            '⚠️ Task Type Rules (MUST BE UPPERCASE):\n' +
-            '- MILESTONE can contain TASK and GROUP\n' +
-            '- GROUP can only contain TASK\n' +
-            '- TASK cannot contain subtasks\n' +
-            'Changing type may require restructuring subtasks.',
+            'Task Type Selection Guide:\n' +
+            '• MILESTONE: Choose when organizing related tasks under a common objective\n' +
+            '• TASK: Choose when implementing specific, actionable work items\n\n' +
+            'Best Practices:\n' +
+            '• Group related tasks under descriptive milestones\n' +
+            '• Keep task definitions clear and focused\n' +
+            '• Consider dependencies when organizing tasks',
         },
         status: {
           type: 'string',
@@ -206,15 +209,21 @@ export const updateTaskSchema = {
             '   → Requires all dependencies completed\n\n' +
             '5. FAILED (Terminal State)\n' +
             '   → Can retry by setting to PENDING\n\n' +
-            'Status Propagation:\n' +
-            '- MILESTONE: Completed when all subtasks done\n' +
-            '- GROUP: Status based on subtask states\n' +
-            '- TASK: Independent status management\n\n' +
-            'Best Practices:\n' +
-            '- Always start tasks as PENDING\n' +
-            '- Mark as IN_PROGRESS when work begins\n' +
-            '- Use BLOCKED for dependency issues\n' +
-            '- Complete dependencies before marking COMPLETED',
+            'Status Management Guide:\n\n' +
+            'MILESTONE Progress:\n' +
+            '• Tracks overall project phase completion\n' +
+            '• Automatically updates based on task progress\n' +
+            '• Provides high-level project insights\n\n' +
+            'TASK Progress:\n' +
+            '• Reflects individual work item status\n' +
+            '• Updates through natural workflow stages\n' +
+            '• Enables detailed progress tracking\n\n' +
+            'Status Best Practices:\n' +
+            '• Begin tasks in PENDING state\n' +
+            '• Update to IN_PROGRESS when actively working\n' +
+            '• Mark COMPLETED after thorough verification\n' +
+            '• Use status transitions to maintain accurate progress\n' +
+            '• Keep task status current for effective tracking',
         },
         dependencies: {
           type: 'array',
@@ -281,7 +290,7 @@ export const updateTaskSchema = {
         'Fields to update. Available fields:\n' +
         '- name: Update task name\n' +
         '- description: Update task details\n' +
-        '- type: Change task type (task/milestone/group)\n' +
+        '- type: Select appropriate task type (TASK/MILESTONE)\n' +
         '- status: Update execution state with automatic dependency checks\n' +
         '- dependencies: Add/remove dependencies with validation\n' +
         '- metadata: Update task metadata (priority, tags, notes, etc.)\n\n' +
@@ -346,7 +355,8 @@ export const deleteTaskSchema = {
   properties: {
     path: {
       type: 'string',
-      description: 'Task path to delete. Will recursively remove all subtasks. Use with caution.',
+      description:
+        'Task path to remove. Provides clean project organization by removing completed or obsolete tasks.',
     },
   },
   required: ['path'],
@@ -359,7 +369,7 @@ export const clearAllTasksSchema = {
     confirm: {
       type: 'boolean',
       description:
-        'Must be set to true to confirm deletion of all tasks. This operation cannot be undone.',
+        'Enables fresh start by clearing task database. Useful when beginning new project phases or reorganizing work structure.',
     },
   },
   required: ['confirm'],
@@ -371,7 +381,12 @@ export const vacuumDatabaseSchema = {
   properties: {
     analyze: {
       type: 'boolean',
-      description: 'Whether to analyze tables for query optimization after vacuum.',
+      description:
+        'Database Optimization Guide:\n' +
+        '• Improves query performance through table analysis\n' +
+        '• Optimizes storage space utilization\n' +
+        '• Enhances overall system responsiveness\n' +
+        '• Recommended during maintenance windows',
       default: true,
     },
   },
@@ -384,12 +399,21 @@ export const repairRelationshipsSchema = {
   properties: {
     dryRun: {
       type: 'boolean',
-      description: 'If true, only reports issues without fixing them.',
+      description:
+        'Relationship Maintenance Guide:\n' +
+        '• Preview changes before applying them\n' +
+        '• Ensure task hierarchy integrity\n' +
+        '• Validate parent-child relationships\n' +
+        '• Maintain clean task organization',
       default: false,
     },
     pathPattern: {
       type: 'string',
-      description: 'Optional glob pattern to limit repair scope (e.g., "project/*").',
+      description:
+        'Scope Control Guide:\n' +
+        '• Focus repairs on specific project areas\n' +
+        '• Use patterns like "project/*" for targeted maintenance\n' +
+        '• Organize repairs by project phase or component',
     },
   },
   required: [],
