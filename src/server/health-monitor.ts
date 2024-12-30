@@ -91,6 +91,7 @@ export class HealthMonitor {
    */
   private async runHealthCheck(): Promise<void> {
     try {
+      const startTime = Date.now();
       const status = await this.getCurrentStatus();
       const health = await this.check(status);
 
@@ -100,16 +101,51 @@ export class HealthMonitor {
           consecutiveFailures: this.consecutiveFailures,
           threshold: this.config.failureThreshold,
           details: health.details,
+          components: health.components,
+          metrics: {
+            storage: status.storage,
+            rateLimiter: status.rateLimiter,
+            requests: status.metrics.requests,
+          },
+          duration: Date.now() - startTime,
+          context: {
+            operation: 'healthCheck',
+            timestamp: startTime,
+          },
         });
 
         if (this.consecutiveFailures >= this.config.failureThreshold) {
           await this.initiateShutdown();
         }
       } else {
+        // Log successful health checks at debug level
+        this.logger.debug('Health check passed', {
+          components: health.components,
+          metrics: {
+            storage: status.storage,
+            rateLimiter: status.rateLimiter,
+            requests: status.metrics.requests,
+          },
+          duration: Date.now() - startTime,
+          context: {
+            operation: 'healthCheck',
+            timestamp: startTime,
+          },
+        });
         this.consecutiveFailures = 0;
       }
     } catch (error) {
-      this.logger.error('Health check error', { error });
+      const errorTime = Date.now();
+      this.logger.error('Health check error', {
+        error,
+        consecutiveFailures: this.consecutiveFailures + 1,
+        threshold: this.config.failureThreshold,
+        context: {
+          operation: 'healthCheck',
+          timestamp: errorTime,
+          errorType: error instanceof Error ? error.name : 'Unknown',
+        },
+      });
       this.consecutiveFailures++;
       if (this.consecutiveFailures >= this.config.failureThreshold) {
         await this.initiateShutdown();
@@ -164,25 +200,64 @@ export class HealthMonitor {
    * Initiate graceful shutdown
    */
   private async initiateShutdown(): Promise<void> {
+    const shutdownStart = Date.now();
     this.logger.error('Initiating shutdown due to health check failures', {
       consecutiveFailures: this.consecutiveFailures,
+      gracePeriod: this.config.shutdownGracePeriod,
+      context: {
+        operation: 'shutdown',
+        timestamp: shutdownStart,
+        reason: 'healthCheckFailure',
+      },
     });
 
     if (this.shutdownCallback) {
       try {
         const shutdownTimeout = setTimeout(() => {
-          this.logger.error('Force shutdown due to timeout');
+          this.logger.error('Force shutdown due to timeout', {
+            duration: Date.now() - shutdownStart,
+            context: {
+              operation: 'shutdown',
+              timestamp: Date.now(),
+              reason: 'timeout',
+            },
+          });
           process.exit(1);
         }, this.config.shutdownGracePeriod);
 
         await this.shutdownCallback();
         clearTimeout(shutdownTimeout);
+
+        this.logger.info('Graceful shutdown completed', {
+          duration: Date.now() - shutdownStart,
+          context: {
+            operation: 'shutdown',
+            timestamp: Date.now(),
+            reason: 'healthCheckFailure',
+          },
+        });
         process.exit(0);
       } catch (error) {
-        this.logger.error('Error during shutdown', { error });
+        this.logger.error('Error during shutdown', {
+          error,
+          duration: Date.now() - shutdownStart,
+          context: {
+            operation: 'shutdown',
+            timestamp: Date.now(),
+            reason: 'error',
+            errorType: error instanceof Error ? error.name : 'Unknown',
+          },
+        });
         process.exit(1);
       }
     } else {
+      this.logger.error('No shutdown callback registered', {
+        context: {
+          operation: 'shutdown',
+          timestamp: Date.now(),
+          reason: 'noCallback',
+        },
+      });
       process.exit(1);
     }
   }

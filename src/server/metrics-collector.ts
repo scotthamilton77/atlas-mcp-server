@@ -41,21 +41,86 @@ export class MetricsCollector {
   }
 
   recordSuccess(event: MetricEvent): void {
-    this.events.push({
+    const timestamp = event.timestamp || Date.now();
+    const enrichedEvent = {
       ...event,
       success: true,
-      timestamp: event.timestamp || Date.now(),
+      timestamp,
+      context: {
+        operation: event.type,
+        tool: event.tool,
+        duration: event.duration,
+        recordedAt: timestamp,
+      },
+    };
+
+    this.events.push(enrichedEvent);
+    this.logger.debug('Success metric recorded', {
+      event: enrichedEvent,
+      metrics: this.calculateCurrentMetrics(event.tool),
     });
-    this.logger.debug('Recorded success metric', { event });
   }
 
   recordError(event: MetricEvent): void {
-    this.events.push({
+    const timestamp = event.timestamp || Date.now();
+    const enrichedEvent = {
       ...event,
       success: false,
-      timestamp: event.timestamp || Date.now(),
+      timestamp,
+      context: {
+        operation: event.type,
+        tool: event.tool,
+        duration: event.duration,
+        error: event.error,
+        errorType: event.error ? this.categorizeError(event.error) : 'unknown',
+        recordedAt: timestamp,
+      },
+    };
+
+    this.events.push(enrichedEvent);
+    this.logger.warn('Error metric recorded', {
+      event: enrichedEvent,
+      metrics: this.calculateCurrentMetrics(event.tool),
+      errorRate: this.calculateErrorRate(event.tool),
     });
-    this.logger.debug('Recorded error metric', { event });
+  }
+
+  private categorizeError(error: string): string {
+    if (error.includes('timeout')) return 'timeout';
+    if (error.includes('validation')) return 'validation';
+    if (error.includes('permission')) return 'permission';
+    if (error.includes('not found')) return 'notFound';
+    return 'other';
+  }
+
+  private calculateErrorRate(tool?: string): number {
+    const now = Date.now();
+    const recentEvents = this.events.filter(
+      e => now - e.timestamp < 3600000 && (!tool || e.tool === tool)
+    );
+
+    if (recentEvents.length === 0) return 0;
+
+    const failedCount = recentEvents.filter(e => !e.success).length;
+    return Number((failedCount / recentEvents.length).toFixed(4));
+  }
+
+  private calculateCurrentMetrics(tool?: string): Record<string, unknown> {
+    const now = Date.now();
+    const recentEvents = this.events.filter(
+      e => now - e.timestamp < 3600000 && (!tool || e.tool === tool)
+    );
+
+    return {
+      total: recentEvents.length,
+      success: recentEvents.filter(e => e.success).length,
+      failed: recentEvents.filter(e => !e.success).length,
+      avgDuration: this.calculateAvgDuration(recentEvents),
+      lastHour: {
+        total: recentEvents.length,
+        errorRate: this.calculateErrorRate(tool),
+      },
+    };
   }
 
   getMetrics(): Metrics {
@@ -111,7 +176,14 @@ export class MetricsCollector {
   }
 
   clearMetrics(): void {
+    const metrics = this.getMetrics();
     this.events = [];
-    this.logger.debug('Cleared metrics');
+    this.logger.info('Metrics cleared', {
+      context: {
+        operation: 'clearMetrics',
+        timestamp: Date.now(),
+        previousMetrics: metrics,
+      },
+    });
   }
 }

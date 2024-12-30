@@ -24,10 +24,10 @@ export interface ServerConfig {
   requestTimeout: number;
   shutdownTimeout: number;
   health?: {
-    checkInterval?: number; // How often to run health checks (ms)
-    failureThreshold?: number; // How many consecutive failures before shutdown
-    shutdownGracePeriod?: number; // How long to wait before force shutdown (ms)
-    clientPingTimeout?: number; // How long to wait for client ping (ms)
+    checkInterval?: number;
+    failureThreshold?: number;
+    shutdownGracePeriod?: number;
+    clientPingTimeout?: number;
   };
 }
 
@@ -41,14 +41,28 @@ export interface ToolHandler {
 
 /**
  * AtlasServer class encapsulates MCP server functionality
- * Handles server lifecycle, transport, and error management
  */
 export class AtlasServer {
   private static instance: AtlasServer;
   private static isInitializing: boolean = false;
   private static serverPromise: Promise<void> | null = null;
   private static logger?: Logger;
-  private readonly server: Server;
+
+  private server!: Server;
+  private readonly rateLimiter: RateLimiter;
+  private readonly healthMonitor: HealthMonitor;
+  private readonly metricsCollector: MetricsCollector;
+  private readonly requestTracer: RequestTracer;
+  private readonly toolHandler: ToolHandler;
+  private readonly config: ServerConfig;
+  private readonly activeRequests: Set<string> = new Set();
+  private readonly MAX_MEMORY_USAGE = 1024 * 1024 * 1024; // 1GB threshold
+  private readonly MEMORY_CHECK_INTERVAL = 30000; // 30 seconds
+
+  private isShuttingDown: boolean = false;
+  private isInitialized: boolean = false;
+  private memoryMonitor?: NodeJS.Timeout;
+  private healthCheckInterval?: NodeJS.Timeout;
 
   private static initLogger(): void {
     if (!AtlasServer.logger) {
@@ -56,32 +70,16 @@ export class AtlasServer {
         AtlasServer.logger = Logger.getInstance().child({ component: 'AtlasServer' });
       } catch {
         // Logger not initialized yet, which is fine
-        // All logging operations will be skipped
       }
     }
   }
 
-  private readonly rateLimiter: RateLimiter;
-  private readonly healthMonitor: HealthMonitor;
-  private readonly metricsCollector: MetricsCollector;
-  private readonly requestTracer: RequestTracer;
-  private isShuttingDown: boolean = false;
-  private isInitialized: boolean = false;
-  private readonly activeRequests: Set<string> = new Set();
-  private memoryMonitor?: NodeJS.Timeout;
-  private readonly MAX_MEMORY_USAGE = 512 * 1024 * 1024; // 512MB threshold for VSCode extension environment
-  private readonly MEMORY_CHECK_INTERVAL = 5000; // 5 seconds
-
-  /**
-   * Gets the singleton instance of AtlasServer
-   */
   public static async getInstance(
     config: ServerConfig,
     toolHandler: ToolHandler
   ): Promise<AtlasServer> {
     AtlasServer.initLogger();
 
-    // Return existing instance if available
     if (AtlasServer.instance?.isInitialized) {
       if (AtlasServer.logger) {
         AtlasServer.logger.debug('Returning existing server instance');
@@ -89,7 +87,6 @@ export class AtlasServer {
       return AtlasServer.instance;
     }
 
-    // If initialization is in progress, wait for it
     if (AtlasServer.isInitializing) {
       if (AtlasServer.logger) {
         AtlasServer.logger.debug('Server initialization in progress, waiting...');
@@ -123,13 +120,10 @@ export class AtlasServer {
     return AtlasServer.instance;
   }
 
-  /**
-   * Creates a new AtlasServer instance
-   */
-  private constructor(
-    private readonly config: ServerConfig,
-    private readonly toolHandler: ToolHandler
-  ) {
+  private constructor(config: ServerConfig, toolHandler: ToolHandler) {
+    this.config = config;
+    this.toolHandler = toolHandler;
+
     // Initialize components
     this.rateLimiter = new RateLimiter(config.maxRequestsPerMinute || 600);
     this.healthMonitor = new HealthMonitor({
@@ -140,40 +134,84 @@ export class AtlasServer {
     });
     this.metricsCollector = new MetricsCollector();
     this.requestTracer = new RequestTracer();
-
-    // Initialize MCP server
-    this.server = new Server(
-      {
-        name: config.name,
-        version: config.version,
-      },
-      {
-        capabilities: {
-          tools: {
-            create_task: {},
-            update_task: {},
-            delete_task: {},
-            get_tasks_by_status: {},
-            get_tasks_by_path: {},
-            get_subtasks: {},
-            bulk_task_operations: {},
-            clear_all_tasks: {},
-            vacuum_database: {},
-            repair_relationships: {},
-          },
-        },
-      }
-    );
-
-    this.setupErrorHandling();
-    this.setupToolHandlers();
-    this.setupHealthCheck();
-    this.setupMemoryMonitoring();
   }
 
-  /**
-   * Sets up error handling for the server
-   */
+  private async initializeServer(): Promise<void> {
+    if (this.isInitialized) {
+      if (AtlasServer.logger) {
+        AtlasServer.logger.debug('Server already initialized');
+      }
+      return;
+    }
+
+    try {
+      // Get available tools with retries
+      let tools = [];
+      let retryCount = 0;
+      const maxRetries = 3;
+
+      while (retryCount < maxRetries) {
+        try {
+          const result = await this.toolHandler.listTools();
+          tools = result.tools;
+          if (tools.length > 0) {
+            break;
+          }
+          retryCount++;
+          await new Promise(resolve => setTimeout(resolve, 100 * retryCount));
+        } catch (error) {
+          if (retryCount === maxRetries - 1) {
+            throw error;
+          }
+          retryCount++;
+          await new Promise(resolve => setTimeout(resolve, 100 * retryCount));
+        }
+      }
+
+      // Initialize MCP server with tools
+      const toolCapabilities: Record<string, Record<string, never>> = {};
+      for (const tool of tools) {
+        toolCapabilities[tool.name] = {};
+      }
+
+      this.server = new Server(
+        {
+          name: this.config.name,
+          version: this.config.version,
+        },
+        {
+          capabilities: {
+            tools: toolCapabilities,
+          },
+        }
+      );
+
+      this.setupErrorHandling();
+      this.setupToolHandlers();
+      this.setupHealthCheck();
+      this.setupMemoryMonitoring();
+
+      const transport = new StdioServerTransport();
+      await this.server.connect(transport);
+
+      this.isInitialized = true;
+      if (AtlasServer.logger) {
+        AtlasServer.logger.info(`${this.config.name} v${this.config.version} running on stdio`, {
+          metrics: this.metricsCollector.getMetrics(),
+          availableTools: Object.keys(toolCapabilities),
+        });
+      }
+    } catch (error) {
+      if (AtlasServer.logger) {
+        AtlasServer.logger.error('Failed to start server:', {
+          error,
+          metrics: this.metricsCollector.getMetrics(),
+        });
+      }
+      throw error;
+    }
+  }
+
   private setupErrorHandling(): void {
     this.server.onerror = (error: unknown) => {
       const metricEvent: MetricEvent = {
@@ -209,7 +247,7 @@ export class AtlasServer {
       await this.shutdown();
     });
 
-    process.on('unhandledRejection', (reason, promise) => {
+    process.on('unhandledRejection', (reason: unknown, promise: Promise<unknown>) => {
       if (AtlasServer.logger) {
         AtlasServer.logger.error('Unhandled Rejection:', {
           reason,
@@ -219,7 +257,7 @@ export class AtlasServer {
       }
     });
 
-    process.on('uncaughtException', error => {
+    process.on('uncaughtException', (error: Error) => {
       const errorMessage =
         error instanceof Error
           ? { name: error.name, message: error.message, stack: error.stack }
@@ -237,9 +275,6 @@ export class AtlasServer {
     });
   }
 
-  /**
-   * Sets up tool request handlers with middleware
-   */
   private setupToolHandlers(): void {
     // Handler for listing available tools
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -330,9 +365,6 @@ export class AtlasServer {
     });
   }
 
-  /**
-   * Sets up health check endpoint
-   */
   private setupHealthCheck(): void {
     // Start health monitor with shutdown callback
     this.healthMonitor.start(async () => {
@@ -342,8 +374,8 @@ export class AtlasServer {
       await this.shutdown();
     });
 
-    // Set up periodic status checks
-    setInterval(async () => {
+    // Set up periodic status checks with stored interval reference
+    this.healthCheckInterval = setInterval(async () => {
       try {
         const status: ComponentStatus = {
           storage: await this.toolHandler.getStorageMetrics(),
@@ -359,108 +391,12 @@ export class AtlasServer {
     }, this.config.health?.checkInterval || 300000);
   }
 
-  /**
-   * Record client activity
-   */
-  private recordClientActivity(): void {
-    this.healthMonitor.recordClientPing();
-  }
-
-  /**
-   * Creates a timeout promise
-   */
-  private createTimeout(ms: number): Promise<never> {
-    return new Promise((_, reject) => {
-      setTimeout(() => {
-        reject(new McpError(ErrorCode.InternalError, `Request timed out after ${ms}ms`));
-      }, ms);
-    });
-  }
-
-  /**
-   * Transforms errors into McpErrors
-   */
-  private handleToolError(error: unknown): void {
-    const errorMessage =
-      error instanceof Error
-        ? error.message
-        : error && typeof error === 'object'
-          ? JSON.stringify(error)
-          : String(error);
-
-    const metricEvent: MetricEvent = {
-      type: 'error',
-      timestamp: Date.now(),
-      error: errorMessage,
-    };
-    this.metricsCollector.recordError(metricEvent);
-
-    if (error instanceof McpError) {
-      return;
-    }
-
-    const errorDetails =
-      error instanceof Error
-        ? { name: error.name, message: error.message, stack: error.stack }
-        : error && typeof error === 'object'
-          ? JSON.stringify(error)
-          : String(error);
-
-    if (AtlasServer.logger) {
-      AtlasServer.logger.error('Unexpected error in tool handler:', {
-        error: errorDetails,
-        metrics: this.metricsCollector.getMetrics(),
-      });
-    }
-
-    throw new McpError(
-      ErrorCode.InternalError,
-      error instanceof Error ? error.message : 'An unexpected error occurred',
-      error instanceof Error ? error.stack : undefined
-    );
-  }
-
-  /**
-   * Starts the server
-   */
-  private async initializeServer(): Promise<void> {
-    if (this.isInitialized) {
-      if (AtlasServer.logger) {
-        AtlasServer.logger.debug('Server already initialized');
-      }
-      return;
-    }
-
-    try {
-      const transport = new StdioServerTransport();
-      await this.server.connect(transport);
-
-      this.isInitialized = true;
-      if (AtlasServer.logger) {
-        AtlasServer.logger.info(`${this.config.name} v${this.config.version} running on stdio`, {
-          metrics: this.metricsCollector.getMetrics(),
-        });
-      }
-    } catch (error) {
-      if (AtlasServer.logger) {
-        AtlasServer.logger.error('Failed to start server:', {
-          error,
-          metrics: this.metricsCollector.getMetrics(),
-        });
-      }
-      throw error;
-    }
-  }
-
-  /**
-   * Sets up memory monitoring to prevent leaks
-   */
   private setupMemoryMonitoring(): void {
     this.memoryMonitor = setInterval(() => {
       const memUsage = process.memoryUsage();
 
-      // Log memory stats
-      if (AtlasServer.logger) {
+      // Log memory stats only when above 50% usage
+      if (memUsage.heapUsed / memUsage.heapTotal > 0.5 && AtlasServer.logger) {
         AtlasServer.logger.debug('Memory usage:', {
           heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
           heapTotal: `${Math.round(memUsage.heapTotal / 1024 / 1024)}MB`,
@@ -468,10 +404,10 @@ export class AtlasServer {
         });
       }
 
-      // More aggressive memory management for VSCode extension environment
+      // Only trigger cleanup at 85% usage instead of 70%
       if (
         memUsage.heapUsed > this.MAX_MEMORY_USAGE ||
-        memUsage.heapUsed / memUsage.heapTotal > 0.7
+        memUsage.heapUsed / memUsage.heapTotal > 0.85
       ) {
         if (AtlasServer.logger) {
           AtlasServer.logger.warn('High memory usage detected, triggering cleanup', {
@@ -512,10 +448,59 @@ export class AtlasServer {
     }, this.MEMORY_CHECK_INTERVAL);
   }
 
-  /**
-   * Gracefully shuts down the server and cleans up resources
-   */
-  async shutdown(): Promise<void> {
+  private recordClientActivity(): void {
+    this.healthMonitor.recordClientPing();
+  }
+
+  private createTimeout(ms: number): Promise<never> {
+    return new Promise((_, reject) => {
+      setTimeout(() => {
+        reject(new McpError(ErrorCode.InternalError, `Request timed out after ${ms}ms`));
+      }, ms);
+    });
+  }
+
+  private handleToolError(error: unknown): void {
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : error && typeof error === 'object'
+          ? JSON.stringify(error)
+          : String(error);
+
+    const metricEvent: MetricEvent = {
+      type: 'error',
+      timestamp: Date.now(),
+      error: errorMessage,
+    };
+    this.metricsCollector.recordError(metricEvent);
+
+    if (error instanceof McpError) {
+      return;
+    }
+
+    const errorDetails =
+      error instanceof Error
+        ? { name: error.name, message: error.message, stack: error.stack }
+        : error && typeof error === 'object'
+          ? JSON.stringify(error)
+          : String(error);
+
+    if (AtlasServer.logger) {
+      AtlasServer.logger.error('Unexpected error in tool handler:', {
+        error: errorDetails,
+        metrics: this.metricsCollector.getMetrics(),
+      });
+    }
+
+    throw new McpError(
+      ErrorCode.InternalError,
+      error instanceof Error ? error.message : 'An unexpected error occurred',
+      error instanceof Error ? error.stack : undefined
+    );
+  }
+
+  public async shutdown(): Promise<void> {
     if (this.isShuttingDown) {
       return;
     }
@@ -526,6 +511,16 @@ export class AtlasServer {
     }
 
     try {
+      // Clear all intervals first
+      if (this.memoryMonitor) {
+        clearInterval(this.memoryMonitor);
+        this.memoryMonitor = undefined;
+      }
+      if (this.healthCheckInterval) {
+        clearInterval(this.healthCheckInterval);
+        this.healthCheckInterval = undefined;
+      }
+
       // Wait for active requests to complete
       const timeout = this.config.shutdownTimeout || 30000;
       const shutdownStart = Date.now();
@@ -537,14 +532,11 @@ export class AtlasServer {
               activeRequests: this.activeRequests.size,
             });
           }
+          // Clear any remaining requests
+          this.activeRequests.clear();
           break;
         }
         await new Promise(resolve => setTimeout(resolve, 100));
-      }
-
-      // Clear monitoring intervals
-      if (this.memoryMonitor) {
-        clearInterval(this.memoryMonitor);
       }
 
       // Clean up resources
