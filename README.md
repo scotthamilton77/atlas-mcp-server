@@ -6,9 +6,7 @@
 [![Status](https://img.shields.io/badge/Status-Stable-blue.svg)]()
 [![GitHub](https://img.shields.io/github/stars/cyanheads/atlas-mcp-server?style=social)](https://github.com/cyanheads/atlas-mcp-server)
 
-ATLAS (Adaptive Task & Logic Automation System) is a Model Context Protocol server that provides
-hierarchical task management capabilities to Large Language Models. This tool enables LLMs to manage
-complex tasks and dependencies through a robust and flexible API.
+ATLAS (Adaptive Task & Logic Automation System) is a Model Context Protocol server that provides hierarchical task management capabilities to Large Language Models. This tool enables LLMs to manage complex tasks and dependencies through a robust and flexible API.
 
 ## Table of Contents
 
@@ -25,8 +23,7 @@ complex tasks and dependencies through a robust and flexible API.
 
 ## Overview
 
-ATLAS implements the Model Context Protocol (MCP), enabling standardized communication between LLMs
-and external systems through:
+ATLAS implements the Model Context Protocol (MCP), enabling standardized communication between LLMs and external systems through:
 
 - **Clients** (Claude Desktop, IDEs) that maintain server connections
 - **Servers** that provide tools and resources
@@ -72,14 +69,12 @@ and external systems through:
 ### Error Handling
 
 Error severity levels:
-
 - CRITICAL: Database/storage failures
 - HIGH: Missing resources, transaction issues
 - MEDIUM: Validation/dependency problems
 - LOW: Non-critical operational issues
 
 Error context tracking:
-
 - Operation details
 - Timestamps
 - Stack traces
@@ -87,30 +82,62 @@ Error context tracking:
 
 ## Installation
 
-1. Clone the repository: \`\`\`bash git clone https://github.com/cyanheads/atlas-mcp-server.git cd
-   atlas-mcp-server \`\`\`
+1. Clone the repository:
+```bash
+git clone https://github.com/cyanheads/atlas-mcp-server.git
+cd atlas-mcp-server
+```
 
-2. Install dependencies: \`\`\`bash npm install \`\`\`
+2. Install dependencies:
+```bash
+npm install
+```
 
-3. Build the project: \`\`\`bash npm run build \`\`\`
+3. Build the project:
+```bash
+npm run build
+```
 
 ## Configuration
 
 Add to your MCP client settings:
 
-\`\`\`json { "mcpServers": { "atlas": { "command": "node", "args":
-["/path/to/atlas-mcp-server/build/index.js"], "env": { "ATLAS_STORAGE_DIR":
-"/path/to/storage/directory", "ATLAS_LOG_LEVEL": "info", "ATLAS_DB_MAX_RETRIES": "3",
-"ATLAS_DB_RETRY_DELAY": "500", "ATLAS_DB_BUSY_TIMEOUT": "2000" } } } } \`\`\`
+```json
+{
+  "mcpServers": {
+    "atlas": {
+      "command": "node",
+      "args": ["/path/to/atlas-mcp-server/build/index.js"],
+      "env": {
+        "ATLAS_STORAGE_DIR": "/path/to/storage/directory",
+        "ATLAS_LOG_LEVEL": "info",
+        "ATLAS_DB_MAX_RETRIES": "3",
+        "ATLAS_DB_RETRY_DELAY": "500",
+        "ATLAS_DB_BUSY_TIMEOUT": "2000"
+      }
+    }
+  }
+}
+```
 
 ## Task Structure
 
 Tasks follow a structured format:
 
-\`\`\`typescript { "path": "project/feature/task", "name": "Implementation Task", "description":
-"Implement core functionality", "type": "TASK", // TASK or MILESTONE "status": "PENDING",
-"dependencies": ["project/feature/design"], "metadata": { "priority": "high", "tags": ["core",
-"implementation"] } } \`\`\`
+```typescript
+{
+  "path": "project/feature/task",
+  "name": "Implementation Task",
+  "description": "Implement core functionality",
+  "type": "TASK", // TASK or MILESTONE
+  "status": "PENDING",
+  "dependencies": ["project/feature/design"],
+  "metadata": {
+    "priority": "high",
+    "tags": ["core", "implementation"]
+  }
+}
+```
 
 ## Tools
 
@@ -118,46 +145,92 @@ Tasks follow a structured format:
 
 Create a new task in the system:
 
-\`\`\`typescript { "path": "project/backend/auth", "title": "Implement JWT Authentication", "type":
-"TASK", "description": "Add JWT-based authentication system", "dependencies":
-["project/backend/database"], "metadata": { "priority": "high", "tags": ["security", "api"] } }
-\`\`\`
+```typescript
+{
+  "path": "project/backend/auth",
+  "title": "Implement JWT Authentication",
+  "type": "TASK",
+  "description": "Add JWT-based authentication system",
+  "dependencies": ["project/backend/database"],
+  "metadata": {
+    "priority": "high",
+    "tags": ["security", "api"]
+  }
+}
+```
 
 ### delete_task
 
 Remove a task and its children:
 
-\`\`\`typescript { "path": "project/backend/deprecated-auth", "reasoning": "Removing deprecated
-authentication implementation" } \`\`\`
+```typescript
+{
+  "path": "project/backend/deprecated-auth",
+  "reasoning": "Removing deprecated authentication implementation"
+}
+```
 
 ### bulk_task_operations
 
 Execute multiple task operations atomically:
 
-\`\`\`typescript { "operations": [ { "type": "create", "path": "project/backend/oauth2", "data": {
-"title": "Implement OAuth2", "type": "MILESTONE", "description": "OAuth2 implementation" } }, {
-"type": "create", "path": "project/backend/oauth2/setup", "data": { "title": "Provider Setup",
-"dependencies": ["project/backend/oauth2"] } } ], "reasoning": "Implementing OAuth2 authentication"
-} \`\`\`
+```typescript
+{
+  "operations": [
+    {
+      "type": "create",
+      "path": "project/backend/oauth2",
+      "data": {
+        "title": "Implement OAuth2",
+        "type": "MILESTONE",
+        "description": "OAuth2 implementation"
+      }
+    },
+    {
+      "type": "create",
+      "path": "project/backend/oauth2/setup",
+      "data": {
+        "title": "Provider Setup",
+        "dependencies": ["project/backend/oauth2"]
+      }
+    }
+  ],
+  "reasoning": "Implementing OAuth2 authentication"
+}
+```
 
 ### clear_all_tasks
 
 Reset the task database:
 
-\`\`\`typescript { "confirm": true, "reasoning": "Resetting task structure for Q2 planning" } \`\`\`
+```typescript
+{
+  "confirm": true,
+  "reasoning": "Resetting task structure for Q2 planning"
+}
+```
 
 ### vacuum_database
 
 Optimize database storage:
 
-\`\`\`typescript { "analyze": true, "reasoning": "Running optimization after bulk deletions" }
-\`\`\`
+```typescript
+{
+  "analyze": true,
+  "reasoning": "Running optimization after bulk deletions"
+}
+```
 
 ### repair_relationships
 
 Fix task hierarchy issues:
 
-\`\`\`typescript { "dryRun": true, "reasoning": "Checking for relationship issues" } \`\`\`
+```typescript
+{
+  "dryRun": true,
+  "reasoning": "Checking for relationship issues"
+}
+```
 
 ## Best Practices
 
