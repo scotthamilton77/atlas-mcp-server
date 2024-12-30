@@ -1,5 +1,10 @@
 /**
  * Storage module exports
  */
-export { SqliteStorage } from './sqlite/index.js';
-export { createStorage, createDefaultStorage } from './sqlite/init.js';
+
+// Export storage creation functions
+export { createStorage } from './sqlite/init.js';
+export { createDefaultStorage } from './factory.js';
+
+// Re-export types
+export type { StorageConfig, TaskStorage, StorageMetrics } from '../types/storage.js';

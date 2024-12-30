@@ -33,15 +33,25 @@ export class ConnectionStateManager {
   private monitoringInterval: NodeJS.Timeout | null = null;
   private readonly DEFAULT_ERROR_THRESHOLD = 5;
   private readonly DEFAULT_RESPONSE_TIME_THRESHOLD = 1000; // 1 second
-  private readonly MONITORING_INTERVAL = 30000; // 30 seconds
+  private readonly MONITORING_INTERVAL = 60000; // 60 seconds
 
   private constructor(options: StateManagerOptions = {}) {
+    // Increase max listeners to prevent warning
+    process.setMaxListeners(20);
+
     this.logger = Logger.getInstance().child({ component: 'ConnectionStateManager' });
     this.eventManager = EventManager.getInstance();
     this.states = new Map();
     this.errorThreshold = options.errorThreshold || this.DEFAULT_ERROR_THRESHOLD;
     this.responseTimeThreshold =
       options.responseTimeThreshold || this.DEFAULT_RESPONSE_TIME_THRESHOLD;
+  }
+
+  private static resetInstance(): void {
+    if (ConnectionStateManager.instance) {
+      ConnectionStateManager.instance.cleanup();
+      ConnectionStateManager.instance = null as unknown as ConnectionStateManager;
+    }
   }
 
   static getInstance(options?: StateManagerOptions): ConnectionStateManager {
@@ -295,5 +305,7 @@ export class ConnectionStateManager {
   cleanup(): void {
     this.stopMonitoring();
     this.states.clear();
+    ConnectionStateManager.resetInstance();
+    process.removeAllListeners('beforeExit');
   }
 }

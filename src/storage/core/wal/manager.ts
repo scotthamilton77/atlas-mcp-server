@@ -6,46 +6,58 @@ import { Logger } from '../../../logging/index.js';
 import { ErrorCodes, createError } from '../../../errors/index.js';
 import { EventManager } from '../../../events/event-manager.js';
 import { EventTypes } from '../../../types/events.js';
-import { promises as fs } from 'fs';
-
-export interface WALMetrics {
-  isEnabled: boolean;
-  walSize: number;
-  lastCheckpoint: number;
-  checkpointCount: number;
-  autoCheckpointSize: number;
-}
+import { isTransientError } from '../../../utils/error-utils.js';
+import { WALConfig, WALMetrics, WALState, DEFAULT_WAL_CONFIG } from './types.js';
+import { CheckpointManager } from './checkpoint-manager.js';
+import { MetricsCollector } from './metrics-collector.js';
+import { FileHandler } from './file-handler.js';
 
 export class WALManager {
   private static instance: WALManager;
   private readonly logger: Logger;
   private readonly eventManager: EventManager;
-  private isWALEnabled = false;
-  private lastCheckpoint = 0;
-  private checkpointCount = 0;
-  private readonly dbPath: string;
-  private checkpointInterval: NodeJS.Timeout | null = null;
-  private readonly CHECKPOINT_INTERVAL = 60000; // 1 minute
-  private readonly MAX_WAL_SIZE = 10 * 1024 * 1024; // 10MB
+  private readonly checkpointManager: CheckpointManager;
+  private readonly metricsCollector: MetricsCollector;
+  private readonly fileHandler: FileHandler;
+  private readonly config: Required<WALConfig>;
+  private initializationPromise: Promise<void> | null = null;
 
-  private constructor(dbPath: string) {
-    this.logger = Logger.getInstance().child({ component: 'WALManager' });
+  private state: WALState = {
+    isEnabled: false,
+    lastCheckpoint: 0,
+    checkpointCount: 0,
+    totalCheckpointTime: 0,
+    maxWalSizeReached: 0,
+  };
+
+  private constructor(dbPath: string, config?: Partial<WALConfig>) {
+    this.config = {
+      ...DEFAULT_WAL_CONFIG,
+      dbPath,
+      ...config,
+    };
+
+    this.logger = Logger.getInstance().child({
+      component: 'WALManager',
+      context: {
+        dbPath: this.config.dbPath,
+        maxWalSize: this.config.maxWalSize,
+        checkpointInterval: this.config.checkpointInterval,
+      },
+    });
+
     this.eventManager = EventManager.getInstance();
-    this.dbPath = dbPath;
-    this.resetState();
-  }
+    this.checkpointManager = new CheckpointManager(this.config.dbPath);
+    this.metricsCollector = new MetricsCollector(this.config.dbPath, this.state);
+    this.fileHandler = new FileHandler(this.config.dbPath);
 
-  /**
-   * Reset internal state
-   */
-  private resetState(): void {
-    this.isWALEnabled = false;
-    this.lastCheckpoint = 0;
-    this.checkpointCount = 0;
-    if (this.checkpointInterval) {
-      clearInterval(this.checkpointInterval);
-      this.checkpointInterval = null;
-    }
+    this.logger.info('WAL manager created', {
+      config: this.config,
+      context: {
+        operation: 'create',
+        timestamp: Date.now(),
+      },
+    });
   }
 
   static getInstance(dbPath?: string): WALManager {
@@ -58,310 +70,356 @@ export class WALManager {
     return WALManager.instance;
   }
 
-  /**
-   * Enable WAL mode with proper locking and verification
-   */
   async enableWAL(db: Database): Promise<void> {
-    if (this.isWALEnabled) {
-      return;
+    if (this.initializationPromise) {
+      try {
+        await this.initializationPromise;
+        return;
+      } catch (error) {
+        this.logger.warn('Previous initialization failed, retrying', {
+          error,
+          context: {
+            operation: 'enableWAL',
+            timestamp: Date.now(),
+          },
+        });
+      }
     }
 
-    // Clean up any existing WAL files from previous runs
-    await this.cleanupWALFiles();
+    const enableStart = Date.now();
+    this.initializationPromise = (async () => {
+      try {
+        // Initialize directory first
+        await this.fileHandler.initializeDirectory();
 
-    try {
-      // Set exclusive lock to prevent other connections
-      await db.exec('PRAGMA locking_mode = EXCLUSIVE');
-
-      // Check current mode
-      const currentMode = await db.get<{ journal_mode: string }>('PRAGMA journal_mode');
-
-      if (currentMode?.journal_mode !== 'wal') {
-        // Force checkpoint existing journal
-        await db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
-
-        // Enable WAL mode
-        await db.exec('PRAGMA journal_mode = WAL');
-
-        // Verify WAL mode
-        const newMode = await db.get<{ journal_mode: string }>('PRAGMA journal_mode');
-        if (newMode?.journal_mode !== 'wal') {
+        // Check WAL support
+        if (!(await this.fileHandler.checkWALSupport())) {
           throw createError(
             ErrorCodes.STORAGE_INIT,
-            'Failed to enable WAL mode',
-            `Expected 'wal', got '${newMode?.journal_mode}'`
+            'WAL mode not supported on this system',
+            'enableWAL',
+            'The system does not support WAL mode'
           );
         }
 
-        try {
-          // Set synchronous mode first (must be outside transaction)
-          await db.exec('PRAGMA synchronous = NORMAL');
+        let retryCount = 0;
+        const maxRetries = this.config.retryOptions?.maxAttempts || 5;
+        let lastError: Error | undefined;
 
-          // Verify synchronous setting
-          const syncMode = await db.get('PRAGMA synchronous');
-          if (syncMode?.synchronous !== 1) {
-            // NORMAL = 1
-            throw new Error('Failed to set synchronous mode');
+        while (retryCount < maxRetries) {
+          try {
+            // Check current mode first without lock
+            const currentMode = await db.get<{ journal_mode: string }>('PRAGMA journal_mode');
+
+            // If WAL is already enabled, just verify and configure
+            if (currentMode?.journal_mode === 'wal') {
+              this.logger.debug('WAL mode already enabled', {
+                context: {
+                  operation: 'enableWAL',
+                  timestamp: enableStart,
+                },
+              });
+
+              // Set state before configuration
+              this.state.isEnabled = true;
+
+              // Configure WAL settings without transaction
+              await this.configureWALSafe(db);
+
+              // Start monitoring
+              this.metricsCollector.startCollecting();
+
+              const duration = Date.now() - enableStart;
+              this.logger.info('WAL configuration verified', {
+                duration,
+                context: {
+                  operation: 'enableWAL',
+                  timestamp: Date.now(),
+                },
+              });
+
+              return;
+            }
+
+            // Set exclusive lock to prevent other connections
+            await db.exec('PRAGMA locking_mode = EXCLUSIVE');
+
+            try {
+              // Enable WAL mode
+              await db.exec('PRAGMA journal_mode = WAL');
+
+              // Verify WAL mode
+              const mode = await db.get<{ journal_mode: string }>('PRAGMA journal_mode');
+              if (mode?.journal_mode !== 'wal') {
+                throw createError(
+                  ErrorCodes.STORAGE_INIT,
+                  'Failed to enable WAL mode',
+                  'enableWAL',
+                  `Expected 'wal', got '${mode?.journal_mode}'`
+                );
+              }
+
+              // Set state before configuration
+              this.state.isEnabled = true;
+
+              // Configure WAL settings
+              await this.configureWAL(db);
+
+              // Start monitoring
+              this.metricsCollector.startCollecting();
+
+              const duration = Date.now() - enableStart;
+              this.logger.info('WAL mode enabled successfully', {
+                duration,
+                retryCount,
+                context: {
+                  operation: 'enableWAL',
+                  timestamp: Date.now(),
+                },
+              });
+
+              // Emit WAL enabled event
+              this.eventManager.emitSystemEvent({
+                type: EventTypes.STORAGE_WAL_ENABLED,
+                timestamp: Date.now(),
+                metadata: {
+                  dbPath: this.config.dbPath,
+                  duration,
+                  metrics: {
+                    connections: {
+                      total: 1,
+                      active: 1,
+                      idle: 0,
+                      errors: retryCount,
+                      avgResponseTime: duration,
+                    },
+                    cache: {
+                      hits: 0,
+                      misses: 0,
+                      hitRate: 0,
+                      size: 0,
+                      memoryUsage: 0,
+                    },
+                    queries: {
+                      total: 1,
+                      errors: retryCount,
+                      avgExecutionTime: duration,
+                      slowQueries: 0,
+                    },
+                    timestamp: Date.now(),
+                  },
+                },
+              });
+
+              return;
+            } finally {
+              // Release exclusive lock
+              await db.exec('PRAGMA locking_mode = NORMAL').catch(error => {
+                this.logger.warn('Failed to release exclusive lock', {
+                  error,
+                  context: {
+                    operation: 'enableWAL',
+                    timestamp: Date.now(),
+                  },
+                });
+              });
+            }
+          } catch (error) {
+            lastError = error instanceof Error ? error : new Error(String(error));
+
+            // Only retry on transient errors
+            if (!isTransientError(error)) {
+              throw error;
+            }
+
+            retryCount++;
+            if (retryCount < maxRetries) {
+              const delay = Math.min(
+                (this.config.retryOptions?.initialDelay || 100) * Math.pow(2, retryCount),
+                this.config.retryOptions?.maxDelay || 2000
+              );
+
+              this.logger.debug('Retrying WAL initialization', {
+                attempt: retryCount,
+                maxRetries,
+                delay,
+                error: lastError,
+                context: {
+                  operation: 'enableWAL',
+                  timestamp: Date.now(),
+                },
+              });
+
+              await new Promise(resolve => setTimeout(resolve, delay));
+            }
           }
-
-          // Set other PRAGMAs in transaction
-          await db.exec('BEGIN IMMEDIATE');
-          await db.exec('PRAGMA wal_autocheckpoint = 1000');
-          await db.exec(`PRAGMA journal_size_limit = ${this.MAX_WAL_SIZE}`);
-          await db.exec('COMMIT');
-
-          // Verify transaction-safe settings
-          const checkpoint = await db.get('PRAGMA wal_autocheckpoint');
-          const journalSize = await db.get('PRAGMA journal_size_limit');
-
-          if (
-            checkpoint?.wal_autocheckpoint !== 1000 ||
-            journalSize?.journal_size_limit !== this.MAX_WAL_SIZE
-          ) {
-            throw new Error('Failed to set WAL optimization settings');
-          }
-
-          this.isWALEnabled = true;
-          this.startCheckpointMonitoring(db);
-
-          this.logger.info('WAL mode enabled successfully', {
-            mode: newMode.journal_mode,
-            settings: {
-              synchronous: syncMode?.synchronous,
-              journal_mode: newMode.journal_mode,
-              wal_autocheckpoint: checkpoint?.wal_autocheckpoint,
-              journal_size_limit: journalSize?.journal_size_limit,
-            },
-          });
-        } catch (error) {
-          // Roll back transaction if it failed
-          await db.exec('ROLLBACK').catch(() => {});
-          throw error;
         }
 
-        // Emit WAL enabled event
-        this.eventManager.emitSystemEvent({
-          type: EventTypes.STORAGE_WAL_ENABLED,
-          timestamp: Date.now(),
-          metadata: {
-            dbPath: this.dbPath,
+        // If we get here, all retries failed
+        throw createError(
+          ErrorCodes.STORAGE_INIT,
+          'Failed to enable WAL mode after retries',
+          'enableWAL',
+          lastError?.message || 'Maximum retry attempts reached',
+          {
+            retryCount,
+            maxRetries,
+            lastError: lastError
+              ? {
+                  name: lastError.name,
+                  message: lastError.message,
+                  stack: lastError.stack,
+                }
+              : undefined,
+          }
+        );
+      } catch (error) {
+        const duration = Date.now() - enableStart;
+        this.logger.error('Failed to enable WAL mode', {
+          error,
+          duration,
+          context: {
+            operation: 'enableWAL',
+            timestamp: Date.now(),
           },
         });
-      } else {
-        this.isWALEnabled = true;
-        this.startCheckpointMonitoring(db);
-        this.logger.info('Database already in WAL mode');
+
+        // Reset state
+        this.state.isEnabled = false;
+        throw error;
+      } finally {
+        this.initializationPromise = null;
       }
-    } catch (error) {
-      // Ensure error is properly stringified
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : error && typeof error === 'object'
-            ? JSON.stringify(error)
-            : String(error);
+    })();
 
-      this.logger.error('Failed to enable WAL mode', {
-        error: errorMessage,
-        details: error instanceof Error ? error.stack : undefined,
-      });
-
-      // Reset WAL state
-      this.isWALEnabled = false;
-
-      throw createError(ErrorCodes.STORAGE_INIT, 'Failed to enable WAL mode', errorMessage);
-    } finally {
-      // Release exclusive lock
-      try {
-        await db.exec('PRAGMA locking_mode = NORMAL');
-      } catch (error) {
-        this.logger.warn('Failed to release exclusive lock', { error });
-      }
-    }
+    await this.initializationPromise;
   }
 
   /**
-   * Start periodic checkpoint monitoring
+   * Configure WAL settings with transaction
    */
-  private startCheckpointMonitoring(db: Database): void {
-    if (this.checkpointInterval) {
-      return;
-    }
+  private async configureWAL(db: Database): Promise<void> {
+    // Set synchronous mode
+    await db.exec('PRAGMA synchronous = NORMAL');
 
-    // Check WAL size periodically
-    this.checkpointInterval = setInterval(async () => {
-      try {
-        const metrics = await this.getMetrics();
-
-        // If WAL file is too large, force a checkpoint
-        if (metrics.walSize > this.MAX_WAL_SIZE) {
-          await this.checkpoint(db);
-        }
-      } catch (error) {
-        this.logger.error('Checkpoint monitoring failed', { error });
-      }
-    }, this.CHECKPOINT_INTERVAL);
-
-    // Ensure the interval doesn't prevent the process from exiting
-    this.checkpointInterval.unref();
-  }
-
-  /**
-   * Force a WAL checkpoint
-   */
-  async checkpoint(db: Database): Promise<void> {
+    // Configure WAL behavior
+    await db.exec('BEGIN IMMEDIATE');
     try {
-      await db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
-      this.lastCheckpoint = Date.now();
-      this.checkpointCount++;
+      await db.exec('PRAGMA wal_autocheckpoint = 1000');
+      await db.exec(`PRAGMA journal_size_limit = ${this.config.maxWalSize}`);
+      await db.exec('PRAGMA mmap_size = 67108864'); // 64MB memory mapping
+      await db.exec('PRAGMA page_size = 4096');
+      await db.exec('COMMIT');
+    } catch (error) {
+      await db.exec('ROLLBACK');
+      throw error;
+    }
+  }
 
-      this.logger.info('WAL checkpoint completed', {
-        checkpointCount: this.checkpointCount,
+  /**
+   * Configure WAL settings without transaction for existing WAL mode
+   */
+  private async configureWALSafe(db: Database): Promise<void> {
+    try {
+      // Set synchronous mode
+      await db.exec('PRAGMA synchronous = NORMAL');
+
+      // Configure WAL behavior one at a time
+      await db.exec('PRAGMA wal_autocheckpoint = 1000');
+      await db.exec(`PRAGMA journal_size_limit = ${this.config.maxWalSize}`);
+      await db.exec('PRAGMA mmap_size = 67108864'); // 64MB memory mapping
+      await db.exec('PRAGMA page_size = 4096');
+    } catch (error) {
+      // Log error but don't fail - these are optional optimizations
+      this.logger.warn('Failed to configure WAL settings', {
+        error,
+        context: {
+          operation: 'configureWALSafe',
+          timestamp: Date.now(),
+        },
+      });
+    }
+  }
+
+  async checkpoint(db: Database): Promise<void> {
+    if (!this.state.isEnabled) {
+      throw createError(
+        ErrorCodes.STORAGE_ERROR,
+        'WAL mode not enabled',
+        'checkpoint',
+        'Cannot checkpoint when WAL mode is not enabled'
+      );
+    }
+
+    const result = await this.checkpointManager.executeCheckpoint(db, this.config.retryOptions);
+
+    // Update state
+    this.state.lastCheckpoint = Date.now();
+    this.state.checkpointCount++;
+    this.state.totalCheckpointTime += result.duration;
+
+    // Emit checkpoint event
+    this.eventManager.emitSystemEvent({
+      type: EventTypes.STORAGE_WAL_CHECKPOINT,
+      timestamp: Date.now(),
+      metadata: {
+        dbPath: this.config.dbPath,
+        ...result,
+      },
+    });
+  }
+
+  async getMetrics(): Promise<WALMetrics> {
+    return this.metricsCollector.getMetrics();
+  }
+
+  async verifyIntegrity(): Promise<boolean> {
+    return this.fileHandler.verifyIntegrity();
+  }
+
+  async close(): Promise<void> {
+    const closeStart = Date.now();
+
+    try {
+      this.logger.info('Closing WAL manager', {
+        metrics: await this.getMetrics(),
+        context: {
+          operation: 'close',
+          timestamp: closeStart,
+        },
       });
 
-      // Emit checkpoint event
-      this.eventManager.emitSystemEvent({
-        type: EventTypes.STORAGE_WAL_CHECKPOINT,
-        timestamp: Date.now(),
-        metadata: {
-          checkpointCount: this.checkpointCount,
-          dbPath: this.dbPath,
+      // Stop metrics collection
+      this.metricsCollector.stopCollecting();
+
+      // Clean up files
+      await this.fileHandler.cleanup();
+
+      // Reset state
+      this.state = {
+        isEnabled: false,
+        lastCheckpoint: 0,
+        checkpointCount: 0,
+        totalCheckpointTime: 0,
+        maxWalSizeReached: 0,
+      };
+
+      this.logger.info('WAL manager closed successfully', {
+        duration: Date.now() - closeStart,
+        context: {
+          operation: 'close',
+          timestamp: Date.now(),
         },
       });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      this.logger.error('WAL checkpoint failed', { error: errorMessage });
-      throw createError(ErrorCodes.STORAGE_ERROR, 'WAL checkpoint failed', errorMessage);
-    }
-  }
-
-  /**
-   * Get WAL metrics
-   */
-  async getMetrics(): Promise<WALMetrics> {
-    const path = await import('path');
-    const walPath = path.join(path.dirname(this.dbPath), path.basename(this.dbPath) + '-wal');
-    let walSize = 0;
-
-    try {
-      const stats = await fs.stat(walPath);
-      walSize = stats.size;
-    } catch (error) {
-      // WAL file might not exist yet
-      this.logger.debug('Could not get WAL file size', { error });
-    }
-
-    return {
-      isEnabled: this.isWALEnabled,
-      walSize,
-      lastCheckpoint: this.lastCheckpoint,
-      checkpointCount: this.checkpointCount,
-      autoCheckpointSize: 1000, // Pages
-    };
-  }
-
-  /**
-   * Verify WAL file integrity
-   */
-  async verifyWALIntegrity(): Promise<boolean> {
-    const path = await import('path');
-    const walPath = path.join(path.dirname(this.dbPath), path.basename(this.dbPath) + '-wal');
-    const shmPath = path.join(path.dirname(this.dbPath), path.basename(this.dbPath) + '-shm');
-
-    try {
-      // Check if WAL and SHM files exist
-      await Promise.all([fs.access(walPath), fs.access(shmPath)]);
-
-      // Get WAL file size
-      const stats = await fs.stat(walPath);
-
-      // Basic integrity checks
-      if (stats.size === 0) {
-        this.logger.warn('WAL file is empty', { walPath });
-        return false;
-      }
-
-      if (stats.size % 4096 !== 0) {
-        this.logger.warn('WAL file size is not page-aligned', {
-          size: stats.size,
-          walPath,
-        });
-        return false;
-      }
-
-      return true;
-    } catch (error) {
-      this.logger.warn('WAL integrity check failed', { error });
-      return false;
-    }
-  }
-
-  /**
-   * Clean up any existing WAL files
-   */
-  private lastCleanup = 0;
-  private readonly CLEANUP_INTERVAL = 1000; // 1 second
-
-  private async cleanupWALFiles(): Promise<void> {
-    const now = Date.now();
-    // Only cleanup every 5 seconds to reduce memory pressure
-    if (now - this.lastCleanup < this.CLEANUP_INTERVAL) {
-      return;
-    }
-
-    const path = await import('path');
-    const walPath = path.join(path.dirname(this.dbPath), path.basename(this.dbPath) + '-wal');
-    const shmPath = path.join(path.dirname(this.dbPath), path.basename(this.dbPath) + '-shm');
-
-    try {
-      // Check if files exist first to avoid unnecessary operations
-      const [walExists, shmExists] = await Promise.all([
-        fs
-          .access(walPath)
-          .then(() => true)
-          .catch(() => false),
-        fs
-          .access(shmPath)
-          .then(() => true)
-          .catch(() => false),
-      ]);
-
-      // Only delete if files exist
-      if (walExists || shmExists) {
-        const promises = [];
-        if (walExists) promises.push(fs.unlink(walPath));
-        if (shmExists) promises.push(fs.unlink(shmPath));
-        await Promise.all(promises);
-        this.logger.debug('Cleaned up existing WAL files');
-      }
-    } catch (error) {
-      // Ignore errors as files may not exist
-      this.logger.debug('No existing WAL files to clean up');
-    } finally {
-      this.lastCleanup = now;
-    }
-  }
-
-  /**
-   * Clean up resources
-   */
-  async close(): Promise<void> {
-    try {
-      // Stop checkpoint monitoring
-      if (this.checkpointInterval) {
-        clearInterval(this.checkpointInterval);
-        this.checkpointInterval = null;
-      }
-
-      // Clean up WAL files
-      await this.cleanupWALFiles();
-
-      // Reset state
-      this.resetState();
-
-      this.logger.info('WAL manager closed successfully');
-    } catch (error) {
-      this.logger.error('Error closing WAL manager', { error });
+      this.logger.error('Error closing WAL manager', {
+        error,
+        duration: Date.now() - closeStart,
+        context: {
+          operation: 'close',
+          timestamp: Date.now(),
+        },
+      });
       throw error;
     }
   }
