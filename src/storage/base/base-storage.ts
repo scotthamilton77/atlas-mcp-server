@@ -96,6 +96,13 @@ export abstract class BaseStorage implements TaskStorage {
       dependencies: input.dependencies || [],
       subtasks: [],
       metadata: input.metadata || ({} as TaskMetadata),
+      // Add required status metadata with empty default values
+      statusMetadata: input.statusMetadata || {},
+      // Add required note arrays with empty defaults
+      planningNotes: input.planningNotes || [],
+      progressNotes: input.progressNotes || [],
+      completionNotes: input.completionNotes || [],
+      troubleshootingNotes: input.troubleshootingNotes || [],
     };
 
     await this.executeInTransaction(async () => {
@@ -143,6 +150,16 @@ export abstract class BaseStorage implements TaskStorage {
           ...existingTask.metadata,
           ...(updates.metadata ?? {}),
         } as TaskMetadata,
+        // Update status metadata while preserving existing values
+        statusMetadata: {
+          ...existingTask.statusMetadata,
+          ...(updates.statusMetadata ?? {}),
+        },
+        // Update note arrays while preserving existing values
+        planningNotes: updates.planningNotes ?? existingTask.planningNotes,
+        progressNotes: updates.progressNotes ?? existingTask.progressNotes,
+        completionNotes: updates.completionNotes ?? existingTask.completionNotes,
+        troubleshootingNotes: updates.troubleshootingNotes ?? existingTask.troubleshootingNotes,
       };
 
       // Handle parent path changes

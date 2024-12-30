@@ -84,6 +84,12 @@ export class TaskValidator {
         dependencies: validatedInput.dependencies || [],
         subtasks: [],
         metadata: validatedInput.metadata || {},
+        // Initialize new required fields
+        statusMetadata: validatedInput.statusMetadata || {},
+        planningNotes: validatedInput.planningNotes || [],
+        progressNotes: validatedInput.progressNotes || [],
+        completionNotes: validatedInput.completionNotes || [],
+        troubleshootingNotes: validatedInput.troubleshootingNotes || []
       };
 
       // Validate hierarchy if parent path provided

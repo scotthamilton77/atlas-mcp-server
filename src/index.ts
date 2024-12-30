@@ -251,7 +251,68 @@ async function main(): Promise<void> {
                       metadata: {
                         type: 'object',
                         description:
-                          'Optional: Additional task context and configuration. Common fields:\n- priority: "high", "medium", "low"\n- owner: "team-name" or "service-name"\n- tags: ["feature", "backend", "database"]\n- timeouts: { "execution": 3600, "retry": 300 }\n- metrics: ["latency", "error_rate", "throughput"]\n- alerts: { "error_threshold": 0.01, "latency_ms": 500 }',
+                          'Optional: Rich metadata structure with multiple categories:\n\n' +
+                          'Classification:\n' +
+                          '- category: Area of work\n' +
+                          '- component: System component\n' +
+                          '- platform: Target platform\n' +
+                          '- scope: Impact scope\n' +
+                          '- tags: [max 10 tags]\n\n' +
+                          'Priority:\n' +
+                          '- priority: Importance level\n' +
+                          '- criticality: Business impact\n' +
+                          '- impact: Affected areas\n\n' +
+                          'Technical:\n' +
+                          '- language: Programming language\n' +
+                          '- framework: Technology framework\n' +
+                          '- tools: Required tools\n' +
+                          '- requirements: Technical requirements\n\n' +
+                          'Quality:\n' +
+                          '- testingRequirements: Testing needs\n' +
+                          '- qualityMetrics: {\n' +
+                          '    coverage: Test coverage target (0-100)\n' +
+                          '    complexity: Code complexity limit\n' +
+                          '    performance: Performance requirements\n' +
+                          '  }',
+                      },
+                      statusMetadata: {
+                        type: 'object',
+                        description:
+                          'Optional: Status-specific metadata:\n\n' +
+                          'IN_PROGRESS:\n' +
+                          '- assignee: Task owner\n' +
+                          '- progress_indicators: Progress metrics\n\n' +
+                          'COMPLETED:\n' +
+                          '- completedBy: Who completed it\n' +
+                          '- verificationStatus: passed/failed\n' +
+                          '- completionChecks: Verification steps\n\n' +
+                          'FAILED:\n' +
+                          '- errorType: Type of failure\n' +
+                          '- errorDetails: Error information\n' +
+                          '- recoveryAttempts: Number of retries\n\n' +
+                          'BLOCKED:\n' +
+                          '- blockedBy: Blocking dependencies\n' +
+                          '- blockedReason: Why it\'s blocked',
+                      },
+                      planningNotes: {
+                        type: 'array',
+                        items: { type: 'string' },
+                        description: 'Optional: Notes about task planning and preparation (max 25)',
+                      },
+                      progressNotes: {
+                        type: 'array',
+                        items: { type: 'string' },
+                        description: 'Optional: Notes about ongoing progress (max 25)',
+                      },
+                      completionNotes: {
+                        type: 'array',
+                        items: { type: 'string' },
+                        description: 'Optional: Notes about task completion (max 25)',
+                      },
+                      troubleshootingNotes: {
+                        type: 'array',
+                        items: { type: 'string' },
+                        description: 'Optional: Notes about issues and fixes (max 25)',
                       },
                     },
                     required: ['path', 'name'],
@@ -328,7 +389,68 @@ async function main(): Promise<void> {
                           metadata: {
                             type: 'object',
                             description:
-                              'Optional: Additional task context. Common updates:\n- Progress metrics (completion %, items processed)\n- Performance data (duration, resource usage)\n- Error details (type, count, timestamp)\n- System state (versions, configurations)\n- Alert thresholds (error rate, latency)',
+                              'Optional: Rich metadata structure with multiple categories:\n\n' +
+                              'Classification:\n' +
+                              '- category: Area of work\n' +
+                              '- component: System component\n' +
+                              '- platform: Target platform\n' +
+                              '- scope: Impact scope\n' +
+                              '- tags: [max 10 tags]\n\n' +
+                              'Priority:\n' +
+                              '- priority: Importance level\n' +
+                              '- criticality: Business impact\n' +
+                              '- impact: Affected areas\n\n' +
+                              'Technical:\n' +
+                              '- language: Programming language\n' +
+                              '- framework: Technology framework\n' +
+                              '- tools: Required tools\n' +
+                              '- requirements: Technical requirements\n\n' +
+                              'Quality:\n' +
+                              '- testingRequirements: Testing needs\n' +
+                              '- qualityMetrics: {\n' +
+                              '    coverage: Test coverage target (0-100)\n' +
+                              '    complexity: Code complexity limit\n' +
+                              '    performance: Performance requirements\n' +
+                              '  }',
+                          },
+                          statusMetadata: {
+                            type: 'object',
+                            description:
+                              'Optional: Status-specific metadata:\n\n' +
+                              'IN_PROGRESS:\n' +
+                              '- assignee: Task owner\n' +
+                              '- progress_indicators: Progress metrics\n\n' +
+                              'COMPLETED:\n' +
+                              '- completedBy: Who completed it\n' +
+                              '- verificationStatus: passed/failed\n' +
+                              '- completionChecks: Verification steps\n\n' +
+                              'FAILED:\n' +
+                              '- errorType: Type of failure\n' +
+                              '- errorDetails: Error information\n' +
+                              '- recoveryAttempts: Number of retries\n\n' +
+                              'BLOCKED:\n' +
+                              '- blockedBy: Blocking dependencies\n' +
+                              '- blockedReason: Why it\'s blocked',
+                          },
+                          planningNotes: {
+                            type: 'array',
+                            items: { type: 'string' },
+                            description: 'Optional: Notes about task planning and preparation (max 25)',
+                          },
+                          progressNotes: {
+                            type: 'array',
+                            items: { type: 'string' },
+                            description: 'Optional: Notes about ongoing progress (max 25)',
+                          },
+                          completionNotes: {
+                            type: 'array',
+                            items: { type: 'string' },
+                            description: 'Optional: Notes about task completion (max 25)',
+                          },
+                          troubleshootingNotes: {
+                            type: 'array',
+                            items: { type: 'string' },
+                            description: 'Optional: Notes about issues and fixes (max 25)',
                           },
                         },
                       },
@@ -615,7 +737,20 @@ async function main(): Promise<void> {
 
                 switch (name) {
                   case 'create_task':
-                    result = await taskManager.createTask(args as CreateTaskInput);
+                    // Initialize empty arrays for note categories
+                    const createInput = {
+                      ...args,
+                      planningNotes: args.planningNotes || [],
+                      progressNotes: args.progressNotes || [],
+                      completionNotes: args.completionNotes || [],
+                      troubleshootingNotes: args.troubleshootingNotes || [],
+                      // Initialize empty status metadata if not provided
+                      statusMetadata: args.statusMetadata || {},
+                      // Ensure metadata is initialized
+                      metadata: args.metadata || {}
+                    } as CreateTaskInput;
+                    
+                    result = await taskManager.createTask(createInput);
                     return {
                       content: [
                         {
@@ -625,9 +760,16 @@ async function main(): Promise<void> {
                       ],
                     };
                   case 'update_task':
+                    // Ensure metadata fields are properly structured
+                    const updates = args.updates || {};
+                    if (updates.status) {
+                      // Initialize status metadata if not present
+                      updates.statusMetadata = updates.statusMetadata || {};
+                    }
+                    
                     result = await taskManager.updateTask(
                       args.path as string,
-                      args.updates as UpdateTaskInput
+                      updates as UpdateTaskInput
                     );
                     return {
                       content: [
