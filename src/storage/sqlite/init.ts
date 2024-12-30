@@ -2,6 +2,8 @@ import { StorageConfig } from '../../types/storage.js';
 import { SqliteStorage } from './storage.js';
 import { Logger } from '../../logging/index.js';
 import { SqliteErrorHandler } from './error-handler.js';
+import { createConfig } from './config.js';
+import { SqliteConnection } from './database/connection.js';
 
 /**
  * Create a new SQLite storage instance
@@ -11,12 +13,17 @@ export async function createStorage(config: StorageConfig): Promise<SqliteStorag
   let storage: SqliteStorage | undefined;
 
   try {
+    const baseDir = config.baseDir || './data';
+    const name = config.name || 'sqlite-db';
+
     logger.info('Initializing SQLite storage', {
       operation: 'createStorage',
-      baseDir: config.baseDir,
-      name: config.name,
+      baseDir,
+      name,
       config: {
         ...config,
+        baseDir,
+        name,
         connection: {
           maxConnections: config.connection?.maxConnections ?? 3,
           idleTimeout: config.connection?.idleTimeout ?? 15000,
@@ -34,8 +41,8 @@ export async function createStorage(config: StorageConfig): Promise<SqliteStorag
     // Ensure storage directory exists with proper permissions
     const fs = await import('fs/promises');
     const path = await import('path');
-    const storageDir = config.baseDir;
-    const dbPath = path.join(storageDir, `${config.name}.db`);
+    const storageDir = baseDir;
+    const dbPath = path.join(storageDir, `${name}.db`);
 
     try {
       // Create directory with explicit permissions
@@ -91,21 +98,50 @@ export async function createStorage(config: StorageConfig): Promise<SqliteStorag
       throw error;
     }
 
-    storage = new SqliteStorage(config);
+    const sqliteConfig = createConfig({
+      path: dbPath,
+      baseDir,
+      name,
+      connection: {
+        maxConnections: config.connection?.maxConnections ?? 3,
+        maxRetries: config.connection?.maxRetries ?? 3,
+        retryDelay: config.connection?.retryDelay ?? 1000,
+        busyTimeout: config.connection?.busyTimeout ?? 5000,
+        idleTimeout: config.connection?.idleTimeout ?? 15000,
+      },
+      performance: {
+        checkpointInterval: config.performance?.checkpointInterval ?? 30000,
+        cacheSize: config.performance?.cacheSize ?? 8000,
+        mmapSize: config.performance?.mmapSize ?? 67108864,
+        pageSize: config.performance?.pageSize ?? 4096,
+        maxMemory: config.performance?.maxMemory ?? 134217728,
+      },
+    });
+
+    const connection = new SqliteConnection(sqliteConfig);
+    await connection.open();
+    storage = new SqliteStorage(connection, sqliteConfig);
     await storage.initialize();
 
     logger.info('SQLite storage initialized successfully', {
       operation: 'createStorage',
-      baseDir: config.baseDir,
-      name: config.name,
+      config: {
+        baseDir,
+        name,
+      },
     });
 
     return storage;
   } catch (error) {
+    const baseDir = config.baseDir || './data';
+    const name = config.name || 'sqlite-db';
+
     logger.error('Failed to initialize SQLite storage', error, {
       operation: 'createStorage',
-      baseDir: config.baseDir,
-      name: config.name,
+      config: {
+        baseDir,
+        name,
+      },
     });
 
     // Ensure cleanup if initialization fails
@@ -122,9 +158,11 @@ export async function createStorage(config: StorageConfig): Promise<SqliteStorag
     const errorHandler = new SqliteErrorHandler();
     return errorHandler.handleInitError(error, {
       operation: 'createStorage',
-      baseDir: config.baseDir,
-      name: config.name,
-      storageDir: config.baseDir,
+      config: {
+        baseDir,
+        name,
+      },
+      storageDir: baseDir,
       error: error instanceof Error ? error : new Error(String(error)),
     }) as never;
   }

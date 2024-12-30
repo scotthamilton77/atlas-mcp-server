@@ -1,298 +1,279 @@
-import { Database } from 'sqlite';
+import { Database, open } from 'sqlite';
+import sqlite3 from 'sqlite3';
 import { Logger } from '../../../logging/index.js';
-import { ConnectionManager, ConnectionOptions } from '../../core/connection/manager.js';
-import { SqliteErrorHandler } from '../error-handler.js';
-import {
-  SqliteConfig,
-  SQLITE_DEFAULTS,
-  DEFAULT_CONFIG,
-  mergeWithDefaults,
-  PerformanceConfig,
-  ConnectionConfig,
-} from '../../interfaces/config.js';
+import { SqliteConfig } from '../config.js';
+import { ConnectionStats } from '../../../types/storage.js';
 
-// Constants with non-null assertions since we know DEFAULT_CONFIG is fully populated
-export const DEFAULT_PAGE_SIZE = DEFAULT_CONFIG.performance!.pageSize;
-export const DEFAULT_CACHE_SIZE = DEFAULT_CONFIG.performance!.cacheSize;
-export const DEFAULT_BUSY_TIMEOUT = DEFAULT_CONFIG.connection!.busyTimeout;
-export const MAX_RETRY_ATTEMPTS = DEFAULT_CONFIG.connection!.maxRetries;
-export const RETRY_DELAY = DEFAULT_CONFIG.connection!.retryDelay;
-export const CONNECTION_TIMEOUT = DEFAULT_CONFIG.connection!.acquireTimeout;
-
-interface FullSqliteConfig extends SqliteConfig {
-  performance: Required<PerformanceConfig>;
-  connection: Required<ConnectionConfig>;
-}
-
+/**
+ * SQLite connection manager
+ */
 export class SqliteConnection {
-  private connectionManager: ConnectionManager;
-  private isInitialized = false;
-  private _isClosed = false;
-  private readonly mergedConfig: FullSqliteConfig;
-  private _dbPath: string;
   private readonly logger: Logger;
-  private readonly errorHandler: SqliteErrorHandler;
+  private db: Database | null = null;
+  private isOpen = false;
+  private inTransaction = false;
+  private readonly _dbPath: string;
 
-  get isClosed(): boolean {
-    return this._isClosed;
-  }
-
+  /**
+   * Get database file path
+   */
   get dbPath(): string {
     return this._dbPath;
   }
+  private stats: ConnectionStats = {
+    total: 0,
+    active: 0,
+    idle: 0,
+    errors: 0,
+    avgResponseTime: 0,
+  };
 
-  constructor(config: SqliteConfig) {
-    // Initialize logger and error handler
+  constructor(private readonly config: Required<SqliteConfig>) {
     this.logger = Logger.getInstance().child({ component: 'SqliteConnection' });
-    this.errorHandler = new SqliteErrorHandler('SqliteConnection');
-
-    // Merge with defaults to ensure all properties are present
-    const merged = mergeWithDefaults(config);
-    this.mergedConfig = {
-      ...merged,
-      performance: {
-        pageSize: merged.performance?.pageSize ?? DEFAULT_CONFIG.performance!.pageSize,
-        cacheSize: merged.performance?.cacheSize ?? DEFAULT_CONFIG.performance!.cacheSize,
-        mmapSize: merged.performance?.mmapSize ?? DEFAULT_CONFIG.performance!.mmapSize,
-        maxMemory: merged.performance?.maxMemory ?? DEFAULT_CONFIG.performance!.maxMemory,
-        checkpointInterval:
-          merged.performance?.checkpointInterval ?? DEFAULT_CONFIG.performance!.checkpointInterval,
-        vacuumInterval:
-          merged.performance?.vacuumInterval ?? DEFAULT_CONFIG.performance!.vacuumInterval,
-        statementCacheSize:
-          merged.performance?.statementCacheSize ?? DEFAULT_CONFIG.performance!.statementCacheSize,
-      },
-      connection: {
-        maxRetries: merged.connection?.maxRetries ?? DEFAULT_CONFIG.connection!.maxRetries,
-        retryDelay: merged.connection?.retryDelay ?? DEFAULT_CONFIG.connection!.retryDelay,
-        busyTimeout: merged.connection?.busyTimeout ?? DEFAULT_CONFIG.connection!.busyTimeout,
-        maxPoolSize: merged.connection?.maxPoolSize ?? DEFAULT_CONFIG.connection!.maxPoolSize,
-        idleTimeout: merged.connection?.idleTimeout ?? DEFAULT_CONFIG.connection!.idleTimeout,
-        acquireTimeout:
-          merged.connection?.acquireTimeout ?? DEFAULT_CONFIG.connection!.acquireTimeout,
-      },
-    } as FullSqliteConfig;
-
-    // Initialize with basic path, will be properly resolved in initialize()
-    this._dbPath = '';
-
-    // Map our config to ConnectionOptions
-    const options: ConnectionOptions = {
-      maxRetries: this.mergedConfig.connection.maxRetries,
-      retryDelay: this.mergedConfig.connection.retryDelay,
-      busyTimeout: this.mergedConfig.connection.busyTimeout,
-      maxConnections: this.mergedConfig.connection.maxPoolSize,
-      minConnections: 1, // Default to single connection
-      idleTimeout: this.mergedConfig.connection.idleTimeout,
-    };
-
-    this.connectionManager = new ConnectionManager(this.mergedConfig, options);
+    this._dbPath = config.path;
   }
 
-  async initialize(): Promise<void> {
-    if (this.isInitialized) {
-      return;
+  /**
+   * Execute operation with retry
+   */
+  async executeWithRetry<T>(
+    operation: () => Promise<T>,
+    operationName: string,
+    maxRetries = 3
+  ): Promise<T> {
+    let lastError: Error | undefined;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await operation();
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        this.logger.warn(`Operation ${operationName} failed (attempt ${attempt}/${maxRetries})`, {
+          error: lastError,
+        });
+        if (attempt === maxRetries) {
+          throw lastError;
+        }
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 100));
+      }
+    }
+    throw lastError;
+  }
+
+  /**
+   * Open database connection
+   */
+  async open(): Promise<void> {
+    if (this.isOpen) {
+      throw new Error('Connection already open');
     }
 
     try {
-      // Resolve proper database path
-      const path = await import('path');
-      const resolvedPath = path.join(this.mergedConfig.baseDir, `${this.mergedConfig.name}.db`);
-      this._dbPath = resolvedPath;
-
-      this.logger.info('Initializing SQLite connection', {
-        operation: 'initialize',
-        path: this._dbPath,
+      this.db = await open({
+        filename: this.config.path,
+        driver: sqlite3.Database,
       });
 
-      // Log database path and permissions
-      this.logger.info('Opening SQLite database', {
-        operation: 'initialize',
-        path: this._dbPath,
-        config: {
-          journalMode: this.mergedConfig.sqlite?.journalMode || 'WAL',
-          synchronous: this.mergedConfig.sqlite?.synchronous || 'NORMAL',
-          busyTimeout: this.mergedConfig.connection.busyTimeout,
-          maxPoolSize: this.mergedConfig.connection.maxPoolSize,
-        },
-      });
+      // Configure connection
+      await this.db.run('PRAGMA foreign_keys = ON');
+      await this.db.run(`PRAGMA journal_mode = ${this.config.journalMode}`);
+      await this.db.run(`PRAGMA synchronous = ${this.config.synchronous}`);
+      await this.db.run(`PRAGMA cache_size = ${this.config.cacheSize}`);
+      await this.db.run(`PRAGMA page_size = ${this.config.pageSize}`);
+      await this.db.run(`PRAGMA max_page_count = ${this.config.maxPageCount}`);
+      await this.db.run(`PRAGMA temp_store = ${this.config.tempStore}`);
+      await this.db.run(`PRAGMA mmap_size = ${this.config.mmap ? -1 : 0}`);
+      await this.db.run(`PRAGMA busy_timeout = ${this.config.busyTimeout}`);
 
-      try {
-        // Initialize connection manager with retries
-        await this.connectionManager.initialize();
-      } catch (error) {
-        this.logger.error('Failed to initialize connection manager', {
-          error:
-            error instanceof Error
-              ? {
-                  name: error.name,
-                  message: error.message,
-                  code: (error as any).code,
-                  errno: (error as any).errno,
-                }
-              : error,
-          dbPath: this._dbPath,
-        });
-        throw error;
-      }
-
-      try {
-        // Configure SQLite pragmas with retries
-        let retryCount = 0;
-        const maxRetries = 3;
-
-        while (retryCount < maxRetries) {
-          try {
-            await this.configurePragmas();
-            break;
-          } catch (error) {
-            retryCount++;
-            if (retryCount === maxRetries) {
-              // If all retries failed, cleanup and throw
-              await this.connectionManager.close().catch(closeError => {
-                this.logger.error(
-                  'Failed to close connection manager after pragma error',
-                  closeError
-                );
-              });
-              throw error;
-            }
-            // Wait before retrying
-            await new Promise(resolve => setTimeout(resolve, 100 * retryCount));
-          }
-        }
-      } catch (error) {
-        // If pragma configuration fails, ensure connection manager is closed
-        await this.connectionManager.close().catch(closeError => {
-          this.logger.error('Failed to close connection manager after pragma error', closeError);
-        });
-        throw error;
-      }
-
-      this.isInitialized = true;
-      this.logger.info('SQLite connection initialized successfully', { path: this._dbPath });
+      this.isOpen = true;
+      this.stats.total++;
+      this.stats.active++;
+      this.logger.info('Database connection opened');
     } catch (error) {
-      this.logger.error('Failed to initialize SQLite connection', error);
-
-      // Ensure we're marked as closed
-      this._isClosed = true;
-
-      // Try to clean up any partial initialization
-      try {
-        await this.connectionManager.close();
-      } catch (cleanupError) {
-        this.logger.error('Failed to cleanup after initialization error', cleanupError);
-      }
-
-      return this.errorHandler.handleInitError(error, {
-        operation: 'initialize',
-        path: this._dbPath,
-        config: this.mergedConfig,
-        error: error instanceof Error ? error : new Error(String(error)),
-      });
+      this.stats.errors++;
+      this.logger.error('Failed to open database connection', { error });
+      throw error;
     }
   }
 
-  private async configurePragmas(): Promise<void> {
-    const config = this.mergedConfig;
-    const pragmas = [
-      `PRAGMA journal_mode=${config.sqlite?.journalMode || SQLITE_DEFAULTS.journalMode}`,
-      'PRAGMA foreign_keys=ON',
-      `PRAGMA synchronous=${config.sqlite?.synchronous || SQLITE_DEFAULTS.synchronous}`,
-      `PRAGMA temp_store=${config.sqlite?.tempStore || SQLITE_DEFAULTS.tempStore}`,
-      `PRAGMA page_size=${config.performance.pageSize}`,
-      // Configure memory settings
-      'PRAGMA cache_size=-8000', // 8MB per connection
-      'PRAGMA mmap_size=67108864', // 64MB memory mapping
-      'PRAGMA page_size=4096', // Standard page size
-      'PRAGMA soft_heap_limit=134217728', // 128MB soft heap limit
-      'PRAGMA journal_mode=WAL', // Enable WAL mode
-      `PRAGMA locking_mode=${config.sqlite?.lockingMode || SQLITE_DEFAULTS.lockingMode}`,
-      `PRAGMA busy_timeout=${config.connection.busyTimeout}`,
-      `PRAGMA auto_vacuum=${config.sqlite?.autoVacuum || SQLITE_DEFAULTS.autoVacuum}`,
-      'PRAGMA optimize',
-    ];
-
-    await this.connectionManager.executeWithRetry(async () => {
-      await this.connectionManager.execute(async db => {
-        for (const pragma of pragmas) {
-          try {
-            await db.exec(pragma);
-          } catch (error) {
-            this.logger.error('Failed to set pragma', error, { pragma });
-            return this.errorHandler.handleError(error, 'configurePragmas', {
-              pragma,
-              error: error instanceof Error ? error : new Error(String(error)),
-            });
-          }
-        }
-
-        // Verify foreign keys are enabled
-        const fkResult = await db.get('PRAGMA foreign_keys');
-        if (!fkResult || !fkResult['foreign_keys']) {
-          return this.errorHandler.handleError(
-            new Error('Failed to enable foreign key constraints'),
-            'configurePragmas',
-            { operation: 'verifyForeignKeys' }
-          );
-        }
-      }, 'configurePragmas');
-    }, 'configurePragmas');
-  }
-
+  /**
+   * Close database connection
+   */
   async close(): Promise<void> {
-    if (this._isClosed) {
-      return;
+    if (!this.isOpen || !this.db) {
+      throw new Error('Connection not open');
     }
 
     try {
-      this.logger.info('Closing SQLite connection');
-      await this.connectionManager.close();
-      this._isClosed = true;
-      this.logger.info('SQLite connection closed successfully');
+      await this.db.close();
+      this.db = null;
+      this.isOpen = false;
+      this.stats.active--;
+      this.stats.idle++;
+      this.logger.info('Database connection closed');
     } catch (error) {
-      this.logger.error('Error closing SQLite connection', error);
-      return this.errorHandler.handleError(error, 'close', {
-        error: error instanceof Error ? error : new Error(String(error)),
+      this.stats.errors++;
+      this.logger.error('Failed to close database connection', { error });
+      throw error;
+    }
+  }
+
+  /**
+   * Begin transaction
+   */
+  async beginTransaction(): Promise<void> {
+    if (!this.isOpen || !this.db) {
+      throw new Error('Connection not open');
+    }
+
+    if (this.inTransaction) {
+      throw new Error('Transaction already in progress');
+    }
+
+    try {
+      await this.db.run('BEGIN TRANSACTION');
+      this.inTransaction = true;
+      this.logger.debug('Transaction started');
+    } catch (error) {
+      this.stats.errors++;
+      this.logger.error('Failed to begin transaction', { error });
+      throw error;
+    }
+  }
+
+  /**
+   * Commit transaction
+   */
+  async commitTransaction(): Promise<void> {
+    if (!this.isOpen || !this.db) {
+      throw new Error('Connection not open');
+    }
+
+    if (!this.inTransaction) {
+      throw new Error('No transaction in progress');
+    }
+
+    try {
+      await this.db.run('COMMIT');
+      this.inTransaction = false;
+      this.logger.debug('Transaction committed');
+    } catch (error) {
+      this.stats.errors++;
+      this.logger.error('Failed to commit transaction', { error });
+      throw error;
+    }
+  }
+
+  /**
+   * Rollback transaction
+   */
+  async rollbackTransaction(): Promise<void> {
+    if (!this.isOpen || !this.db) {
+      throw new Error('Connection not open');
+    }
+
+    if (!this.inTransaction) {
+      throw new Error('No transaction in progress');
+    }
+
+    try {
+      await this.db.run('ROLLBACK');
+      this.inTransaction = false;
+      this.logger.debug('Transaction rolled back');
+    } catch (error) {
+      this.stats.errors++;
+      this.logger.error('Failed to rollback transaction', { error });
+      throw error;
+    }
+  }
+
+  /**
+   * Execute work in transaction
+   */
+  async executeInTransaction<T>(work: () => Promise<T>, retries = 3): Promise<T> {
+    let attempt = 0;
+    while (attempt < retries) {
+      try {
+        await this.beginTransaction();
+        const result = await work();
+        await this.commitTransaction();
+        return result;
+      } catch (error) {
+        this.stats.errors++;
+        this.logger.error(`Transaction failed (attempt ${attempt + 1}/${retries})`, {
+          error,
+        });
+        await this.rollbackTransaction();
+        attempt++;
+        if (attempt === retries) {
+          throw error;
+        }
+      }
+    }
+    throw new Error('Transaction failed after max retries');
+  }
+
+  /**
+   * Execute database operation
+   */
+  async execute<T>(operation: (db: Database) => Promise<T>, name: string): Promise<T> {
+    if (!this.isOpen || !this.db) {
+      throw new Error('Connection not open');
+    }
+
+    const start = Date.now();
+    try {
+      const result = await operation(this.db);
+      const duration = Date.now() - start;
+      this.logger.debug(`Operation ${name} completed`, { duration });
+      return result;
+    } catch (error) {
+      this.stats.errors++;
+      const duration = Date.now() - start;
+      this.logger.error(`Operation ${name} failed`, {
+        error,
+        duration,
       });
+      throw error;
     }
   }
 
   /**
-   * Execute a database operation with retries and connection management
+   * Clear connection cache
    */
-  async execute<T>(operation: (db: Database) => Promise<T>, context: string): Promise<T> {
-    return this.connectionManager.execute(operation, context);
-  }
+  async clearCache(): Promise<void> {
+    if (!this.isOpen || !this.db) {
+      throw new Error('Connection not open');
+    }
 
-  /**
-   * Execute a database operation with retries
-   */
-  async executeWithRetry<T>(operation: () => Promise<T>, context: string): Promise<T> {
-    return this.connectionManager.executeWithRetry(operation, context);
-  }
-
-  /**
-   * Verifies database integrity
-   */
-  async verifyIntegrity(): Promise<boolean> {
     try {
-      this.logger.info('Running SQLite integrity check');
-
-      await this.executeWithRetry(async () => {
-        await this.execute(async db => {
-          const result = await db.get('PRAGMA integrity_check');
-          if (!result || result['integrity_check'] !== 'ok') {
-            throw new Error('Integrity check failed');
-          }
-        }, 'verifyIntegrity');
-      }, 'verifyIntegrity');
-
-      this.logger.info('SQLite integrity check passed');
-      return true;
+      await this.db.run('PRAGMA shrink_memory');
+      this.logger.debug('Connection cache cleared');
     } catch (error) {
-      this.logger.error('SQLite integrity check failed', error);
-      return false;
+      this.stats.errors++;
+      this.logger.error('Failed to clear connection cache', { error });
+      throw error;
     }
+  }
+
+  /**
+   * Get connection metrics
+   */
+  getCacheMetrics(): {
+    hitRate: number;
+    memoryUsage: number;
+    entryCount: number;
+  } {
+    return {
+      hitRate: 0, // SQLite doesn't expose cache hit rate
+      memoryUsage: 0, // SQLite doesn't expose memory usage
+      entryCount: 0, // SQLite doesn't expose entry count
+    };
+  }
+
+  /**
+   * Get connection statistics
+   */
+  getStats(): ConnectionStats {
+    return { ...this.stats };
   }
 }
