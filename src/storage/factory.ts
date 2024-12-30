@@ -2,11 +2,6 @@ import { StorageConfig, TaskStorage } from '../types/storage.js';
 import { createStorage } from './sqlite/init.js';
 import path from 'path';
 import { StorageFactoryErrorHandler } from './factory/error-handler.js';
-import {
-  DEFAULT_CHECK_INTERVAL,
-  DEFAULT_ERROR_THRESHOLD,
-  DEFAULT_RESPONSE_TIME_THRESHOLD,
-} from './monitoring/index.js';
 
 /**
  * Create a default storage instance with standard configuration
@@ -32,21 +27,6 @@ export async function createDefaultStorage(): Promise<TaskStorage> {
       pageSize: 4096,
       mmapSize: 0, // Disable memory mapping
       maxMemory: 32 * 1024 * 1024, // 32MB max memory
-    },
-    monitoring: {
-      enabled: true,
-      healthCheck: {
-        enabled: true,
-        interval: DEFAULT_CHECK_INTERVAL,
-        errorThreshold: DEFAULT_ERROR_THRESHOLD,
-        responseTimeThreshold: DEFAULT_RESPONSE_TIME_THRESHOLD,
-      },
-      metrics: {
-        enabled: true,
-        interval: DEFAULT_CHECK_INTERVAL,
-        errorThreshold: DEFAULT_ERROR_THRESHOLD,
-        responseTimeThreshold: DEFAULT_RESPONSE_TIME_THRESHOLD,
-      },
     },
   };
 

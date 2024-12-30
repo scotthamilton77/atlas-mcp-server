@@ -11,6 +11,7 @@ import { WALManager } from '../wal/manager.js';
 import { join } from 'path';
 import crypto from 'crypto';
 import { isDatabaseError, isTransientError } from '../../../utils/error-utils.js';
+import { DEFAULT_BUSY_TIMEOUT } from '../../sqlite/config.js';
 
 interface PoolConnection {
   db: Database;
@@ -75,7 +76,7 @@ export class ConnectionPool {
     this.logger = Logger.getInstance().child({
       component: 'ConnectionPool',
       context: {
-        database: config.name,
+        database: config.name || 'default',
         minConnections: options.minConnections || 1,
         maxConnections: Math.min(options.maxConnections || 5, 5),
         idleTimeout: options.idleTimeout || 30000,
@@ -88,7 +89,7 @@ export class ConnectionPool {
     this.maxConnections = Math.min(options.maxConnections || 5, 5); // Cap at 5 connections
     this.idleTimeout = options.idleTimeout || 30000; // 30 seconds idle timeout
     this.cleanupInterval = null;
-    this._dbPath = join(config.baseDir, `${config.name}.db`);
+    this._dbPath = join(config.baseDir || './data', `${config.name || 'default'}.db`);
 
     // Initialize state manager with monitoring config
     this.stateManager = ConnectionStateManager.getInstance({
@@ -381,7 +382,7 @@ export class ConnectionPool {
               }
             )
           );
-        }, this.config.connection?.busyTimeout || 5000);
+        }, this.config.connection?.busyTimeout || DEFAULT_BUSY_TIMEOUT);
 
         const checkConnection = async () => {
           for (const [id] of this.connections.entries()) {

@@ -93,8 +93,10 @@ export class MetricsCollector {
       cache: {
         hits: 0, // Populated by storage implementation
         misses: 0,
-        hitRate: 0,
         size: 0,
+        maxSize: 0,
+        hitRate: 0,
+        evictions: 0,
         memoryUsage: memoryUsage.heapUsed,
       },
       connections: {

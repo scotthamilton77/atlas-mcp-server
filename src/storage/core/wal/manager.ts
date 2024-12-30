@@ -196,8 +196,10 @@ export class WALManager {
                     cache: {
                       hits: 0,
                       misses: 0,
-                      hitRate: 0,
                       size: 0,
+                      maxSize: 0,
+                      hitRate: 0,
+                      evictions: 0,
                       memoryUsage: 0,
                     },
                     queries: {

@@ -31,25 +31,30 @@ export abstract class BaseStorage implements TaskStorage {
    * Update parent task references when changing parent paths
    */
   protected async updateParentReferences(
-    taskPath: string,
     oldParentPath: string | undefined,
     newParentPath: string | undefined
   ): Promise<void> {
     // Remove from old parent if it exists
     if (oldParentPath) {
       const oldParent = await this.getTask(oldParentPath);
-      if (oldParent && Array.isArray(oldParent.subtasks)) {
-        oldParent.subtasks = oldParent.subtasks.filter(s => s !== taskPath);
-        await this.saveTask(oldParent);
+      if (oldParent) {
+        await this.saveTask({
+          ...oldParent,
+          updated: formatTimestamp(Date.now()),
+          version: oldParent.version + 1,
+        });
       }
     }
 
     // Add to new parent if it exists
     if (newParentPath) {
       const newParent = await this.getTask(newParentPath);
-      if (newParent && Array.isArray(newParent.subtasks)) {
-        newParent.subtasks = [...newParent.subtasks, taskPath];
-        await this.saveTask(newParent);
+      if (newParent) {
+        await this.saveTask({
+          ...newParent,
+          updated: formatTimestamp(Date.now()),
+          version: newParent.version + 1,
+        });
       }
     }
   }
@@ -81,6 +86,7 @@ export abstract class BaseStorage implements TaskStorage {
     const projectPath = input.path.split('/')[0];
 
     const task: Task = {
+      id: `task_${now}_${Math.random().toString(36).substr(2, 9)}`,
       path: input.path,
       name: input.name,
       type: input.type,
@@ -94,7 +100,6 @@ export abstract class BaseStorage implements TaskStorage {
       notes: input.notes || [],
       reasoning: input.reasoning,
       dependencies: input.dependencies || [],
-      subtasks: [],
       metadata: input.metadata || ({} as TaskMetadata),
       // Add required status metadata with empty default values
       statusMetadata: input.statusMetadata || {},
@@ -110,7 +115,7 @@ export abstract class BaseStorage implements TaskStorage {
 
       // Add to parent if specified
       if (task.parentPath) {
-        await this.updateParentReferences(task.path, undefined, task.parentPath);
+        await this.updateParentReferences(undefined, task.parentPath);
       }
     });
 
@@ -131,7 +136,6 @@ export abstract class BaseStorage implements TaskStorage {
 
       const now = Date.now();
       // Create updated task with proper type handling
-      // Create updated task with explicit type handling
       const updatedTask: Task = {
         ...existingTask,
         name: updates.name ?? existingTask.name,
@@ -145,7 +149,6 @@ export abstract class BaseStorage implements TaskStorage {
         dependencies: updates.dependencies ?? existingTask.dependencies,
         updated: formatTimestamp(now),
         version: existingTask.version + 1,
-        subtasks: existingTask.subtasks,
         metadata: {
           ...existingTask.metadata,
           ...(updates.metadata ?? {}),
@@ -166,7 +169,6 @@ export abstract class BaseStorage implements TaskStorage {
       if (updates.parentPath !== undefined && updates.parentPath !== existingTask.parentPath) {
         // Handle parent path updates
         await this.updateParentReferences(
-          path,
           existingTask.parentPath,
           updates.parentPath === null ? undefined : updates.parentPath
         );
@@ -178,7 +180,7 @@ export abstract class BaseStorage implements TaskStorage {
   }
 
   /**
-   * Delete a task and its subtasks recursively
+   * Delete a task and its children recursively
    */
   async deleteTask(path: string): Promise<void> {
     this.ensureInitialized();
@@ -189,12 +191,13 @@ export abstract class BaseStorage implements TaskStorage {
 
       // Remove from parent if exists
       if (task.parentPath) {
-        await this.updateParentReferences(path, task.parentPath, undefined);
+        await this.updateParentReferences(task.parentPath, undefined);
       }
 
-      const subtasks = await this.getSubtasks(path);
-      for (const subtask of subtasks) {
-        await this.deleteTask(subtask.path);
+      // Delete all child tasks (tasks with this path as parent)
+      const children = await this.getChildren(path);
+      for (const child of children) {
+        await this.deleteTask(child.path);
       }
 
       await this.deleteTasks([path]);
@@ -248,7 +251,7 @@ export abstract class BaseStorage implements TaskStorage {
   abstract getTasks(paths: string[]): Promise<Task[]>;
   abstract getTasksByPattern(pattern: string): Promise<Task[]>;
   abstract getTasksByStatus(status: TaskStatus): Promise<Task[]>;
-  abstract getSubtasks(parentPath: string): Promise<Task[]>;
+  abstract getChildren(parentPath: string): Promise<Task[]>;
   abstract deleteTasks(paths: string[]): Promise<void>;
   abstract hasChildren(path: string): Promise<boolean>;
   abstract getDependentTasks(path: string): Promise<Task[]>;

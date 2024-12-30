@@ -21,7 +21,7 @@ export interface TaskStorage {
   getTasks(paths: string[]): Promise<Task[]>;
   getTasksByPattern(pattern: string): Promise<Task[]>;
   getTasksByStatus(status: TaskStatus): Promise<Task[]>;
-  getSubtasks(parentPath: string): Promise<Task[]>;
+  getChildren(parentPath: string): Promise<Task[]>;
   deleteTask(path: string): Promise<void>;
   deleteTasks(paths: string[]): Promise<void>;
   hasChildren(path: string): Promise<boolean>;

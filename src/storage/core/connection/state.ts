@@ -4,7 +4,7 @@
 import { Logger } from '../../../logging/index.js';
 import { EventManager } from '../../../events/event-manager.js';
 import { EventTypes } from '../../../types/events.js';
-import { ConnectionStats, MonitoringMetrics } from '../../../types/storage.js';
+import { MonitoringMetrics } from '../../../types/storage.js';
 
 interface ConnectionState {
   id: string;
@@ -187,28 +187,30 @@ export class ConnectionStateManager {
       totalResponseTime += state.totalResponseTime;
     }
 
-    const connectionStats: ConnectionStats = {
-      total: this.states.size,
-      active: totalActive,
-      idle: this.states.size - totalActive,
-      errors: totalErrors,
-      avgResponseTime: totalQueries > 0 ? totalResponseTime / totalQueries : 0,
-    };
+    const avgResponseTime = totalQueries > 0 ? totalResponseTime / totalQueries : 0;
 
     return {
-      cache: {
-        hits: 0,
-        misses: 0,
-        hitRate: 0,
-        size: 0,
-        memoryUsage: process.memoryUsage().heapUsed,
+      connections: {
+        total: this.states.size,
+        active: totalActive,
+        idle: this.states.size - totalActive,
+        errors: totalErrors,
+        avgResponseTime,
       },
-      connections: connectionStats,
       queries: {
         total: totalQueries,
         errors: totalErrors,
-        avgExecutionTime: totalQueries > 0 ? totalResponseTime / totalQueries : 0,
-        slowQueries: 0, // TODO: Track slow queries
+        slowQueries: 0,
+        avgExecutionTime: avgResponseTime,
+      },
+      cache: {
+        hits: 0,
+        misses: 0,
+        size: 0,
+        maxSize: 0,
+        hitRate: 0,
+        evictions: 0,
+        memoryUsage: process.memoryUsage().heapUsed,
       },
       timestamp: Date.now(),
     };
@@ -273,9 +275,17 @@ export class ConnectionStateManager {
         component: 'ConnectionStateManager',
         memoryUsage: process.memoryUsage(),
         metrics: {
-          cache: metrics.cache,
           connections: metrics.connections,
           queries: metrics.queries,
+          cache: {
+            hits: 0,
+            misses: 0,
+            size: 0,
+            maxSize: 0,
+            hitRate: 0,
+            evictions: 0,
+            memoryUsage: process.memoryUsage().heapUsed,
+          },
           timestamp: metrics.timestamp,
         },
         operation: 'health_check',
