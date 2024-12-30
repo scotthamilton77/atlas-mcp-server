@@ -12,7 +12,6 @@ const VALIDATION_MESSAGES = {
   NOTE_LENGTH: `Write focused notes up to ${CONSTRAINTS.NOTE_MAX_LENGTH} characters each`,
   REASONING_LENGTH: `Document reasoning clearly within ${CONSTRAINTS.REASONING_MAX_LENGTH} characters`,
   DEPENDENCIES_SIZE: `Maintain up to ${CONSTRAINTS.MAX_DEPENDENCIES} well-defined dependencies`,
-  SUBTASKS_SIZE: `Organize with up to ${CONSTRAINTS.MAX_SUBTASKS} focused subtasks`,
   NOTES_SIZE: `Track progress with up to ${CONSTRAINTS.MAX_NOTES} detailed notes`,
   METADATA_LENGTH: `Keep metadata fields concise within ${CONSTRAINTS.METADATA_STRING_MAX_LENGTH} characters`,
   METADATA_ARRAY: `Use up to ${CONSTRAINTS.MAX_ARRAY_ITEMS} items for effective categorization`,
@@ -191,7 +190,7 @@ export const updateTaskSchema = {
         },
         status: {
           type: 'string',
-          enum: ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'BLOCKED'],
+          enum: ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'BLOCKED', 'CANCELLED'],
           description:
             'Current execution state with strict transition rules:\n\n' +
             'Status Flow:\n' +
@@ -310,7 +309,7 @@ export const getTasksByStatusSchema = {
   properties: {
     status: {
       type: 'string',
-      enum: ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'BLOCKED'] as TaskStatus[],
+      enum: ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'BLOCKED', 'CANCELLED'] as TaskStatus[],
       description:
         'Filter tasks by their execution state. Use to find tasks needing attention or verify completion.',
     },
@@ -336,14 +335,14 @@ export const getTasksByPathSchema = {
   required: ['pathPattern'],
 };
 
-/** Gets subtasks of a task */
-export const getSubtasksSchema = {
+/** Gets child tasks of a task */
+export const getChildrenSchema = {
   type: 'object',
   properties: {
     path: {
       type: 'string',
       description:
-        'Parent task path. Returns immediate subtasks to analyze task breakdown and progress.',
+        'Parent task path. Returns immediate child tasks to analyze task breakdown and progress.',
     },
   },
   required: ['path'],
