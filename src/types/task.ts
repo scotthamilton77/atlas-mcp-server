@@ -21,17 +21,17 @@ export interface StatusMetadata {
   // IN_PROGRESS
   assignee?: string;
   progress_indicators?: string[];
-  
+
   // COMPLETED
   completedBy?: string;
   verificationStatus?: 'passed' | 'failed';
   completionChecks?: string[];
-  
+
   // FAILED
   errorType?: string;
   errorDetails?: string;
   recoveryAttempts?: number;
-  
+
   // BLOCKED
   blockedBy?: string[];
   blockedReason?: string;
@@ -82,11 +82,11 @@ export interface QualityMetadata {
 /**
  * Combined task metadata with required properties
  */
-export interface TaskMetadata extends
-  ClassificationMetadata,
-  PriorityMetadata,
-  TechnicalMetadata,
-  QualityMetadata {
+export interface TaskMetadata
+  extends ClassificationMetadata,
+    PriorityMetadata,
+    TechnicalMetadata,
+    QualityMetadata {
   [key: string]: any;
 }
 
@@ -116,23 +116,23 @@ export interface Task {
   description?: string;
   parentPath?: string;
   reasoning?: string;
-  
+
   // Status metadata
   statusMetadata: StatusMetadata;
-  
+
   // Notes - organized by category
   planningNotes: string[];
   progressNotes: string[];
   completionNotes: string[];
   troubleshootingNotes: string[];
-  
+
   // Legacy notes field for backward compatibility
   notes: string[]; // Required array, can be empty but not undefined
-  
+
   // Relationships
   dependencies: string[]; // Required array, can be empty but not undefined
   subtasks: string[]; // Required array, can be empty but not undefined
-  
+
   // Rich metadata
   metadata: TaskMetadata;
 }
@@ -144,22 +144,22 @@ export interface CreateTaskInput {
   description?: string;
   parentPath?: string;
   reasoning?: string;
-  
+
   // Status metadata
   statusMetadata?: Partial<StatusMetadata>;
-  
+
   // Notes by category
   planningNotes?: string[];
   progressNotes?: string[];
   completionNotes?: string[];
   troubleshootingNotes?: string[];
-  
+
   // Legacy notes field
   notes?: string[]; // Optional, will be initialized to empty array if undefined
-  
+
   // Relationships
   dependencies?: string[]; // Optional, will be initialized to empty array if undefined
-  
+
   // Rich metadata
   metadata?: TaskMetadata;
 }
@@ -171,23 +171,23 @@ export interface UpdateTaskInput {
   status?: TaskStatus;
   parentPath?: string | null; // Can be null to clear the parent
   reasoning?: string;
-  
+
   // Status metadata
   statusMetadata?: Partial<StatusMetadata>;
-  
+
   // Notes by category
   planningNotes?: string[];
   progressNotes?: string[];
   completionNotes?: string[];
   troubleshootingNotes?: string[];
-  
+
   // Legacy notes field
   notes?: string[]; // Optional, will keep existing if undefined
-  
+
   // Relationships
   dependencies?: string[]; // Optional, will keep existing if undefined
   subtasks?: string[]; // Optional, will keep existing if undefined
-  
+
   // Rich metadata
   metadata?: Partial<TaskMetadata>;
 }

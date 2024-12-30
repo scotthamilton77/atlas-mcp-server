@@ -155,3 +155,24 @@ export interface LoggerRecoveryOptions {
   /** Callback for recovery events */
   onRecoveryAttempt?: (attempt: number, error?: Error) => void;
 }
+
+/**
+ * Transport manager interface
+ */
+export interface ITransportManager {
+  /** Initialize transports */
+  initialize(): Promise<void>;
+  /** Write log entry to transports */
+  write(entry: LogEntry): Promise<void>;
+  /** Close all transports */
+  close(): Promise<void>;
+  /** Set event manager */
+  setEventManager(eventManager: EventManager): void;
+  /** Get transport status */
+  getStatus?(): Promise<{
+    active: boolean;
+    currentFileSize: number;
+    queueLength: number;
+    error?: string;
+  }>;
+}
