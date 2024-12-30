@@ -6,13 +6,7 @@ export {
   DEFAULT_BUSY_TIMEOUT,
   DEFAULT_CONFIG,
   type SqliteConfig,
-  type SqliteOptions,
 } from './config.js';
 
 // Re-export types
-export type {
-  StorageConfig,
-  TaskStorage,
-  StorageMetrics,
-  CacheStats,
-} from '../../types/storage.js';
+export type { StorageConfig, TaskStorage, StorageMetrics } from '../../types/storage.js';

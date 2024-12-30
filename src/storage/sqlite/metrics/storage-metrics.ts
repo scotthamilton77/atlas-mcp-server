@@ -37,9 +37,13 @@ export interface StorageMetrics {
     pageCount: number;
     walSize: number;
     cache: {
+      hits: number;
+      misses: number;
+      size: number;
+      maxSize: number;
       hitRate: number;
+      evictions: number;
       memoryUsage: number;
-      entryCount: number;
     };
   };
 }
@@ -81,9 +85,13 @@ export class SqliteMetrics {
         pageCount: storageStats.pageCount,
         walSize: storageStats.walSize,
         cache: {
-          hitRate: 0, // SQLite implementation doesn't use cache
+          hits: 0,
+          misses: 0,
+          size: 0,
+          maxSize: 0,
+          hitRate: 0,
+          evictions: 0,
           memoryUsage: memUsage.heapUsed,
-          entryCount: 0,
         },
       },
     };

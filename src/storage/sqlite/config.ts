@@ -1,51 +1,88 @@
 import { StorageConfig } from '../../types/storage.js';
 
+// Default configuration values
 export const DEFAULT_PAGE_SIZE = 4096;
 export const DEFAULT_CACHE_SIZE = 2000;
-export const DEFAULT_BUSY_TIMEOUT = 5000;
+export const DEFAULT_BUSY_TIMEOUT = 2000;
 
-export interface SqliteOptions {
-  journalMode?: 'DELETE' | 'TRUNCATE' | 'PERSIST' | 'MEMORY' | 'WAL' | 'OFF';
-  synchronous?: 'OFF' | 'NORMAL' | 'FULL' | 'EXTRA';
-  tempStore?: 'DEFAULT' | 'FILE' | 'MEMORY';
-  lockingMode?: 'NORMAL' | 'EXCLUSIVE';
-  autoVacuum?: 'NONE' | 'FULL' | 'INCREMENTAL';
-}
-
+/**
+ * SQLite specific configuration
+ */
 export interface SqliteConfig extends StorageConfig {
-  sqlite?: SqliteOptions;
-  connection?: {
-    maxRetries?: number;
-    retryDelay?: number;
-    busyTimeout?: number;
-  };
-  performance?: {
-    checkpointInterval?: number;
-    cacheSize?: number;
-    mmapSize?: number;
-    pageSize?: number;
-  };
+  // File path
+  path: string;
+
+  // Connection settings
+  maxConnections: number;
+  timeout: number;
+  busyTimeout: number;
+
+  // Journal settings
+  journalMode: 'delete' | 'truncate' | 'persist' | 'memory' | 'wal' | 'off';
+  synchronous: 'off' | 'normal' | 'full' | 'extra';
+
+  // Cache settings
+  cacheSize: number;
+  pageSize: number;
+  maxPageCount: number;
+  tempStore: 'default' | 'file' | 'memory';
+  mmap: boolean;
+
+  // Access mode
+  readonly: boolean;
 }
 
-export const DEFAULT_CONFIG: SqliteConfig = {
-  baseDir: 'atlas-tasks',
-  name: 'atlas-tasks',
-  sqlite: {
-    journalMode: 'WAL',
-    synchronous: 'NORMAL',
-    tempStore: 'MEMORY',
-    lockingMode: 'NORMAL',
-    autoVacuum: 'NONE',
-  },
+/**
+ * Default SQLite configuration
+ */
+export const DEFAULT_CONFIG: Required<SqliteConfig> = {
+  // StorageConfig required properties
+  baseDir: process.env.SQLITE_BASE_DIR || './data',
+  name: process.env.SQLITE_DB_NAME || 'sqlite-db',
   connection: {
+    maxConnections: 1,
     maxRetries: 3,
     retryDelay: 1000,
-    busyTimeout: DEFAULT_BUSY_TIMEOUT,
+    busyTimeout: 2000,
+    idleTimeout: 60000,
   },
   performance: {
-    checkpointInterval: 60000,
-    cacheSize: DEFAULT_CACHE_SIZE,
-    mmapSize: 1024 * 1024 * 1024, // 1GB
-    pageSize: DEFAULT_PAGE_SIZE,
+    checkpointInterval: 30000,
+    cacheSize: 2000,
+    mmapSize: 67108864, // 64MB
+    pageSize: 4096,
+    maxMemory: 134217728, // 128MB
   },
+
+  // File path
+  path: ':memory:', // In-memory database by default
+
+  // Connection settings
+  maxConnections: 1,
+  timeout: 5000,
+  busyTimeout: 2000,
+
+  // Journal settings
+  journalMode: 'wal',
+  synchronous: 'normal',
+
+  // Cache settings
+  cacheSize: 2000,
+  pageSize: 4096,
+  maxPageCount: 1000000,
+  tempStore: 'memory',
+  mmap: true,
+
+  // Access mode
+  readonly: false,
 };
+
+/**
+ * Create SQLite configuration with defaults
+ */
+export function createConfig(config: Partial<SqliteConfig> = {}): Required<SqliteConfig> {
+  return {
+    ...DEFAULT_CONFIG,
+    ...config,
+  };
+}
