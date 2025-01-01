@@ -3,7 +3,22 @@ atlas-mcp-server
 ├── .husky/
 │   ├── _/
 │   │   ├── .gitignore
-│   │   └── husky.sh
+│   │   ├── applypatch-msg
+│   │   ├── commit-msg
+│   │   ├── h
+│   │   ├── husky.sh
+│   │   ├── post-applypatch
+│   │   ├── post-checkout
+│   │   ├── post-commit
+│   │   ├── post-merge
+│   │   ├── post-rewrite
+│   │   ├── pre-applypatch
+│   │   ├── pre-auto-gc
+│   │   ├── pre-commit
+│   │   ├── pre-merge-commit
+│   │   ├── pre-push
+│   │   ├── pre-rebase
+│   │   └── prepare-commit-msg
 │   └── pre-commit
 ├── examples/
 │   ├── portfolio-website/
@@ -118,7 +133,8 @@ atlas-mcp-server
 │   │   │   │   ├── cache-coordinator.ts
 │   │   │   │   ├── cache-manager.ts
 │   │   │   │   ├── cache-metrics.ts
-│   │   │   │   └── index.ts
+│   │   │   │   ├── index.ts
+│   │   │   │   └── resource-cache-manager.ts
 │   │   │   ├── indexing/
 │   │   │   │   ├── index-manager.ts
 │   │   │   │   └── index.ts
@@ -128,6 +144,7 @@ atlas-mcp-server
 │   │   │   │   └── transaction-manager.ts
 │   │   │   ├── error-handler.ts
 │   │   │   ├── index.ts
+│   │   │   ├── task-resource-handler.ts
 │   │   │   └── task-store.ts
 │   │   ├── manager/
 │   │   │   ├── error-handler.ts
