@@ -4,6 +4,8 @@ import { Task, TaskStatus, CreateTaskInput, UpdateTaskInput } from '../../types/
 import { TaskIndexManager } from './indexing/index-manager.js';
 import { TaskCacheManager } from '../manager/task-cache-manager.js';
 import { TaskErrorFactory } from '../../errors/task-error.js';
+import { TaskVisualizer } from '../../visualization/task-visualizer.js';
+import path from 'path';
 
 /**
  * Core task store implementation
@@ -13,10 +15,25 @@ export class TaskStore {
   private readonly indexManager: TaskIndexManager;
   private readonly cacheManager: TaskCacheManager;
 
-  constructor(private readonly storage: TaskStorage) {
+  private readonly visualizer: TaskVisualizer;
+
+  constructor(
+    private readonly storage: TaskStorage,
+    config: { workspaceDir: string }
+  ) {
     this.logger = Logger.getInstance().child({ component: 'TaskStore' });
     this.indexManager = new TaskIndexManager();
     this.cacheManager = new TaskCacheManager();
+
+    // Initialize visualizer with workspace directory
+    const visualizerDir = path.join(config.workspaceDir, 'visualizations');
+    this.logger.info('Initializing task visualizer', { outputDir: visualizerDir });
+
+    this.visualizer = new TaskVisualizer({
+      outputDir: visualizerDir,
+      formats: ['markdown', 'json'],
+      autoUpdate: true,
+    });
   }
 
   /**
@@ -25,6 +42,11 @@ export class TaskStore {
   async initialize(): Promise<void> {
     try {
       await this.storage.initialize();
+
+      // Initial visualization of all tasks
+      const tasks = await this.storage.getTasksByPattern('**');
+      await this.visualizer.updateVisualizations(tasks);
+
       this.logger.info('Task store initialized');
     } catch (error) {
       this.logger.error('Failed to initialize task store', { error });
@@ -43,6 +65,11 @@ export class TaskStore {
       const task = await this.storage.createTask(input);
       await this.indexManager.indexTask(task);
       this.cacheManager.set(task);
+
+      // Update visualizations
+      const allTasks = await this.storage.getTasksByPattern('**');
+      await this.visualizer.updateVisualizations(allTasks);
+
       return task;
     } catch (error) {
       this.logger.error('Failed to create task', {
@@ -61,6 +88,11 @@ export class TaskStore {
       const task = await this.storage.updateTask(path, updates);
       await this.indexManager.indexTask(task);
       this.cacheManager.set(task);
+
+      // Update visualizations
+      const allTasks = await this.storage.getTasksByPattern('**');
+      await this.visualizer.updateVisualizations(allTasks);
+
       return task;
     } catch (error) {
       this.logger.error('Failed to update task', {
@@ -239,6 +271,10 @@ export class TaskStore {
       await this.storage.deleteTask(path);
       await this.indexManager.removeTask(path);
       this.cacheManager.delete(path);
+
+      // Update visualizations
+      const allTasks = await this.storage.getTasksByPattern('**');
+      await this.visualizer.updateVisualizations(allTasks);
     } catch (error) {
       this.logger.error('Failed to delete task', {
         error,
@@ -275,6 +311,9 @@ export class TaskStore {
       await this.storage.clearAllTasks();
       await this.indexManager.clearIndex();
       this.cacheManager.clear();
+
+      // Update visualizations with empty task list
+      await this.visualizer.updateVisualizations([]);
     } catch (error) {
       this.logger.error('Failed to clear all tasks', { error });
       throw error;
