@@ -1,5 +1,6 @@
 import { Logger } from './logging/index.js';
 import { TaskManager } from './task/manager/task-manager.js';
+import { VisualizationManager } from './visualization/visualization-manager.js';
 import { createStorage } from './storage/index.js';
 import { AtlasServer } from './server/index.js';
 import { EventManager } from './events/event-manager.js';
@@ -121,6 +122,16 @@ async function main(): Promise<void> {
       // Initialize task manager
       const taskManager = await TaskManager.getInstance(storage);
 
+      // Initialize visualization manager
+      const visualizationManager = await VisualizationManager.initialize(taskManager, {
+        baseDir,
+      });
+
+      // Register visualization cleanup
+      ProcessManager.registerCleanupHandler(async () => {
+        await visualizationManager.cleanup();
+      });
+
       // Initialize template storage and manager
       const templateStorage = new SqliteTemplateStorage(storage, logger);
       await templateStorage.initialize();
@@ -219,6 +230,38 @@ async function main(): Promise<void> {
           getResourceTemplates: async () => templateManager.getResourceTemplates(),
           resolveResourceTemplate: async (template: string, vars: Record<string, string>) =>
             templateManager.resolveResourceTemplate(template, vars),
+          // Add visualization resource
+          getVisualizationResource: async () => ({
+            uri: 'visualizations://current',
+            name: 'Task Visualizations',
+            mimeType: 'application/json',
+            text: JSON.stringify(
+              {
+                timestamp: new Date().toISOString(),
+                files: {
+                  markdown: `/visualizations/tasks-${new Date().toISOString().split('T')[0]}.md`,
+                  json: `/visualizations/tasks-${new Date().toISOString().split('T')[0]}.json`,
+                },
+                summary: await taskManager.getMetrics(),
+                format: {
+                  statusIndicators: {
+                    PENDING: '⏳',
+                    IN_PROGRESS: '🔄',
+                    COMPLETED: '✅',
+                    BLOCKED: '🚫',
+                    CANCELLED: '❌',
+                  },
+                  progressBar: {
+                    length: 20,
+                    filled: '█',
+                    empty: '░',
+                  },
+                },
+              },
+              null,
+              2
+            ),
+          }),
         }
       );
 
