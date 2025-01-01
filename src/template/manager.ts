@@ -1,227 +1,41 @@
-import { watch, FSWatcher } from 'fs';
-import { readFile, readdir } from 'fs/promises';
-import { join, basename } from 'path';
-import { nanoid } from 'nanoid';
 import { Resource, ResourceTemplate } from '@modelcontextprotocol/sdk/types.js';
-
+import { TaskManager } from '../task/manager/task-manager.js';
+import { TaskType } from '../types/task-types.js';
 import { TemplateStorage } from '../storage/interfaces/template-storage.js';
-import { Logger } from '../logging/index.js';
-import { z } from 'zod';
 import {
   TaskTemplate,
   TemplateInfo,
-  taskTemplateSchema,
   TemplateInstantiationOptions,
+  TemplateTask,
 } from '../types/template.js';
-import { TaskManager } from '../task/manager/task-manager.js';
-import { TaskType } from '../types/task.js';
+import { TemplateLoader } from './loader/template-loader.js';
+import { VariableInterpolator } from './interpolation/variable-interpolator.js';
+import { MetadataTransformer } from './interpolation/metadata-transformer.js';
 
 /**
  * Manages task templates including storage, validation, and instantiation
  */
 export class TemplateManager {
-  private storage: TemplateStorage;
-  private taskManager: TaskManager;
-  private logger: Logger;
-  private watchers: Map<string, FSWatcher> = new Map();
+  private readonly loader: TemplateLoader;
+  private readonly interpolator: VariableInterpolator;
+  private readonly transformer: MetadataTransformer;
+  private readonly processingTemplates: Set<string> = new Set();
 
-  constructor(storage: TemplateStorage, taskManager: TaskManager, logger: Logger) {
-    this.storage = storage;
-    this.taskManager = taskManager;
-    this.logger = logger;
+  constructor(
+    private readonly storage: TemplateStorage,
+    private readonly taskManager: TaskManager
+  ) {
+    this.loader = new TemplateLoader(storage);
+    this.interpolator = new VariableInterpolator();
+    this.transformer = new MetadataTransformer();
   }
 
   /**
-   * Initialize the template system with multiple template directories
+   * Initialize the template system
    */
   async initialize(templateDirs: string[]): Promise<void> {
-    // Initialize storage
     await this.storage.initialize();
-
-    this.logger.info('Initializing template directories:', {
-      directories: templateDirs,
-      cwd: process.cwd(),
-    });
-
-    // Load existing templates from all directories
-    for (const dir of templateDirs) {
-      try {
-        // Check if directory exists
-        const exists = await this.directoryExists(dir);
-        if (!exists) {
-          this.logger.warn(`Template directory does not exist: ${dir}`);
-          continue;
-        }
-
-        await this.loadTemplatesFromDirectory(dir);
-        await this.setupTemplateWatcher(dir);
-      } catch (error) {
-        this.logger.warn(`Failed to initialize templates from directory: ${dir}`, {
-          error,
-          directory: dir,
-        });
-        // Continue with other directories even if one fails
-      }
-    }
-  }
-
-  /**
-   * Check if a directory exists
-   */
-  private async directoryExists(dir: string): Promise<boolean> {
-    try {
-      const stats = await import('fs/promises').then(fs => fs.stat(dir));
-      return stats.isDirectory();
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        return false;
-      }
-      throw error;
-    }
-  }
-
-  /**
-   * Load templates from a directory
-   */
-  private async loadTemplatesFromDirectory(dir: string): Promise<void> {
-    try {
-      this.logger.info(`Loading templates from directory: ${dir}`);
-      const files = await readdir(dir, { withFileTypes: true });
-      for (const entry of files) {
-        const fullPath = join(dir, entry.name);
-        if (entry.isDirectory()) {
-          this.logger.info(`Found subdirectory: ${entry.name}, recursing...`);
-          await this.loadTemplatesFromDirectory(fullPath);
-        } else if (entry.name.endsWith('.json')) {
-          this.logger.info(`Found template file: ${entry.name}`);
-          try {
-            await this.loadTemplateFromFile(fullPath);
-          } catch (error) {
-            this.logger.warn(`Failed to load template file: ${entry.name}`, {
-              error,
-              file: fullPath,
-            });
-            // Continue with other files even if one fails
-          }
-        }
-      }
-    } catch (error) {
-      this.logger.error('Failed to load templates from directory', {
-        error,
-        directory: dir,
-      });
-      throw new Error(
-        'Failed to load templates: ' + (error instanceof Error ? error.message : String(error))
-      );
-    }
-  }
-
-  /**
-   * Load and validate a template from a file
-   */
-  private async loadTemplateFromFile(path: string): Promise<void> {
-    try {
-      const content = await readFile(path, 'utf-8');
-      const template = JSON.parse(content);
-
-      // Generate ID if not present
-      if (!template.id) {
-        template.id = nanoid();
-      }
-
-      // Validate template structure
-      this.logger.debug('Validating template:', {
-        templateId: template.id,
-        templateName: template.name,
-        file: basename(path),
-      });
-
-      let validatedTemplate: TaskTemplate;
-      try {
-        this.logger.debug('Template pre-validation:', {
-          id: template.id,
-          name: template.name,
-          variableCount: template.variables?.length ?? 0,
-          taskCount: template.tasks?.length ?? 0,
-          file: basename(path),
-        });
-
-        validatedTemplate = taskTemplateSchema.parse(template);
-
-        this.logger.debug('Template validation successful', {
-          templateId: validatedTemplate.id,
-          templateName: validatedTemplate.name,
-          variables: validatedTemplate.variables.map(v => v.name),
-          tasks: validatedTemplate.tasks.map(t => t.path),
-        });
-      } catch (error) {
-        if (error instanceof z.ZodError) {
-          this.logger.error('Template validation failed:', {
-            templateId: template.id,
-            templateName: template.name,
-            file: basename(path),
-            errors: error.errors.map((e: z.ZodIssue) => ({
-              path: e.path.join('.'),
-              message: e.message,
-              code: e.code,
-            })),
-          });
-        } else {
-          this.logger.error('Unexpected validation error:', {
-            error,
-            templateId: template.id,
-            templateName: template.name,
-            file: basename(path),
-          });
-        }
-        throw error;
-      }
-
-      // Store template
-      await this.storage.saveTemplate(validatedTemplate);
-
-      this.logger.info('Template loaded successfully', {
-        templateId: validatedTemplate.id,
-        name: validatedTemplate.name,
-        file: basename(path),
-        path,
-      });
-    } catch (error) {
-      this.logger.error('Failed to load template file', {
-        error,
-        file: path,
-      });
-      throw new Error(
-        'Failed to load template: ' + (error instanceof Error ? error.message : String(error))
-      );
-    }
-  }
-
-  /**
-   * Watch template directory for changes
-   */
-  private async setupTemplateWatcher(dir: string): Promise<void> {
-    // Close existing watcher for this directory if any
-    this.watchers.get(dir)?.close();
-
-    const watcher = watch(dir, { persistent: false }, async (eventType, filename) => {
-      if (filename && filename.endsWith('.json')) {
-        const path = join(dir, filename);
-        try {
-          if (eventType === 'change' || eventType === 'rename') {
-            await this.loadTemplateFromFile(path);
-          }
-        } catch (error) {
-          this.logger.error('Error handling template file change', {
-            error,
-            file: filename,
-            directory: dir,
-          });
-        }
-      }
-    });
-
-    this.watchers.set(dir, watcher);
+    await this.loader.initialize(templateDirs);
   }
 
   /**
@@ -242,81 +56,118 @@ export class TemplateManager {
    * Instantiate a template with provided variables
    */
   async instantiateTemplate(options: TemplateInstantiationOptions): Promise<void> {
-    const template = await this.getTemplate(options.templateId);
-
-    // Combine provided variables with defaults
-    const variables = { ...options.variables };
-    for (const v of template.variables) {
-      if (!(v.name in variables) && 'default' in v) {
-        variables[v.name] = v.default;
-      }
+    if (this.processingTemplates.has(options.templateId)) {
+      throw new Error(`Circular template reference detected: ${options.templateId}`);
     }
 
-    // Validate all required variables are provided (after applying defaults)
-    const missingVars = template.variables
-      .filter(v => v.required && !(v.name in variables))
-      .map(v => v.name);
+    this.processingTemplates.add(options.templateId);
 
-    if (missingVars.length) {
-      throw new Error(`Missing required variables: ${missingVars.join(', ')}`);
-    }
+    try {
+      const template = await this.getTemplate(options.templateId);
 
-    // Create tasks
-    for (const task of template.tasks) {
-      // Interpolate variables in strings
-      const interpolatedTask = {
-        ...task,
-        path: this.interpolateVariables(task.path, variables),
-        title: this.interpolateVariables(task.title, variables),
-        description: task.description
-          ? this.interpolateVariables(task.description, variables)
-          : undefined,
-        dependencies: task.dependencies?.map(d => this.interpolateVariables(d, variables)),
-      };
-
-      // Prepend parent path if provided
-      if (options.parentPath) {
-        interpolatedTask.path = `${options.parentPath}/${interpolatedTask.path}`;
-        if (interpolatedTask.dependencies) {
-          interpolatedTask.dependencies = interpolatedTask.dependencies.map(
-            d => `${options.parentPath}/${d}`
-          );
+      // Combine provided variables with defaults
+      const variables = { ...options.variables };
+      for (const v of template.variables) {
+        if (!(v.name in variables) && 'default' in v) {
+          variables[v.name] = v.default;
         }
       }
 
-      // Create task
+      // Validate required variables
+      const missingVars = this.interpolator.validateRequiredVariables(
+        template.variables,
+        variables
+      );
+      if (missingVars.length) {
+        throw new Error(`Missing required variables: ${missingVars.join(', ')}`);
+      }
+
+      // Create tasks
+      for (const task of template.tasks) {
+        await this.processTemplateTask(task, variables, options.parentPath);
+      }
+    } finally {
+      this.processingTemplates.delete(options.templateId);
+    }
+  }
+
+  /**
+   * Process a single template task
+   */
+  private async processTemplateTask(
+    task: TemplateTask,
+    variables: Record<string, unknown>,
+    parentPath?: string
+  ): Promise<void> {
+    // Interpolate variables in strings and metadata first
+    const interpolatedTask = {
+      path: this.interpolator.interpolateString(task.path, variables),
+      title: this.interpolator.interpolateString(task.title, variables),
+      type: task.type,
+      description: task.description
+        ? this.interpolator.interpolateString(task.description, variables)
+        : undefined,
+      dependencies: task.dependencies?.map(d => this.interpolator.interpolateString(d, variables)),
+      metadata: task.metadata
+        ? this.interpolator.interpolateMetadata(task.metadata, variables)
+        : undefined,
+    };
+
+    // Prepend parent path if provided
+    if (parentPath) {
+      interpolatedTask.path = `${parentPath}/${interpolatedTask.path}`;
+      if (interpolatedTask.dependencies) {
+        interpolatedTask.dependencies = interpolatedTask.dependencies.map(
+          d => `${parentPath}/${d}`
+        );
+      }
+    }
+
+    // Transform the interpolated metadata
+    const transformedMetadata = interpolatedTask.metadata
+      ? this.transformer.transform(interpolatedTask.metadata)
+      : undefined;
+
+    // Check for nested template reference
+    const templateRef =
+      transformedMetadata && this.transformer.extractTemplateRef(transformedMetadata);
+
+    if (templateRef) {
+      // Create the task without the templateRef
+      const cleanMetadata = this.transformer.removeTemplateRef(transformedMetadata);
       await this.taskManager.createTask({
         path: interpolatedTask.path,
         name: interpolatedTask.title,
         description: interpolatedTask.description,
         type: interpolatedTask.type === 'TASK' ? TaskType.TASK : TaskType.MILESTONE,
-        metadata: interpolatedTask.metadata,
+        metadata: cleanMetadata,
+        dependencies: interpolatedTask.dependencies,
+      });
+
+      // Process nested template
+      await this.instantiateTemplate({
+        templateId: templateRef.template,
+        variables: templateRef.variables,
+        parentPath: interpolatedTask.path,
+      });
+    } else {
+      // Create task normally
+      await this.taskManager.createTask({
+        path: interpolatedTask.path,
+        name: interpolatedTask.title,
+        description: interpolatedTask.description,
+        type: interpolatedTask.type === 'TASK' ? TaskType.TASK : TaskType.MILESTONE,
+        metadata: transformedMetadata,
         dependencies: interpolatedTask.dependencies,
       });
     }
   }
 
   /**
-   * Interpolate variables in a string
-   */
-  private interpolateVariables(str: string, variables: Record<string, unknown>): string {
-    return str.replace(/\${(\w+)}/g, (_, key) => {
-      if (!(key in variables)) {
-        throw new Error(`Variable not found: ${key}`);
-      }
-      return String(variables[key]);
-    });
-  }
-
-  /**
    * Clean up resources
    */
   async close(): Promise<void> {
-    // Close all watchers
-    for (const watcher of this.watchers.values()) {
-      watcher.close();
-    }
-    this.watchers.clear();
+    await this.loader.close();
     await this.storage.close();
   }
 
