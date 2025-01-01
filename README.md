@@ -43,6 +43,7 @@ and external systems through:
 - **EventManager**: Enhanced event system with circuit breaker and health monitoring
 - **ProcessManager**: Robust process lifecycle management with graceful shutdown
 - **ErrorHandler**: Structured error handling with severity levels and context
+- **VisualizationManager**: Real-time task visualization with session-based file management
 
 ## Features
 
@@ -58,6 +59,12 @@ and external systems through:
 - Categorized notes (planning, progress, completion, troubleshooting)
 - Technical requirements tracking
 - Priority levels and tagging
+- Real-time visualization:
+  - Hierarchical task views
+  - Progress tracking with visual indicators
+  - Status summaries and statistics
+  - Session-based file management
+  - Both markdown and JSON formats
 
 ### Storage & Performance
 
@@ -530,7 +537,7 @@ Best practices:
 
 ## Resources
 
-ATLAS exposes two main resources through the MCP protocol:
+ATLAS exposes three main resources through the MCP protocol:
 
 ### Task Overview Resource
 
@@ -562,6 +569,48 @@ tasklist://current
     "averageCompletionTime": "3.5 days",
     "blockageRate": "7%",
     "progressRate": "tasks/day: 4.2"
+  }
+}
+```
+
+### Visualization Resource
+
+Access real-time task visualizations:
+
+```typescript
+// Resource URI
+visualizations://current
+
+// Returns
+{
+  "timestamp": "2024-01-28T10:00:00Z",
+  "files": {
+    "markdown": "/visualizations/tasks-2024-01-28.md",
+    "json": "/visualizations/tasks-2024-01-28.json"
+  },
+  "summary": {
+    "totalTasks": 42,
+    "statusCounts": {
+      "PENDING": 10,
+      "IN_PROGRESS": 15,
+      "COMPLETED": 12,
+      "BLOCKED": 3,
+      "CANCELLED": 2
+    }
+  },
+  "format": {
+    "statusIndicators": {
+      "PENDING": "⏳",
+      "IN_PROGRESS": "🔄",
+      "COMPLETED": "✅",
+      "BLOCKED": "🚫",
+      "CANCELLED": "❌"
+    },
+    "progressBar": {
+      "length": 20,
+      "filled": "█",
+      "empty": "░"
+    }
   }
 }
 ```
