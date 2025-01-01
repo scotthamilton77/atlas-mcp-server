@@ -129,9 +129,6 @@ export interface Task extends CoreIdentification, Documentation {
   created: string;
   updated: string;
 
-  // Legacy notes field for backward compatibility
-  notes: string[]; // Required array, can be empty but not undefined
-
   // Relationships
   parentPath?: string;
   dependencies: string[]; // Required array, can be empty but not undefined
@@ -157,9 +154,6 @@ export interface CreateTaskInput {
   completionNotes?: string[];
   troubleshootingNotes?: string[];
 
-  // Legacy notes field
-  notes?: string[]; // Optional, will be initialized to empty array if undefined
-
   // Relationships
   dependencies?: string[]; // Optional, will be initialized to empty array if undefined
 
@@ -183,9 +177,6 @@ export interface UpdateTaskInput {
   progressNotes?: string[];
   completionNotes?: string[];
   troubleshootingNotes?: string[];
-
-  // Legacy notes field
-  notes?: string[]; // Optional, will keep existing if undefined
 
   // Relationships
   dependencies?: string[]; // Optional, will keep existing if undefined

@@ -2,6 +2,7 @@
  * System event types and interfaces
  */
 import { MonitoringMetrics } from './storage.js';
+import { Task, TaskStatus } from './task.js';
 
 // Base event interface with common properties
 export interface BaseEvent {
@@ -29,6 +30,23 @@ export interface EventHandlerOptions {
   };
 }
 
+// Task-specific metadata interfaces
+export interface TaskStatusMetadata {
+  [key: string]: unknown;
+  parentPath?: string;
+  childrenPaths?: string[];
+  oldStatus: TaskStatus;
+  newStatus: TaskStatus;
+  reason: 'parent_update' | 'children_completed' | 'dependency_update';
+}
+
+export interface TaskDependencyMetadata {
+  [key: string]: unknown;
+  taskPath: string;
+  addedDependencies: string[];
+  removedDependencies: string[];
+}
+
 // Event interfaces extending BaseEvent
 export interface SystemEvent extends BaseEvent {
   metadata?: SystemEventMetadata;
@@ -36,11 +54,11 @@ export interface SystemEvent extends BaseEvent {
 
 export interface TaskEvent extends BaseEvent {
   taskId: string;
-  task: unknown;
-  metadata?: Record<string, unknown>;
+  task: Task;
+  metadata?: TaskStatusMetadata | TaskDependencyMetadata | Record<string, unknown>;
   changes?: {
-    before: unknown;
-    after: unknown;
+    before: Partial<Task>;
+    after: Partial<Task>;
   };
 }
 
@@ -120,6 +138,7 @@ export enum EventTypes {
   TASK_UPDATED = 'task_updated',
   TASK_DELETED = 'task_deleted',
   TASK_STATUS_CHANGED = 'task_status_changed',
+  TASK_DEPENDENCIES_CHANGED = 'task_dependencies_changed',
 
   // Cache events
   MEMORY_PRESSURE = 'memory_pressure',
@@ -185,5 +204,3 @@ export interface SystemEventMetadata {
   originalErrors?: string[];
   errors?: string[];
 }
-
-// End of file - removed duplicate interface definitions

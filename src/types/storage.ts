@@ -70,6 +70,7 @@ export interface StorageConfig {
     mmapSize?: number;
     pageSize?: number;
     maxMemory?: number;
+    sharedMemory?: boolean;
   };
   journalMode?: 'delete' | 'truncate' | 'persist' | 'memory' | 'wal' | 'off';
   synchronous?: 'off' | 'normal' | 'full' | 'extra';
