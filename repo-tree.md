@@ -160,6 +160,8 @@ atlas-mcp-server
 │   │       │   ├── create-schema.ts
 │   │       │   ├── index.ts
 │   │       │   ├── metadata-schema.ts
+│   │       │   ├── path-schema.ts
+│   │       │   ├── task-schemas.ts
 │   │       │   └── update-schema.ts
 │   │       ├── validators/
 │   │       │   ├── dependency-validator.ts
@@ -169,6 +171,15 @@ atlas-mcp-server
 │   │       ├── index.ts
 │   │       └── task-validator.ts
 │   ├── template/
+│   │   ├── interpolation/
+│   │   │   ├── metadata-transformer.ts
+│   │   │   └── variable-interpolator.ts
+│   │   ├── loader/
+│   │   │   ├── template-loader.ts
+│   │   │   └── template-validator.ts
+│   │   ├── validation/
+│   │   │   └── schemas/
+│   │   │       └── template-schemas.ts
 │   │   └── manager.ts
 │   ├── tools/
 │   │   ├── definitions/
@@ -222,8 +233,7 @@ atlas-mcp-server
 │   │   ├── id-schema.ts
 │   │   ├── index.ts
 │   │   ├── logging.ts
-│   │   ├── path-validator.ts
-│   │   └── task-schemas.ts
+│   │   └── path-validator.ts
 │   └── index.ts
 ├── templates/
 │   ├── software_engineer/

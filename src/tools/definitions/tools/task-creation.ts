@@ -1,4 +1,4 @@
-import { TaskType } from '../../../types/task.js';
+import { TaskType, TaskMetadata } from '../../../types/task.js';
 import { TaskManager } from '../../../task/manager/task-manager.js';
 import { Logger } from '../../../logging/index.js';
 import { Tool, ToolResponse } from '../../../types/tool.js';
@@ -322,7 +322,19 @@ Custom Fields:
         : [],
 
       // Metadata
-      metadata: args.metadata || {},
+      metadata: (args.metadata as TaskMetadata) || {
+        tags: [],
+        technicalRequirements: {
+          dependencies: [],
+          requirements: [],
+        },
+        resources: {
+          toolsUsed: [],
+          resourcesAccessed: [],
+          contextUsed: [],
+        },
+        customFields: {},
+      },
       statusMetadata: {},
     });
 

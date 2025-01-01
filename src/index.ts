@@ -126,7 +126,7 @@ async function main(): Promise<void> {
       await templateStorage.initialize();
 
       // Initialize template manager with both built-in and workspace templates
-      const templateManager = new TemplateManager(templateStorage, taskManager, logger);
+      const templateManager = new TemplateManager(templateStorage, taskManager);
       const builtInTemplateDir = join(packageRoot, 'templates');
 
       logger.info('Template directories:', {
