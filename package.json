@@ -13,15 +13,16 @@
   "scripts": {
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,md}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx,json,md}\"",
+    "preinstall": "mkdir -p build",
+    "prepare": "husky install && node scripts/postinstall.js",
+    "prebuild": "mkdir -p build",
     "build": "tsc && node scripts/set-build-permissions.js",
-    "prepare": "husky install",
     "watch": "tsc --watch",
     "inspector": "npx @modelcontextprotocol/inspector build/index.js",
     "prestart": "node scripts/prestart.js",
     "start": "node --expose-gc build/index.js",
     "dev": "concurrently \"npm run watch\" \"npm run start\"",
-    "tree": "node scripts/generate-tree.js",
-    "postinstall": "node scripts/postinstall.js"
+    "tree": "node scripts/generate-tree.js"
   },
   "repository": {
     "type": "git",
