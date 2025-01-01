@@ -12,11 +12,12 @@ import { ToolHandler } from './tools/handler.js';
 async function main(): Promise<void> {
   let logger: Logger | undefined;
   let server: AtlasServer | undefined;
-  
+
   try {
     // Get platform-agnostic paths
     const documentsDir = PlatformPaths.getDocumentsDir();
-    const baseDir = process.env.ATLAS_STORAGE_DIR || join(documentsDir, 'Cline', 'mcp-workspace', 'ATLAS');
+    const baseDir =
+      process.env.ATLAS_STORAGE_DIR || join(documentsDir, 'Cline', 'mcp-workspace', 'ATLAS');
     const logDir = join(baseDir, 'logs');
     const dataDir = join(baseDir, 'data');
 
@@ -127,7 +128,7 @@ async function main(): Promise<void> {
       server = await AtlasServer.getInstance(
         {
           name: 'atlas-mcp-server',
-          version: '1.1.1',
+          version: '1.2.0',
           maxRequestsPerMinute: 600,
           requestTimeout: 30000,
           shutdownTimeout: 5000,
@@ -141,7 +142,11 @@ async function main(): Promise<void> {
         {
           listTools: async () => toolHandler.listTools(),
           handleToolCall: async request => {
-            if (!request.params?.name || typeof request.params.name !== 'string' || !request.params.arguments) {
+            if (
+              !request.params?.name ||
+              typeof request.params.name !== 'string' ||
+              !request.params.arguments
+            ) {
               throw new Error('Invalid tool call request parameters');
             }
             return toolHandler.handleToolCall({
