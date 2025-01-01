@@ -234,6 +234,16 @@ atlas-mcp-server
 │   │   ├── index.ts
 │   │   ├── logging.ts
 │   │   └── path-validator.ts
+│   ├── visualization/
+│   │   ├── formatters/
+│   │   │   ├── base-formatter.ts
+│   │   │   ├── index.ts
+│   │   │   ├── json-formatter.ts
+│   │   │   └── markdown-formatter.ts
+│   │   ├── index.ts
+│   │   ├── README.md
+│   │   ├── task-visualizer.ts
+│   │   └── visualization-manager.ts
 │   └── index.ts
 ├── templates/
 │   ├── software_engineer/
