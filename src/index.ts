@@ -4,7 +4,12 @@ import { createStorage } from './storage/index.js';
 import { AtlasServer } from './server/index.js';
 import { EventManager } from './events/event-manager.js';
 import { ConfigManager } from './config/index.js';
-import { join } from 'path';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+// Get package root directory
+const __filename = fileURLToPath(import.meta.url);
+const packageRoot = join(dirname(__filename), '..');
 import { PlatformPaths, PlatformCapabilities, ProcessManager } from './utils/platform-utils.js';
 import { LogLevels } from './types/logging.js';
 import { ToolHandler } from './tools/handler.js';
@@ -31,13 +36,13 @@ async function main(): Promise<void> {
 
     // Initialize logger with comprehensive file logging
     logger = await Logger.initialize({
-      console: false,
+      console: true,
       file: true,
       minLevel: LogLevels.DEBUG,
       logDir,
       maxFileSize: 10 * 1024 * 1024, // 10MB
       maxFiles: 10,
-      noColors: true,
+      noColors: false,
     });
 
     // Set logger for process manager
@@ -122,8 +127,33 @@ async function main(): Promise<void> {
 
       // Initialize template manager with both built-in and workspace templates
       const templateManager = new TemplateManager(templateStorage, taskManager, logger);
-      const builtInTemplateDir = join(__dirname, '..', 'templates');
-      await templateManager.initialize([builtInTemplateDir, templateDir]);
+      const builtInTemplateDir = join(packageRoot, 'templates');
+
+      logger.info('Template directories:', {
+        builtIn: builtInTemplateDir,
+        workspace: templateDir,
+      });
+
+      try {
+        await templateManager.initialize([builtInTemplateDir, templateDir]);
+
+        // List available templates
+        const templates = await templateManager.listTemplates();
+        logger.info('Loaded templates:', {
+          count: templates.length,
+          templates: templates.map(t => ({
+            id: t.id,
+            name: t.name,
+          })),
+        });
+      } catch (error) {
+        logger.error('Failed to initialize templates:', {
+          error,
+          builtInTemplateDir,
+          templateDir,
+        });
+        throw error;
+      }
 
       // Register task manager cleanup
       ProcessManager.registerCleanupHandler(async () => {

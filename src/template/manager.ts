@@ -5,6 +5,7 @@ import { nanoid } from 'nanoid';
 
 import { TemplateStorage } from '../storage/interfaces/template-storage.js';
 import { Logger } from '../logging/index.js';
+import { z } from 'zod';
 import {
   TaskTemplate,
   TemplateInfo,
@@ -36,9 +37,21 @@ export class TemplateManager {
     // Initialize storage
     await this.storage.initialize();
 
+    this.logger.info('Initializing template directories:', {
+      directories: templateDirs,
+      cwd: process.cwd(),
+    });
+
     // Load existing templates from all directories
     for (const dir of templateDirs) {
       try {
+        // Check if directory exists
+        const exists = await this.directoryExists(dir);
+        if (!exists) {
+          this.logger.warn(`Template directory does not exist: ${dir}`);
+          continue;
+        }
+
         await this.loadTemplatesFromDirectory(dir);
         await this.setupTemplateWatcher(dir);
       } catch (error) {
@@ -52,19 +65,40 @@ export class TemplateManager {
   }
 
   /**
+   * Check if a directory exists
+   */
+  private async directoryExists(dir: string): Promise<boolean> {
+    try {
+      const stats = await import('fs/promises').then(fs => fs.stat(dir));
+      return stats.isDirectory();
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  /**
    * Load templates from a directory
    */
   private async loadTemplatesFromDirectory(dir: string): Promise<void> {
     try {
-      const files = await readdir(dir);
-      for (const file of files) {
-        if (file.endsWith('.json')) {
+      this.logger.info(`Loading templates from directory: ${dir}`);
+      const files = await readdir(dir, { withFileTypes: true });
+      for (const entry of files) {
+        const fullPath = join(dir, entry.name);
+        if (entry.isDirectory()) {
+          this.logger.info(`Found subdirectory: ${entry.name}, recursing...`);
+          await this.loadTemplatesFromDirectory(fullPath);
+        } else if (entry.name.endsWith('.json')) {
+          this.logger.info(`Found template file: ${entry.name}`);
           try {
-            await this.loadTemplateFromFile(join(dir, file));
+            await this.loadTemplateFromFile(fullPath);
           } catch (error) {
-            this.logger.warn(`Failed to load template file: ${file}`, {
+            this.logger.warn(`Failed to load template file: ${entry.name}`, {
               error,
-              file: join(dir, file),
+              file: fullPath,
             });
             // Continue with other files even if one fails
           }
@@ -95,7 +129,52 @@ export class TemplateManager {
       }
 
       // Validate template structure
-      const validatedTemplate = taskTemplateSchema.parse(template);
+      this.logger.debug('Validating template:', {
+        templateId: template.id,
+        templateName: template.name,
+        file: basename(path),
+      });
+
+      let validatedTemplate: TaskTemplate;
+      try {
+        this.logger.debug('Template pre-validation:', {
+          id: template.id,
+          name: template.name,
+          variableCount: template.variables?.length ?? 0,
+          taskCount: template.tasks?.length ?? 0,
+          file: basename(path),
+        });
+
+        validatedTemplate = taskTemplateSchema.parse(template);
+
+        this.logger.debug('Template validation successful', {
+          templateId: validatedTemplate.id,
+          templateName: validatedTemplate.name,
+          variables: validatedTemplate.variables.map(v => v.name),
+          tasks: validatedTemplate.tasks.map(t => t.path),
+        });
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          this.logger.error('Template validation failed:', {
+            templateId: template.id,
+            templateName: template.name,
+            file: basename(path),
+            errors: error.errors.map((e: z.ZodIssue) => ({
+              path: e.path.join('.'),
+              message: e.message,
+              code: e.code,
+            })),
+          });
+        } else {
+          this.logger.error('Unexpected validation error:', {
+            error,
+            templateId: template.id,
+            templateName: template.name,
+            file: basename(path),
+          });
+        }
+        throw error;
+      }
 
       // Store template
       await this.storage.saveTemplate(validatedTemplate);
