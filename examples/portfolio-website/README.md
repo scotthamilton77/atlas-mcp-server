@@ -1,182 +1,239 @@
-# Portfolio Website Example
+# Modern Developer Portfolio Task Structure
 
-This directory contains a complete example of using Atlas MCP for planning and managing a modern portfolio website project. The example demonstrates how to structure complex web development tasks with proper dependencies, metadata, and organization.
+This example demonstrates how to use Atlas MCP to organize and track the development of a modern,
+minimalist developer portfolio website.
 
-## Contents
+## Project Overview
 
-- `atlas-tasks.db`: SQLite database containing the task hierarchy and metadata
-- `task-hierarchy-full.txt`: Human-readable tree view of all tasks and their relationships
-- `task-hierarchy-full.json`: Detailed JSON export of all tasks with complete metadata
-- `prompt.md`: Original prompt used to create this task structure
+A portfolio website that embodies the modern San Francisco tech aesthetic, featuring subtle
+interactive elements and a clean, sophisticated project showcase.
 
-## Project Architecture
+### Design Philosophy
 
-### Technology Stack
+- Ultra-clean, distraction-free layouts
+- Strategic use of negative space
+- Monochromatic color scheme with subtle accent colors
+- Modern sans-serif typography (e.g., Inter, SF Pro)
+- Minimal UI elements that appear on interaction
+- Subtle borders and shadows
+- Muted, professional color palette
 
-- **Framework**: Next.js 14 with App Router
-- **Language**: TypeScript with strict mode
-- **Styling**: Tailwind CSS with custom configuration
-- **Animation Libraries**:
-  - Framer Motion for UI animations
-  - GSAP for advanced animations
-  - Three.js/React Three Fiber for 3D effects
-- **Development Tools**:
-  - ESLint with TypeScript rules
-  - Prettier for code formatting
-  - Husky for git hooks
-  - Jest and Testing Library for testing
+### Technical Stack
 
-### Core Features
+- Next.js 14 with App Router
+- TypeScript for type safety
+- Framer Motion for fluid animations
+- Three.js/React Three Fiber for background effects
+- Tailwind CSS for minimal styling
+- GSAP for advanced animations
 
-1. **Project Gallery**
-   - Responsive masonry grid layout
-   - Interactive project cards with 3D transforms
-   - GitHub integration for real-time stats
-   - Dynamic filtering and search
-   - Infinite scroll support
+## Task Structure
 
-2. **Hero Section**
-   - Three.js particle system background
-   - Mouse-reactive animations
-   - Staggered text reveal effects
-   - Scroll-aware navigation
-   - Performance-optimized canvas
+### 1. Project Setup & Infrastructure
 
-3. **Experience Timeline**
-   - Clean, minimal timeline design
-   - Interactive skill visualization
-   - Animated achievement metrics
-   - Responsive layout system
-   - Intersection-based animations
+- **Initialize Next.js Project with TypeScript**
+  - Next.js 14 configuration
+  - TypeScript setup
+  - Environment configuration
+- **Configure Git and Version Control**
+  - Git repository setup
+  - Husky hooks
+  - Conventional commits
+- **Configure Development Tools**
+  - ESLint & Prettier
+  - Testing frameworks
+  - Tailwind CSS setup
 
-4. **About & Contact**
-   - Modern typography system
-   - Form validation with React Hook Form
-   - Social media integration
-   - Minimal design aesthetic
-   - Interactive elements
+### 2. Core Development Implementation
 
-### Shared Components
+- **Component Library and Design System**
+  - Atomic design structure
+  - Type-safe components
+  - Animation variants
+  - Theme support
+- **Modern Project Gallery**
+  - Interactive cards
+  - GitHub integration
+  - Infinite scroll
+  - Filtering system
+- **Hero Section**
+  - Animated text
+  - Interactive background
+  - Scroll navigation
+- **Professional Experience**
+  - Timeline design
+  - Tech stack visualization
+  - Achievement metrics
+- **About Section**
+  - Modern image treatment
+  - Content transitions
+  - Dark mode support
+- **Contact Section**
+  - Interactive form
+  - Social media integration
+  - Email service
+  - Spam protection
 
-1. **Interactive System**
-   - Custom cursor effects
-   - Particle system engine
-   - Mouse position tracking
-   - Force field interactions
-   - Performance monitoring
+### 3. Interactive Elements
 
-2. **Animation Utilities**
-   - Scroll-based animations
-   - Spring physics system
-   - Transition components
-   - Loading states
-   - RAF optimization
+- **Background Effects**
+  - Particle system
+  - Gradient mesh
+  - Cursor tracking
+- **Micro-interactions**
+  - Button effects
+  - Page transitions
+  - Scroll animations
 
-3. **UI Components**
-   - Typography system with responsive scaling
-   - Layout components (Container, Grid, Section)
-   - Interactive elements (Button, Input, Card)
-   - Navigation components
-   - Animation primitives
+### 4. Testing & QA
+
+- **Component/Integration Tests**
+  - Jest configuration
+  - React Testing Library
+  - Snapshot testing
+- **E2E & Performance**
+  - Cypress setup
+  - Lighthouse integration
+  - Performance monitoring
+
+### 5. Deployment & Production
+
+- **Production Optimization**
+  - Vercel deployment
+  - Error tracking
+  - Analytics
+  - SEO optimization
+
+## Dependencies
+
+### Core Dependencies
+
+```json
+{
+  "dependencies": {
+    "next": "14.x",
+    "react": "18.x",
+    "react-dom": "18.x",
+    "typescript": "5.x",
+    "framer-motion": "latest",
+    "three": "latest",
+    "@react-three/fiber": "latest",
+    "tailwindcss": "latest",
+    "gsap": "latest"
+  }
+}
+```
+
+### Development Dependencies
+
+```json
+{
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/three": "latest",
+    "eslint": "latest",
+    "prettier": "latest",
+    "husky": "latest",
+    "jest": "latest",
+    "cypress": "latest",
+    "@testing-library/react": "latest"
+  }
+}
+```
+
+## Task Dependencies
+
+```
+portfolio/setup → portfolio/core → portfolio/interactive → portfolio/testing → portfolio/deployment
+```
+
+Each core section task depends on the component library task (`portfolio/core/components`).
+
+## Acceptance Criteria
+
+### Performance
+
+- 60fps animations
+- Core Web Vitals optimization
+- Efficient asset loading
+- Mobile performance
+
+### Accessibility
+
+- WCAG 2.1 compliance
+- Keyboard navigation
+- Screen reader support
+- Reduced motion support
+
+### Quality
+
+- 80%+ test coverage
+- E2E test suite
+- Visual regression tests
+- Performance monitoring
+
+## Implementation Notes
+
+### Animation Strategy
+
+- Hardware-accelerated transforms
+- RAF-based animations
+- Efficient state management
+- Proper cleanup
+
+### Responsive Design
+
+- Mobile-first approach
+- Fluid typography
+- Responsive spacing
+- Touch interactions
+
+### Code Quality
+
+- TypeScript strict mode
+- ESLint configuration
+- Prettier formatting
+- Git hooks
 
 ### Performance Optimization
 
-- Code splitting strategy
-- Asset optimization pipeline
-- Lazy loading implementation
-- Performance monitoring
-- Memory management
-- FPS optimization
+- Image optimization
+- Code splitting
+- Bundle analysis
+- Cache strategies
 
-### Testing Implementation
+## Getting Started
 
-1. **Unit Testing**
-   - Component testing
-   - Hook testing
-   - Animation testing
-   - Utility function testing
-
-2. **Integration Testing**
-   - Feature workflows
-   - Form submissions
-   - API integrations
-   - Navigation flows
-
-3. **Performance Testing**
-   - Load time benchmarks
-   - Animation performance
-   - Memory profiling
-   - Bundle analysis
-
-4. **Visual Testing**
-   - Component snapshots
-   - Responsive layouts
-   - Animation states
-   - Theme variations
-
-### Deployment Pipeline
-
-- Automated CI/CD with GitHub Actions
-- Preview deployments
-- Production optimization
-- Performance monitoring
-- Error tracking
-- Analytics integration
+1. Clone the repository
+2. Install dependencies: `npm install`
+3. Run development server: `npm run dev`
+4. Access at: `http://localhost:3000`
 
 ## Development Workflow
 
-1. **Project Setup**
-   ```bash
-   npx create-next-app@latest portfolio --typescript --tailwind --app --src-dir
-   ```
+1. Create feature branch
+2. Implement changes
+3. Run tests: `npm test`
+4. Run E2E tests: `npm run cypress`
+5. Build production: `npm run build`
+6. Create pull request
 
-2. **Install Dependencies**
-   ```bash
-   # Core animation libraries
-   npm install framer-motion gsap three @react-three/fiber @react-three/drei
+## Deployment
 
-   # Styling dependencies
-   npm install -D tailwindcss postcss autoprefixer @tailwindcss/typography @tailwindcss/forms
+Automated deployment via Vercel:
 
-   # Development tools
-   npm install -D typescript @types/node @types/react @types/react-dom
-   npm install -D eslint prettier husky lint-staged
-   ```
+1. Push to main branch
+2. Automatic build and deploy
+3. Preview deployments for PRs
+4. Production optimization
 
-3. **Directory Structure**
-   ```
-   src/
-   ├── app/
-   │   ├── layout.tsx
-   │   └── page.tsx
-   ├── components/
-   │   ├── ui/
-   │   ├── features/
-   │   └── shared/
-   ├── lib/
-   │   ├── utils/
-   │   ├── hooks/
-   │   └── types/
-   └── styles/
-       └── globals.css
-   ```
+## Monitoring
 
-## Performance Targets
+- Vercel Analytics
+- Error tracking via Sentry
+- Performance monitoring
+- User behavior analytics
 
-- First Contentful Paint (FCP): < 1000ms
-- Largest Contentful Paint (LCP): < 2500ms
-- First Input Delay (FID): < 100ms
-- Cumulative Layout Shift (CLS): < 0.1
-- Time to Interactive (TTI): < 3000ms
-
-## Bundle Size Budgets
-
-- JavaScript: 200KB
-- Images: 500KB
-- Total: 1MB
-
-## Browser Support
-
-- Modern evergreen browsers
-- Progressive enhancement
-- Fallback support for older browsers
+This task structure provides a comprehensive framework for implementing a modern developer portfolio
+with sophisticated interactions while maintaining performance and accessibility standards.
