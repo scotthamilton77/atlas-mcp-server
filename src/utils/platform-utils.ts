@@ -1,146 +1,200 @@
-import { homedir, platform, type } from 'os';
+import { homedir, platform, totalmem } from 'os';
 import { join } from 'path';
+import { promises as fs } from 'fs';
 
-/**
- * Platform-specific path resolver for special directories
- */
+// Platform-specific error codes
+const PERMISSION_ERROR_CODES = {
+  win32: ['EPERM', 'EACCES'],
+  unix: ['EACCES'],
+};
+
 export class PlatformPaths {
-  /**
-   * Get user's home directory in a platform-agnostic way
-   */
-  static getHomeDir(): string {
-    return homedir();
-  }
+  private static readonly PLATFORM = platform();
 
-  /**
-   * Get documents directory path in a platform-agnostic way
-   */
   static getDocumentsDir(): string {
-    const home = this.getHomeDir();
-
-    switch (platform()) {
+    switch (this.PLATFORM) {
       case 'win32':
-        // Windows: \Users\username\Documents
-        return join(home, 'Documents');
+        return process.env.USERPROFILE ? join(process.env.USERPROFILE, 'Documents') : join(homedir(), 'Documents');
       case 'darwin':
-        // macOS: /Users/username/Documents
-        return join(home, 'Documents');
-      case 'linux':
-        // Linux: Try XDG standard first, fall back to ~/Documents
+        return join(homedir(), 'Documents');
+      default:
+        // Linux and others - check XDG first
         const xdgDocuments = process.env.XDG_DOCUMENTS_DIR;
-        if (xdgDocuments) {
-          return xdgDocuments;
-        }
-        return join(home, 'Documents');
-      default:
-        // Default fallback
-        return join(home, 'Documents');
+        return xdgDocuments || join(homedir(), 'Documents');
     }
   }
 
-  /**
-   * Get application data directory in a platform-agnostic way
-   */
-  static getAppDataDir(appName: string): string {
-    const home = this.getHomeDir();
-
-    switch (platform()) {
+  static getConfigDir(): string {
+    switch (this.PLATFORM) {
       case 'win32':
-        // Windows: \Users\username\AppData\Local\appName
-        return join(home, 'AppData', 'Local', appName);
+        return process.env.APPDATA || join(homedir(), 'AppData', 'Roaming');
       case 'darwin':
-        // macOS: /Users/username/Library/Application Support/appName
-        return join(home, 'Library', 'Application Support', appName);
-      case 'linux':
-        // Linux: ~/.local/share/appName (XDG standard)
-        const xdgData = process.env.XDG_DATA_HOME || join(home, '.local', 'share');
-        return join(xdgData, appName);
+        return join(homedir(), 'Library', 'Application Support');
       default:
-        // Default fallback
-        return join(home, '.' + appName);
+        // Linux and others - respect XDG
+        return process.env.XDG_CONFIG_HOME || join(homedir(), '.config');
     }
   }
 
-  /**
-   * Get temporary directory in a platform-agnostic way
-   */
-  static getTempDir(appName: string): string {
-    const tmpDir = process.env.TMPDIR || process.env.TMP || process.env.TEMP || '/tmp';
-    return join(tmpDir, appName);
+  static getCacheDir(): string {
+    switch (this.PLATFORM) {
+      case 'win32':
+        return process.env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local');
+      case 'darwin':
+        return join(homedir(), 'Library', 'Caches');
+      default:
+        // Linux and others - respect XDG
+        return process.env.XDG_CACHE_HOME || join(homedir(), '.cache');
+    }
+  }
+
+  static normalizePath(path: string): string {
+    return path.split(/[/\\]/).join(this.PLATFORM === 'win32' ? '\\' : '/');
+  }
+
+  static getAppDataDir(appName: string): string {
+    switch (this.PLATFORM) {
+      case 'win32':
+        return join(process.env.APPDATA || homedir(), appName);
+      case 'darwin':
+        return join(homedir(), 'Library', 'Application Support', appName);
+      default:
+        return join(process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share'), appName);
+    }
   }
 }
 
-/**
- * Platform capability detection and feature checks
- */
 export class PlatformCapabilities {
-  /**
-   * Check if running on Windows
-   */
-  static isWindows(): boolean {
-    return platform() === 'win32';
+  private static readonly PLATFORM = platform();
+
+  static getDefaultMode(): number {
+    return this.PLATFORM === 'win32' 
+      ? 0o666  // Windows ignores modes
+      : 0o755; // Unix-like systems
   }
 
-  /**
-   * Check if running on macOS
-   */
-  static isMacOS(): boolean {
-    return platform() === 'darwin';
+  static getFileMode(mode: number): number {
+    // Windows ignores file modes, return as-is
+    if (this.PLATFORM === 'win32') {
+      return this.getDefaultMode();
+    }
+    // Unix-like systems use the mode as specified
+    return mode;
   }
 
-  /**
-   * Check if running on Linux
-   */
-  static isLinux(): boolean {
-    return platform() === 'linux';
+  static getSqliteConfig(): {pageSize: number; sharedMemory: boolean} {
+    return {
+      // Windows: larger page size for NTFS
+      pageSize: this.PLATFORM === 'win32' ? 8192 : 4096,
+      // Unix: enable shared memory where supported
+      sharedMemory: this.PLATFORM !== 'win32',
+    };
   }
 
-  /**
-   * Check if platform supports file permissions
-   */
-  static supportsFilePermissions(): boolean {
-    return !this.isWindows();
+  static isPermissionError(error: unknown): boolean {
+    if (!error || typeof error !== 'object' || !('code' in error)) {
+      return false;
+    }
+    
+    const errorCode = (error as {code: string}).code;
+    return this.PLATFORM === 'win32'
+      ? PERMISSION_ERROR_CODES.win32.includes(errorCode)
+      : PERMISSION_ERROR_CODES.unix.includes(errorCode);
   }
 
-  /**
-   * Check if platform supports symbolic links
-   */
-  static supportsSymlinks(): boolean {
-    // Windows supports symlinks but requires special privileges
-    if (this.isWindows()) {
-      try {
-        // Try to create a test symlink
-        const { execSync } = require('child_process');
-        execSync('mklink /?');
-        return true;
-      } catch {
-        return false;
+  static getMaxMemory(): number {
+    const GB = 1024 * 1024 * 1024;
+    // Get available system memory
+    try {
+      const totalMem = totalmem();
+      // Use 25% of total memory up to 4GB
+      return Math.min(Math.floor(totalMem * 0.25), 4 * GB);
+    } catch {
+      // Fallback to conservative defaults
+      switch (this.PLATFORM) {
+        case 'win32':
+          return 2 * GB;
+        case 'darwin':
+          return 4 * GB;
+        default:
+          return 2 * GB;
       }
     }
-    return true;
   }
 
-  /**
-   * Get platform-specific file mode
-   * @param mode Unix-style file mode (e.g. 0o755)
-   * @returns File mode appropriate for current platform
-   */
-  static getFileMode(mode: number): number | undefined {
-    return this.supportsFilePermissions() ? mode : undefined;
+  static getProcessSignals(): NodeJS.Signals[] {
+    const signals: NodeJS.Signals[] = ['SIGINT', 'SIGTERM'];
+    if (this.PLATFORM !== 'win32') {
+      signals.push('SIGHUP', 'SIGUSR2');
+    }
+    return signals;
   }
 
-  /**
-   * Get system architecture information
-   */
-  static getArchInfo(): {
-    platform: string;
-    arch: string;
-    type: string;
-  } {
-    return {
-      platform: platform(),
-      arch: process.arch,
-      type: type(),
-    };
+  static async ensureDirectoryPermissions(path: string, mode: number): Promise<void> {
+    await fs.mkdir(path, { recursive: true, mode: this.getFileMode(mode) });
+    
+    // Verify permissions
+    if (this.PLATFORM !== 'win32') {
+      try {
+        await fs.access(path, fs.constants.R_OK | fs.constants.W_OK);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`Directory ${path} is not readable/writable: ${message}`);
+      }
+    }
+  }
+}
+
+export class ProcessManager {
+  private static cleanupHandlers: Array<() => Promise<void>> = [];
+  private static isShuttingDown = false;
+  private static logger?: {
+    info: (message: string, ...args: any[]) => void;
+    error: (message: string, ...args: any[]) => void;
+  };
+
+  static setLogger(logger: { info: (message: string, ...args: any[]) => void; error: (message: string, ...args: any[]) => void }): void {
+    this.logger = logger;
+  }
+
+  static registerCleanupHandler(handler: () => Promise<void>): void {
+    this.cleanupHandlers.push(handler);
+  }
+
+  static async cleanup(): Promise<void> {
+    if (this.isShuttingDown) return;
+    this.isShuttingDown = true;
+
+    for (const handler of this.cleanupHandlers.reverse()) {
+      try {
+        await handler();
+      } catch (error) {
+        this.logger?.error('Cleanup handler failed:', error);
+      }
+    }
+  }
+
+  static setupSignalHandlers(): void {
+    const signals = PlatformCapabilities.getProcessSignals();
+    
+    for (const signal of signals) {
+      process.once(signal, async () => {
+        this.logger?.info(`Received ${signal}, cleaning up...`);
+        await this.cleanup();
+        process.exit(0);
+      });
+    }
+
+    process.on('uncaughtException', async (error) => {
+      this.logger?.error('Uncaught Exception:', error);
+      await this.cleanup();
+      process.exit(1);
+    });
+
+    process.on('unhandledRejection', async (reason) => {
+      this.logger?.error('Unhandled Rejection:', reason);
+      await this.cleanup();
+      process.exit(1);
+    });
   }
 }
