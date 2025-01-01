@@ -77,7 +77,9 @@ export interface TechnicalMetadata {
   language?: string;
   framework?: string;
   tools?: string[];
-  requirements?: string[];
+  technicalRequirements?: {
+    requirements?: string[];
+  };
 }
 
 /**
@@ -93,6 +95,14 @@ export interface QualityMetadata {
 }
 
 /**
+ * Template reference metadata
+ */
+export interface TemplateRefMetadata {
+  template: string;
+  variables: Record<string, unknown>;
+}
+
+/**
  * Combined task metadata
  */
 export interface TaskMetadata
@@ -100,6 +110,7 @@ export interface TaskMetadata
     PriorityMetadata,
     TechnicalMetadata,
     QualityMetadata {
+  templateRef?: TemplateRefMetadata;
   [key: string]: any;
 }
 

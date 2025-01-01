@@ -1,45 +1,88 @@
-/**
- * Task type definitions
- */
-export enum TaskType {
-  TASK = 'TASK',
-  MILESTONE = 'MILESTONE',
-}
+import { TaskStatus as CoreTaskStatus } from './task-core.js';
+import { TaskType } from './task-types.js';
 
-export enum TaskStatus {
-  PENDING = 'PENDING',
-  IN_PROGRESS = 'IN_PROGRESS',
-  COMPLETED = 'COMPLETED',
-  BLOCKED = 'BLOCKED',
-  CANCELLED = 'CANCELLED',
-}
+// Re-export TaskStatus and TaskType
+export { TaskStatus } from './task-core.js';
+export { TaskType } from './task-types.js';
 
 /**
- * Core identification fields
+ * Technical requirements type
  */
-export interface CoreIdentification {
-  id: string;
-  path: string;
-  name: string;
-  type: TaskType;
-  version: number;
-  projectPath: string;
+export interface TechnicalRequirements {
+  language?: string;
+  framework?: string;
+  dependencies?: string[];
+  environment?: string;
+  performance?: {
+    memory?: string;
+    cpu?: string;
+    storage?: string;
+  };
+  requirements?: string[];
 }
 
 /**
- * Documentation fields
+ * Progress tracking type
  */
-export interface Documentation {
-  description?: string;
+export interface Progress {
+  percentage?: number;
+  milestones?: string[];
+  lastUpdated?: number;
+  estimatedCompletion?: number;
+}
+
+/**
+ * Resource tracking type
+ */
+export interface Resources {
+  toolsUsed?: string[];
+  resourcesAccessed?: string[];
+  contextUsed?: string[];
+}
+
+/**
+ * Block information type
+ */
+export interface BlockInfo {
+  blockedBy?: string;
+  blockReason?: string;
+  blockTimestamp?: number;
+  unblockTimestamp?: number;
+  resolution?: string;
+}
+
+/**
+ * Version control type
+ */
+export interface VersionControl {
+  version?: number;
+  branch?: string;
+  commit?: string;
+  previousVersions?: number[];
+}
+
+/**
+ * Task metadata type
+ */
+export interface TaskMetadata {
+  priority?: 'low' | 'medium' | 'high';
+  tags?: string[];
   reasoning?: string;
-  planningNotes: string[];
-  progressNotes: string[];
-  completionNotes: string[];
-  troubleshootingNotes: string[];
+  status?: CoreTaskStatus;
+  statusUpdatedAt?: number;
+  previousStatus?: CoreTaskStatus;
+  technicalRequirements?: TechnicalRequirements;
+  progress?: Progress;
+  resources?: Resources;
+  blockInfo?: BlockInfo;
+  versionControl?: VersionControl;
+  deliverables?: string[];
+  customFields?: Record<string, unknown>;
+  [key: string]: unknown;
 }
 
 /**
- * Status-specific metadata
+ * Status metadata type
  */
 export interface StatusMetadata {
   // Common fields
@@ -65,235 +108,103 @@ export interface StatusMetadata {
 }
 
 /**
- * Classification metadata
+ * Task interface
  */
-export interface ClassificationMetadata {
-  category?: string;
-  component?: string;
-  platform?: string;
-  scope?: string;
-  tags?: string[];
-}
-
-/**
- * Priority metadata
- */
-export interface PriorityMetadata {
-  priority?: 'low' | 'medium' | 'high';
-  criticality?: string;
-  impact?: string;
-}
-
-/**
- * Technical metadata
- */
-export interface TechnicalMetadata {
-  language?: string;
-  framework?: string;
-  tools?: string[];
-  requirements?: string[];
-}
-
-/**
- * Quality metadata
- */
-export interface QualityMetadata {
-  testingRequirements?: string[];
-  qualityMetrics?: {
-    coverage: number;
-    complexity: number;
-    performance: string[];
-  };
-}
-
-/**
- * Combined task metadata with required properties
- */
-export interface TaskMetadata
-  extends ClassificationMetadata,
-    PriorityMetadata,
-    TechnicalMetadata,
-    QualityMetadata {
-  [key: string]: any;
-}
-
-/**
- * Main task interface
- */
-export interface Task extends CoreIdentification, Documentation {
-  // Status
-  status: TaskStatus;
-  statusMetadata: StatusMetadata;
-
-  // Timestamps stored as formatted strings (e.g. "10:00:00 AM 1/28/2024")
+export interface Task {
+  id: string;
+  path: string;
+  name: string;
+  type: TaskType;
+  status: CoreTaskStatus;
   created: string;
   updated: string;
-
-  // Relationships
+  version: number;
+  projectPath: string;
+  description?: string;
   parentPath?: string;
-  dependencies: string[]; // Required array, can be empty but not undefined
-
-  // Rich metadata
+  dependencies: string[];
   metadata: TaskMetadata;
+  statusMetadata: StatusMetadata;
+  planningNotes: string[];
+  progressNotes: string[];
+  completionNotes: string[];
+  troubleshootingNotes: string[];
+  reasoning?: string;
 }
 
+/**
+ * Task creation input
+ */
 export interface CreateTaskInput {
   path: string;
   name: string;
   type: TaskType;
   description?: string;
   parentPath?: string;
-  reasoning?: string;
-
-  // Status metadata
-  statusMetadata?: Partial<StatusMetadata>;
-
-  // Notes by category
+  dependencies?: string[];
+  metadata?: TaskMetadata;
+  statusMetadata?: StatusMetadata;
   planningNotes?: string[];
   progressNotes?: string[];
   completionNotes?: string[];
   troubleshootingNotes?: string[];
-
-  // Relationships
-  dependencies?: string[]; // Optional, will be initialized to empty array if undefined
-
-  // Rich metadata
-  metadata?: TaskMetadata;
+  reasoning?: string;
 }
 
+/**
+ * Task update input
+ */
 export interface UpdateTaskInput {
   name?: string;
-  description?: string;
   type?: TaskType;
-  status?: TaskStatus;
-  parentPath?: string | null; // Can be null to clear the parent
-  reasoning?: string;
-
-  // Status metadata
-  statusMetadata?: Partial<StatusMetadata>;
-
-  // Notes by category
+  status?: CoreTaskStatus;
+  description?: string;
+  parentPath?: string;
+  dependencies?: string[];
+  metadata?: TaskMetadata;
+  statusMetadata?: StatusMetadata;
   planningNotes?: string[];
   progressNotes?: string[];
   completionNotes?: string[];
   troubleshootingNotes?: string[];
-
-  // Relationships
-  dependencies?: string[]; // Optional, will keep existing if undefined
-
-  // Rich metadata
-  metadata?: Partial<TaskMetadata>;
+  reasoning?: string;
 }
 
-export interface TaskMetrics {
-  total: number;
-  byStatus: Record<TaskStatus, number>;
-  noteCount: number;
-  dependencyCount: number;
-}
-
-export interface ValidationResult {
+/**
+ * Task response
+ */
+export interface TaskResponse {
   success: boolean;
-  errors: string[];
-  warnings?: string[];
-  details?: {
-    metadata?: {
-      invalidFields?: string[];
-      missingRequired?: string[];
-      securityIssues?: string[];
-    };
-    dependencies?: {
-      missing?: string[];
-      invalid?: string[];
-      cycles?: string[];
-      performance?: {
-        depth: number;
-        breadth: number;
-        warning?: string;
-      };
-    };
-    hierarchy?: {
-      missingParents?: string[];
-      depthExceeded?: boolean;
-      invalidRelationships?: string[];
-    };
-    security?: {
-      issues: string[];
-      severity: 'low' | 'medium' | 'high';
-    }[];
-    performance?: {
-      validationTime: number;
-      complexityScore: number;
-      recommendations?: string[];
-    };
-  };
-}
-
-export interface TaskValidationError {
-  code: string;
-  message: string;
-  field?: string;
-  details?: {
-    validationResult?: ValidationResult;
-    [key: string]: unknown;
-  };
-}
-
-export interface TaskOperationResult {
-  success: boolean;
-  task?: Task;
-  errors?: TaskValidationError[];
-  validationResult?: ValidationResult;
-}
-
-export interface BulkOperationResult {
-  success: boolean;
-  results: TaskOperationResult[];
-  errors?: TaskValidationError[];
-  validationResults?: ValidationResult[];
-}
-
-export interface TaskResponseMetadata {
-  timestamp: number;
-  requestId: string;
-  projectPath: string;
-  affectedPaths: string[];
-  pagination?: {
-    limit: number;
-    offset: number;
-  };
-  operationCount?: number;
-  successCount?: number;
-}
-
-export interface TaskResponse<T = Task> {
-  success: boolean;
-  data?: T;
+  data?: unknown;
   error?: {
     code: string;
     message: string;
   };
-  metadata: TaskResponseMetadata;
+  metadata: {
+    timestamp: number;
+    requestId: string;
+    projectPath: string;
+    affectedPaths: string[];
+  };
 }
 
+/**
+ * Task constraints
+ */
 export const CONSTRAINTS = {
-  // Path constraints
-  PATH_MAX_LENGTH: 255,
-  MAX_PATH_DEPTH: 10,
-
-  // Field length constraints
+  PATH_MAX_LENGTH: 1000,
   NAME_MAX_LENGTH: 200,
   DESCRIPTION_MAX_LENGTH: 2000,
   REASONING_MAX_LENGTH: 2000,
-  NOTE_MAX_LENGTH: 2000,
-  METADATA_STRING_MAX_LENGTH: 1000,
-
-  // Array size constraints
   MAX_DEPENDENCIES: 50,
-  MAX_NOTES: 25, // Per note category
+  MAX_NOTES_PER_CATEGORY: 100,
+  NOTE_MAX_LENGTH: 1000,
+  MAX_METADATA_SIZE: 102400,
+  MAX_PATH_DEPTH: 10,
+  MAX_SEGMENT_LENGTH: 100,
+  PATH_ALLOWED_CHARS: /^[a-zA-Z0-9-_/]+$/,
+  PATH_SEGMENT_PATTERN: /^[a-zA-Z0-9-_]+$/,
   MAX_ARRAY_ITEMS: 100,
-  MAX_TAGS: 10,
-
-  // Size constraints
-  MAX_METADATA_SIZE: 32768, // 32KB
-} as const;
+  MAX_NOTES: 100,
+  METADATA_STRING_MAX_LENGTH: 1000,
+};

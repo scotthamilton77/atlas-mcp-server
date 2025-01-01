@@ -1,19 +1,28 @@
 import { z } from 'zod';
+import { TaskStatus } from '../../../types/task-core.js';
 
 /**
- * Enhanced task metadata schema with strict validation
+ * Enhanced task metadata schema with flexible validation
  */
 
 // Define sub-schemas for better organization
 const timeSchema = z.number().int().min(0).optional();
-const statusSchema = z.enum(['PENDING', 'IN_PROGRESS', 'COMPLETED', 'BLOCKED', 'CANCELLED']);
+
+// Array or object schema helper
+const arrayOrObjectSchema = <T extends z.ZodTypeAny>(itemSchema: T) =>
+  z.union([
+    z.array(itemSchema),
+    z.object({
+      items: z.array(itemSchema),
+    }),
+  ]);
 
 // Technical requirements schema
 const technicalRequirementsSchema = z
   .object({
     language: z.string().optional(),
     framework: z.string().optional(),
-    dependencies: z.array(z.string()).max(50).optional(),
+    dependencies: arrayOrObjectSchema(z.string()).optional(),
     environment: z.string().optional(),
     performance: z
       .object({
@@ -22,23 +31,28 @@ const technicalRequirementsSchema = z
         storage: z.string().optional(),
       })
       .optional(),
+    requirements: arrayOrObjectSchema(z.string()).optional(),
   })
   .optional();
 
 // Acceptance criteria schema
 const acceptanceCriteriaSchema = z
-  .object({
-    criteria: z.array(z.string().max(500)).max(20),
-    testCases: z.array(z.string().max(500)).max(20).optional(),
-    reviewers: z.array(z.string()).max(10).optional(),
-  })
+  .union([
+    z.array(z.string()),
+    z.object({
+      items: z.array(z.string()),
+      criteria: z.array(z.string().max(500)).max(20).optional(),
+      testCases: z.array(z.string().max(500)).max(20).optional(),
+      reviewers: z.array(z.string()).max(10).optional(),
+    }),
+  ])
   .optional();
 
 // Progress tracking schema
 const progressTrackingSchema = z
   .object({
     percentage: z.number().min(0).max(100).optional(),
-    milestones: z.array(z.string()).max(20).optional(),
+    milestones: arrayOrObjectSchema(z.string()).optional(),
     lastUpdated: timeSchema,
     estimatedCompletion: timeSchema,
   })
@@ -47,9 +61,9 @@ const progressTrackingSchema = z
 // Resource tracking schema
 const resourceTrackingSchema = z
   .object({
-    toolsUsed: z.array(z.string().max(100)).max(100).optional(),
-    resourcesAccessed: z.array(z.string().max(100)).max(100).optional(),
-    contextUsed: z.array(z.string().max(1000)).max(100).optional(),
+    toolsUsed: arrayOrObjectSchema(z.string().max(100)).optional(),
+    resourcesAccessed: arrayOrObjectSchema(z.string().max(100)).optional(),
+    contextUsed: arrayOrObjectSchema(z.string().max(1000)).optional(),
   })
   .optional();
 
@@ -70,24 +84,27 @@ const versionControlSchema = z
     version: z.number().optional(),
     branch: z.string().optional(),
     commit: z.string().optional(),
-    previousVersions: z.array(z.number()).max(10).optional(),
+    previousVersions: arrayOrObjectSchema(z.number()).optional(),
   })
   .optional();
 
+// Deliverables schema
+const deliverablesSchema = arrayOrObjectSchema(z.string()).optional();
+
 /**
- * Main metadata schema with comprehensive validation
+ * Main metadata schema with flexible validation
  */
 export const taskMetadataSchema = z
   .object({
     // Core metadata
     priority: z.enum(['low', 'medium', 'high']).optional(),
-    tags: z.array(z.string().max(100)).max(100).optional(),
+    tags: arrayOrObjectSchema(z.string().max(100)).optional(),
     reasoning: z.string().max(2000).optional(),
 
     // Status tracking
-    status: statusSchema.optional(),
+    status: z.nativeEnum(TaskStatus).optional(),
     statusUpdatedAt: timeSchema,
-    previousStatus: statusSchema.optional(),
+    previousStatus: z.nativeEnum(TaskStatus).optional(),
 
     // Technical details
     technicalRequirements: technicalRequirementsSchema,
@@ -103,22 +120,13 @@ export const taskMetadataSchema = z
     // Version control
     versionControl: versionControlSchema,
 
+    // Deliverables
+    deliverables: deliverablesSchema,
+
     // Custom fields (with validation)
     customFields: z.record(z.string(), z.unknown()).optional(),
   })
-  .strict() // Prevent additional properties
-  .refine(
-    data => {
-      // Custom validation logic
-      if (data.blockInfo?.blockedBy && !data.blockInfo.blockReason) {
-        return false;
-      }
-      return true;
-    },
-    {
-      message: 'Block reason is required when task is blocked',
-    }
-  );
+  .passthrough(); // Allow additional properties
 
 export type TaskMetadata = z.infer<typeof taskMetadataSchema>;
 
