@@ -17,6 +17,7 @@ complex tasks and dependencies through a robust and flexible API.
 - [Features](#features)
 - [Installation](#installation)
 - [Configuration](#configuration)
+- [Templates](#templates)
 - [Task Structure](#task-structure)
 - [Tools](#tools)
 - [Best Practices](#best-practices)
@@ -151,6 +152,38 @@ Add to your MCP client settings:
   }
 }
 ```
+
+## Templates
+
+ATLAS provides built-in templates for common task structures:
+
+### Software Engineering Team Templates
+
+A comprehensive set of templates for managing software engineering teams:
+
+- **Team Coordinator**: Overall team coordination and milestone tracking
+- **Product Designer**: User research and product design
+- **System Architect**: System design and infrastructure planning
+- **Security Engineer**: Security implementation and compliance
+- **DevOps Engineer**: Infrastructure automation and deployment
+- **Tech Lead**: Development standards and quality
+
+Usage:
+
+```typescript
+{
+  "templateId": "llm-software-team",
+  "variables": {
+    "projectName": "my-project",
+    "teamScale": "growth",
+    "developmentMethodology": "agile",
+    "securityLevel": "high",
+    "complianceFrameworks": "OWASP,SOC2"
+  }
+}
+```
+
+See [templates/README.md](templates/README.md) for detailed template documentation.
 
 ## Task Structure
 

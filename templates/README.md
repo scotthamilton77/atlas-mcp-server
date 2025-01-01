@@ -138,6 +138,10 @@ Metadata provides additional context and requirements for tasks. Supported field
     "acceptanceCriteria": {
       "criteria": ["criterion1", "criterion2"],
       "testCases": ["test1", "test2"]
+    },
+    "customFields": {
+      "roleTemplate": "template-id",
+      "roleVariables": {}
     }
   }
 }
@@ -181,43 +185,67 @@ Metadata provides additional context and requirements for tasks. Supported field
 
 ## Examples
 
-### Basic Project Template
+### Software Engineering Team Template
+
+The software engineering team templates provide a comprehensive structure for managing software
+development teams with specialized roles:
 
 ```json
 {
-  "id": "basic-project",
-  "name": "Basic Project Setup",
-  "description": "Simple project structure with core tasks",
-  "version": "1.0.0",
+  "id": "llm-software-team",
+  "name": "LLM Software Engineering Team",
   "variables": [
     {
       "name": "projectName",
-      "description": "Project name",
       "type": "string",
       "required": true
+    },
+    {
+      "name": "teamScale",
+      "type": "string",
+      "required": true,
+      "default": "growth"
+    },
+    {
+      "name": "securityLevel",
+      "type": "string",
+      "default": "standard"
     }
   ],
   "tasks": [
     {
-      "path": "${projectName}/setup",
-      "title": "Project Setup",
-      "description": "Initialize project structure",
-      "type": "MILESTONE"
-    },
-    {
-      "path": "${projectName}/setup/structure",
-      "title": "Create Structure",
-      "description": "Set up directories",
-      "type": "TASK",
-      "dependencies": ["${projectName}/setup"],
+      "path": "${projectName}/team-setup",
+      "title": "Team Setup & Coordination",
+      "type": "MILESTONE",
       "metadata": {
         "priority": "high",
-        "tags": ["setup", "infrastructure"]
+        "customFields": {
+          "roleTemplate": "llm-team-coordinator"
+        }
+      }
+    },
+    {
+      "path": "${projectName}/product-design",
+      "title": "Product Design Phase",
+      "type": "MILESTONE",
+      "dependencies": ["${projectName}/team-setup"],
+      "metadata": {
+        "customFields": {
+          "roleTemplate": "llm-product-designer"
+        }
       }
     }
   ]
 }
 ```
+
+Available role templates:
+
+- `llm-product-designer`: Product design and research
+- `llm-system-architect`: System architecture and design
+- `llm-security-engineer`: Security implementation
+- `llm-devops-engineer`: Infrastructure automation
+- `llm-tech-lead`: Development standards and quality
 
 ### Web Project Template
 
@@ -267,6 +295,7 @@ interface Task {
       criteria?: string[];
       testCases?: string[];
     };
+    customFields?: Record<string, unknown>;
   };
 }
 ```
