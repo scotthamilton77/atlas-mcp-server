@@ -1,5 +1,5 @@
 import { Resource } from '@modelcontextprotocol/sdk/types.js';
-import { Task } from '../../types/task.js';
+import { Task, TaskStatus } from '../../types/task.js';
 import { Logger } from '../../logging/index.js';
 import { TaskStorage } from '../../types/storage.js';
 import { ResourceCacheManager } from './cache/resource-cache-manager.js';
@@ -72,19 +72,15 @@ export class TaskResourceHandler {
    * @returns Array of task resources
    */
   public async listTaskResources(): Promise<Resource[]> {
-    try {
-      // Get all tasks by using an empty pattern
-      const tasks = await this.storage.getTasksByPattern('*');
-      return tasks.map((task: Task) => this.taskToResource(
-        task,
-        `task://${task.path}/content`
-      ));
-    } catch (error) {
-      this.logger.error('Failed to list task resources:', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      throw error;
-    }
+    return [
+      {
+        uri: 'tasklist://current',
+        name: 'Current Task List Overview',
+        mimeType: 'application/json',
+        description:
+          'Dynamic overview of all tasks including status counts, recent updates, and metrics. Updates in real-time when accessed.',
+      },
+    ];
   }
 
   /**
@@ -142,39 +138,92 @@ export class TaskResourceHandler {
         return bUpdated - aUpdated;
       });
 
+      // Group tasks by their top-level path component
+      const topLevelGroups: Record<string, Task[]> = {};
+      tasks.forEach(task => {
+        const topLevel = task.path.split('/')[0];
+        if (!topLevelGroups[topLevel]) {
+          topLevelGroups[topLevel] = [];
+        }
+        topLevelGroups[topLevel].push(task);
+      });
+
+      // Calculate metrics for each top-level group
+      const topLevelOverview = Object.entries(topLevelGroups)
+        .map(([group, groupTasks]) => {
+          const groupStatusCounts: Record<string, number> = {};
+          groupTasks.forEach(task => {
+            groupStatusCounts[task.status] = (groupStatusCounts[task.status] || 0) + 1;
+          });
+
+          return {
+            name: group,
+            totalTasks: groupTasks.length,
+            statusBreakdown: groupStatusCounts,
+            progress: {
+              completed: ((groupStatusCounts[TaskStatus.COMPLETED] || 0) / groupTasks.length) * 100,
+              blocked: ((groupStatusCounts[TaskStatus.BLOCKED] || 0) / groupTasks.length) * 100,
+              inProgress:
+                ((groupStatusCounts[TaskStatus.IN_PROGRESS] || 0) / groupTasks.length) * 100,
+            },
+            recentActivity:
+              groupTasks.filter(t => t.updated && now - Number(t.updated) < ONE_DAY).length > 0,
+          };
+        })
+        .sort((a, b) => b.totalTasks - a.totalTasks);
+
       const overview = {
         timestamp: new Date().toISOString(),
-        totalTasks: tasks.length,
-        statusBreakdown: statusCounts,
-        recentlyUpdated: recentlyUpdated.slice(0, 10).map(task => ({
-          id: task.id,
-          path: task.path,
-          name: task.name,
-          status: task.status,
-          updated: task.updated ? new Date(Number(task.updated)).toISOString() : undefined
-        })),
+        summary: {
+          totalTasks: tasks.length,
+          statusBreakdown: statusCounts,
+          topLevelProjects: topLevelOverview,
+        },
+        recentActivity: {
+          last24Hours: recentlyUpdated.slice(0, 10).map(task => ({
+            id: task.id,
+            path: task.path,
+            name: task.name,
+            status: task.status,
+            updated: task.updated ? new Date(Number(task.updated)).toISOString() : undefined,
+          })),
+        },
         metrics: {
           tasksWithDependencies: tasks.filter(t => (t.dependencies?.length || 0) > 0).length,
-          tasksWithNotes: tasks.filter(t => 
-            (t.planningNotes?.length || 0) + 
-            (t.progressNotes?.length || 0) + 
-            (t.completionNotes?.length || 0) + 
-            (t.troubleshootingNotes?.length || 0) > 0
+          tasksWithNotes: tasks.filter(
+            t =>
+              (t.planningNotes?.length || 0) +
+                (t.progressNotes?.length || 0) +
+                (t.completionNotes?.length || 0) +
+                (t.troubleshootingNotes?.length || 0) >
+              0
           ).length,
-          averageDependenciesPerTask: tasks.length > 0 ? 
-            tasks.reduce((acc, t) => acc + (t.dependencies?.length || 0), 0) / tasks.length : 0
-        }
+          averageDependenciesPerTask:
+            tasks.length > 0
+              ? tasks.reduce((acc, t) => acc + (t.dependencies?.length || 0), 0) / tasks.length
+              : 0,
+          projectMetrics: {
+            totalProjects: Object.keys(topLevelGroups).length,
+            activeProjects: topLevelOverview.filter(
+              p =>
+                p.statusBreakdown[TaskStatus.IN_PROGRESS] || p.statusBreakdown[TaskStatus.PENDING]
+            ).length,
+            completedProjects: topLevelOverview.filter(
+              p => p.totalTasks === (p.statusBreakdown[TaskStatus.COMPLETED] || 0)
+            ).length,
+          },
+        },
       };
 
       return {
         uri: 'tasklist://current',
         name: 'Current Task List Overview',
         mimeType: 'application/json',
-        text: JSON.stringify(overview, null, 2)
+        text: JSON.stringify(overview, null, 2),
       };
     } catch (error) {
       this.logger.error('Failed to generate task list overview:', {
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -191,26 +240,30 @@ export class TaskResourceHandler {
       uri,
       name: `Task: ${task.name}`,
       mimeType: 'application/json',
-      text: JSON.stringify({
-        id: task.id,
-        path: task.path,
-        name: task.name,
-        type: task.type,
-        status: task.status,
-        description: task.description,
-        created: task.created,
-        updated: task.updated,
-        version: task.version,
-        projectPath: task.projectPath,
-        parentPath: task.parentPath,
-        dependencies: task.dependencies,
-        metadata: task.metadata,
-        statusMetadata: task.statusMetadata,
-        planningNotes: task.planningNotes,
-        progressNotes: task.progressNotes,
-        completionNotes: task.completionNotes,
-        troubleshootingNotes: task.troubleshootingNotes,
-      }, null, 2),
+      text: JSON.stringify(
+        {
+          id: task.id,
+          path: task.path,
+          name: task.name,
+          type: task.type,
+          status: task.status,
+          description: task.description,
+          created: task.created,
+          updated: task.updated,
+          version: task.version,
+          projectPath: task.projectPath,
+          parentPath: task.parentPath,
+          dependencies: task.dependencies,
+          metadata: task.metadata,
+          statusMetadata: task.statusMetadata,
+          planningNotes: task.planningNotes,
+          progressNotes: task.progressNotes,
+          completionNotes: task.completionNotes,
+          troubleshootingNotes: task.troubleshootingNotes,
+        },
+        null,
+        2
+      ),
     };
   }
 }

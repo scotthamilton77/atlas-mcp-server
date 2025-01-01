@@ -524,15 +524,7 @@ export class TaskManager {
   }
 
   async listTaskResources(): Promise<Resource[]> {
-    const resources = await this.resourceHandler.listTaskResources();
-    // Add the dynamic task list resource
-    resources.push({
-      uri: 'tasklist://current',
-      name: 'Current Task List Overview',
-      mimeType: 'application/json',
-      description: 'Dynamic overview of all tasks including status counts, recent updates, and metrics. Updates in real-time when accessed.'
-    });
-    return resources;
+    return this.resourceHandler.listTaskResources();
   }
 
   async getHierarchyResource(rootPath: string): Promise<Resource> {
@@ -541,15 +533,19 @@ export class TaskManager {
       uri: `hierarchy://${rootPath}`,
       name: `Task Hierarchy: ${rootPath}`,
       mimeType: 'application/json',
-      text: JSON.stringify(tasks.map(task => ({
-        id: task.id,
-        path: task.path,
-        name: task.name,
-        type: task.type,
-        status: task.status,
-        parentPath: task.parentPath,
-        dependencies: task.dependencies
-      })), null, 2)
+      text: JSON.stringify(
+        tasks.map(task => ({
+          id: task.id,
+          path: task.path,
+          name: task.name,
+          type: task.type,
+          status: task.status,
+          parentPath: task.parentPath,
+          dependencies: task.dependencies,
+        })),
+        null,
+        2
+      ),
     };
   }
 
@@ -566,27 +562,31 @@ export class TaskManager {
       uri: `status://${taskPath}`,
       name: `Task Status: ${task.name}`,
       mimeType: 'application/json',
-      text: JSON.stringify({
-        task: {
-          id: task.id,
-          path: task.path,
-          name: task.name,
-          status: task.status,
-          statusMetadata: task.statusMetadata
+      text: JSON.stringify(
+        {
+          task: {
+            id: task.id,
+            path: task.path,
+            name: task.name,
+            status: task.status,
+            statusMetadata: task.statusMetadata,
+          },
+          children: children.map(child => ({
+            id: child.id,
+            path: child.path,
+            name: child.name,
+            status: child.status,
+          })),
+          dependencies: dependencies.map(dep => ({
+            id: dep.id,
+            path: dep.path,
+            name: dep.name,
+            status: dep.status,
+          })),
         },
-        children: children.map(child => ({
-          id: child.id,
-          path: child.path,
-          name: child.name,
-          status: child.status
-        })),
-        dependencies: dependencies.map(dep => ({
-          id: dep.id,
-          path: dep.path,
-          name: dep.name,
-          status: dep.status
-        }))
-      }, null, 2)
+        null,
+        2
+      ),
     };
   }
 }
