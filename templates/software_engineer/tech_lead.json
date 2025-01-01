@@ -1,10 +1,10 @@
 {
   "id": "software_engineer/tech_lead",
   "name": "LLM Technical Team Lead Agent",
-  "description": "Task template for LLM agents performing technical leadership and team coordination",
-  "version": "1.0.0",
+  "description": "Technical leadership focusing on development coordination, code quality, and team productivity",
+  "version": "1.1.0",
   "author": "Atlas Team",
-  "tags": ["llm-agent", "technical-leadership", "team-coordination"],
+  "tags": ["llm-agent", "technical-leadership", "team-coordination", "development"],
   "variables": [
     {
       "name": "projectName",
@@ -13,191 +13,302 @@
       "required": true
     },
     {
-      "name": "teamSize",
-      "description": "Number of team members",
-      "type": "number",
+      "name": "teamScale",
+      "description": "Size/scale of the team",
+      "type": "string",
       "required": true,
-      "default": 5
+      "default": "growth",
+      "enum": ["startup", "growth", "enterprise"]
     },
     {
-      "name": "developmentMethodology",
-      "description": "Development methodology (agile, kanban, etc)",
+      "name": "methodology",
+      "description": "Development methodology",
       "type": "string",
       "required": false,
-      "default": "agile"
+      "default": "agile",
+      "enum": ["agile", "kanban"]
+    },
+    {
+      "name": "enableAutomation",
+      "description": "Enable automated quality checks and workflows",
+      "type": "boolean",
+      "required": false,
+      "default": true
     }
   ],
   "tasks": [
     {
-      "path": "${projectName}/tech-lead/development-standards",
+      "path": "${projectName}/development/standards",
       "title": "Development Standards Setup",
-      "type": "TASK",
       "description": "Establish development standards and best practices",
+      "type": "MILESTONE",
       "metadata": {
         "priority": "high",
         "tags": ["standards", "best-practices"],
-        "agentInstructions": {
-          "objective": "Define and document development standards",
-          "requiredCapabilities": [
-            {
-              "type": "code_analysis",
-              "purpose": "Code quality assessment",
-              "features": ["Pattern recognition", "Best practice evaluation", "Standard compliance"]
-            },
-            {
-              "type": "documentation_generation",
-              "purpose": "Standards documentation",
-              "features": ["Template creation", "Guide generation", "Example creation"]
-            }
+        "technicalRequirements": {
+          "language": "typescript",
+          "framework": "node",
+          "dependencies": ["eslint", "prettier", "husky"],
+          "environment": "Node.js v18+"
+        },
+        "acceptanceCriteria": {
+          "criteria": [
+            "Coding standards documented",
+            "Best practices established",
+            "Review process defined",
+            "Quality metrics selected"
           ],
-          "steps": [
-            {
-              "order": 1,
-              "action": "Define coding standards",
-              "thought": "Establish consistent coding practices",
-              "capability": "code_analysis",
-              "operations": [
-                {
-                  "type": "analyze_patterns",
-                  "aspects": [
-                    "code_organization",
-                    "naming_conventions",
-                    "error_handling",
-                    "testing_approaches"
-                  ]
-                },
-                {
-                  "type": "generate_rules",
-                  "categories": ["style", "architecture", "testing", "documentation"]
-                }
-              ]
-            },
-            {
-              "order": 2,
-              "action": "Create documentation",
-              "thought": "Document standards and practices",
-              "capability": "documentation_generation",
-              "operations": [
-                {
-                  "type": "create_guides",
-                  "documents": [
-                    {
-                      "type": "coding_standards",
-                      "sections": [
-                        "Style Guide",
-                        "Architecture Patterns",
-                        "Testing Requirements",
-                        "Documentation Rules"
-                      ]
-                    },
-                    {
-                      "type": "workflow_guide",
-                      "sections": ["Git Workflow", "Code Review Process", "Release Procedures"]
-                    }
-                  ]
-                }
-              ]
-            }
-          ],
-          "outputArtifacts": [
-            {
-              "type": "document",
-              "path": "${projectName}/docs/standards/",
-              "files": ["coding-standards.md", "workflow-guide.md", "review-checklist.md"]
-            },
-            {
-              "type": "code",
-              "path": "${projectName}/examples/",
-              "components": ["code-examples", "test-examples", "documentation-examples"]
-            }
+          "testCases": [
+            "Validate coding standards documentation",
+            "Review best practices implementation",
+            "Test code review workflow",
+            "Verify quality metrics tracking"
           ]
         }
       }
     },
     {
-      "path": "${projectName}/tech-lead/quality-automation",
-      "title": "Quality Automation Setup",
+      "path": "${projectName}/development/standards/code",
+      "title": "Coding Standards Definition",
+      "description": "Define and document coding standards",
       "type": "TASK",
-      "description": "Implement automated quality checks and monitoring",
-      "dependencies": ["${projectName}/tech-lead/development-standards"],
+      "dependencies": ["${projectName}/development/standards"],
       "metadata": {
         "priority": "high",
-        "tags": ["quality", "automation"],
-        "agentInstructions": {
-          "objective": "Automate code quality and standards enforcement",
-          "requiredCapabilities": [
-            {
-              "type": "tool_integration",
-              "purpose": "Quality tool setup",
-              "features": ["Linter configuration", "Test automation", "Quality gates"]
-            },
-            {
-              "type": "metrics_automation",
-              "purpose": "Quality metrics tracking",
-              "features": ["Metric collection", "Report generation", "Trend analysis"]
-            }
+        "technicalRequirements": {
+          "language": "typescript",
+          "framework": "node",
+          "dependencies": [
+            "typescript",
+            "@typescript-eslint/parser",
+            "@typescript-eslint/eslint-plugin"
           ],
-          "steps": [
-            {
-              "order": 1,
-              "action": "Configure quality tools",
-              "thought": "Set up automated quality checks",
-              "capability": "tool_integration",
-              "operations": [
-                {
-                  "type": "setup_tools",
-                  "tools": [
-                    {
-                      "category": "linting",
-                      "config": "standards_based"
-                    },
-                    {
-                      "category": "testing",
-                      "config": "coverage_enforced"
-                    },
-                    {
-                      "category": "security",
-                      "config": "continuous_scanning"
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "order": 2,
-              "action": "Implement metrics collection",
-              "thought": "Set up quality metrics tracking",
-              "capability": "metrics_automation",
-              "operations": [
-                {
-                  "type": "configure_metrics",
-                  "metrics": [
-                    "code_coverage",
-                    "technical_debt",
-                    "bug_density",
-                    "documentation_coverage"
-                  ]
-                }
-              ]
-            }
+          "environment": "Node.js v18+"
+        },
+        "acceptanceCriteria": {
+          "criteria": [
+            "Style guide created",
+            "Naming conventions defined",
+            "Code organization rules established",
+            "Documentation requirements specified"
           ],
-          "outputArtifacts": [
-            {
-              "type": "configuration",
-              "path": "${projectName}/.quality/",
-              "files": ["linter-config.json", "test-config.json", "quality-gates.yml"]
-            },
-            {
-              "type": "documentation",
-              "path": "${projectName}/docs/quality/",
-              "files": ["quality-metrics.md", "tool-guides.md", "troubleshooting.md"]
-            }
+          "testCases": [
+            "Verify style guide compliance",
+            "Test naming convention enforcement",
+            "Validate code organization",
+            "Check documentation coverage"
+          ]
+        }
+      }
+    },
+    {
+      "path": "${projectName}/development/standards/review",
+      "title": "Code Review Process",
+      "description": "Establish code review procedures and guidelines",
+      "type": "TASK",
+      "dependencies": ["${projectName}/development/standards"],
+      "metadata": {
+        "priority": "high",
+        "technicalRequirements": {
+          "language": "typescript",
+          "framework": "node",
+          "dependencies": ["danger", "commitlint", "semantic-release"],
+          "environment": "Node.js v18+"
+        },
+        "acceptanceCriteria": {
+          "criteria": [
+            "Review process documented",
+            "Review checklist created",
+            "Feedback guidelines established",
+            "Review templates provided"
           ],
-          "validationCriteria": [
-            "All quality tools configured and running",
-            "Metrics collection operational",
-            "Documentation complete and accurate",
-            "Team has tool access and training"
+          "testCases": [
+            "Test review process workflow",
+            "Validate checklist completeness",
+            "Review feedback effectiveness",
+            "Verify template usage"
+          ]
+        }
+      }
+    },
+    {
+      "path": "${projectName}/development/workflow",
+      "title": "Development Workflow Setup",
+      "description": "Define development workflow and processes",
+      "type": "MILESTONE",
+      "dependencies": ["${projectName}/development/standards"],
+      "metadata": {
+        "priority": "high",
+        "tags": ["workflow", "process"],
+        "technicalRequirements": {
+          "language": "typescript",
+          "framework": "node",
+          "dependencies": ["husky", "lint-staged", "conventional-changelog"],
+          "environment": "Node.js v18+"
+        },
+        "acceptanceCriteria": {
+          "criteria": [
+            "Git workflow established",
+            "Task management defined",
+            "Release process documented",
+            "Communication channels set"
+          ],
+          "testCases": [
+            "Validate git workflow",
+            "Test task management process",
+            "Verify release procedures",
+            "Check communication effectiveness"
+          ]
+        }
+      }
+    },
+    {
+      "path": "${projectName}/development/workflow/git",
+      "title": "Git Workflow Setup",
+      "description": "Define Git branching and versioning strategy",
+      "type": "TASK",
+      "dependencies": ["${projectName}/development/workflow"],
+      "metadata": {
+        "priority": "high",
+        "technicalRequirements": {
+          "language": "typescript",
+          "framework": "node",
+          "dependencies": ["husky", "commitlint", "standard-version"],
+          "environment": "Node.js v18+"
+        },
+        "acceptanceCriteria": {
+          "criteria": [
+            "Branching strategy defined",
+            "Version control guidelines created",
+            "Commit message standards set",
+            "Release tagging rules established"
+          ],
+          "testCases": [
+            "Test branch creation workflow",
+            "Verify version control process",
+            "Validate commit messages",
+            "Check release tag format"
+          ]
+        }
+      }
+    },
+    {
+      "path": "${projectName}/development/workflow/tasks",
+      "title": "Task Management Process",
+      "description": "Define task management and tracking procedures",
+      "type": "TASK",
+      "dependencies": ["${projectName}/development/workflow"],
+      "metadata": {
+        "priority": "high",
+        "technicalRequirements": {
+          "language": "typescript",
+          "framework": "node",
+          "dependencies": ["jira-client", "github-api", "trello"],
+          "environment": "Node.js v18+"
+        },
+        "acceptanceCriteria": {
+          "criteria": [
+            "Task workflow documented",
+            "Estimation guidelines created",
+            "Progress tracking methods defined",
+            "Status reporting templates provided"
+          ],
+          "testCases": [
+            "Validate task workflow",
+            "Test estimation process",
+            "Check progress tracking",
+            "Review status reports"
+          ]
+        }
+      }
+    },
+    {
+      "path": "${projectName}/development/quality",
+      "title": "Quality Assurance Setup",
+      "description": "Establish quality assurance processes",
+      "type": "MILESTONE",
+      "dependencies": ["${projectName}/development/standards"],
+      "metadata": {
+        "priority": "high",
+        "tags": ["quality", "testing"],
+        "technicalRequirements": {
+          "language": "typescript",
+          "framework": "node",
+          "dependencies": ["jest", "cypress", "codecov"],
+          "environment": "Node.js v18+"
+        },
+        "acceptanceCriteria": {
+          "criteria": [
+            "Testing strategy defined",
+            "Quality metrics established",
+            "Automation tools selected",
+            "Coverage targets set"
+          ],
+          "testCases": [
+            "Review testing strategy",
+            "Validate quality metrics",
+            "Test automation setup",
+            "Check coverage reporting"
+          ]
+        }
+      }
+    },
+    {
+      "path": "${projectName}/development/quality/testing",
+      "title": "Testing Strategy",
+      "description": "Define comprehensive testing approach",
+      "type": "TASK",
+      "dependencies": ["${projectName}/development/quality"],
+      "metadata": {
+        "priority": "high",
+        "technicalRequirements": {
+          "language": "typescript",
+          "framework": "jest",
+          "dependencies": ["@testing-library/react", "@testing-library/jest-dom", "msw"],
+          "environment": "Node.js v18+"
+        },
+        "acceptanceCriteria": {
+          "criteria": [
+            "Test strategy documented",
+            "Coverage requirements defined",
+            "Testing tools configured",
+            "Documentation templates created"
+          ],
+          "testCases": [
+            "Review test documentation",
+            "Validate coverage rules",
+            "Test tool configuration",
+            "Check template usage"
+          ]
+        }
+      }
+    },
+    {
+      "path": "${projectName}/development/quality/automation",
+      "title": "Quality Automation",
+      "description": "Set up automated quality checks",
+      "type": "TASK",
+      "dependencies": ["${projectName}/development/quality"],
+      "metadata": {
+        "priority": "high",
+        "technicalRequirements": {
+          "language": "typescript",
+          "framework": "node",
+          "dependencies": ["sonarqube-scanner", "lighthouse", "pa11y"],
+          "environment": "Node.js v18+"
+        },
+        "acceptanceCriteria": {
+          "criteria": [
+            "Linting rules configured",
+            "Static analysis setup complete",
+            "Test automation framework ready",
+            "Quality gates defined"
+          ],
+          "testCases": [
+            "Verify linting configuration",
+            "Test static analysis",
+            "Validate automation framework",
+            "Check quality gates"
           ]
         }
       }

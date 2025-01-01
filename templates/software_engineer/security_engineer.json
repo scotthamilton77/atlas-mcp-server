@@ -1,8 +1,8 @@
 {
   "id": "software_engineer/security_engineer",
   "name": "LLM Security Engineer Agent",
-  "description": "Task template for LLM agents performing security engineering and implementation",
-  "version": "1.0.0",
+  "description": "Comprehensive security engineering and compliance implementation with focus on threat modeling, security controls, and compliance requirements",
+  "version": "1.1.0",
   "author": "Atlas Team",
   "tags": ["llm-agent", "security", "compliance", "threat-modeling"],
   "variables": [
@@ -13,181 +13,221 @@
       "required": true
     },
     {
-      "name": "complianceFrameworks",
-      "description": "Required compliance frameworks (comma-separated)",
-      "type": "string",
-      "required": false,
-      "default": "OWASP"
-    },
-    {
-      "name": "dataClassification",
-      "description": "Highest level of data sensitivity",
+      "name": "securityLevel",
+      "description": "Required security level",
       "type": "string",
       "required": true,
-      "default": "confidential"
+      "default": "standard",
+      "enum": ["standard", "high", "regulated"]
+    },
+    {
+      "name": "complianceFrameworks",
+      "description": "Required compliance frameworks",
+      "type": "array",
+      "required": false,
+      "default": ["OWASP"],
+      "items": {
+        "type": "string",
+        "enum": ["OWASP", "SOC2", "HIPAA", "GDPR", "PCI-DSS"]
+      }
+    },
+    {
+      "name": "enableAuditLogging",
+      "description": "Enable comprehensive audit logging",
+      "type": "boolean",
+      "required": false,
+      "default": true
+    },
+    {
+      "name": "maxAuthAttempts",
+      "description": "Maximum authentication attempts before lockout",
+      "type": "number",
+      "required": false,
+      "default": 5
     }
   ],
   "tasks": [
     {
-      "path": "${projectName}/security/threat-modeling",
-      "title": "Security Threat Modeling",
-      "type": "TASK",
-      "description": "Perform comprehensive threat modeling",
+      "path": "${projectName}/security/requirements",
+      "title": "Security Requirements Analysis",
+      "description": "Analyze and document security requirements and compliance needs",
+      "type": "MILESTONE",
       "metadata": {
         "priority": "high",
-        "tags": ["security", "threat-model"],
-        "agentInstructions": {
-          "objective": "Create detailed threat model and security architecture",
-          "requiredCapabilities": [
-            {
-              "type": "threat_analysis",
-              "purpose": "Security assessment",
-              "features": ["Attack surface analysis", "Threat identification", "Risk assessment"]
-            },
-            {
-              "type": "security_documentation",
-              "purpose": "Security documentation",
-              "features": ["Threat model diagrams", "Risk matrices", "Mitigation strategies"]
-            }
+        "tags": ["security", "requirements"],
+        "technicalRequirements": {
+          "language": "typescript",
+          "framework": "node",
+          "dependencies": ["security-requirements-schema", "compliance-checklist", "threat-dragon"],
+          "environment": "Node.js v18+"
+        },
+        "acceptanceCriteria": {
+          "criteria": [
+            "Security requirements documented",
+            "Compliance needs identified",
+            "Risk assessment completed",
+            "Security controls mapped"
           ],
-          "steps": [
-            {
-              "order": 1,
-              "action": "System decomposition",
-              "thought": "Break down system for security analysis",
-              "capability": "threat_analysis",
-              "operations": [
-                {
-                  "type": "analyze_architecture",
-                  "aspects": ["trust_boundaries", "data_flows", "entry_points", "assets"]
-                },
-                {
-                  "type": "identify_threats",
-                  "frameworks": "${complianceFrameworks}",
-                  "categories": ["STRIDE", "OWASP_Top_10", "CWE_Top_25"]
-                }
-              ]
-            },
-            {
-              "order": 2,
-              "action": "Risk assessment",
-              "thought": "Evaluate and prioritize security risks",
-              "capability": "threat_analysis",
-              "operations": [
-                {
-                  "type": "assess_risks",
-                  "criteria": ["impact", "likelihood", "data_sensitivity", "exposure"]
-                }
-              ]
-            }
-          ],
-          "outputArtifacts": [
-            {
-              "type": "document",
-              "path": "${projectName}/security/threat-model/",
-              "files": ["threat-model.md", "risk-assessment.md", "mitigation-strategies.md"]
-            },
-            {
-              "type": "diagram",
-              "path": "${projectName}/security/diagrams/",
-              "files": ["trust-boundaries.svg", "data-flow.svg", "attack-vectors.svg"]
-            }
+          "testCases": [
+            "Validate security requirements",
+            "Review compliance mapping",
+            "Test risk assessment",
+            "Verify control coverage"
           ]
         }
       }
     },
     {
-      "path": "${projectName}/security/implementation",
-      "title": "Security Controls Implementation",
-      "type": "TASK",
-      "description": "Implement security controls and monitoring",
-      "dependencies": ["${projectName}/security/threat-modeling"],
+      "path": "${projectName}/security/threat-model",
+      "title": "Threat Modeling",
+      "description": "Perform comprehensive threat modeling",
+      "type": "MILESTONE",
+      "dependencies": ["${projectName}/security/requirements"],
       "metadata": {
         "priority": "high",
-        "tags": ["security", "implementation"],
-        "agentInstructions": {
-          "objective": "Implement and validate security controls",
-          "requiredCapabilities": [
-            {
-              "type": "security_implementation",
-              "purpose": "Security control deployment",
-              "features": ["Access control", "Encryption", "Monitoring", "Incident response"]
-            },
-            {
-              "type": "security_testing",
-              "purpose": "Security validation",
-              "features": ["Penetration testing", "Vulnerability scanning", "Security review"]
-            }
+        "tags": ["threat-modeling", "security"],
+        "technicalRequirements": {
+          "language": "typescript",
+          "framework": "node",
+          "dependencies": ["owasp-threat-dragon", "microsoft-tmt", "stride-model"],
+          "environment": "Node.js v18+"
+        },
+        "acceptanceCriteria": {
+          "criteria": [
+            "Threat model documented",
+            "Attack vectors identified",
+            "Mitigations defined",
+            "Risk levels assessed"
           ],
-          "steps": [
-            {
-              "order": 1,
-              "action": "Implement controls",
-              "thought": "Deploy security measures based on threat model",
-              "capability": "security_implementation",
-              "operations": [
-                {
-                  "type": "deploy_controls",
-                  "controls": [
-                    {
-                      "type": "authentication",
-                      "level": "multi_factor"
-                    },
-                    {
-                      "type": "encryption",
-                      "scope": "data_in_transit_and_rest"
-                    },
-                    {
-                      "type": "monitoring",
-                      "components": ["activity_logs", "security_events", "anomaly_detection"]
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "order": 2,
-              "action": "Security validation",
-              "thought": "Verify security control effectiveness",
-              "capability": "security_testing",
-              "operations": [
-                {
-                  "type": "security_testing",
-                  "tests": [
-                    {
-                      "type": "penetration_test",
-                      "scope": "full_system"
-                    },
-                    {
-                      "type": "vulnerability_scan",
-                      "tools": ["static", "dynamic", "composition"]
-                    }
-                  ]
-                }
-              ]
-            }
+          "testCases": [
+            "Review threat model completeness",
+            "Validate attack vectors",
+            "Test mitigation strategies",
+            "Verify risk assessments"
+          ]
+        }
+      }
+    },
+    {
+      "path": "${projectName}/security/architecture",
+      "title": "Security Architecture Design",
+      "description": "Design security architecture and controls",
+      "type": "MILESTONE",
+      "dependencies": ["${projectName}/security/threat-model"],
+      "metadata": {
+        "priority": "high",
+        "tags": ["architecture", "security"],
+        "technicalRequirements": {
+          "language": "typescript",
+          "framework": "node",
+          "dependencies": ["helmet", "passport", "oauth2-server"],
+          "environment": "Node.js v18+"
+        },
+        "acceptanceCriteria": {
+          "criteria": [
+            "Security architecture documented",
+            "Authentication design completed",
+            "Authorization model defined",
+            "Data protection designed"
           ],
-          "outputArtifacts": [
-            {
-              "type": "configuration",
-              "path": "${projectName}/security/configs/",
-              "files": ["security-controls.yml", "monitoring-rules.yml", "incident-response.yml"]
-            },
-            {
-              "type": "documentation",
-              "path": "${projectName}/security/docs/",
-              "files": [
-                "security-architecture.md",
-                "control-implementation.md",
-                "testing-results.md"
-              ]
-            }
+          "testCases": [
+            "Test authentication flows",
+            "Validate authorization rules",
+            "Verify data protection",
+            "Review security patterns"
+          ]
+        }
+      }
+    },
+    {
+      "path": "${projectName}/security/compliance",
+      "title": "Compliance Implementation",
+      "description": "Implement compliance requirements and controls",
+      "type": "MILESTONE",
+      "dependencies": ["${projectName}/security/architecture"],
+      "metadata": {
+        "priority": "high",
+        "tags": ["compliance", "security"],
+        "technicalRequirements": {
+          "language": "typescript",
+          "framework": "node",
+          "dependencies": ["audit-logger", "compliance-monitor", "policy-enforcer"],
+          "environment": "Node.js v18+"
+        },
+        "acceptanceCriteria": {
+          "criteria": [
+            "Compliance controls implemented",
+            "Audit logging configured",
+            "Policy enforcement setup",
+            "Documentation completed"
           ],
-          "validationCriteria": [
-            "All identified threats have corresponding controls",
-            "Security testing completed successfully",
-            "Monitoring systems operational",
-            "Compliance requirements met"
+          "testCases": [
+            "Validate compliance controls",
+            "Test audit logging",
+            "Review policy enforcement",
+            "Check documentation"
+          ]
+        }
+      }
+    },
+    {
+      "path": "${projectName}/security/testing",
+      "title": "Security Testing Setup",
+      "description": "Establish security testing framework and procedures",
+      "type": "MILESTONE",
+      "dependencies": ["${projectName}/security/architecture"],
+      "metadata": {
+        "priority": "high",
+        "tags": ["testing", "security"],
+        "technicalRequirements": {
+          "language": "typescript",
+          "framework": "node",
+          "dependencies": ["owasp-zap", "snyk", "sonarqube"],
+          "environment": "Node.js v18+"
+        },
+        "acceptanceCriteria": {
+          "criteria": [
+            "Security testing framework setup",
+            "Test cases documented",
+            "Automation configured",
+            "Coverage metrics defined"
+          ],
+          "testCases": [
+            "Run security test suite",
+            "Validate test coverage",
+            "Verify automation",
+            "Check reporting"
+          ]
+        }
+      }
+    },
+    {
+      "path": "${projectName}/security/monitoring",
+      "title": "Security Monitoring Setup",
+      "description": "Implement security monitoring and incident response",
+      "type": "MILESTONE",
+      "dependencies": ["${projectName}/security/testing"],
+      "metadata": {
+        "priority": "high",
+        "tags": ["monitoring", "security"],
+        "technicalRequirements": {
+          "language": "typescript",
+          "framework": "node",
+          "dependencies": ["wazuh", "elastic-siem", "prometheus-alertmanager"],
+          "environment": "Node.js v18+"
+        },
+        "acceptanceCriteria": {
+          "criteria": [
+            "Monitoring system configured",
+            "Alerts defined",
+            "Incident response documented",
+            "Escalation paths established"
+          ],
+          "testCases": [
+            "Test monitoring system",
+            "Validate alert rules",
+            "Review response procedures",
+            "Check escalation flows"
           ]
         }
       }

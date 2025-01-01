@@ -1,10 +1,10 @@
 {
   "id": "software_engineer/team",
   "name": "LLM Software Engineering Team",
-  "description": "Coordinated team of LLM agents performing specialized software engineering roles",
-  "version": "1.0.0",
+  "description": "Coordinated team of LLM agents performing specialized software engineering roles with clear handoffs and responsibilities",
+  "version": "1.1.0",
   "author": "Atlas Team",
-  "tags": ["llm-agent", "team-coordination", "software-engineering"],
+  "tags": ["llm-agent", "team-coordination", "software-engineering", "agile"],
   "variables": [
     {
       "name": "projectName",
@@ -14,120 +14,317 @@
     },
     {
       "name": "teamScale",
-      "description": "Size/scale of the team (startup, growth, enterprise)",
+      "description": "Size/scale of the team",
       "type": "string",
       "required": true,
-      "default": "growth"
+      "default": "growth",
+      "enum": ["startup", "growth", "enterprise"]
     },
     {
       "name": "developmentMethodology",
-      "description": "Development methodology (agile, kanban)",
+      "description": "Development methodology",
       "type": "string",
       "required": false,
-      "default": "agile"
+      "default": "agile",
+      "enum": ["agile", "kanban"]
     },
     {
       "name": "securityLevel",
-      "description": "Required security level (standard, high, regulated)",
+      "description": "Required security level",
       "type": "string",
       "required": false,
-      "default": "standard"
+      "default": "standard",
+      "enum": ["standard", "high", "regulated"]
     },
     {
       "name": "complianceFrameworks",
       "description": "Required compliance frameworks",
-      "type": "string",
+      "type": "array",
       "required": false,
-      "default": "OWASP"
+      "default": ["OWASP"],
+      "items": {
+        "type": "string",
+        "enum": ["OWASP", "SOC2", "HIPAA", "GDPR", "PCI-DSS"]
+      }
+    },
+    {
+      "name": "enableMetrics",
+      "description": "Enable detailed metrics collection",
+      "type": "boolean",
+      "required": false,
+      "default": true
     }
   ],
   "tasks": [
     {
-      "path": "${projectName}/team-setup",
-      "title": "Team Setup & Coordination",
+      "path": "${projectName}/team/initialization",
+      "title": "Team Initialization and Planning",
+      "description": "Set up team structure, roles, and coordination mechanisms",
       "type": "MILESTONE",
-      "description": "Initialize and coordinate specialized engineering roles",
       "metadata": {
         "priority": "high",
-        "tags": ["team-structure", "coordination"]
+        "tags": ["team-structure", "planning"],
+        "technicalRequirements": {
+          "language": "typescript",
+          "framework": "node",
+          "dependencies": ["@modelcontextprotocol/sdk", "zod", "sqlite3"],
+          "environment": "Node.js v18+"
+        },
+        "acceptanceCriteria": {
+          "criteria": [
+            "Team roles and responsibilities defined",
+            "Communication channels established",
+            "Coordination mechanisms documented",
+            "Project goals aligned across roles",
+            "Team charter document created",
+            "RACI matrix established",
+            "Communication plan documented",
+            "Project timeline defined"
+          ],
+          "testCases": [
+            "Verify all team roles have clear responsibilities",
+            "Confirm communication channels are accessible",
+            "Test coordination mechanisms effectiveness",
+            "Validate project goal alignment"
+          ]
+        }
       }
     },
     {
       "path": "${projectName}/product-design",
       "title": "Product Design Phase",
+      "description": "Product design, user research, and requirements gathering",
       "type": "MILESTONE",
-      "description": "Product design and user research",
-      "dependencies": ["${projectName}/team-setup"],
+      "dependencies": ["${projectName}/team/initialization"],
       "metadata": {
         "priority": "high",
         "tags": ["product-design", "research"],
-        "template": "software_engineer/product_designer",
-        "variables": {
-          "targetAudience": "determined_from_requirements"
+        "technicalRequirements": {
+          "language": "typescript",
+          "framework": "react",
+          "dependencies": ["react", "react-dom", "styled-components"],
+          "environment": "Node.js v18+"
+        },
+        "acceptanceCriteria": {
+          "criteria": [
+            "User research completed",
+            "Product requirements documented",
+            "Design system established",
+            "Usability testing plan created"
+          ],
+          "testCases": [
+            "Validate user research methodology",
+            "Review requirements documentation",
+            "Verify design system components",
+            "Test usability plan coverage"
+          ]
+        },
+        "templateRef": {
+          "template": "software_engineer/product_designer",
+          "variables": {
+            "projectName": "${projectName}",
+            "teamScale": "${teamScale}",
+            "methodology": "${developmentMethodology}"
+          }
         }
       }
     },
     {
       "path": "${projectName}/architecture",
       "title": "System Architecture Phase",
+      "description": "Technical architecture design and system planning",
       "type": "MILESTONE",
-      "description": "System architecture and technical design",
       "dependencies": ["${projectName}/product-design"],
       "metadata": {
         "priority": "high",
-        "tags": ["architecture", "design"],
-        "template": "software_engineer/system_architect",
-        "variables": {
-          "scalingRequirements": "${teamScale}",
-          "securityLevel": "${securityLevel}"
+        "tags": ["architecture", "technical-design"],
+        "technicalRequirements": {
+          "language": "typescript",
+          "framework": "node",
+          "dependencies": ["express", "prisma", "graphql"],
+          "environment": "Node.js v18+"
+        },
+        "acceptanceCriteria": {
+          "criteria": [
+            "Architecture design documented",
+            "Technology stack defined",
+            "System constraints identified",
+            "Performance requirements specified"
+          ],
+          "testCases": [
+            "Review architecture documentation",
+            "Validate technology choices",
+            "Test system constraints",
+            "Benchmark performance requirements"
+          ]
+        },
+        "templateRef": {
+          "template": "software_engineer/system_architect",
+          "variables": {
+            "projectName": "${projectName}",
+            "scalingRequirements": "${teamScale}",
+            "securityLevel": "${securityLevel}"
+          }
         }
       }
     },
     {
       "path": "${projectName}/security",
       "title": "Security Engineering Phase",
+      "description": "Security architecture and implementation planning",
       "type": "MILESTONE",
-      "description": "Security architecture and implementation",
       "dependencies": ["${projectName}/architecture"],
       "metadata": {
         "priority": "high",
         "tags": ["security", "compliance"],
-        "template": "software_engineer/security_engineer",
-        "variables": {
-          "complianceFrameworks": "${complianceFrameworks}",
-          "dataClassification": "derived_from_security_level"
+        "technicalRequirements": {
+          "language": "typescript",
+          "framework": "node",
+          "dependencies": ["helmet", "passport", "oauth2-server"],
+          "environment": "Node.js v18+"
+        },
+        "acceptanceCriteria": {
+          "criteria": [
+            "Security architecture reviewed",
+            "Compliance requirements met",
+            "Threat model completed",
+            "Security controls defined"
+          ],
+          "testCases": [
+            "Perform security architecture review",
+            "Validate compliance requirements",
+            "Test threat model scenarios",
+            "Verify security control implementation"
+          ]
+        },
+        "templateRef": {
+          "template": "software_engineer/security_engineer",
+          "variables": {
+            "projectName": "${projectName}",
+            "securityLevel": "${securityLevel}",
+            "complianceFrameworks": "${complianceFrameworks}"
+          }
         }
       }
     },
     {
-      "path": "${projectName}/devops",
-      "title": "DevOps Implementation Phase",
+      "path": "${projectName}/infrastructure",
+      "title": "Infrastructure and DevOps Phase",
+      "description": "Infrastructure setup and automation implementation",
       "type": "MILESTONE",
-      "description": "Infrastructure and deployment automation",
       "dependencies": ["${projectName}/architecture"],
       "metadata": {
         "priority": "high",
-        "tags": ["devops", "automation"],
-        "template": "software_engineer/devops_engineer",
-        "variables": {
-          "deploymentEnvironments": "development,staging,production",
-          "infrastructureType": "determined_from_architecture"
+        "tags": ["devops", "infrastructure"],
+        "technicalRequirements": {
+          "language": "typescript",
+          "framework": "terraform",
+          "dependencies": ["docker", "kubernetes", "terraform"],
+          "environment": "Node.js v18+"
+        },
+        "acceptanceCriteria": {
+          "criteria": [
+            "Infrastructure as code implemented",
+            "CI/CD pipelines configured",
+            "Monitoring setup complete",
+            "Deployment automation tested"
+          ],
+          "testCases": [
+            "Validate infrastructure code",
+            "Test CI/CD pipeline functionality",
+            "Verify monitoring coverage",
+            "Run deployment automation tests"
+          ]
+        },
+        "templateRef": {
+          "template": "software_engineer/devops_engineer",
+          "variables": {
+            "projectName": "${projectName}",
+            "teamScale": "${teamScale}",
+            "securityLevel": "${securityLevel}"
+          }
         }
       }
     },
     {
       "path": "${projectName}/development",
-      "title": "Development Phase",
+      "title": "Development Coordination Phase",
+      "description": "Technical implementation coordination and quality assurance",
       "type": "MILESTONE",
-      "description": "Technical implementation and quality assurance",
-      "dependencies": ["${projectName}/architecture", "${projectName}/security"],
+      "dependencies": [
+        "${projectName}/architecture",
+        "${projectName}/security",
+        "${projectName}/infrastructure"
+      ],
       "metadata": {
         "priority": "high",
-        "tags": ["development", "quality"],
-        "template": "software_engineer/tech_lead",
-        "variables": {
-          "teamSize": "derived_from_scale",
-          "developmentMethodology": "${developmentMethodology}"
+        "tags": ["development", "coordination"],
+        "technicalRequirements": {
+          "language": "typescript",
+          "framework": "node",
+          "dependencies": ["jest", "eslint", "prettier"],
+          "environment": "Node.js v18+"
+        },
+        "acceptanceCriteria": {
+          "criteria": [
+            "Development standards established",
+            "Code review process defined",
+            "Quality metrics agreed upon",
+            "Team velocity baseline set"
+          ],
+          "testCases": [
+            "Review development standards",
+            "Test code review workflow",
+            "Validate quality metrics",
+            "Measure team velocity"
+          ]
+        },
+        "templateRef": {
+          "template": "software_engineer/tech_lead",
+          "variables": {
+            "projectName": "${projectName}",
+            "teamScale": "${teamScale}",
+            "methodology": "${developmentMethodology}"
+          }
+        }
+      }
+    },
+    {
+      "path": "${projectName}/team/coordination",
+      "title": "Ongoing Team Coordination",
+      "description": "Continuous team alignment and progress tracking",
+      "type": "MILESTONE",
+      "dependencies": ["${projectName}/development"],
+      "metadata": {
+        "priority": "high",
+        "tags": ["coordination", "agile"],
+        "technicalRequirements": {
+          "language": "typescript",
+          "framework": "node",
+          "dependencies": ["jira-client", "slack-sdk", "github-api"],
+          "environment": "Node.js v18+"
+        },
+        "acceptanceCriteria": {
+          "criteria": [
+            "Regular sync meetings established",
+            "Progress tracking implemented",
+            "Impediments being addressed",
+            "Cross-team collaboration effective",
+            "Sprint/iteration plans created",
+            "Progress reports established",
+            "Risk register maintained",
+            "Team retrospectives conducted"
+          ],
+          "testCases": [
+            "Verify meeting schedules",
+            "Test progress tracking tools",
+            "Review impediment resolution",
+            "Assess collaboration effectiveness",
+            "Validate sprint planning process",
+            "Check reporting mechanisms",
+            "Audit risk management",
+            "Evaluate retrospective outcomes"
+          ]
         }
       }
     }

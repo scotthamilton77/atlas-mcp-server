@@ -1,10 +1,10 @@
 {
   "id": "software_engineer/system_architect",
   "name": "LLM System Architect Agent",
-  "description": "Task template for LLM agents performing system architecture and technical design",
-  "version": "1.0.0",
+  "description": "Comprehensive system architecture and technical design planning with focus on scalability, maintainability, and security",
+  "version": "1.1.0",
   "author": "Atlas Team",
-  "tags": ["llm-agent", "architecture", "system-design"],
+  "tags": ["llm-agent", "architecture", "system-design", "technical-planning"],
   "variables": [
     {
       "name": "projectName",
@@ -14,184 +14,244 @@
     },
     {
       "name": "scalingRequirements",
-      "description": "Expected system scale (startup, growth, enterprise)",
+      "description": "Expected scale of the system",
       "type": "string",
       "required": true,
-      "default": "growth"
+      "default": "growth",
+      "enum": ["startup", "growth", "enterprise"]
     },
     {
       "name": "securityLevel",
-      "description": "Required security level (standard, high, regulated)",
+      "description": "Required security level",
       "type": "string",
+      "required": true,
+      "default": "standard",
+      "enum": ["standard", "high", "regulated"]
+    },
+    {
+      "name": "enableDistributed",
+      "description": "Enable distributed system architecture",
+      "type": "boolean",
       "required": false,
-      "default": "standard"
+      "default": false
+    },
+    {
+      "name": "performanceTargets",
+      "description": "Performance targets in milliseconds",
+      "type": "number",
+      "required": false,
+      "default": 100
     }
   ],
   "tasks": [
     {
-      "path": "${projectName}/architecture/requirements-analysis",
-      "title": "System Requirements Analysis",
-      "type": "TASK",
-      "description": "Analyze and document system requirements",
+      "path": "${projectName}/architecture/requirements",
+      "title": "Architecture Requirements Analysis",
+      "description": "Analyze and document system requirements and constraints",
+      "type": "MILESTONE",
       "metadata": {
         "priority": "high",
         "tags": ["requirements", "analysis"],
-        "agentInstructions": {
-          "objective": "Analyze technical requirements and constraints",
-          "requiredCapabilities": [
-            {
-              "type": "document_access",
-              "purpose": "Requirements gathering",
-              "features": [
-                "Read project documentation",
-                "Extract requirements",
-                "Cross-reference documents"
-              ]
-            },
-            {
-              "type": "technical_analysis",
-              "purpose": "System analysis",
-              "features": ["Performance modeling", "Scalability assessment", "Security evaluation"]
-            }
+        "technicalRequirements": {
+          "language": "typescript",
+          "framework": "node",
+          "dependencies": ["plantuml", "mermaid", "draw.io"],
+          "environment": "Node.js v18+"
+        },
+        "acceptanceCriteria": {
+          "criteria": [
+            "Functional requirements analyzed",
+            "Non-functional requirements documented",
+            "System constraints identified",
+            "Stakeholder requirements validated"
           ],
-          "steps": [
-            {
-              "order": 1,
-              "action": "Gather requirements",
-              "thought": "Extract and categorize system requirements",
-              "capability": "document_access",
-              "operations": [
-                {
-                  "type": "read_documents",
-                  "sources": ["product_requirements", "user_research", "technical_constraints"]
-                },
-                {
-                  "type": "extract_requirements",
-                  "categories": ["functional", "non_functional", "security", "performance"]
-                }
-              ]
-            },
-            {
-              "order": 2,
-              "action": "Analyze scalability needs",
-              "thought": "Determine scaling requirements for ${scalingRequirements} level",
-              "capability": "technical_analysis",
-              "operations": [
-                {
-                  "type": "performance_modeling",
-                  "aspects": ["user_load", "data_volume", "transaction_rate"]
-                }
-              ]
-            }
-          ],
-          "outputArtifacts": [
-            {
-              "type": "document",
-              "path": "${projectName}/architecture/requirements.md",
-              "sections": [
-                "System Overview",
-                "Functional Requirements",
-                "Non-functional Requirements",
-                "Constraints"
-              ]
-            },
-            {
-              "type": "data",
-              "path": "${projectName}/architecture/scaling-metrics.json",
-              "format": "technical_specifications"
-            }
+          "testCases": [
+            "Review requirements completeness",
+            "Validate constraints documentation",
+            "Test requirements traceability",
+            "Verify stakeholder sign-off"
           ]
         }
       }
     },
     {
-      "path": "${projectName}/architecture/system-design",
-      "title": "High-Level System Design",
+      "path": "${projectName}/architecture/requirements/functional",
+      "title": "Functional Requirements Analysis",
+      "description": "Analyze core functional requirements and system capabilities",
       "type": "TASK",
-      "description": "Create high-level system architecture",
-      "dependencies": ["${projectName}/architecture/requirements-analysis"],
+      "dependencies": ["${projectName}/architecture/requirements"],
       "metadata": {
         "priority": "high",
-        "tags": ["architecture", "design"],
-        "agentInstructions": {
-          "objective": "Design high-level system architecture",
-          "requiredCapabilities": [
-            {
-              "type": "architecture_design",
-              "purpose": "System design",
-              "features": ["Component design", "Integration patterns", "Data flow modeling"]
-            },
-            {
-              "type": "diagram_generation",
-              "purpose": "Architecture visualization",
-              "features": ["System diagrams", "Component diagrams", "Data flow diagrams"]
-            }
+        "technicalRequirements": {
+          "language": "typescript",
+          "framework": "node",
+          "dependencies": ["swagger-ui", "openapi-typescript", "json-schema"],
+          "environment": "Node.js v18+"
+        },
+        "acceptanceCriteria": {
+          "criteria": [
+            "Core functionality mapped",
+            "System capabilities defined",
+            "Integration requirements documented",
+            "Data flow diagrams created"
           ],
-          "steps": [
-            {
-              "order": 1,
-              "action": "Design core architecture",
-              "thought": "Define main system components and interactions",
-              "capability": "architecture_design",
-              "operations": [
-                {
-                  "type": "component_design",
-                  "aspects": ["service_boundaries", "data_stores", "integration_points"]
-                },
-                {
-                  "type": "pattern_selection",
-                  "considerations": ["scalability", "reliability", "maintainability"]
-                }
-              ]
-            },
-            {
-              "order": 2,
-              "action": "Create architecture diagrams",
-              "thought": "Visualize system design and interactions",
-              "capability": "diagram_generation",
-              "operations": [
-                {
-                  "type": "create_diagram",
-                  "diagrams": [
-                    {
-                      "type": "system_context",
-                      "scope": "high_level"
-                    },
-                    {
-                      "type": "component",
-                      "scope": "detailed"
-                    },
-                    {
-                      "type": "data_flow",
-                      "scope": "system_wide"
-                    }
-                  ]
-                }
-              ]
-            }
+          "testCases": [
+            "Validate functionality mapping",
+            "Review capability definitions",
+            "Test integration requirements",
+            "Check data flow accuracy"
+          ]
+        }
+      }
+    },
+    {
+      "path": "${projectName}/architecture/requirements/non-functional",
+      "title": "Non-Functional Requirements Analysis",
+      "description": "Define and document non-functional requirements",
+      "type": "TASK",
+      "dependencies": ["${projectName}/architecture/requirements"],
+      "metadata": {
+        "priority": "high",
+        "technicalRequirements": {
+          "language": "typescript",
+          "framework": "node",
+          "dependencies": ["k6", "artillery", "prometheus"],
+          "environment": "Node.js v18+"
+        },
+        "acceptanceCriteria": {
+          "criteria": [
+            "Performance requirements defined",
+            "Scalability targets set",
+            "Reliability objectives documented",
+            "Maintainability guidelines created"
           ],
-          "outputArtifacts": [
-            {
-              "type": "document",
-              "path": "${projectName}/architecture/design.md",
-              "sections": [
-                "Architecture Overview",
-                "Component Design",
-                "Integration Patterns",
-                "Data Flow"
-              ]
-            },
-            {
-              "type": "diagrams",
-              "path": "${projectName}/architecture/diagrams/",
-              "formats": ["svg", "png"]
-            }
+          "testCases": [
+            "Benchmark performance targets",
+            "Test scalability requirements",
+            "Validate reliability metrics",
+            "Review maintainability criteria"
+          ]
+        }
+      }
+    },
+    {
+      "path": "${projectName}/architecture/design",
+      "title": "System Architecture Design",
+      "description": "Design high-level system architecture and component interactions",
+      "type": "MILESTONE",
+      "dependencies": ["${projectName}/architecture/requirements"],
+      "metadata": {
+        "priority": "high",
+        "tags": ["design", "architecture"],
+        "technicalRequirements": {
+          "language": "typescript",
+          "framework": "node",
+          "dependencies": ["c4-model", "archimate", "structurizr"],
+          "environment": "Node.js v18+"
+        },
+        "acceptanceCriteria": {
+          "criteria": [
+            "System components defined",
+            "Integration patterns selected",
+            "Data architecture designed",
+            "Security architecture integrated"
           ],
-          "validationCriteria": [
-            "Meets ${scalingRequirements} scale requirements",
-            "Addresses ${securityLevel} security needs",
-            "Component boundaries clearly defined",
-            "Integration patterns documented"
+          "testCases": [
+            "Review component definitions",
+            "Validate integration patterns",
+            "Test data architecture",
+            "Verify security integration"
+          ]
+        }
+      }
+    },
+    {
+      "path": "${projectName}/architecture/design/components",
+      "title": "Component Architecture Design",
+      "description": "Design system components and their interactions",
+      "type": "TASK",
+      "dependencies": ["${projectName}/architecture/design"],
+      "metadata": {
+        "priority": "high",
+        "technicalRequirements": {
+          "language": "typescript",
+          "framework": "node",
+          "dependencies": ["inversify", "typeorm", "graphql"],
+          "environment": "Node.js v18+"
+        },
+        "acceptanceCriteria": {
+          "criteria": [
+            "Component specifications created",
+            "Interface definitions documented",
+            "Communication patterns defined",
+            "State management designed"
+          ],
+          "testCases": [
+            "Validate component specs",
+            "Test interface contracts",
+            "Review communication flows",
+            "Verify state handling"
+          ]
+        }
+      }
+    },
+    {
+      "path": "${projectName}/architecture/design/data",
+      "title": "Data Architecture Design",
+      "description": "Design data storage, flow, and management systems",
+      "type": "TASK",
+      "dependencies": ["${projectName}/architecture/design"],
+      "metadata": {
+        "priority": "high",
+        "technicalRequirements": {
+          "language": "typescript",
+          "framework": "node",
+          "dependencies": ["prisma", "redis", "elasticsearch"],
+          "environment": "Node.js v18+"
+        },
+        "acceptanceCriteria": {
+          "criteria": [
+            "Data model diagrams created",
+            "Storage architecture defined",
+            "Data flow patterns documented",
+            "Caching strategy designed"
+          ],
+          "testCases": [
+            "Validate data models",
+            "Test storage architecture",
+            "Review data flows",
+            "Verify caching strategy"
+          ]
+        }
+      }
+    },
+    {
+      "path": "${projectName}/architecture/technology",
+      "title": "Technology Stack Selection",
+      "description": "Select and document technology stack decisions",
+      "type": "MILESTONE",
+      "dependencies": ["${projectName}/architecture/design"],
+      "metadata": {
+        "priority": "high",
+        "tags": ["technology", "stack"],
+        "technicalRequirements": {
+          "language": "typescript",
+          "framework": "node",
+          "dependencies": ["webpack", "docker", "kubernetes"],
+          "environment": "Node.js v18+"
+        },
+        "acceptanceCriteria": {
+          "criteria": [
+            "Technology choices justified",
+            "Stack compatibility verified",
+            "Learning curve assessed",
+            "Community support evaluated"
+          ],
+          "testCases": [
+            "Review technology choices",
+            "Test stack compatibility",
+            "Assess learning resources",
+            "Validate community metrics"
           ]
         }
       }

@@ -1,10 +1,10 @@
 {
   "id": "software_engineer/product_designer",
   "name": "LLM Product Designer Agent",
-  "description": "Task template for LLM agents performing product design and user research roles",
-  "version": "1.0.0",
+  "description": "Product design and user research with focus on user experience, design systems, and product requirements",
+  "version": "1.1.0",
   "author": "Atlas Team",
-  "tags": ["llm-agent", "product-design", "ux-research"],
+  "tags": ["llm-agent", "product-design", "ux-research", "design-systems"],
   "variables": [
     {
       "name": "projectName",
@@ -13,189 +13,252 @@
       "required": true
     },
     {
-      "name": "targetAudience",
-      "description": "Primary user demographic",
+      "name": "teamScale",
+      "description": "Size/scale of the team (startup, growth, enterprise)",
       "type": "string",
-      "required": true
+      "required": true,
+      "default": "growth"
     },
     {
-      "name": "competitorCount",
-      "description": "Number of main competitors to analyze",
-      "type": "number",
+      "name": "methodology",
+      "description": "Development methodology (agile, kanban)",
+      "type": "string",
       "required": false,
-      "default": 3
+      "default": "agile"
     }
   ],
   "tasks": [
     {
-      "path": "${projectName}/product-design/market-research",
-      "title": "Market Research Analysis",
-      "type": "TASK",
-      "description": "Analyze market conditions and competitor landscape",
+      "path": "${projectName}/design/discovery",
+      "title": "Product Discovery",
+      "description": "Initial product research and requirements gathering",
+      "type": "MILESTONE",
       "metadata": {
         "priority": "high",
-        "tags": ["research", "market-analysis"],
-        "agentInstructions": {
-          "objective": "Gather and analyze market data for informed product decisions",
-          "requiredCapabilities": [
-            {
-              "type": "web_access",
-              "purpose": "Market research and data gathering",
-              "features": ["Search capability", "Page content extraction", "Data scraping"]
-            },
-            {
-              "type": "file_operation",
-              "purpose": "Document management",
-              "features": ["Read files", "Write files", "Create directories"]
-            },
-            {
-              "type": "data_analysis",
-              "purpose": "Process market data",
-              "features": ["Statistical analysis", "Pattern recognition", "Trend analysis"]
-            }
-          ],
-          "steps": [
-            {
-              "order": 1,
-              "action": "Initialize research structure",
-              "thought": "Create organized framework for findings",
-              "capability": "file_operation",
-              "operations": [
-                {
-                  "type": "create_directory",
-                  "path": "${projectName}/research"
-                },
-                {
-                  "type": "write_file",
-                  "path": "${projectName}/research/market-analysis.md",
-                  "template": "market_analysis_template"
-                }
-              ]
-            },
-            {
-              "order": 2,
-              "action": "Gather competitor data",
-              "thought": "Research top ${competitorCount} competitors",
-              "capability": "web_access",
-              "operations": [
-                {
-                  "type": "search",
-                  "queries": [
-                    "market leaders ${targetAudience}",
-                    "top companies ${targetAudience} solutions"
-                  ]
-                },
-                {
-                  "type": "extract_data",
-                  "targets": ["company profiles", "product features", "market share"]
-                }
-              ]
-            },
-            {
-              "order": 3,
-              "action": "Analyze market trends",
-              "thought": "Process and synthesize market data",
-              "capability": "data_analysis",
-              "operations": [
-                {
-                  "type": "trend_analysis",
-                  "data": "competitor_features",
-                  "metrics": ["feature_frequency", "pricing_patterns", "market_segments"]
-                }
-              ]
-            }
-          ],
-          "outputArtifacts": [
-            {
-              "type": "document",
-              "path": "${projectName}/research/market-analysis.md",
-              "sections": [
-                "Executive Summary",
-                "Competitor Analysis",
-                "Market Trends",
-                "Opportunities"
-              ]
-            },
-            {
-              "type": "data",
-              "path": "${projectName}/research/competitor-matrix.json",
-              "format": "structured_comparison"
-            }
-          ],
-          "validationCriteria": [
-            "Competitor analysis completed for ${competitorCount} companies",
-            "Market size estimation documented",
-            "Key trends identified and analyzed",
-            "Growth opportunities documented"
-          ]
-        }
+        "tags": ["discovery", "research"],
+        "acceptanceCriteria": [
+          "User needs identified",
+          "Market research completed",
+          "Stakeholder requirements gathered",
+          "Competitive analysis done"
+        ],
+        "deliverables": [
+          "User research report",
+          "Market analysis document",
+          "Requirements document",
+          "Competitive analysis"
+        ]
       }
     },
     {
-      "path": "${projectName}/product-design/user-research",
-      "title": "User Research & Personas",
+      "path": "${projectName}/design/discovery/user-research",
+      "title": "User Research",
+      "description": "Conduct user research and analysis",
       "type": "TASK",
-      "description": "Create detailed user personas and journey maps",
-      "dependencies": ["${projectName}/product-design/market-research"],
+      "dependencies": ["${projectName}/design/discovery"],
       "metadata": {
         "priority": "high",
-        "tags": ["user-research", "personas"],
-        "agentInstructions": {
-          "objective": "Develop comprehensive user personas and journey maps",
-          "requiredCapabilities": [
-            {
-              "type": "data_analysis",
-              "purpose": "User behavior analysis",
-              "features": ["Pattern recognition", "Behavioral clustering", "Demographic analysis"]
-            },
-            {
-              "type": "document_generation",
-              "purpose": "Create user documentation",
-              "features": ["Template processing", "Markdown generation", "Diagram creation"]
-            }
-          ],
-          "steps": [
-            {
-              "order": 1,
-              "action": "Analyze user data",
-              "thought": "Process ${targetAudience} characteristics",
-              "capability": "data_analysis",
-              "operations": [
-                {
-                  "type": "demographic_analysis",
-                  "target": "${targetAudience}",
-                  "aspects": ["age_distribution", "technical_proficiency", "usage_patterns"]
-                }
-              ]
-            },
-            {
-              "order": 2,
-              "action": "Generate personas",
-              "thought": "Create representative user profiles",
-              "capability": "document_generation",
-              "operations": [
-                {
-                  "type": "create_document",
-                  "template": "user_persona",
-                  "count": 3,
-                  "sections": ["Background", "Goals", "Pain Points", "Technology Usage"]
-                }
-              ]
-            }
-          ],
-          "outputArtifacts": [
-            {
-              "type": "document",
-              "path": "${projectName}/research/user-personas.md",
-              "format": "markdown"
-            },
-            {
-              "type": "diagram",
-              "path": "${projectName}/research/journey-maps.svg",
-              "format": "vector"
-            }
-          ]
-        }
+        "deliverables": [
+          "User personas",
+          "User journey maps",
+          "Pain points analysis",
+          "User needs matrix"
+        ]
+      }
+    },
+    {
+      "path": "${projectName}/design/discovery/market-analysis",
+      "title": "Market Analysis",
+      "description": "Analyze market trends and competition",
+      "type": "TASK",
+      "dependencies": ["${projectName}/design/discovery"],
+      "metadata": {
+        "priority": "high",
+        "deliverables": [
+          "Market trends report",
+          "Competitor analysis",
+          "Feature comparison matrix",
+          "Market opportunities"
+        ]
+      }
+    },
+    {
+      "path": "${projectName}/design/requirements",
+      "title": "Product Requirements",
+      "description": "Define and document product requirements",
+      "type": "MILESTONE",
+      "dependencies": ["${projectName}/design/discovery"],
+      "metadata": {
+        "priority": "high",
+        "tags": ["requirements", "specification"],
+        "acceptanceCriteria": [
+          "Functional requirements defined",
+          "User stories created",
+          "Acceptance criteria set",
+          "Priority levels assigned"
+        ],
+        "deliverables": [
+          "Product requirements document",
+          "User story map",
+          "Feature priority matrix",
+          "Acceptance criteria list"
+        ]
+      }
+    },
+    {
+      "path": "${projectName}/design/requirements/user-stories",
+      "title": "User Story Creation",
+      "description": "Create detailed user stories and scenarios",
+      "type": "TASK",
+      "dependencies": ["${projectName}/design/requirements"],
+      "metadata": {
+        "priority": "high",
+        "deliverables": [
+          "User story backlog",
+          "Acceptance criteria",
+          "Story mapping",
+          "Priority assignments"
+        ]
+      }
+    },
+    {
+      "path": "${projectName}/design/system",
+      "title": "Design System Development",
+      "description": "Create and document design system",
+      "type": "MILESTONE",
+      "dependencies": ["${projectName}/design/requirements"],
+      "metadata": {
+        "priority": "high",
+        "tags": ["design-system", "ui-components"],
+        "acceptanceCriteria": [
+          "Design principles established",
+          "Component library created",
+          "Style guide documented",
+          "Usage guidelines defined"
+        ],
+        "deliverables": [
+          "Design system documentation",
+          "Component specifications",
+          "Style guide",
+          "Usage guidelines"
+        ]
+      }
+    },
+    {
+      "path": "${projectName}/design/system/principles",
+      "title": "Design Principles",
+      "description": "Define core design principles and guidelines",
+      "type": "TASK",
+      "dependencies": ["${projectName}/design/system"],
+      "metadata": {
+        "priority": "high",
+        "deliverables": [
+          "Design principles document",
+          "Visual language guide",
+          "Brand guidelines",
+          "Design philosophy"
+        ]
+      }
+    },
+    {
+      "path": "${projectName}/design/system/components",
+      "title": "Component Library",
+      "description": "Design and document component library",
+      "type": "TASK",
+      "dependencies": ["${projectName}/design/system"],
+      "metadata": {
+        "priority": "high",
+        "deliverables": [
+          "Component specifications",
+          "Visual examples",
+          "Interaction patterns",
+          "Implementation guidelines"
+        ]
+      }
+    },
+    {
+      "path": "${projectName}/design/prototypes",
+      "title": "Prototyping",
+      "description": "Create and validate prototypes",
+      "type": "MILESTONE",
+      "dependencies": ["${projectName}/design/system"],
+      "metadata": {
+        "priority": "high",
+        "tags": ["prototyping", "validation"],
+        "acceptanceCriteria": [
+          "Key flows prototyped",
+          "User feedback collected",
+          "Iterations completed",
+          "Usability validated"
+        ],
+        "deliverables": [
+          "Interactive prototypes",
+          "User flow diagrams",
+          "Usability test results",
+          "Iteration documentation"
+        ]
+      }
+    },
+    {
+      "path": "${projectName}/design/prototypes/flows",
+      "title": "User Flow Prototypes",
+      "description": "Create prototypes for key user flows",
+      "type": "TASK",
+      "dependencies": ["${projectName}/design/prototypes"],
+      "metadata": {
+        "priority": "high",
+        "deliverables": [
+          "Flow diagrams",
+          "Interactive prototypes",
+          "State transitions",
+          "Interaction documentation"
+        ]
+      }
+    },
+    {
+      "path": "${projectName}/design/validation",
+      "title": "Design Validation",
+      "description": "Validate design solutions through testing",
+      "type": "MILESTONE",
+      "dependencies": ["${projectName}/design/prototypes"],
+      "metadata": {
+        "priority": "high",
+        "tags": ["validation", "testing"],
+        "acceptanceCriteria": [
+          "Usability tests completed",
+          "Feedback analyzed",
+          "Iterations documented",
+          "Solutions validated"
+        ],
+        "deliverables": [
+          "Usability test results",
+          "Feedback analysis",
+          "Iteration documentation",
+          "Validation report"
+        ]
+      }
+    },
+    {
+      "path": "${projectName}/design/documentation",
+      "title": "Design Documentation",
+      "description": "Create comprehensive design documentation",
+      "type": "MILESTONE",
+      "dependencies": ["${projectName}/design/system", "${projectName}/design/validation"],
+      "metadata": {
+        "priority": "high",
+        "tags": ["documentation"],
+        "acceptanceCriteria": [
+          "Design system documented",
+          "Implementation guides created",
+          "Handoff materials prepared",
+          "Design decisions recorded"
+        ],
+        "deliverables": [
+          "Design system documentation",
+          "Implementation guidelines",
+          "Handoff specifications",
+          "Decision records"
+        ]
       }
     }
   ]
