@@ -1,28 +1,62 @@
 #!/usr/bin/env node
-/* eslint-disable no-console */
-/* eslint-disable no-process-exit */
 import { readdir } from 'fs/promises';
-import { join } from 'path';
+import { join, basename } from 'path';
+import { fileURLToPath } from 'url';
 
-async function generateTree(dir, prefix = '') {
+const IGNORE_PATTERNS = [
+  'node_modules',
+  '.git',
+  'build',
+  '.DS_Store',
+  'coverage',
+  'dist',
+  '*.log'
+];
+
+async function generateTree(dir, prefix = '', isLast = true, parentPrefix = '', isRoot = false) {
   const entries = await readdir(dir, { withFileTypes: true });
-  const tree = [];
+  const filteredEntries = entries
+    .filter(entry => !IGNORE_PATTERNS.some(pattern => 
+      pattern.includes('*') 
+        ? entry.name.endsWith(pattern.slice(1))
+        : entry.name === pattern
+    ))
+    .sort((a, b) => {
+      // Directories first, then files
+      if (a.isDirectory() && !b.isDirectory()) return -1;
+      if (!a.isDirectory() && b.isDirectory()) return 1;
+      return a.name.localeCompare(b.name);
+    });
 
-  for (let i = 0; i < entries.length; i++) {
-    const entry = entries[i];
-    const isLastEntry = i === entries.length - 1;
-    const connector = isLastEntry ? '└── ' : '├── ';
+  const tree = [];
+  
+  if (isRoot) {
+    // Add project name header
+    tree.push('# atlas-mcp-server\n');
+  }
+
+  for (let i = 0; i < filteredEntries.length; i++) {
+    const entry = filteredEntries[i];
+    const isLastEntry = i === filteredEntries.length - 1;
+    const newPrefix = prefix + (isLastEntry ? '└── ' : '├── ');
+    const newParentPrefix = prefix + (isLastEntry ? '    ' : '│   ');
     const fullPath = join(dir, entry.name);
 
     if (entry.isDirectory()) {
-      const subTree = await generateTree(
+      // Add directory entry
+      tree.push(parentPrefix + newPrefix + entry.name + '/');
+      
+      // Recursively process subdirectory
+      const subtree = await generateTree(
         fullPath,
-        prefix + (isLastEntry ? '    ' : '│   ')
+        newParentPrefix,
+        isLastEntry,
+        parentPrefix + newParentPrefix
       );
-      tree.push(prefix + connector + entry.name + '/');
-      tree.push(...subTree);
+      tree.push(...subtree);
     } else {
-      tree.push(prefix + connector + entry.name);
+      // Add file entry
+      tree.push(parentPrefix + newPrefix + entry.name);
     }
   }
 
@@ -32,11 +66,13 @@ async function generateTree(dir, prefix = '') {
 // Get directory from command line args or use current directory
 const targetDir = process.argv[2] || '.';
 
-generateTree(targetDir)
+generateTree(targetDir, '', true, '', true)
   .then(tree => {
+    // eslint-disable-next-line no-console
     console.log(tree.join('\n'));
   })
   .catch(error => {
+    // eslint-disable-next-line no-console
     console.error('Error generating tree:', error);
     process.exit(1);
   });
