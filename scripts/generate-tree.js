@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-import { readdir } from 'fs/promises';
-import { join, basename } from 'path';
+/* eslint-env node */
+import { readdir, writeFile } from 'fs/promises';
+import { join } from 'path';
 
 const IGNORE_PATTERNS = [
   'node_modules',
@@ -31,7 +32,7 @@ async function generateTree(dir, indent = '', isRoot = false) {
   
   if (isRoot) {
     // Add project name header
-    tree.push('# atlas-mcp-server\n');
+    tree.push('atlas-mcp-server\n');
   }
 
   for (let i = 0; i < filteredEntries.length; i++) {
@@ -61,12 +62,14 @@ async function generateTree(dir, indent = '', isRoot = false) {
 const targetDir = process.argv[2] || '.';
 
 generateTree(targetDir, '', true)
-  .then(tree => {
-    // eslint-disable-next-line no-console
-    console.log(tree.join('\n'));
+  .then(async tree => {
+    const treeContent = tree.join('\n');
+    // Write to file
+    await writeFile(join(process.cwd(), 'repo-tree.md'), treeContent);
+    // Also log to console for feedback
+    console.log(treeContent);
   })
   .catch(error => {
-    // eslint-disable-next-line no-console
     console.error('Error generating tree:', error);
     process.exit(1);
   });
