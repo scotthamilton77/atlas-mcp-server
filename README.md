@@ -27,7 +27,7 @@ ATLAS (Adaptive Task & Logic Automation System) is a Model Context Protocol serv
 ATLAS implements the Model Context Protocol (MCP), enabling standardized communication between LLMs and external systems through:
 
 - **Clients** (Claude Desktop, IDEs) that maintain server connections
-- **Servers** that provide tools and resources
+- **Servers** that provide tools and resources (Like our ATLAS MCP Server)
 - **LLMs** that interact with servers through client applications
 
 ### Core Components
