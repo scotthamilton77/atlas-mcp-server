@@ -1,0 +1,78 @@
+{
+  "id": "web-project",
+  "name": "Web Project Setup",
+  "description": "Template for initializing a web development project with common tasks and structure",
+  "version": "1.0.0",
+  "author": "Atlas Team",
+  "tags": ["web", "frontend", "project-setup"],
+  "variables": [
+    {
+      "name": "projectName",
+      "description": "Name of the project",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "useTypeScript",
+      "description": "Whether to use TypeScript",
+      "type": "boolean",
+      "required": false,
+      "default": false
+    },
+    {
+      "name": "includeTesting",
+      "description": "Include testing setup",
+      "type": "boolean",
+      "required": false,
+      "default": true
+    }
+  ],
+  "tasks": [
+    {
+      "path": "${projectName}/setup",
+      "title": "Project Setup",
+      "type": "MILESTONE",
+      "description": "Initialize project structure and dependencies"
+    },
+    {
+      "path": "${projectName}/setup/structure",
+      "title": "Create Project Structure",
+      "type": "TASK",
+      "description": "Set up project directories and configuration files",
+      "dependencies": ["${projectName}/setup"]
+    },
+    {
+      "path": "${projectName}/setup/dependencies",
+      "title": "Install Dependencies",
+      "type": "TASK",
+      "description": "Install and configure project dependencies",
+      "dependencies": ["${projectName}/setup/structure"]
+    },
+    {
+      "path": "${projectName}/setup/typescript",
+      "title": "Configure TypeScript",
+      "type": "TASK",
+      "description": "Set up TypeScript configuration if enabled",
+      "dependencies": ["${projectName}/setup/dependencies"],
+      "metadata": {
+        "conditional": {
+          "variable": "useTypeScript",
+          "value": true
+        }
+      }
+    },
+    {
+      "path": "${projectName}/setup/testing",
+      "title": "Set Up Testing Framework",
+      "type": "TASK",
+      "description": "Configure testing environment and write initial tests",
+      "dependencies": ["${projectName}/setup/dependencies"],
+      "metadata": {
+        "conditional": {
+          "variable": "includeTesting",
+          "value": true
+        }
+      }
+    }
+  ]
+}

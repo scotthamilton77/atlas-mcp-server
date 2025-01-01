@@ -2,6 +2,7 @@
  * Tool definitions and handlers for LLM agent task management
  */
 import { TaskManager } from '../../task/manager/task-manager.js';
+import { TemplateManager } from '../../template/manager.js';
 import { Logger } from '../../logging/index.js';
 import { Tool, ToolResponse } from '../../types/tool.js';
 import {
@@ -15,6 +16,7 @@ import {
   clearAllTasksTool,
   vacuumDatabaseTool,
   repairRelationshipsTool,
+  createTemplateTools,
   ToolImplementation,
 } from './tools/index.js';
 
@@ -22,24 +24,29 @@ export class ToolDefinitions {
   private readonly logger: Logger;
   private readonly tools: ToolImplementation[];
 
-  constructor(taskManager: TaskManager) {
+  constructor(taskManager: TaskManager, templateManager: TemplateManager) {
     this.logger = Logger.getInstance().child({
       component: 'ToolDefinitions',
     });
 
     // Initialize all tools with context
-    const context = { taskManager, logger: this.logger };
+    const taskContext = { taskManager, logger: this.logger };
+    const templateContext = { templateManager, logger: this.logger };
+
     this.tools = [
-      createTaskTool(context),
-      updateTaskTool(context),
-      getTasksByStatusTool(context),
-      getTasksByPathTool(context),
-      getChildrenTool(context),
-      deleteTaskTool(context),
-      bulkTaskOperationsTool(context),
-      clearAllTasksTool(context),
-      vacuumDatabaseTool(context),
-      repairRelationshipsTool(context),
+      // Task tools
+      createTaskTool(taskContext),
+      updateTaskTool(taskContext),
+      getTasksByStatusTool(taskContext),
+      getTasksByPathTool(taskContext),
+      getChildrenTool(taskContext),
+      deleteTaskTool(taskContext),
+      bulkTaskOperationsTool(taskContext),
+      clearAllTasksTool(taskContext),
+      vacuumDatabaseTool(taskContext),
+      repairRelationshipsTool(taskContext),
+      // Template tools
+      ...createTemplateTools(templateContext),
     ];
   }
 

@@ -22,6 +22,9 @@ export {
   repairRelationshipsTool,
 } from './task-maintenance.js';
 
+// Template operations
+export { createTemplateTools } from './template-tools.js';
+
 // Shared utilities
 export * from './shared/response-formatter.js';
 export * from './shared/types.js';

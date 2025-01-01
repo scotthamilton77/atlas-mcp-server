@@ -2,6 +2,7 @@
  * Path-based task management tools handler
  */
 import { TaskManager } from '../task/manager/task-manager.js';
+import { TemplateManager } from '../template/manager.js';
 import { Logger } from '../logging/index.js';
 import { ErrorCodes, createError } from '../errors/index.js';
 import { Tool, ToolResponse } from './types.js';
@@ -16,7 +17,10 @@ export class ToolHandler {
   > = new Map();
   private readonly toolDefinitions: ToolDefinitions;
 
-  constructor(private readonly taskManager: TaskManager) {
+  constructor(
+    private readonly taskManager: TaskManager,
+    templateManager: TemplateManager
+  ) {
     this.logger = Logger.getInstance().child({
       component: 'ToolHandler',
       context: {
@@ -24,7 +28,7 @@ export class ToolHandler {
       },
     });
 
-    this.toolDefinitions = new ToolDefinitions(taskManager);
+    this.toolDefinitions = new ToolDefinitions(taskManager, templateManager);
     this.registerTools();
 
     this.logger.info('Tool registration completed', {

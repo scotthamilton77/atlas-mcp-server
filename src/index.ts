@@ -8,6 +8,8 @@ import { join } from 'path';
 import { PlatformPaths, PlatformCapabilities, ProcessManager } from './utils/platform-utils.js';
 import { LogLevels } from './types/logging.js';
 import { ToolHandler } from './tools/handler.js';
+import { TemplateManager } from './template/manager.js';
+import { SqliteTemplateStorage } from './storage/sqlite/template-storage.js';
 
 async function main(): Promise<void> {
   let logger: Logger | undefined;
@@ -20,10 +22,12 @@ async function main(): Promise<void> {
       process.env.ATLAS_STORAGE_DIR || join(documentsDir, 'Cline', 'mcp-workspace', 'ATLAS');
     const logDir = join(baseDir, 'logs');
     const dataDir = join(baseDir, 'data');
+    const templateDir = join(baseDir, 'templates');
 
     // Create directories with platform-appropriate permissions
     await PlatformCapabilities.ensureDirectoryPermissions(logDir, 0o755);
     await PlatformCapabilities.ensureDirectoryPermissions(dataDir, 0o755);
+    await PlatformCapabilities.ensureDirectoryPermissions(templateDir, 0o755);
 
     // Initialize logger with comprehensive file logging
     logger = await Logger.initialize({
@@ -50,6 +54,7 @@ async function main(): Promise<void> {
             base: baseDir,
             logs: logDir,
             data: dataDir,
+            templates: templateDir,
           },
           environment: process.env.NODE_ENV || 'development',
           nodeVersion: process.version,
@@ -111,13 +116,25 @@ async function main(): Promise<void> {
       // Initialize task manager
       const taskManager = await TaskManager.getInstance(storage);
 
+      // Initialize template storage and manager
+      const templateStorage = new SqliteTemplateStorage(storage, logger);
+      await templateStorage.initialize();
+
+      const templateManager = new TemplateManager(templateStorage, taskManager, logger);
+      await templateManager.initialize(templateDir);
+
       // Register task manager cleanup
       ProcessManager.registerCleanupHandler(async () => {
         await taskManager.close();
       });
 
+      // Register template manager cleanup
+      ProcessManager.registerCleanupHandler(async () => {
+        await templateManager.close();
+      });
+
       // Initialize tool handler
-      const toolHandler = new ToolHandler(taskManager);
+      const toolHandler = new ToolHandler(taskManager, templateManager);
 
       // Run maintenance
       await storage.vacuum();
