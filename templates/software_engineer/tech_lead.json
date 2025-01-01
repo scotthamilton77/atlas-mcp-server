@@ -1,5 +1,5 @@
 {
-  "id": "llm-tech-lead",
+  "id": "software_engineer/tech_lead",
   "name": "LLM Technical Team Lead Agent",
   "description": "Task template for LLM agents performing technical leadership and team coordination",
   "version": "1.0.0",

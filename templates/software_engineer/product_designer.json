@@ -1,5 +1,5 @@
 {
-  "id": "llm-product-designer",
+  "id": "software_engineer/product_designer",
   "name": "LLM Product Designer Agent",
   "description": "Task template for LLM agents performing product design and user research roles",
   "version": "1.0.0",

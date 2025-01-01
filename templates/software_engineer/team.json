@@ -1,5 +1,5 @@
 {
-  "id": "llm-software-team",
+  "id": "software_engineer/team",
   "name": "LLM Software Engineering Team",
   "description": "Coordinated team of LLM agents performing specialized software engineering roles",
   "version": "1.0.0",
@@ -61,7 +61,7 @@
       "metadata": {
         "priority": "high",
         "tags": ["product-design", "research"],
-        "template": "llm-product-designer",
+        "template": "software_engineer/product_designer",
         "variables": {
           "targetAudience": "determined_from_requirements"
         }
@@ -76,7 +76,7 @@
       "metadata": {
         "priority": "high",
         "tags": ["architecture", "design"],
-        "template": "llm-system-architect",
+        "template": "software_engineer/system_architect",
         "variables": {
           "scalingRequirements": "${teamScale}",
           "securityLevel": "${securityLevel}"
@@ -92,7 +92,7 @@
       "metadata": {
         "priority": "high",
         "tags": ["security", "compliance"],
-        "template": "llm-security-engineer",
+        "template": "software_engineer/security_engineer",
         "variables": {
           "complianceFrameworks": "${complianceFrameworks}",
           "dataClassification": "derived_from_security_level"
@@ -108,7 +108,7 @@
       "metadata": {
         "priority": "high",
         "tags": ["devops", "automation"],
-        "template": "llm-devops-engineer",
+        "template": "software_engineer/devops_engineer",
         "variables": {
           "deploymentEnvironments": "development,staging,production",
           "infrastructureType": "determined_from_architecture"
@@ -124,7 +124,7 @@
       "metadata": {
         "priority": "high",
         "tags": ["development", "quality"],
-        "template": "llm-tech-lead",
+        "template": "software_engineer/tech_lead",
         "variables": {
           "teamSize": "derived_from_scale",
           "developmentMethodology": "${developmentMethodology}"

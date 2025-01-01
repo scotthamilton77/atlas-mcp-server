@@ -1,5 +1,5 @@
 {
-  "id": "llm-security-engineer",
+  "id": "software_engineer/security_engineer",
   "name": "LLM Security Engineer Agent",
   "description": "Task template for LLM agents performing security engineering and implementation",
   "version": "1.0.0",

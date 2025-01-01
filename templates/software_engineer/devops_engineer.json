@@ -1,5 +1,5 @@
 {
-  "id": "llm-devops-engineer",
+  "id": "software_engineer/devops_engineer",
   "name": "LLM DevOps Engineer Agent",
   "description": "Task template for LLM agents performing DevOps and infrastructure automation",
   "version": "1.0.0",

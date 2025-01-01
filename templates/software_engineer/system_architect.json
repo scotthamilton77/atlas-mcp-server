@@ -1,5 +1,5 @@
 {
-  "id": "llm-system-architect",
+  "id": "software_engineer/system_architect",
   "name": "LLM System Architect Agent",
   "description": "Task template for LLM agents performing system architecture and technical design",
   "version": "1.0.0",

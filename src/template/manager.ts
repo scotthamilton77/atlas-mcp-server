@@ -244,21 +244,21 @@ export class TemplateManager {
   async instantiateTemplate(options: TemplateInstantiationOptions): Promise<void> {
     const template = await this.getTemplate(options.templateId);
 
-    // Validate all required variables are provided
-    const missingVars = template.variables
-      .filter(v => v.required && !(v.name in options.variables))
-      .map(v => v.name);
-
-    if (missingVars.length) {
-      throw new Error(`Missing required variables: ${missingVars.join(', ')}`);
-    }
-
     // Combine provided variables with defaults
     const variables = { ...options.variables };
     for (const v of template.variables) {
       if (!(v.name in variables) && 'default' in v) {
         variables[v.name] = v.default;
       }
+    }
+
+    // Validate all required variables are provided (after applying defaults)
+    const missingVars = template.variables
+      .filter(v => v.required && !(v.name in variables))
+      .map(v => v.name);
+
+    if (missingVars.length) {
+      throw new Error(`Missing required variables: ${missingVars.join(', ')}`);
     }
 
     // Create tasks
@@ -322,12 +322,14 @@ export class TemplateManager {
 
   // Resource-related methods
   async listTemplateResources(): Promise<Resource[]> {
-    return [{
-      uri: 'templates://current',
-      name: 'Available Templates',
-      description: 'List of all available task templates with their metadata and variables',
-      mimeType: 'application/json'
-    }];
+    return [
+      {
+        uri: 'templates://current',
+        name: 'Available Templates',
+        description: 'List of all available task templates with their metadata and variables',
+        mimeType: 'application/json',
+      },
+    ];
   }
 
   async getTemplateResource(uri: string): Promise<Resource> {
@@ -337,10 +339,8 @@ export class TemplateManager {
 
     // Get full template details for each template
     const templateInfos = await this.listTemplates();
-    const fullTemplates = await Promise.all(
-      templateInfos.map(info => this.getTemplate(info.id))
-    );
-    
+    const fullTemplates = await Promise.all(templateInfos.map(info => this.getTemplate(info.id)));
+
     const templateOverview = {
       timestamp: new Date().toISOString(),
       totalTemplates: fullTemplates.length,
@@ -353,24 +353,27 @@ export class TemplateManager {
           name: v.name,
           description: v.description,
           required: v.required,
-          default: v.default
-        }))
-      }))
+          default: v.default,
+        })),
+      })),
     };
 
     return {
       uri,
       name: 'Available Templates',
       mimeType: 'application/json',
-      text: JSON.stringify(templateOverview, null, 2)
+      text: JSON.stringify(templateOverview, null, 2),
     };
   }
 
   async getResourceTemplates(): Promise<ResourceTemplate[]> {
-    return [];  // No dynamic templates needed since we use a single resource
+    return []; // No dynamic templates needed since we use a single resource
   }
 
-  async resolveResourceTemplate(_template: string, _vars: Record<string, string>): Promise<Resource> {
+  async resolveResourceTemplate(
+    _template: string,
+    _vars: Record<string, string>
+  ): Promise<Resource> {
     throw new Error('Resource templates not supported - use templates://current instead');
   }
 }
