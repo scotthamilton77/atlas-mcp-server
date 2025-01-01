@@ -67,24 +67,36 @@ Example:
         },
         updates: {
           type: 'object',
-          description: `Changes to apply to the task. Available fields:
-- title: Update task name to reflect current focus
-- description: Update details with latest findings/requirements
-- type: Change task classification (TASK/MILESTONE)
-- status: Update execution state with automatic dependency checks
-- parentPath: Move task in hierarchy
-- dependencies: Add/remove task dependencies
-- metadata: Update task tracking information
-- planningNotes: Planning and preparation notes
-- progressNotes: Implementation progress notes
-- completionNotes: Task completion notes
-- troubleshootingNotes: Issue resolution notes
+          description: `Changes to apply to the task. Field constraints:
+- title: Task name (max 200 chars)
+- description: Task details (max 2000 chars)
+- type: TASK/MILESTONE classification
+- status: Task state with validation rules
+- parentPath: Parent task path (max 1000 chars, 10 levels)
+- dependencies: Required tasks (max 50)
+- metadata: Task tracking fields:
+  - priority: low/medium/high
+  - tags: max 100 tags, each max 100 chars
+  - reasoning: max 2000 chars
+  - tools_used: max 100 entries
+  - resources_accessed: max 100 entries
+  - context_used: max 100 entries, each max 1000 chars
+  - technical_requirements: implementation details
+  - acceptance_criteria: validation points
+  - status_tracking: timestamps, block reasons
+  - version_control: version numbers, states
+- notes: Each category max 100 notes, each note max 1000 chars
+  - planningNotes: Planning and preparation
+  - progressNotes: Implementation progress
+  - completionNotes: Completion details
+  - troubleshootingNotes: Issue resolution
 
 Status changes trigger:
 - Automatic dependency validation
 - Status propagation to parent tasks
 - Dependent task blocking
-- Child task status updates`,
+- Child task status updates
+- Validation of all constraints`,
           properties: {
             title: {
               type: 'string',

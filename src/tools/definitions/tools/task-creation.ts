@@ -44,16 +44,17 @@ Parent-Child Rules:
         path: {
           type: 'string',
           description:
-            'Hierarchical path (e.g., "project/backend/auth"). Use forward slashes to indicate task hierarchy.',
+            'Hierarchical path (e.g., "project/backend/auth"). Max length 1000 chars, max depth 10 levels. Must be alphanumeric with -_/ characters. Use forward slashes to indicate task hierarchy.',
         },
         title: {
           type: 'string',
-          description: 'Clear, action-oriented title describing the task objective.',
+          description:
+            'Clear, action-oriented title describing the task objective. Max length 200 chars.',
         },
         description: {
           type: 'string',
           description:
-            'Detailed explanation including context, requirements, and success criteria.',
+            'Detailed explanation including context, requirements, and success criteria. Max length 2000 chars.',
         },
         type: {
           type: 'string',
@@ -76,27 +77,28 @@ Parent-Child Rules:
         metadata: {
           type: 'object',
           description:
-            'Additional task context and tracking information:\n- priority: Task urgency (low/medium/high)\n- tags: Keywords for categorization\n- reasoning: Document decision rationale\n- technical_requirements: Specific implementation needs\n- acceptance_criteria: Success validation points',
+            'Additional task context and tracking information:\n- priority: Task urgency (low/medium/high)\n- tags: Keywords for categorization (max 100 tags, each max 100 chars)\n- reasoning: Document decision rationale (max 2000 chars)\n- tools_used: Track tool usage (max 100 entries)\n- resources_accessed: Track resource access (max 100 entries)\n- context_used: Contextual information (max 100 entries, each max 1000 chars)\n- technical_requirements: Implementation needs\n- acceptance_criteria: Success validation points\n- status_tracking: Timestamps, block reasons\n- version_control: Version numbers, previous states',
         },
         planningNotes: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Initial planning notes for the task',
+          description: 'Initial planning notes for the task. Max 100 notes, each max 1000 chars.',
         },
         progressNotes: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Progress tracking notes',
+          description: 'Progress tracking notes. Max 100 notes, each max 1000 chars.',
         },
         completionNotes: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Task completion notes',
+          description: 'Task completion notes. Max 100 notes, each max 1000 chars.',
         },
         troubleshootingNotes: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Notes about issues and their resolution',
+          description:
+            'Notes about issues and their resolution. Max 100 notes, each max 1000 chars.',
         },
       },
       required: ['path', 'title'],

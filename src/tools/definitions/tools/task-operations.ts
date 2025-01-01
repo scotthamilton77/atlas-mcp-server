@@ -94,33 +94,45 @@ Example:
       properties: {
         operations: {
           type: 'array',
-          description: `Sequence of atomic task operations:
-Operations execute in dependency order and roll back on failure.
-Each operation must include:
-- type: Operation type (create/update/delete)
-- path: Target task path
-- data: Operation-specific data
+          description: `Sequence of atomic task operations with validation:
 
-Create operations support:
-- title: Task name (required)
-- description: Task details
+Operation Constraints:
+- Path: max length 1000 chars, max depth 10 levels
+- Dependencies: max 50 per task
+- Notes: max 100 per category, each max 1000 chars
+- Metadata fields: max 100 entries each
+
+Create Operations:
+- title: Task name (required, max 200 chars)
+- description: Task details (max 2000 chars)
 - type: TASK/MILESTONE
-- dependencies: Required tasks
-- planningNotes: Planning and preparation notes
-- progressNotes: Implementation progress notes
-- completionNotes: Task completion notes
-- troubleshootingNotes: Issue resolution notes
-- metadata: Additional context
+- dependencies: Required tasks (max 50)
+- metadata: Task tracking fields:
+  - priority: low/medium/high
+  - tags: max 100 tags, each max 100 chars
+  - reasoning: max 2000 chars
+  - tools_used: max 100 entries
+  - resources_accessed: max 100 entries
+  - context_used: max 100 entries, each max 1000 chars
+- notes: Each category max 100 notes, each max 1000 chars
 
-Update operations support:
-- All task fields can be modified
+Update Operations:
+- Same field constraints as create
 - Status changes validate dependencies
-- Moving tasks updates relationships
+- Parent-child relationships enforced
+- Metadata schema validated
+- Note limits enforced
 
-Delete operations:
-- Remove task and all children
-- Update dependent task references
-Note: Operations are atomic - all succeed or all fail`,
+Delete Operations:
+- Cascades to all child tasks
+- Updates dependent references
+- Validates relationship integrity
+
+Execution:
+- Operations processed in dependency order
+- Full transaction rollback on failure
+- Retry mechanism: 3 retries, 1s delay
+- Atomic - all succeed or all fail`,
           items: {
             type: 'object',
             properties: {
@@ -163,10 +175,12 @@ Delete: No additional data needed`,
         reasoning: {
           type: 'string',
           description: `Explanation for bulk operation. Best practices:
-- Document overall goal
+- Document overall goal and rationale
 - Explain relationships between operations
-- Note impact on existing tasks
-- Record migration details if applicable`,
+- Note impact on existing tasks and dependencies
+- Record migration details and backup locations
+- Include validation and testing strategy
+- Document rollback procedures if needed`,
         },
       },
       required: ['operations'],
