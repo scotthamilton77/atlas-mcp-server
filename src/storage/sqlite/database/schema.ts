@@ -38,7 +38,6 @@ export const SCHEMA: SqliteSchema = {
       updated_at INTEGER NOT NULL,
       status_metadata TEXT,
       metadata TEXT,
-      notes TEXT,
       planning_notes TEXT,
       progress_notes TEXT,
       completion_notes TEXT,

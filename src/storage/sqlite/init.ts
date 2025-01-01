@@ -4,6 +4,7 @@ import { Logger } from '../../logging/index.js';
 import { SqliteErrorHandler } from './error-handler.js';
 import { createConfig } from './config.js';
 import { SqliteConnection } from './database/connection.js';
+import { PlatformCapabilities } from '../../utils/platform-utils.js';
 
 /**
  * Create a new SQLite storage instance
@@ -45,10 +46,10 @@ export async function createStorage(config: StorageConfig): Promise<SqliteStorag
     const dbPath = path.join(storageDir, `${name}.db`);
 
     try {
-      // Create directory with explicit permissions
+      // Create directory with platform-appropriate permissions
       await fs.mkdir(storageDir, {
         recursive: true,
-        mode: 0o755, // rwxr-xr-x
+        mode: PlatformCapabilities.getDefaultMode(),
       });
 
       // Verify directory permissions
@@ -98,6 +99,9 @@ export async function createStorage(config: StorageConfig): Promise<SqliteStorag
       throw error;
     }
 
+    // Get platform-specific SQLite settings
+    const platformSqlite = PlatformCapabilities.getSqliteConfig();
+
     const sqliteConfig = createConfig({
       path: dbPath,
       baseDir,
@@ -113,8 +117,9 @@ export async function createStorage(config: StorageConfig): Promise<SqliteStorag
         checkpointInterval: config.performance?.checkpointInterval ?? 30000,
         cacheSize: config.performance?.cacheSize ?? 8000,
         mmapSize: config.performance?.mmapSize ?? 67108864,
-        pageSize: config.performance?.pageSize ?? 4096,
+        pageSize: config.performance?.pageSize ?? platformSqlite.pageSize,
         maxMemory: config.performance?.maxMemory ?? 134217728,
+        sharedMemory: platformSqlite.sharedMemory,
       },
     });
 

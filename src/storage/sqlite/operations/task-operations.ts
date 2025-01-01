@@ -56,14 +56,11 @@ export class TaskOperations {
         // Status metadata
         statusMetadata: input.statusMetadata || {},
 
-        // Note categories
+        // Note categories - ensure arrays are initialized
         planningNotes: input.planningNotes || [],
         progressNotes: input.progressNotes || [],
         completionNotes: input.completionNotes || [],
         troubleshootingNotes: input.troubleshootingNotes || [],
-
-        // Legacy notes field
-        notes: input.notes || [],
 
         // User metadata
         metadata: input.metadata || {},
@@ -132,9 +129,8 @@ export class TaskOperations {
         },
         // Ensure arrays are initialized
         dependencies: updates.dependencies || existingTask.dependencies,
-        notes: updates.notes || existingTask.notes,
 
-        // Note categories
+        // Note categories - preserve existing notes if not updated
         planningNotes: updates.planningNotes || existingTask.planningNotes,
         progressNotes: updates.progressNotes || existingTask.progressNotes,
         completionNotes: updates.completionNotes || existingTask.completionNotes,
@@ -558,10 +554,10 @@ export class TaskOperations {
       INSERT OR REPLACE INTO tasks (
         id, path, name, description, type, status,
         parent_path, reasoning, project_path,
-        metadata, status_metadata, notes,
+        metadata, status_metadata,
         planning_notes, progress_notes, completion_notes, troubleshooting_notes,
         created_at, updated_at, version
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     await db.run(sql, [
@@ -576,7 +572,6 @@ export class TaskOperations {
       task.projectPath,
       JSON.stringify(task.metadata),
       JSON.stringify(task.statusMetadata),
-      JSON.stringify(task.notes),
       JSON.stringify(task.planningNotes),
       JSON.stringify(task.progressNotes),
       JSON.stringify(task.completionNotes),
@@ -671,9 +666,6 @@ export class TaskOperations {
       parentPath: row.parent_path ? String(row.parent_path) : undefined,
       reasoning: row.reasoning ? String(row.reasoning) : undefined,
       dependencies: this.parseJSON<string[]>(String(row.dependencies || '[]'), []),
-
-      // Legacy notes field
-      notes: this.parseJSON<string[]>(String(row.notes || '[]'), []),
 
       // Status metadata
       statusMetadata: this.parseJSON(String(row.status_metadata || '{}'), {}),

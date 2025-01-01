@@ -1,4 +1,5 @@
 import { StorageConfig } from '../../types/storage.js';
+import { PlatformCapabilities } from '../../utils/platform-utils.js';
 
 // Default configuration values
 export const DEFAULT_PAGE_SIZE = 4096;
@@ -27,6 +28,7 @@ export interface SqliteConfig extends StorageConfig {
   maxPageCount: number;
   tempStore: 'default' | 'file' | 'memory';
   mmap: boolean;
+  sharedMemory: boolean;
 
   // Access mode
   readonly: boolean;
@@ -68,10 +70,11 @@ export const DEFAULT_CONFIG: Required<SqliteConfig> = {
 
   // Cache settings
   cacheSize: 2000,
-  pageSize: 4096,
+  pageSize: 4096, // Will be overridden by platform-specific settings
   maxPageCount: 1000000,
   tempStore: 'memory',
   mmap: true,
+  sharedMemory: false, // Will be overridden by platform-specific settings
 
   // Access mode
   readonly: false,
@@ -81,8 +84,17 @@ export const DEFAULT_CONFIG: Required<SqliteConfig> = {
  * Create SQLite configuration with defaults
  */
 export function createConfig(config: Partial<SqliteConfig> = {}): Required<SqliteConfig> {
-  return {
+  // Get platform-specific SQLite settings for dynamic defaults
+  const platformSqlite = PlatformCapabilities.getSqliteConfig();
+
+  const defaultConfig = {
     ...DEFAULT_CONFIG,
+    pageSize: platformSqlite.pageSize,
+    sharedMemory: platformSqlite.sharedMemory,
+  };
+
+  return {
+    ...defaultConfig,
     ...config,
   };
 }
