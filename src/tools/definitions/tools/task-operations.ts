@@ -36,6 +36,10 @@ Example:
         "title": "Implement OAuth2 Authentication",
         "type": "MILESTONE",
         "description": "Replace JWT auth with OAuth2 implementation",
+        "planningNotes": [
+          "Research OAuth2 providers",
+          "Define integration requirements"
+        ],
         "metadata": {
           "reasoning": "OAuth2 provides better security and standardization"
         }
@@ -47,6 +51,10 @@ Example:
       "data": {
         "title": "Configure OAuth2 Providers",
         "dependencies": ["project/backend/oauth2"],
+        "planningNotes": [
+          "List required OAuth2 providers",
+          "Document configuration requirements"
+        ],
         "metadata": {
           "reasoning": "Provider setup required before implementation"
         }
@@ -57,6 +65,9 @@ Example:
       "path": "project/backend/auth",
       "data": {
         "status": "CANCELLED",
+        "completionNotes": [
+          "Functionality replaced by OAuth2 implementation"
+        ],
         "metadata": {
           "reasoning": "Replaced by OAuth2 implementation"
         }
@@ -82,6 +93,10 @@ Create operations support:
 - description: Task details
 - type: TASK/MILESTONE
 - dependencies: Required tasks
+- planningNotes: Planning and preparation notes
+- progressNotes: Implementation progress notes
+- completionNotes: Task completion notes
+- troubleshootingNotes: Issue resolution notes
 - metadata: Additional context
 
 Update operations support:
@@ -121,6 +136,10 @@ Create/Update fields:
 - type: TASK/MILESTONE
 - status: Task state
 - dependencies: Required tasks
+- planningNotes: Planning notes
+- progressNotes: Progress notes
+- completionNotes: Completion notes
+- troubleshootingNotes: Troubleshooting notes
 - metadata: Additional context
 Delete: No additional data needed`,
               },
@@ -183,7 +202,10 @@ Delete: No additional data needed`,
               dependencies: (op.data?.dependencies as string[]) || [],
               metadata: (op.data?.metadata as Record<string, unknown>) || {},
               statusMetadata: {},
-              notes: [],
+              planningNotes: Array.isArray(op.data?.planningNotes) ? op.data.planningNotes as string[] : [],
+              progressNotes: Array.isArray(op.data?.progressNotes) ? op.data.progressNotes as string[] : [],
+              completionNotes: Array.isArray(op.data?.completionNotes) ? op.data.completionNotes as string[] : [],
+              troubleshootingNotes: Array.isArray(op.data?.troubleshootingNotes) ? op.data.troubleshootingNotes as string[] : [],
             });
             break;
           }
@@ -210,11 +232,10 @@ Delete: No additional data needed`,
               dependencies: existingTask.dependencies,
               metadata: { ...existingTask.metadata },
               statusMetadata: { ...existingTask.statusMetadata },
-              notes: existingTask.notes,
-              planningNotes: existingTask.planningNotes,
-              progressNotes: existingTask.progressNotes,
-              completionNotes: existingTask.completionNotes,
-              troubleshootingNotes: existingTask.troubleshootingNotes,
+              planningNotes: [...existingTask.planningNotes],
+              progressNotes: [...existingTask.progressNotes],
+              completionNotes: [...existingTask.completionNotes],
+              troubleshootingNotes: [...existingTask.troubleshootingNotes],
             };
 
             // Apply updates only if they are provided
@@ -232,6 +253,18 @@ Delete: No additional data needed`,
             }
             if (Array.isArray(op.data?.dependencies)) {
               updateData.dependencies = op.data.dependencies as string[];
+            }
+            if (Array.isArray(op.data?.planningNotes)) {
+              updateData.planningNotes = op.data.planningNotes as string[];
+            }
+            if (Array.isArray(op.data?.progressNotes)) {
+              updateData.progressNotes = op.data.progressNotes as string[];
+            }
+            if (Array.isArray(op.data?.completionNotes)) {
+              updateData.completionNotes = op.data.completionNotes as string[];
+            }
+            if (Array.isArray(op.data?.troubleshootingNotes)) {
+              updateData.troubleshootingNotes = op.data.troubleshootingNotes as string[];
             }
             if (op.data?.metadata) {
               updateData.metadata = {

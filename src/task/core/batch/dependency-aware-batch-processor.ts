@@ -1,7 +1,7 @@
 import { Task, TaskStatus } from '../../../types/task.js';
 import { BatchData, BatchResult, ValidationResult } from './common/batch-utils.js';
 import { BaseBatchProcessor, BatchDependencies, BatchOptions } from './base-batch-processor.js';
-import { detectDependencyCycle } from '../../validation/index.js';
+import { TaskValidators } from '../../validation/validators/index.js';
 
 interface TaskBatchData extends BatchData {
   task: Task;
@@ -10,12 +10,14 @@ interface TaskBatchData extends BatchData {
 
 export class DependencyAwareBatchProcessor extends BaseBatchProcessor {
   private dependencyGraph: Record<string, Set<string>> = {};
+  private readonly validators: TaskValidators;
 
   constructor(dependencies: BatchDependencies, options: BatchOptions = {}) {
     super(dependencies, {
       ...options,
       validateBeforeProcess: true, // Always validate dependencies
     });
+    this.validators = new TaskValidators();
   }
 
   protected async validate(batch: BatchData[]): Promise<ValidationResult> {
@@ -46,10 +48,10 @@ export class DependencyAwareBatchProcessor extends BaseBatchProcessor {
         }
       }
 
-      // Check for circular dependencies using shared validation
+      // Check for circular dependencies using validators
       for (const taskData of tasks) {
         try {
-          const hasCycle = await detectDependencyCycle(
+          const hasCycle = await this.validators.detectDependencyCycle(
             taskData.task,
             taskData.dependencies,
             this.dependencies.storage.getTask.bind(this.dependencies.storage)

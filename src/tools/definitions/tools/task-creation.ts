@@ -1,52 +1,27 @@
 import { TaskType } from '../../../types/task.js';
-import { ToolFactory, ToolImplementation } from './shared/types.js';
-import { formatResponse } from './shared/response-formatter.js';
+import { TaskManager } from '../../../task/manager/task-manager.js';
+import { Logger } from '../../../logging/index.js';
+import { Tool, ToolResponse } from '../../../types/tool.js';
+import { ToolImplementation } from './index.js';
+
+interface ToolContext {
+  taskManager: TaskManager;
+  logger: Logger;
+}
 
 /**
  * Create task tool implementation
  */
-export const createTaskTool: ToolFactory = (context): ToolImplementation => ({
-  definition: {
+export function createTaskTool(context: ToolContext): ToolImplementation {
+  const definition: Tool = {
     name: 'create_task',
-    description: `Create a new task in the hierarchical task system.
-
-When to Use:
-- Starting a new work item or project phase
-- Breaking down complex tasks into subtasks
-- Creating milestones for project organization
-
-Best Practices:
-- Use clear, descriptive paths that reflect task hierarchy
-- Set appropriate task type (TASK for work items, MILESTONE for organization)
-- Define dependencies to ensure proper execution order
-- Include detailed metadata for better organization
-- Document reasoning in metadata for decision tracking
-
-Example:
-{
-  "path": "project/backend/auth",
-  "title": "Implement JWT Authentication",
-  "type": "TASK",
-  "description": "Add JWT-based authentication system for API security",
-  "dependencies": ["project/backend/database"],
-  "metadata": {
-    "priority": "high",
-    "tags": ["security", "api"],
-    "reasoning": "JWT authentication is required to secure API endpoints and enable user-specific functionality. This task depends on database setup to store user credentials and token information.",
-    "technical_requirements": [
-      "Use industry-standard JWT library",
-      "Implement token refresh mechanism",
-      "Add rate limiting for auth endpoints"
-    ]
-  }
-}`,
+    description: 'Create a new task in the hierarchical task system.',
     inputSchema: {
       type: 'object',
       properties: {
         path: {
           type: 'string',
-          description:
-            'Hierarchical path (e.g., "project/backend/auth"). Use forward slashes to indicate task hierarchy.',
+          description: 'Hierarchical path (e.g., "project/backend/auth"). Use forward slashes to indicate task hierarchy.',
         },
         title: {
           type: 'string',
@@ -54,8 +29,7 @@ Example:
         },
         description: {
           type: 'string',
-          description:
-            'Detailed explanation including context, requirements, and success criteria.',
+          description: 'Detailed explanation including context, requirements, and success criteria.',
         },
         type: {
           type: 'string',
@@ -69,34 +43,77 @@ Example:
         },
         dependencies: {
           type: 'array',
-          items: { type: 'string' },
-          description:
-            'Paths of tasks that must be completed first. Tasks will be blocked until dependencies are met.',
+          items: {
+            type: 'string',
+          },
+          description: 'Paths of tasks that must be completed first. Tasks will be blocked until dependencies are met.',
         },
         metadata: {
           type: 'object',
-          description: `Additional task context and tracking information:
-- priority: Task urgency (low/medium/high)
-- tags: Keywords for categorization
-- reasoning: Document decision rationale
-- technical_requirements: Specific implementation needs
-- acceptance_criteria: Success validation points`,
+          description: 'Additional task context and tracking information:\n- priority: Task urgency (low/medium/high)\n- tags: Keywords for categorization\n- reasoning: Document decision rationale\n- technical_requirements: Specific implementation needs\n- acceptance_criteria: Success validation points',
+        },
+        planningNotes: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Initial planning notes for the task',
+        },
+        progressNotes: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Progress tracking notes',
+        },
+        completionNotes: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Task completion notes',
+        },
+        troubleshootingNotes: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Notes about issues and their resolution',
         },
       },
       required: ['path', 'title'],
     },
-  },
-  handler: async (args: Record<string, unknown>) => {
-    const result = await context.taskManager.createTask({
-      path: args.path as string,
-      name: args.title as string,
-      type: args.type ? ((args.type as string).toUpperCase() as TaskType) : TaskType.TASK,
-      description: args.description as string | undefined,
-      dependencies: Array.isArray(args.dependencies) ? (args.dependencies as string[]) : [],
-      metadata: (args.metadata as Record<string, unknown>) || {},
+  };
+
+  const handler = async (args: Record<string, unknown>): Promise<ToolResponse> => {
+    const { taskManager } = context;
+
+    const task = await taskManager.createTask({
+      // Required fields
+      path: String(args.path),
+      name: String(args.title),
+      type: (args.type as TaskType) || TaskType.TASK,
+
+      // Optional fields
+      description: args.description ? String(args.description) : undefined,
+      parentPath: args.parentPath ? String(args.parentPath) : undefined,
+      dependencies: Array.isArray(args.dependencies) ? args.dependencies.map(String) : [],
+
+      // Note categories
+      planningNotes: Array.isArray(args.planningNotes) ? args.planningNotes.map(String) : [],
+      progressNotes: Array.isArray(args.progressNotes) ? args.progressNotes.map(String) : [],
+      completionNotes: Array.isArray(args.completionNotes) ? args.completionNotes.map(String) : [],
+      troubleshootingNotes: Array.isArray(args.troubleshootingNotes) ? args.troubleshootingNotes.map(String) : [],
+
+      // Metadata
+      metadata: args.metadata || {},
       statusMetadata: {},
-      notes: [],
     });
-    return formatResponse(result, context.logger);
-  },
-});
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(task, null, 2),
+        },
+      ],
+    };
+  };
+
+  return {
+    definition,
+    handler,
+  };
+}

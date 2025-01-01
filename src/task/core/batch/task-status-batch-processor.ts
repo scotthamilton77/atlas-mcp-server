@@ -1,171 +1,139 @@
 import { Task, TaskStatus } from '../../../types/task.js';
-import { BatchData, BatchResult, ValidationResult, TaskBatchData } from './common/batch-utils.js';
+import { BatchData, BatchResult, ValidationResult } from './common/batch-utils.js';
 import { BaseBatchProcessor, BatchDependencies, BatchOptions } from './base-batch-processor.js';
-import { validateTaskStatusTransition } from '../../validation/index.js';
+import { TaskValidators } from '../../validation/validators/index.js';
 
-export interface TaskStatusBatchConfig extends BatchOptions {
-  updateDependents?: boolean;
+interface StatusBatchData extends BatchData {
+  task: Task;
+  newStatus: TaskStatus;
 }
 
-export class TaskStatusBatchProcessor extends BaseBatchProcessor<Task> {
-  private readonly config: Required<TaskStatusBatchConfig> & Required<BatchOptions>;
+export class TaskStatusBatchProcessor extends BaseBatchProcessor {
+  private readonly validators: TaskValidators;
 
-  constructor(dependencies: BatchDependencies, config: TaskStatusBatchConfig = {}) {
-    super(dependencies, config);
-    this.config = Object.assign(
-      {},
-      this.defaultOptions,
-      {
-        updateDependents: true,
-      },
-      config
-    ) as Required<TaskStatusBatchConfig> & Required<BatchOptions>;
+  constructor(dependencies: BatchDependencies, options: BatchOptions = {}) {
+    super(dependencies, {
+      ...options,
+      validateBeforeProcess: true, // Always validate status transitions
+    });
+    this.validators = new TaskValidators();
   }
 
   protected async validate(batch: BatchData[]): Promise<ValidationResult> {
     const errors: string[] = [];
-    const tasks = batch.map(item => (item as TaskBatchData).data);
+    const tasks = batch as StatusBatchData[];
 
-    if (!Array.isArray(batch)) {
-      errors.push('Batch must be an array');
-      return { valid: false, errors };
-    }
-
-    if (batch.length === 0) {
-      errors.push('Batch cannot be empty');
-      return { valid: false, errors };
-    }
-
-    // Clear any stale cache entries before validation
-    if ('clearCache' in this.dependencies.storage) {
-      await (this.dependencies.storage as any).clearCache();
-    }
-
-    // First pass: validate all status transitions
-    for (const task of tasks) {
-      const newStatus = task.metadata?.newStatus as TaskStatus;
-
-      if (!newStatus) {
-        errors.push(`Task ${task.path} is missing new status in metadata`);
-        continue;
+    try {
+      // Clear any stale cache entries before validation
+      if ('clearCache' in this.dependencies.storage) {
+        await (this.dependencies.storage as any).clearCache();
       }
 
-      try {
-        // Use shared validation utility for status transitions
-        await validateTaskStatusTransition(
-          task,
-          newStatus,
-          this.dependencies.storage.getTask.bind(this.dependencies.storage)
-        );
-      } catch (error) {
-        if (error instanceof Error) {
-          errors.push(error.message);
-        } else {
-          errors.push('Unknown validation error occurred');
+      // Validate each status transition
+      for (const task of tasks) {
+        try {
+          await this.validators.validateStatusTransition(
+            task.task,
+            task.newStatus,
+            this.dependencies.storage.getTask.bind(this.dependencies.storage)
+          );
+        } catch (error) {
+          errors.push(
+            `Invalid status transition for task ${task.task.path}: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
         }
       }
+
+      return {
+        valid: errors.length === 0,
+        errors,
+      };
+    } catch (error) {
+      this.logger.error('Status validation failed', { error });
+      errors.push(`Validation error: ${(error as Error).message}`);
+      return { valid: false, errors };
     }
-
-    // Second pass: validate parent-child status consistency
-    for (const task of tasks) {
-      const newStatus = task.metadata?.newStatus as TaskStatus;
-      if (!newStatus || !task.parentPath) continue;
-
-      const parent = await this.dependencies.storage.getTask(task.parentPath);
-      if (!parent) continue;
-
-      const siblings = await this.dependencies.storage.getSubtasks(parent.path);
-      const siblingStatuses = new Set(siblings.map((t: Task) => t.status));
-
-      // Check for invalid status combinations
-      if (newStatus === TaskStatus.COMPLETED && siblingStatuses.has(TaskStatus.BLOCKED)) {
-        errors.push(`Cannot complete task ${task.path} while sibling tasks are blocked`);
-      }
-
-      if (newStatus === TaskStatus.IN_PROGRESS && siblingStatuses.has(TaskStatus.CANCELLED)) {
-        errors.push(`Cannot start task ${task.path} while sibling tasks have failed`);
-      }
-    }
-
-    return {
-      valid: errors.length === 0,
-      errors,
-    };
   }
 
-  protected async process(batch: BatchData[]): Promise<BatchResult<Task>> {
-    const tasks = batch.map(item => (item as TaskBatchData).data);
-    const results: Task[] = [];
+  protected async process<T>(batch: BatchData[]): Promise<BatchResult<T>> {
+    const tasks = batch as StatusBatchData[];
+    const results: T[] = [];
     const errors: Error[] = [];
     const startTime = Date.now();
 
-    for (const task of tasks) {
-      try {
-        const newStatus = task.metadata?.newStatus as TaskStatus;
-        const updatedTask = await this.updateTaskStatus(task, newStatus);
-        results.push(updatedTask);
+    try {
+      for (const task of tasks) {
+        try {
+          // Process the status update
+          const result = await this.withRetry(
+            async () => this.processStatusUpdate(task),
+            `Updating status for task ${task.task.path}`
+          );
 
-        if (this.config.updateDependents) {
-          await this.updateDependentTasks(updatedTask);
-        }
-      } catch (error) {
-        errors.push(error as Error);
-        this.logger.error('Failed to update task status', {
-          error,
-          taskPath: task.path,
-          newStatus: task.metadata?.newStatus,
-        });
-      }
-    }
+          results.push(result as T);
 
-    const endTime = Date.now();
-    const result: BatchResult<Task> = {
-      results,
-      errors,
-      metadata: {
-        processingTime: endTime - startTime,
-        successCount: results.length,
-        errorCount: errors.length,
-      },
-    };
-
-    this.logMetrics(result);
-    return result;
-  }
-
-  private async updateTaskStatus(task: Task, newStatus: TaskStatus): Promise<Task> {
-    return await this.dependencies.storage.updateTask(task.path, {
-      status: newStatus,
-      metadata: {
-        ...task.metadata,
-        statusUpdatedAt: Date.now(),
-        previousStatus: task.status,
-      },
-    });
-  }
-
-  private async updateDependentTasks(task: Task): Promise<void> {
-    const dependentTasks = await this.dependencies.storage.getDependentTasks(task.path);
-
-    for (const depTask of dependentTasks) {
-      if (task.status === TaskStatus.BLOCKED || task.status === TaskStatus.CANCELLED) {
-        await this.updateTaskStatus(depTask, TaskStatus.BLOCKED);
-      } else if (task.status === TaskStatus.COMPLETED) {
-        const allDepsCompleted = await this.areAllDependenciesCompleted(depTask);
-        if (allDepsCompleted && depTask.status === TaskStatus.BLOCKED) {
-          await this.updateTaskStatus(depTask, TaskStatus.PENDING);
+          this.logger.debug('Task status updated successfully', {
+            taskPath: task.task.path,
+            oldStatus: task.task.status,
+            newStatus: task.newStatus,
+          });
+        } catch (error) {
+          this.logger.error('Failed to update task status', {
+            error,
+            taskPath: task.task.path,
+          });
+          errors.push(error as Error);
         }
       }
+
+      const endTime = Date.now();
+      const result: BatchResult<T> = {
+        results,
+        errors,
+        metadata: {
+          processingTime: endTime - startTime,
+          successCount: results.length,
+          errorCount: errors.length,
+        },
+      };
+
+      this.logMetrics(result);
+      return result;
+    } catch (error) {
+      this.logger.error('Batch processing failed', { error });
+      throw error;
     }
   }
 
-  private async areAllDependenciesCompleted(task: Task): Promise<boolean> {
-    for (const depPath of task.dependencies) {
-      const depTask = await this.dependencies.storage.getTask(depPath);
-      if (!depTask || depTask.status !== TaskStatus.COMPLETED) {
-        return false;
+  private async processStatusUpdate(task: StatusBatchData): Promise<Task> {
+    try {
+      // Re-fetch task to ensure we have latest state
+      const currentTask = await this.dependencies.storage.getTask(task.task.path);
+      if (!currentTask) {
+        throw new Error(`Task ${task.task.path} not found during processing`);
       }
+
+      // Update task status
+      const updatedTask = await this.dependencies.storage.updateTask(task.task.path, {
+        status: task.newStatus,
+        metadata: {
+          ...currentTask.metadata,
+          statusUpdated: Date.now(),
+          previousStatus: currentTask.status,
+          version: currentTask.metadata.version + 1,
+        },
+      });
+
+      return updatedTask;
+    } catch (error) {
+      this.logger.error('Failed to update task status', {
+        error,
+        taskPath: task.task.path,
+        newStatus: task.newStatus,
+      });
+      throw error;
     }
-    return true;
   }
 }

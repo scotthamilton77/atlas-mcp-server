@@ -29,12 +29,12 @@ Example:
   "path": "project/backend/auth",
   "updates": {
     "status": "IN_PROGRESS",
+    "progressNotes": [
+      "Database schema updated",
+      "JWT library integrated",
+      "Basic token generation implemented"
+    ],
     "metadata": {
-      "progress_indicators": [
-        "Database schema updated",
-        "JWT library integrated",
-        "Basic token generation implemented"
-      ],
       "reasoning": "Moving to IN_PROGRESS as database dependencies are completed and core JWT implementation has begun. Token refresh mechanism still pending.",
       "technical_notes": [
         "Using jsonwebtoken library for JWT operations",
@@ -60,6 +60,10 @@ Example:
 - parentPath: Move task in hierarchy
 - dependencies: Add/remove task dependencies
 - metadata: Update task tracking information
+- planningNotes: Planning and preparation notes
+- progressNotes: Implementation progress notes
+- completionNotes: Task completion notes
+- troubleshootingNotes: Issue resolution notes
 
 Status changes trigger:
 - Automatic dependency validation
@@ -99,6 +103,26 @@ Status changes trigger:
               items: { type: 'string' },
               description: 'Updated list of required tasks',
             },
+            planningNotes: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Planning and preparation notes',
+            },
+            progressNotes: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Implementation progress notes',
+            },
+            completionNotes: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Task completion notes',
+            },
+            troubleshootingNotes: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Issue resolution notes',
+            },
             metadata: {
               type: 'object',
               description: `Task tracking information:
@@ -134,6 +158,10 @@ Status changes trigger:
       dependencies: existingTask.dependencies,
       metadata: { ...existingTask.metadata },
       statusMetadata: { ...existingTask.statusMetadata },
+      planningNotes: [...existingTask.planningNotes],
+      progressNotes: [...existingTask.progressNotes],
+      completionNotes: [...existingTask.completionNotes],
+      troubleshootingNotes: [...existingTask.troubleshootingNotes],
     };
 
     // Apply updates only if they are provided
@@ -151,6 +179,18 @@ Status changes trigger:
     }
     if (Array.isArray(updates.dependencies)) {
       updateData.dependencies = updates.dependencies as string[];
+    }
+    if (Array.isArray(updates.planningNotes)) {
+      updateData.planningNotes = updates.planningNotes as string[];
+    }
+    if (Array.isArray(updates.progressNotes)) {
+      updateData.progressNotes = updates.progressNotes as string[];
+    }
+    if (Array.isArray(updates.completionNotes)) {
+      updateData.completionNotes = updates.completionNotes as string[];
+    }
+    if (Array.isArray(updates.troubleshootingNotes)) {
+      updateData.troubleshootingNotes = updates.troubleshootingNotes as string[];
     }
     if (updates.metadata) {
       updateData.metadata = {
