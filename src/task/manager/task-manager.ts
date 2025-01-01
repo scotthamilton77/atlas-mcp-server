@@ -1,6 +1,3 @@
-/**
- * Task manager singleton
- */
 import { Logger } from '../../logging/index.js';
 import { TaskStorage } from '../../types/storage.js';
 import { Task, TaskStatus, CreateTaskInput, UpdateTaskInput } from '../../types/task.js';
@@ -8,6 +5,7 @@ import { TaskValidator } from '../validation/task-validator.js';
 import { TaskCacheManager } from './task-cache-manager.js';
 import { TaskEventHandler } from './task-event-handler.js';
 import { TaskErrorFactory } from '../../errors/task-error.js';
+import { TaskTransactionManager } from '../core/transactions/task-transaction-manager.js';
 
 export class TaskManager {
   private static instance: TaskManager;
@@ -15,17 +13,16 @@ export class TaskManager {
   private readonly validator: TaskValidator;
   private readonly cache: TaskCacheManager;
   private readonly events: TaskEventHandler;
+  private readonly transactionManager: TaskTransactionManager;
 
   protected constructor(private readonly storage: TaskStorage) {
     this.logger = Logger.getInstance().child({ component: 'TaskManager' });
     this.validator = new TaskValidator(storage);
     this.cache = new TaskCacheManager();
     this.events = new TaskEventHandler();
+    this.transactionManager = new TaskTransactionManager(storage);
   }
 
-  /**
-   * Get task manager instance
-   */
   static async getInstance(storage?: TaskStorage): Promise<TaskManager> {
     if (!TaskManager.instance && !storage) {
       throw TaskErrorFactory.createTaskOperationError(
@@ -42,12 +39,8 @@ export class TaskManager {
     return TaskManager.instance;
   }
 
-  /**
-   * Initialize task manager
-   */
   private async initialize(): Promise<void> {
     try {
-      // Storage is already initialized in createStorage()
       this.logger.info('Task manager initialized');
     } catch (error) {
       this.logger.error('Failed to initialize task manager', { error });
@@ -59,73 +52,174 @@ export class TaskManager {
     }
   }
 
-  /**
-   * Create a new task
-   */
   async createTask(input: CreateTaskInput): Promise<Task> {
     try {
-      // Validate input
       await this.validator.validateCreate(input);
-
-      // Create task
       const task = await this.storage.createTask(input);
-
-      // Update cache
       this.cache.set(task);
-
-      // Emit event
       await this.events.emitTaskCreated(task);
-
       return task;
     } catch (error) {
-      this.logger.error('Failed to create task', {
-        error,
-        input,
-      });
+      this.logger.error('Failed to create task', { error, input });
       throw error;
     }
   }
 
-  /**
-   * Update an existing task
-   */
   async updateTask(path: string, updates: UpdateTaskInput): Promise<Task> {
     try {
-      // Validate updates
-      await this.validator.validateUpdate(path, updates);
+      const existingTask = await this.getTask(path);
+      if (!existingTask) {
+        throw TaskErrorFactory.createTaskNotFoundError('TaskManager.updateTask', path);
+      }
 
-      // Update task
-      const task = await this.storage.updateTask(path, updates);
-
-      // Update cache
-      this.cache.set(task);
-
-      // Emit event
-      await this.events.emitTaskUpdated(task);
-
-      return task;
-    } catch (error) {
-      this.logger.error('Failed to update task', {
-        error,
-        path,
-        updates,
+      return await this.transactionManager.executeUpdate(existingTask, updates, {
+        validateUpdate: () => this.validator.validateUpdate(path, updates),
+        handleDependencyUpdates: updates.dependencies
+          ? () => this.handleDependencyUpdates(existingTask, updates.dependencies!)
+          : undefined,
+        handleStatusPropagation:
+          updates.status !== undefined && updates.status !== existingTask.status
+            ? () => this.handleStatusPropagation(existingTask, existingTask.status, updates.status!)
+            : undefined,
+        validateStatusTransition:
+          updates.status !== undefined && updates.status !== existingTask.status
+            ? () =>
+                this.validator.getStatusValidationResult(
+                  existingTask,
+                  updates.status!,
+                  this.getTask.bind(this)
+                )
+            : undefined,
+        validateParentChildStatus:
+          updates.status !== undefined && updates.status !== existingTask.status
+            ? async () => {
+                const siblings = existingTask.parentPath
+                  ? await this.getChildren(existingTask.parentPath)
+                  : [];
+                return this.validator.validateParentChildStatus(
+                  existingTask,
+                  updates.status!,
+                  siblings,
+                  this.getTask.bind(this)
+                );
+              }
+            : undefined,
+        emitEvents: async (updatedTask: Task) => {
+          if (updates.status !== undefined && updates.status !== existingTask.status) {
+            await this.events.emitTaskStatusChanged(
+              updatedTask,
+              existingTask.status,
+              updates.status,
+              {
+                reason: 'dependency_update',
+                oldStatus: existingTask.status,
+                newStatus: updates.status,
+              }
+            );
+          }
+          await this.events.emitTaskUpdated(updatedTask);
+        },
+        updateCache: (updatedTask: Task) => this.cache.set(updatedTask),
       });
+    } catch (error) {
+      this.logger.error('Failed to update task', { error, path, updates });
       throw error;
     }
   }
 
-  /**
-   * Get a task by path
-   */
+  private async handleDependencyUpdates(task: Task, newDependencies: string[]): Promise<void> {
+    const addedDeps = newDependencies.filter(dep => !task.dependencies.includes(dep));
+    const removedDeps = task.dependencies.filter(dep => !newDependencies.includes(dep));
+
+    await this.events.emitTaskDependenciesChanged(task, {
+      taskPath: task.path,
+      addedDependencies: addedDeps,
+      removedDependencies: removedDeps,
+    });
+
+    if (task.status === TaskStatus.COMPLETED) {
+      for (const depPath of addedDeps) {
+        const depTask = await this.getTask(depPath);
+        if (depTask && depTask.status === TaskStatus.BLOCKED) {
+          await this.updateTask(depPath, { status: TaskStatus.PENDING });
+        }
+      }
+    }
+  }
+
+  private async handleStatusPropagation(
+    task: Task,
+    oldStatus: TaskStatus,
+    newStatus: TaskStatus
+  ): Promise<void> {
+    if (task.parentPath && newStatus === TaskStatus.COMPLETED) {
+      const parent = await this.getTask(task.parentPath);
+      if (parent) {
+        const siblings = await this.getChildren(task.parentPath);
+        const allCompleted = siblings.every(s =>
+          s.path === task.path ? true : s.status === TaskStatus.COMPLETED
+        );
+
+        if (allCompleted && parent.status !== TaskStatus.COMPLETED) {
+          await this.storage.updateTask(parent.path, { status: TaskStatus.COMPLETED });
+          await this.events.emitParentStatusPropagation(
+            parent,
+            parent.status,
+            TaskStatus.COMPLETED,
+            siblings.map(s => s.path)
+          );
+        }
+      }
+    }
+
+    if (newStatus === TaskStatus.CANCELLED) {
+      const children = await this.getChildren(task.path);
+      const incompleteTasks = children.filter(child => child.status !== TaskStatus.COMPLETED);
+
+      if (incompleteTasks.length > 0) {
+        await Promise.all(
+          incompleteTasks.map(child =>
+            this.storage.updateTask(child.path, { status: TaskStatus.CANCELLED })
+          )
+        );
+
+        await this.events.emitChildrenStatusPropagation(
+          incompleteTasks,
+          oldStatus,
+          TaskStatus.CANCELLED,
+          task.path
+        );
+      }
+    }
+
+    if (newStatus === TaskStatus.COMPLETED) {
+      const dependentTasks = await this.storage.getDependentTasks(task.path);
+      for (const depTask of dependentTasks) {
+        const allDepsCompleted = await this.areAllDependenciesCompleted(depTask);
+        if (allDepsCompleted && depTask.status === TaskStatus.BLOCKED) {
+          await this.updateTask(depTask.path, { status: TaskStatus.PENDING });
+        }
+      }
+    }
+  }
+
+  private async areAllDependenciesCompleted(task: Task): Promise<boolean> {
+    for (const depPath of task.dependencies) {
+      const depTask = await this.getTask(depPath);
+      if (!depTask || depTask.status !== TaskStatus.COMPLETED) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   async getTask(path: string): Promise<Task | null> {
     try {
-      // Check cache first
       const cached = this.cache.get(path);
       if (cached) {
         return cached;
       }
 
-      // Get from storage
       const task = await this.storage.getTask(path);
       if (task) {
         this.cache.set(task);
@@ -133,30 +227,20 @@ export class TaskManager {
 
       return task;
     } catch (error) {
-      this.logger.error('Failed to get task', {
-        error,
-        path,
-      });
+      this.logger.error('Failed to get task', { error, path });
       throw error;
     }
   }
 
-  /**
-   * Get task by path (alias for getTask)
-   */
   async getTaskByPath(path: string): Promise<Task | null> {
     return this.getTask(path);
   }
 
-  /**
-   * Get multiple tasks by paths
-   */
   async getTasks(paths: string[]): Promise<Task[]> {
     try {
       const tasks: Task[] = [];
       const uncached: string[] = [];
 
-      // Check cache first
       for (const path of paths) {
         const cached = this.cache.get(path);
         if (cached) {
@@ -166,7 +250,6 @@ export class TaskManager {
         }
       }
 
-      // Get remaining from storage
       if (uncached.length > 0) {
         const fromStorage = await this.storage.getTasks(uncached);
         for (const task of fromStorage) {
@@ -177,130 +260,78 @@ export class TaskManager {
 
       return tasks;
     } catch (error) {
-      this.logger.error('Failed to get tasks', {
-        error,
-        paths,
-      });
+      this.logger.error('Failed to get tasks', { error, paths });
       throw error;
     }
   }
 
-  /**
-   * Get tasks by pattern
-   */
   async getTasksByPattern(pattern: string): Promise<Task[]> {
     try {
       const tasks = await this.storage.getTasksByPattern(pattern);
       tasks.forEach(task => this.cache.set(task));
       return tasks;
     } catch (error) {
-      this.logger.error('Failed to get tasks by pattern', {
-        error,
-        pattern,
-      });
+      this.logger.error('Failed to get tasks by pattern', { error, pattern });
       throw error;
     }
   }
 
-  /**
-   * List tasks (alias for getTasksByPattern)
-   */
   async listTasks(pattern: string): Promise<Task[]> {
     return this.getTasksByPattern(pattern);
   }
 
-  /**
-   * Get tasks by status
-   */
   async getTasksByStatus(status: TaskStatus): Promise<Task[]> {
     try {
       const tasks = await this.storage.getTasksByStatus(status);
       tasks.forEach(task => this.cache.set(task));
       return tasks;
     } catch (error) {
-      this.logger.error('Failed to get tasks by status', {
-        error,
-        status,
-      });
+      this.logger.error('Failed to get tasks by status', { error, status });
       throw error;
     }
   }
 
-  /**
-   * Get child tasks
-   */
   async getChildren(parentPath: string): Promise<Task[]> {
     try {
       const tasks = await this.storage.getChildren(parentPath);
       tasks.forEach(task => this.cache.set(task));
       return tasks;
     } catch (error) {
-      this.logger.error('Failed to get child tasks', {
-        error,
-        parentPath,
-      });
+      this.logger.error('Failed to get child tasks', { error, parentPath });
       throw error;
     }
   }
 
-  /**
-   * Delete a task
-   */
   async deleteTask(path: string): Promise<void> {
     try {
-      // Get task first for event
       const task = await this.getTask(path);
       if (!task) {
         throw TaskErrorFactory.createTaskNotFoundError('TaskManager.deleteTask', path);
       }
 
-      // Delete task
       await this.storage.deleteTask(path);
-
-      // Remove from cache
       this.cache.delete(path);
-
-      // Emit event
       await this.events.emitTaskDeleted(task);
     } catch (error) {
-      this.logger.error('Failed to delete task', {
-        error,
-        path,
-      });
+      this.logger.error('Failed to delete task', { error, path });
       throw error;
     }
   }
 
-  /**
-   * Delete multiple tasks
-   */
   async deleteTasks(paths: string[]): Promise<void> {
     try {
-      // Get tasks first for events
       const tasks = await this.getTasks(paths);
-
-      // Delete tasks
       await this.storage.deleteTasks(paths);
-
-      // Remove from cache
       paths.forEach(path => this.cache.delete(path));
-
-      // Emit events
       for (const task of tasks) {
         await this.events.emitTaskDeleted(task);
       }
     } catch (error) {
-      this.logger.error('Failed to delete tasks', {
-        error,
-        paths,
-      });
+      this.logger.error('Failed to delete tasks', { error, paths });
       throw error;
     }
   }
 
-  /**
-   * Clear all tasks
-   */
   async clearAllTasks(confirm = false): Promise<void> {
     if (!confirm) {
       throw TaskErrorFactory.createTaskOperationError(
@@ -319,9 +350,6 @@ export class TaskManager {
     }
   }
 
-  /**
-   * Sort tasks by dependencies
-   */
   async sortTasksByDependencies(
     tasks: { path: string; dependencies: string[] }[]
   ): Promise<string[]> {
@@ -360,9 +388,6 @@ export class TaskManager {
     return sorted;
   }
 
-  /**
-   * Vacuum database
-   */
   async vacuumDatabase(analyze = false): Promise<void> {
     try {
       await this.storage.vacuum();
@@ -375,9 +400,6 @@ export class TaskManager {
     }
   }
 
-  /**
-   * Repair task relationships
-   */
   async repairRelationships(dryRun = false): Promise<{
     fixed: number;
     issues: string[];
@@ -390,9 +412,6 @@ export class TaskManager {
     }
   }
 
-  /**
-   * Subscribe to task events
-   */
   onTaskEvent(
     event: 'created' | 'updated' | 'deleted' | 'cleared',
     handler: (task?: Task) => Promise<void>
@@ -400,9 +419,6 @@ export class TaskManager {
     this.events.subscribe(event, handler);
   }
 
-  /**
-   * Unsubscribe from task events
-   */
   offTaskEvent(
     event: 'created' | 'updated' | 'deleted' | 'cleared',
     handler: (task?: Task) => Promise<void>
@@ -410,16 +426,10 @@ export class TaskManager {
     this.events.unsubscribe(event, handler);
   }
 
-  /**
-   * Get storage instance
-   */
   getStorage(): TaskStorage {
     return this.storage;
   }
 
-  /**
-   * Get task metrics
-   */
   async getMetrics(): Promise<{
     tasks: {
       total: number;
@@ -442,17 +452,11 @@ export class TaskManager {
     };
   }
 
-  /**
-   * Clear all caches
-   */
   async clearCaches(): Promise<void> {
     this.cache.clear();
     await this.storage.clearCache();
   }
 
-  /**
-   * Close task manager and cleanup resources
-   */
   async close(): Promise<void> {
     await this.storage.close();
     this.cache.clear();

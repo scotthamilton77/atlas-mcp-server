@@ -2,7 +2,12 @@ import { Task, TaskStatus } from '../../types/task.js';
 import { EventManager } from '../../events/event-manager.js';
 import { EventTypes } from '../../types/events.js';
 
-type TaskEventCallback = (task?: Task) => Promise<void>;
+import { TaskStatusMetadata, TaskDependencyMetadata } from '../../types/events.js';
+
+type TaskEventCallback = (
+  task?: Task,
+  metadata?: TaskStatusMetadata | TaskDependencyMetadata | Record<string, unknown>
+) => Promise<void>;
 
 export class TaskEventHandler {
   private readonly eventManager: EventManager;
@@ -95,7 +100,7 @@ export class TaskEventHandler {
       type: EventTypes.CACHE_CLEARED, // Using CACHE_CLEARED as a substitute for ALL_TASKS_CLEARED
       timestamp: Date.now(),
       taskId: 'all',
-      task: null,
+      task: {} as Task, // Empty task object for system-wide events
     });
 
     const handlers = this.handlers.get('cleared');
@@ -110,7 +115,8 @@ export class TaskEventHandler {
   async emitTaskStatusChanged(
     task: Task,
     oldStatus: TaskStatus,
-    newStatus: TaskStatus
+    newStatus: TaskStatus,
+    metadata?: TaskStatusMetadata
   ): Promise<void> {
     this.eventManager.emitTaskEvent({
       type: EventTypes.TASK_STATUS_CHANGED,
@@ -121,7 +127,67 @@ export class TaskEventHandler {
         before: { status: oldStatus },
         after: { status: newStatus },
       },
+      metadata,
     });
+
+    const handlers = this.handlers.get('updated');
+    if (handlers) {
+      await Promise.all(Array.from(handlers).map(handler => handler(task, metadata)));
+    }
+  }
+
+  /**
+   * Emit task dependencies changed event
+   */
+  async emitTaskDependenciesChanged(task: Task, metadata: TaskDependencyMetadata): Promise<void> {
+    this.eventManager.emitTaskEvent({
+      type: EventTypes.TASK_DEPENDENCIES_CHANGED,
+      timestamp: Date.now(),
+      taskId: task.id,
+      task,
+      metadata,
+    });
+
+    const handlers = this.handlers.get('updated');
+    if (handlers) {
+      await Promise.all(Array.from(handlers).map(handler => handler(task, metadata)));
+    }
+  }
+
+  /**
+   * Emit parent status propagation event
+   */
+  async emitParentStatusPropagation(
+    task: Task,
+    oldStatus: TaskStatus,
+    newStatus: TaskStatus,
+    childrenPaths: string[]
+  ): Promise<void> {
+    await this.emitTaskStatusChanged(task, oldStatus, newStatus, {
+      childrenPaths,
+      oldStatus,
+      newStatus,
+      reason: 'children_completed',
+    });
+  }
+
+  /**
+   * Emit children status propagation event
+   */
+  async emitChildrenStatusPropagation(
+    tasks: Task[],
+    oldStatus: TaskStatus,
+    newStatus: TaskStatus,
+    parentPath: string
+  ): Promise<void> {
+    for (const task of tasks) {
+      await this.emitTaskStatusChanged(task, oldStatus, newStatus, {
+        parentPath,
+        oldStatus,
+        newStatus,
+        reason: 'parent_update',
+      });
+    }
   }
 
   /**
