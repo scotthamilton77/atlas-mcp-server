@@ -42,7 +42,6 @@ atlas-mcp-server
 │   │   ├── index.ts
 │   │   ├── logger.ts
 │   │   └── transport-manager.ts
-│   ├── scripts/
 │   ├── server/
 │   │   ├── health-monitor.ts
 │   │   ├── index.ts
