@@ -50,6 +50,7 @@ export interface ToolHandler {
   getStatusResource?: (taskPath: string) => Promise<Resource>;
   getResourceTemplates?: () => Promise<ResourceTemplate[]>;
   resolveResourceTemplate?: (template: string, vars: Record<string, string>) => Promise<Resource>;
+  getVisualizationResource?: () => Promise<Resource>;
 }
 
 /**
@@ -197,6 +198,16 @@ export class AtlasServer {
           name: 'Current Task List Overview',
           description:
             'Dynamic overview of all tasks including status counts, recent updates, and metrics. Updates in real-time when accessed.',
+          mimeType: 'application/json',
+        });
+      }
+
+      // Add visualization resource if available
+      if (this.toolHandler.getVisualizationResource) {
+        resources.push({
+          uri: 'visualizations://current',
+          name: 'Task Visualizations',
+          description: 'Real-time task visualization with progress tracking and hierarchy display',
           mimeType: 'application/json',
         });
       }
@@ -440,6 +451,11 @@ export class AtlasServer {
         } else if (uri.startsWith('status://') && this.toolHandler.getStatusResource) {
           const taskPath = uri.replace('status://', '');
           resource = await this.toolHandler.getStatusResource(taskPath);
+        } else if (
+          uri === 'visualizations://current' &&
+          this.toolHandler.getVisualizationResource
+        ) {
+          resource = await this.toolHandler.getVisualizationResource();
         }
 
         if (!resource) {
