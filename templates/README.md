@@ -122,30 +122,60 @@ Tasks define the work items that will be created. Each task must include:
 
 ## Metadata
 
-Metadata provides additional context and requirements for tasks. Supported fields:
+Metadata provides additional context and requirements for tasks. The metadata structure is flexible
+and can include any fields needed, with only a size limit constraint. Common patterns include:
 
 ```json
 {
   "metadata": {
+    // Core fields (optional)
     "priority": "high|medium|low",
     "tags": ["tag1", "tag2"],
+    "reasoning": "Explanation of decisions",
+
+    // Technical details (flexible structure)
     "technicalRequirements": {
       "language": "programming language",
       "framework": "framework name",
       "dependencies": ["dep1", "dep2"],
-      "environment": "runtime environment"
+      "environment": "runtime environment",
+      // Additional technical fields as needed
+      "performance": {
+        "memory": "512MB",
+        "cpu": "2 cores"
+      }
     },
+
+    // Validation & progress (flexible structure)
     "acceptanceCriteria": {
       "criteria": ["criterion1", "criterion2"],
       "testCases": ["test1", "test2"]
     },
+    "progress": {
+      "percentage": 0,
+      "milestones": ["milestone1", "milestone2"],
+      "lastUpdated": "timestamp"
+    },
+
+    // Resource tracking (flexible structure)
+    "resources": {
+      "toolsUsed": ["tool1", "tool2"],
+      "contextUsed": ["context1", "context2"]
+    },
+
+    // Custom fields (any additional metadata)
     "customFields": {
-      "roleTemplate": "template-id",
-      "roleVariables": {}
+      "field1": "value1",
+      "field2": {
+        "nestedField": "value"
+      }
     }
   }
 }
 ```
+
+The only constraint on metadata is a total size limit to prevent performance issues. Within this
+limit, you can structure the metadata as needed for your use case.
 
 ## Best Practices
 
@@ -282,35 +312,50 @@ interface Task {
   description: string; // Task description
   type: 'TASK' | 'MILESTONE';
   dependencies?: string[]; // Task dependencies
-  metadata?: {
-    priority?: 'high' | 'medium' | 'low';
-    tags?: string[];
-    technicalRequirements?: {
-      language?: string;
-      framework?: string;
-      dependencies?: string[];
-      environment?: string;
-    };
-    acceptanceCriteria?: {
-      criteria?: string[];
-      testCases?: string[];
-    };
-    customFields?: Record<string, unknown>;
-  };
+  metadata?: Record<string, unknown>; // Flexible metadata structure
 }
 ```
 
 ### Validation Rules
 
-- Template IDs must be unique and alphanumeric with dashes
-- Versions must follow semantic versioning
-- Task paths must be unique within a template
-- Dependencies must reference existing task paths
-- Variables must have unique names
-- Required variables must not have defaults
-- Task titles must be under 200 characters
-- Descriptions must be under 2000 characters
-- Tags must be under 100 characters each
-- Maximum 100 tags per task/template
-- Maximum 50 dependencies per task
-- Maximum 20 acceptance criteria per task
+1. **Template Structure**
+
+   - Template IDs must be 1-100 characters
+   - Template names must be 1-200 characters
+   - Descriptions must be under 2000 characters
+   - Version strings must be 1-50 characters
+   - Author name must be under 100 characters
+
+2. **Variables**
+
+   - Variable names must be 1-100 characters
+   - Variable descriptions must be under 500 characters
+   - Type must be one of: string, number, boolean, array
+   - Required variables must not have defaults
+   - Default values must match declared type
+   - Variable names must be unique within template
+
+3. **Tasks**
+
+   - Task paths must be unique within template
+   - Paths must be under 1000 characters
+   - Titles must be 1-200 characters
+   - Descriptions must be under 2000 characters
+   - Type must be either TASK or MILESTONE
+   - Dependencies must reference existing task paths
+   - No circular dependencies allowed
+
+4. **Variable References**
+
+   - ${variable} syntax must reference defined variables
+   - Variables can be used in:
+     - Task paths
+     - Task titles
+     - Task descriptions
+     - Dependencies
+     - Metadata string values
+
+5. **Metadata**
+   - Total metadata size must be under 100KB
+   - All string values support variable interpolation
+   - Structure is flexible within size constraint

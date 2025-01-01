@@ -214,39 +214,43 @@ paths:
     "verificationStatus": "passed"
   },
 
-  // Rich metadata
+  // Flexible metadata (Max total size: 100KB)
   "metadata": {
-    // Classification
+    // Common patterns (all fields optional)
+    "priority": "high",
+    "tags": ["security", "api"],
     "category": "backend",
     "component": "authentication",
-    "platform": "node.js",
-    "scope": "internal",
-    "tags": ["security", "api"],          // Max: 10 tags, each max 1000 chars
 
-    // Priority
-    "priority": "high",                   // low, medium, high
-    "criticality": "essential",
-    "impact": "high",
+    // Technical details (flexible structure)
+    "technicalRequirements": {
+      "language": "typescript",
+      "framework": "express",
+      "dependencies": ["jwt", "bcrypt"],
+      "environment": "node.js",
+      // Additional fields as needed
+      "performance": {
+        "memory": "512MB",
+        "cpu": "2 cores",
+        "latency": "<100ms"
+      }
+    },
 
-    // Technical
-    "language": "typescript",
-    "framework": "express",
-    "tools": ["jwt", "bcrypt"],           // Max: 100 items, each max 1000 chars
-    "requirements": [                      // Max: 100 items, each max 1000 chars
-      "Implement error handling",
-      "Add comprehensive logging",
-      "Handle edge cases"
-    ],
-
-    // Quality
-    "testingRequirements": [              // Max: 100 items, each max 1000 chars
-      "Unit tests required",
-      "Integration tests required"
-    ],
-    "qualityMetrics": {
+    // Quality & progress (flexible structure)
+    "quality": {
+      "testingRequirements": ["unit", "integration"],
       "coverage": 90,
-      "complexity": 5,
-      "performance": ["<100ms response time"] // Max: 100 items, each max 1000 chars
+      "metrics": {
+        "complexity": 5,
+        "performance": ["<100ms response"]
+      }
+    },
+
+    // Custom fields (any additional metadata)
+    "customFields": {
+      "scope": "internal",
+      "impact": "high",
+      "criticality": "essential"
     }
   },
 
@@ -282,20 +286,37 @@ Create a new task in the system:
   "parentPath": "project/backend",                   // For organizing subtasks
   "dependencies": ["project/backend/database"],      // Tasks that must be completed first
 
-  // Rich metadata (Max total size: 32KB)
+  // Flexible metadata (Max total size: 100KB)
   "metadata": {
+    // Core fields
     "priority": "high",
     "tags": ["security", "api"],
     "reasoning": "Required for secure API access",
-    "technical_requirements": [
-      "Implement JWT generation and validation",
-      "Add refresh token mechanism",
-      "Implement rate limiting"
-    ],
-    "acceptance_criteria": [
-      "All security tests pass",
-      "Performance meets SLA requirements"
-    ]
+
+    // Technical requirements (flexible structure)
+    "technicalRequirements": {
+      "language": "typescript",
+      "framework": "node",
+      "dependencies": ["jsonwebtoken", "express-rate-limit"],
+      "environment": "Node.js v18+",
+      "requirements": [
+        "Implement JWT generation and validation",
+        "Add refresh token mechanism",
+        "Implement rate limiting"
+      ]
+    },
+
+    // Validation criteria (flexible structure)
+    "acceptanceCriteria": {
+      "criteria": [
+        "All security tests pass",
+        "Performance meets SLA requirements"
+      ],
+      "testCases": [
+        "Verify token generation",
+        "Test rate limiting"
+      ]
+    }
   },
 
   // Categorized notes
@@ -337,9 +358,24 @@ Execute multiple task operations atomically:
         "description": "Replace JWT auth with OAuth2 implementation",
         "metadata": {
           "priority": "high",
-          "component": "authentication",
           "tags": ["security", "api", "oauth2"],
-          "reasoning": "OAuth2 provides better security and standardization"
+          "reasoning": "OAuth2 provides better security and standardization",
+          "technicalRequirements": {
+            "language": "typescript",
+            "framework": "node",
+            "dependencies": ["oauth2-server", "passport"],
+            "environment": "Node.js v18+"
+          },
+          "acceptanceCriteria": {
+            "criteria": [
+              "OAuth2 flows implemented",
+              "Security best practices followed"
+            ],
+            "testCases": [
+              "Test authorization flows",
+              "Verify token handling"
+            ]
+          }
         },
         "planningNotes": [
           "Research OAuth2 providers",
@@ -357,10 +393,22 @@ Execute multiple task operations atomically:
         "dependencies": ["project/backend/oauth2"],
         "metadata": {
           "priority": "high",
-          "technical_requirements": [
-            "Configure Google OAuth2",
-            "Configure GitHub OAuth2"
-          ]
+          "technicalRequirements": {
+            "language": "typescript",
+            "framework": "node",
+            "dependencies": ["passport-google-oauth20", "passport-github2"],
+            "environment": "Node.js v18+",
+            "requirements": [
+              "Configure Google OAuth2",
+              "Configure GitHub OAuth2"
+            ]
+          },
+          "acceptanceCriteria": {
+            "criteria": [
+              "OAuth2 providers configured",
+              "Authentication flows tested"
+            ]
+          }
         },
         "planningNotes": [
           "List required OAuth2 providers",
