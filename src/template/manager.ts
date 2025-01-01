@@ -2,6 +2,7 @@ import { Resource, ResourceTemplate } from '@modelcontextprotocol/sdk/types.js';
 import { TaskManager } from '../task/manager/task-manager.js';
 import { TaskType } from '../types/task-types.js';
 import { TemplateStorage } from '../storage/interfaces/template-storage.js';
+import { PathUtils } from '../utils/path-utils.js';
 import {
   TaskTemplate,
   TemplateInfo,
@@ -113,13 +114,22 @@ export class TemplateManager {
         : undefined,
     };
 
-    // Prepend parent path if provided
+    // Normalize paths with parent path if provided
     if (parentPath) {
-      interpolatedTask.path = `${parentPath}/${interpolatedTask.path}`;
+      // Remove any duplicate path segments and normalize
+      const normalizedPath = PathUtils.splitPath(interpolatedTask.path)
+        .filter((segment, index, array) => array.indexOf(segment) === index)
+        .join('/');
+
+      interpolatedTask.path = PathUtils.joinPath(parentPath, normalizedPath);
+
       if (interpolatedTask.dependencies) {
-        interpolatedTask.dependencies = interpolatedTask.dependencies.map(
-          d => `${parentPath}/${d}`
-        );
+        interpolatedTask.dependencies = interpolatedTask.dependencies.map(d => {
+          const normalizedDep = PathUtils.splitPath(d)
+            .filter((segment, index, array) => array.indexOf(segment) === index)
+            .join('/');
+          return PathUtils.joinPath(parentPath, normalizedDep);
+        });
       }
     }
 
