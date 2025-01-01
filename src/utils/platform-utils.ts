@@ -14,7 +14,9 @@ export class PlatformPaths {
   static getDocumentsDir(): string {
     switch (this.PLATFORM) {
       case 'win32':
-        return process.env.USERPROFILE ? join(process.env.USERPROFILE, 'Documents') : join(homedir(), 'Documents');
+        return process.env.USERPROFILE
+          ? join(process.env.USERPROFILE, 'Documents')
+          : join(homedir(), 'Documents');
       case 'darwin':
         return join(homedir(), 'Documents');
       default:
@@ -68,8 +70,8 @@ export class PlatformCapabilities {
   private static readonly PLATFORM = platform();
 
   static getDefaultMode(): number {
-    return this.PLATFORM === 'win32' 
-      ? 0o666  // Windows ignores modes
+    return this.PLATFORM === 'win32'
+      ? 0o666 // Windows ignores modes
       : 0o755; // Unix-like systems
   }
 
@@ -82,7 +84,7 @@ export class PlatformCapabilities {
     return mode;
   }
 
-  static getSqliteConfig(): {pageSize: number; sharedMemory: boolean} {
+  static getSqliteConfig(): { pageSize: number; sharedMemory: boolean } {
     return {
       // Windows: larger page size for NTFS
       pageSize: this.PLATFORM === 'win32' ? 8192 : 4096,
@@ -95,8 +97,8 @@ export class PlatformCapabilities {
     if (!error || typeof error !== 'object' || !('code' in error)) {
       return false;
     }
-    
-    const errorCode = (error as {code: string}).code;
+
+    const errorCode = (error as { code: string }).code;
     return this.PLATFORM === 'win32'
       ? PERMISSION_ERROR_CODES.win32.includes(errorCode)
       : PERMISSION_ERROR_CODES.unix.includes(errorCode);
@@ -132,7 +134,7 @@ export class PlatformCapabilities {
 
   static async ensureDirectoryPermissions(path: string, mode: number): Promise<void> {
     await fs.mkdir(path, { recursive: true, mode: this.getFileMode(mode) });
-    
+
     // Verify permissions
     if (this.PLATFORM !== 'win32') {
       try {
@@ -153,7 +155,10 @@ export class ProcessManager {
     error: (message: string, ...args: any[]) => void;
   };
 
-  static setLogger(logger: { info: (message: string, ...args: any[]) => void; error: (message: string, ...args: any[]) => void }): void {
+  static setLogger(logger: {
+    info: (message: string, ...args: any[]) => void;
+    error: (message: string, ...args: any[]) => void;
+  }): void {
     this.logger = logger;
   }
 
@@ -176,7 +181,7 @@ export class ProcessManager {
 
   static setupSignalHandlers(): void {
     const signals = PlatformCapabilities.getProcessSignals();
-    
+
     for (const signal of signals) {
       process.once(signal, async () => {
         this.logger?.info(`Received ${signal}, cleaning up...`);
@@ -185,13 +190,13 @@ export class ProcessManager {
       });
     }
 
-    process.on('uncaughtException', async (error) => {
+    process.on('uncaughtException', async error => {
       this.logger?.error('Uncaught Exception:', error);
       await this.cleanup();
       process.exit(1);
     });
 
-    process.on('unhandledRejection', async (reason) => {
+    process.on('unhandledRejection', async reason => {
       this.logger?.error('Unhandled Rejection:', reason);
       await this.cleanup();
       process.exit(1);

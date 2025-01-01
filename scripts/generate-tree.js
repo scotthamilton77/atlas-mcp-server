@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import { readdir } from 'fs/promises';
 import { join, basename } from 'path';
-import { fileURLToPath } from 'url';
 
 const IGNORE_PATTERNS = [
   'node_modules',
