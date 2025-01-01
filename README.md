@@ -480,6 +480,102 @@ Best practices:
 - Document changes
 - Update affected tasks
 
+## Resources
+
+ATLAS exposes two main resources through the MCP protocol:
+
+### Task Overview Resource
+
+Access real-time task information:
+
+```typescript
+// Resource URI
+tasklist://current
+
+// Returns
+{
+  "timestamp": "2024-01-28T10:00:00Z",
+  "totalTasks": 42,
+  "statusCounts": {
+    "PENDING": 10,
+    "IN_PROGRESS": 15,
+    "COMPLETED": 12,
+    "BLOCKED": 3,
+    "CANCELLED": 2
+  },
+  "recentUpdates": [
+    {
+      "path": "project/backend/auth",
+      "status": "COMPLETED",
+      "timestamp": "2024-01-28T09:55:00Z"
+    }
+  ],
+  "metrics": {
+    "averageCompletionTime": "3.5 days",
+    "blockageRate": "7%",
+    "progressRate": "tasks/day: 4.2"
+  }
+}
+```
+
+### Template Resource
+
+Access available task templates and their metadata:
+
+```typescript
+// Resource URI
+templates://current
+
+// Returns
+{
+  "timestamp": "2024-01-28T10:00:00Z",
+  "totalTemplates": 6,
+  "templates": [
+    {
+      "id": "software-team",
+      "name": "Software Engineering Team",
+      "description": "Complete software team structure with roles and responsibilities",
+      "tags": ["software", "team", "engineering"],
+      "variables": [
+        {
+          "name": "projectName",
+          "description": "Name of the project",
+          "required": true
+        },
+        {
+          "name": "teamScale",
+          "description": "Team size category (startup, growth, enterprise)",
+          "required": true,
+          "default": "growth"
+        },
+        {
+          "name": "developmentMethodology",
+          "description": "Development methodology to use",
+          "required": false,
+          "default": "agile"
+        }
+      ]
+    }
+  ]
+}
+```
+
+Access these resources through standard MCP endpoints:
+
+```typescript
+// List available resources
+GET resources/list
+-> Returns both tasklist://current and templates://current
+
+// Get task overview
+GET resources/read?uri=tasklist://current
+-> Returns current task statistics
+
+// Get template overview
+GET resources/read?uri=templates://current
+-> Returns all template information
+```
+
 ## Best Practices
 
 ### Task Management
