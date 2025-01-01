@@ -2,6 +2,7 @@
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
 [![Model Context Protocol](https://img.shields.io/badge/MCP-1.0.4-green.svg)](https://modelcontextprotocol.io/)
+[![Version](https://img.shields.io/badge/Version-1.2.0-blue.svg)]()
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Status](https://img.shields.io/badge/Status-Stable-blue.svg)]()
 [![GitHub](https://img.shields.io/github/stars/cyanheads/atlas-mcp-server?style=social)](https://github.com/cyanheads/atlas-mcp-server)
@@ -34,7 +35,9 @@ ATLAS implements the Model Context Protocol (MCP), enabling standardized communi
 - **TaskStore**: Central task storage and retrieval with ACID compliance
 - **TaskValidator**: Comprehensive validation with dependency cycle detection
 - **SqliteStorage**: Robust SQLite-based persistence with WAL and transaction support
-- **BatchProcessor**: Optimized bulk operations with dependency awareness
+- **BatchProcessor**: Optimized bulk operations with retry mechanism and dead letter queue
+- **EventManager**: Enhanced event system with circuit breaker and health monitoring
+- **ProcessManager**: Robust process lifecycle management with graceful shutdown
 - **ErrorHandler**: Structured error handling with severity levels and context
 
 ## Features
@@ -48,15 +51,20 @@ ATLAS implements the Model Context Protocol (MCP), enabling standardized communi
 - Dependency cycle detection
 - Rich metadata support
 - Automatic subtask management
+- Categorized notes (planning, progress, completion, troubleshooting)
+- Technical requirements tracking
+- Priority levels and tagging
 
 ### Storage & Performance
 
 - SQLite backend with Write-Ahead Logging (WAL)
 - ACID-compliant transactions
-- Batch processing optimization
-- Connection pooling
-- Automatic checkpointing
-- Database maintenance tools
+- Batch processing with retry mechanism
+- Connection pooling with health monitoring
+- Automatic checkpointing and maintenance
+- Memory usage optimization
+- Platform-specific optimizations
+- Circuit breaker pattern for reliability
 
 ### Validation & Safety
 
@@ -134,8 +142,23 @@ Tasks follow a structured format:
   "dependencies": ["project/feature/design"],
   "metadata": {
     "priority": "high",
-    "tags": ["core", "implementation"]
-  }
+    "tags": ["core", "implementation"],
+    "technical_requirements": [
+      "Implement error handling",
+      "Add logging",
+      "Handle edge cases"
+    ]
+  },
+  "planningNotes": [
+    "Review requirements",
+    "Design architecture"
+  ],
+  "progressNotes": [
+    "Implemented core functionality",
+    "Added error handling"
+  ],
+  "completionNotes": [],
+  "troubleshootingNotes": []
 }
 ```
 
@@ -249,8 +272,10 @@ Fix task hierarchy issues:
 - Use bulk operations for multiple updates
 - Keep task hierarchies shallow
 - Regular database maintenance
-- Monitor memory usage
-- Use appropriate batch sizes
+- Monitor memory usage with automatic optimization
+- Use appropriate batch sizes with retry mechanism
+- Implement circuit breakers for stability
+- Configure platform-specific optimizations
 
 ### Error Handling
 
