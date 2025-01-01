@@ -21,7 +21,7 @@ export class TemplateManager {
   private storage: TemplateStorage;
   private taskManager: TaskManager;
   private logger: Logger;
-  private watcher?: FSWatcher;
+  private watchers: Map<string, FSWatcher> = new Map();
 
   constructor(storage: TemplateStorage, taskManager: TaskManager, logger: Logger) {
     this.storage = storage;
@@ -30,17 +30,25 @@ export class TemplateManager {
   }
 
   /**
-   * Initialize the template system
+   * Initialize the template system with multiple template directories
    */
-  async initialize(templateDir: string): Promise<void> {
+  async initialize(templateDirs: string[]): Promise<void> {
     // Initialize storage
     await this.storage.initialize();
 
-    // Load existing templates
-    await this.loadTemplatesFromDirectory(templateDir);
-
-    // Watch for changes
-    await this.setupTemplateWatcher(templateDir);
+    // Load existing templates from all directories
+    for (const dir of templateDirs) {
+      try {
+        await this.loadTemplatesFromDirectory(dir);
+        await this.setupTemplateWatcher(dir);
+      } catch (error) {
+        this.logger.warn(`Failed to initialize templates from directory: ${dir}`, {
+          error,
+          directory: dir,
+        });
+        // Continue with other directories even if one fails
+      }
+    }
   }
 
   /**
@@ -51,7 +59,15 @@ export class TemplateManager {
       const files = await readdir(dir);
       for (const file of files) {
         if (file.endsWith('.json')) {
-          await this.loadTemplateFromFile(join(dir, file));
+          try {
+            await this.loadTemplateFromFile(join(dir, file));
+          } catch (error) {
+            this.logger.warn(`Failed to load template file: ${file}`, {
+              error,
+              file: join(dir, file),
+            });
+            // Continue with other files even if one fails
+          }
         }
       }
     } catch (error) {
@@ -88,6 +104,7 @@ export class TemplateManager {
         templateId: validatedTemplate.id,
         name: validatedTemplate.name,
         file: basename(path),
+        path,
       });
     } catch (error) {
       this.logger.error('Failed to load template file', {
@@ -104,8 +121,10 @@ export class TemplateManager {
    * Watch template directory for changes
    */
   private async setupTemplateWatcher(dir: string): Promise<void> {
-    this.watcher?.close();
-    this.watcher = watch(dir, { persistent: false }, async (eventType, filename) => {
+    // Close existing watcher for this directory if any
+    this.watchers.get(dir)?.close();
+
+    const watcher = watch(dir, { persistent: false }, async (eventType, filename) => {
       if (filename && filename.endsWith('.json')) {
         const path = join(dir, filename);
         try {
@@ -116,10 +135,13 @@ export class TemplateManager {
           this.logger.error('Error handling template file change', {
             error,
             file: filename,
+            directory: dir,
           });
         }
       }
     });
+
+    this.watchers.set(dir, watcher);
   }
 
   /**
@@ -210,7 +232,11 @@ export class TemplateManager {
    * Clean up resources
    */
   async close(): Promise<void> {
-    this.watcher?.close();
+    // Close all watchers
+    for (const watcher of this.watchers.values()) {
+      watcher.close();
+    }
+    this.watchers.clear();
     await this.storage.close();
   }
 }

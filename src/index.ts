@@ -120,8 +120,10 @@ async function main(): Promise<void> {
       const templateStorage = new SqliteTemplateStorage(storage, logger);
       await templateStorage.initialize();
 
+      // Initialize template manager with both built-in and workspace templates
       const templateManager = new TemplateManager(templateStorage, taskManager, logger);
-      await templateManager.initialize(templateDir);
+      const builtInTemplateDir = join(__dirname, '..', 'templates');
+      await templateManager.initialize([builtInTemplateDir, templateDir]);
 
       // Register task manager cleanup
       ProcessManager.registerCleanupHandler(async () => {
