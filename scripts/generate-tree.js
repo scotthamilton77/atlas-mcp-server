@@ -13,7 +13,7 @@ const IGNORE_PATTERNS = [
   '*.log'
 ];
 
-async function generateTree(dir, prefix = '', isLast = true, parentPrefix = '', isRoot = false) {
+async function generateTree(dir, indent = '', isRoot = false) {
   const entries = await readdir(dir, { withFileTypes: true });
   const filteredEntries = entries
     .filter(entry => !IGNORE_PATTERNS.some(pattern => 
@@ -38,25 +38,20 @@ async function generateTree(dir, prefix = '', isLast = true, parentPrefix = '', 
   for (let i = 0; i < filteredEntries.length; i++) {
     const entry = filteredEntries[i];
     const isLastEntry = i === filteredEntries.length - 1;
-    const newPrefix = prefix + (isLastEntry ? '└── ' : '├── ');
-    const newParentPrefix = prefix + (isLastEntry ? '    ' : '│   ');
+    const prefix = isLastEntry ? '└── ' : '├── ';
     const fullPath = join(dir, entry.name);
 
     if (entry.isDirectory()) {
       // Add directory entry
-      tree.push(parentPrefix + newPrefix + entry.name + '/');
+      tree.push(`${indent}${prefix}${entry.name}/`);
       
-      // Recursively process subdirectory
-      const subtree = await generateTree(
-        fullPath,
-        newParentPrefix,
-        isLastEntry,
-        parentPrefix + newParentPrefix
-      );
+      // Recursively process subdirectory with updated indent
+      const nextIndent = indent + (isLastEntry ? '    ' : '│   ');
+      const subtree = await generateTree(fullPath, nextIndent);
       tree.push(...subtree);
     } else {
       // Add file entry
-      tree.push(parentPrefix + newPrefix + entry.name);
+      tree.push(`${indent}${prefix}${entry.name}`);
     }
   }
 
@@ -66,7 +61,7 @@ async function generateTree(dir, prefix = '', isLast = true, parentPrefix = '', 
 // Get directory from command line args or use current directory
 const targetDir = process.argv[2] || '.';
 
-generateTree(targetDir, '', true, '', true)
+generateTree(targetDir, '', true)
   .then(tree => {
     // eslint-disable-next-line no-console
     console.log(tree.join('\n'));

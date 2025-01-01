@@ -15,6 +15,8 @@
 │   └── README.md
 ├── scripts/
 │   ├── generate-tree.js
+│   ├── postinstall.js
+│   ├── prestart.js
 │   └── set-build-permissions.js
 ├── src/
 │   ├── config/
@@ -40,6 +42,7 @@
 │   │   ├── index.ts
 │   │   ├── logger.ts
 │   │   └── transport-manager.ts
+│   ├── scripts/
 │   ├── server/
 │   │   ├── health-monitor.ts
 │   │   ├── index.ts
@@ -64,6 +67,7 @@
 │   │   │   │   ├── migrations.ts
 │   │   │   │   └── validator.ts
 │   │   │   ├── transactions/
+│   │   │   │   ├── coordinator.ts
 │   │   │   │   ├── manager.ts
 │   │   │   │   └── scope.ts
 │   │   │   ├── wal/
@@ -119,6 +123,7 @@
 │   │   │   │   └── index.ts
 │   │   │   ├── transactions/
 │   │   │   │   ├── index.ts
+│   │   │   │   ├── task-transaction-manager.ts
 │   │   │   │   └── transaction-manager.ts
 │   │   │   ├── error-handler.ts
 │   │   │   ├── index.ts
