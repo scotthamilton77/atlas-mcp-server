@@ -22,11 +22,8 @@
     "noFallthroughCasesInSwitch": true,
     "removeComments": false,
     "preserveConstEnums": true,
-    "verbatimModuleSyntax": true,
     "allowUnusedLabels": false,
-    "allowUnreachableCode": false,
-    "exactOptionalPropertyTypes": true,
-    "noUncheckedIndexedAccess": true
+    "allowUnreachableCode": false
   },
   "include": ["src/**/*", "eslint.config.js"],
   "exclude": ["node_modules", "build", "**/*.test.ts"]
