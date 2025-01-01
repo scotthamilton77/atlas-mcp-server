@@ -162,6 +162,11 @@ async function main(): Promise<void> {
         await server?.shutdown();
       });
 
+      // Register event manager cleanup
+      ProcessManager.registerCleanupHandler(async () => {
+        await eventManager.shutdown();
+      });
+
       // Set up signal handlers
       ProcessManager.setupSignalHandlers();
 
