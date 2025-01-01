@@ -33,7 +33,8 @@ atlas-mcp-server
 │   └── set-build-permissions.js
 ├── src/
 │   ├── config/
-│   │   └── index.ts
+│   │   ├── index.ts
+│   │   └── README.md
 │   ├── errors/
 │   │   ├── base-error.ts
 │   │   ├── config-error.ts
@@ -47,19 +48,22 @@ atlas-mcp-server
 │   ├── events/
 │   │   ├── batch-processor.ts
 │   │   ├── event-manager.ts
-│   │   └── health-monitor.ts
+│   │   ├── health-monitor.ts
+│   │   └── README.md
 │   ├── logging/
 │   │   ├── error-formatter.ts
 │   │   ├── file-transport.ts
 │   │   ├── health-monitor.ts
 │   │   ├── index.ts
 │   │   ├── logger.ts
+│   │   ├── README.md
 │   │   └── transport-manager.ts
 │   ├── server/
 │   │   ├── health-monitor.ts
 │   │   ├── index.ts
 │   │   ├── metrics-collector.ts
 │   │   ├── rate-limiter.ts
+│   │   ├── README.md
 │   │   └── request-tracer.ts
 │   ├── storage/
 │   │   ├── base/
@@ -115,7 +119,8 @@ atlas-mcp-server
 │   │   │   ├── storage.ts
 │   │   │   └── template-storage.ts
 │   │   ├── factory.ts
-│   │   └── index.ts
+│   │   ├── index.ts
+│   │   └── README.md
 │   ├── task/
 │   │   ├── core/
 │   │   │   ├── batch/
@@ -153,23 +158,24 @@ atlas-mcp-server
 │   │   ├── operations/
 │   │   │   ├── index.ts
 │   │   │   └── task-operations.ts
-│   │   └── validation/
-│   │       ├── schemas/
-│   │       │   ├── base-schema.ts
-│   │       │   ├── bulk-operations-schema.ts
-│   │       │   ├── create-schema.ts
-│   │       │   ├── index.ts
-│   │       │   ├── metadata-schema.ts
-│   │       │   ├── path-schema.ts
-│   │       │   ├── task-schemas.ts
-│   │       │   └── update-schema.ts
-│   │       ├── validators/
-│   │       │   ├── dependency-validator.ts
-│   │       │   ├── hierarchy-validator.ts
-│   │       │   ├── index.ts
-│   │       │   └── status-validator.ts
-│   │       ├── index.ts
-│   │       └── task-validator.ts
+│   │   ├── validation/
+│   │   │   ├── schemas/
+│   │   │   │   ├── base-schema.ts
+│   │   │   │   ├── bulk-operations-schema.ts
+│   │   │   │   ├── create-schema.ts
+│   │   │   │   ├── index.ts
+│   │   │   │   ├── metadata-schema.ts
+│   │   │   │   ├── path-schema.ts
+│   │   │   │   ├── task-schemas.ts
+│   │   │   │   └── update-schema.ts
+│   │   │   ├── validators/
+│   │   │   │   ├── dependency-validator.ts
+│   │   │   │   ├── hierarchy-validator.ts
+│   │   │   │   ├── index.ts
+│   │   │   │   └── status-validator.ts
+│   │   │   ├── index.ts
+│   │   │   └── task-validator.ts
+│   │   └── README.md
 │   ├── template/
 │   │   ├── interpolation/
 │   │   │   ├── metadata-transformer.ts
@@ -180,7 +186,8 @@ atlas-mcp-server
 │   │   ├── validation/
 │   │   │   └── schemas/
 │   │   │       └── template-schemas.ts
-│   │   └── manager.ts
+│   │   ├── manager.ts
+│   │   └── README.md
 │   ├── tools/
 │   │   ├── definitions/
 │   │   │   ├── tools/
@@ -199,6 +206,7 @@ atlas-mcp-server
 │   │   ├── error-handler.ts
 │   │   ├── handler.ts
 │   │   ├── index.ts
+│   │   ├── README.md
 │   │   ├── schemas.ts
 │   │   ├── session-schemas.ts
 │   │   ├── types.ts
@@ -213,6 +221,7 @@ atlas-mcp-server
 │   │   ├── indexing.ts
 │   │   ├── logging.ts
 │   │   ├── project.ts
+│   │   ├── README.md
 │   │   ├── session.ts
 │   │   ├── storage.ts
 │   │   ├── task-core.ts
@@ -227,13 +236,15 @@ atlas-mcp-server
 │   │   ├── id-generator.ts
 │   │   ├── path-utils.ts
 │   │   ├── pattern-matcher.ts
-│   │   └── platform-utils.ts
+│   │   ├── platform-utils.ts
+│   │   └── README.md
 │   ├── validation/
 │   │   ├── config.ts
 │   │   ├── id-schema.ts
 │   │   ├── index.ts
 │   │   ├── logging.ts
-│   │   └── path-validator.ts
+│   │   ├── path-validator.ts
+│   │   └── README.md
 │   ├── visualization/
 │   │   ├── formatters/
 │   │   │   ├── base-formatter.ts
