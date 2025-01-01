@@ -7,7 +7,9 @@
 [![Status](https://img.shields.io/badge/Status-Stable-blue.svg)]()
 [![GitHub](https://img.shields.io/github/stars/cyanheads/atlas-mcp-server?style=social)](https://github.com/cyanheads/atlas-mcp-server)
 
-ATLAS (Adaptive Task & Logic Automation System) is a Model Context Protocol server that provides hierarchical task management capabilities to Large Language Models. This tool enables LLMs to manage complex tasks and dependencies through a robust and flexible API.
+ATLAS (Adaptive Task & Logic Automation System) is a Model Context Protocol server that provides
+hierarchical task management capabilities to Large Language Models. This tool enables LLMs to manage
+complex tasks and dependencies through a robust and flexible API.
 
 ## Table of Contents
 
@@ -24,7 +26,8 @@ ATLAS (Adaptive Task & Logic Automation System) is a Model Context Protocol serv
 
 ## Overview
 
-ATLAS implements the Model Context Protocol (MCP), enabling standardized communication between LLMs and external systems through:
+ATLAS implements the Model Context Protocol (MCP), enabling standardized communication between LLMs
+and external systems through:
 
 - **Clients** (Claude Desktop, IDEs) that maintain server connections
 - **Servers** that provide tools and resources (Like our ATLAS MCP Server)
@@ -62,7 +65,11 @@ ATLAS implements the Model Context Protocol (MCP), enabling standardized communi
 - Batch processing with retry mechanism
 - Connection pooling with health monitoring
 - Automatic checkpointing and maintenance
-- Memory usage optimization
+- Advanced memory management:
+  - Progressive cache reduction
+  - Memory pressure monitoring
+  - Smart eviction strategies
+  - Detailed memory metrics
 - Platform-specific optimizations
 - Circuit breaker pattern for reliability
 
@@ -74,34 +81,50 @@ ATLAS implements the Model Context Protocol (MCP), enabling standardized communi
 - Schema enforcement
 - Relationship integrity checks
 
-### Error Handling
+### Error Handling & Monitoring
 
 Error severity levels:
+
 - CRITICAL: Database/storage failures
 - HIGH: Missing resources, transaction issues
 - MEDIUM: Validation/dependency problems
 - LOW: Non-critical operational issues
 
 Error context tracking:
+
 - Operation details
 - Timestamps
 - Stack traces
 - Metadata
 
+Monitoring capabilities:
+
+- Memory pressure tracking
+- Cache utilization metrics
+- Performance analytics
+- Health monitoring with:
+  - Memory usage patterns
+  - Cache efficiency metrics
+  - Operation latency tracking
+  - Resource pressure alerts
+
 ## Installation
 
 1. Clone the repository:
+
 ```bash
 git clone https://github.com/cyanheads/atlas-mcp-server.git
 cd atlas-mcp-server
 ```
 
 2. Install dependencies:
+
 ```bash
 npm install
 ```
 
 3. Build the project:
+
 ```bash
 npm run build
 ```
@@ -118,11 +141,11 @@ Add to your MCP client settings:
       "args": ["/path/to/atlas-mcp-server/build/index.js"],
       "env": {
         "ATLAS_STORAGE_DIR": "/path/to/storage/directory", // Optional, defaults to ~/Documents/Cline/mcp-workspace/ATLAS
-        "ATLAS_STORAGE_NAME": "atlas-tasks",               // Optional, defaults to atlas-tasks
-        "NODE_ENV": "production",                          // Optional, defaults to development
-        "ATLAS_LOG_LEVEL": "info",                        // Optional, defaults to debug
-        "ATLAS_MAX_MEMORY": "1024",                       // Optional, in MB, defaults to 25% of system memory
-        "ATLAS_CHECKPOINT_INTERVAL": "30000"              // Optional, in ms, defaults to 30000
+        "ATLAS_STORAGE_NAME": "atlas-tasks", // Optional, defaults to atlas-tasks
+        "NODE_ENV": "production", // Optional, defaults to development
+        "ATLAS_LOG_LEVEL": "info", // Optional, defaults to debug
+        "ATLAS_MAX_MEMORY": "1024", // Optional, in MB, defaults to 25% of system memory
+        "ATLAS_CHECKPOINT_INTERVAL": "30000" // Optional, in ms, defaults to 30000
       }
     }
   }
@@ -336,6 +359,7 @@ Execute multiple task operations atomically:
 ```
 
 Operations are executed in dependency order and rolled back on failure. Each operation can:
+
 - Create new tasks with full metadata and notes
 - Update existing tasks while preserving required fields
 - Delete tasks and update dependent references
@@ -352,12 +376,14 @@ Reset the task database:
 ```
 
 When to use:
+
 - Starting fresh project phase
 - Major project restructuring
 - Development environment reset
 - Test environment cleanup
 
 Best practices:
+
 - Backup data before clearing
 - Document clear reasoning
 - Consider selective deletion
@@ -375,17 +401,24 @@ Optimize database storage and performance:
 ```
 
 When to use:
+
 - After bulk operations
 - During maintenance windows
 - When performance degrades
 - After large deletions
+- Under memory pressure
 
 Best practices:
+
 - Run during low activity
 - Monitor space usage
 - Schedule regularly
 - Backup before running
 - Check performance impact
+- Monitor memory metrics:
+  - Heap usage
+  - Cache pressure
+  - Memory fragmentation
 
 ### repair_relationships
 
@@ -399,12 +432,14 @@ Fix task hierarchy and dependency issues:
 ```
 
 When to use:
+
 - After failed operations
 - Fixing circular dependencies
 - Resolving orphaned tasks
 - Maintaining task integrity
 
 Best practices:
+
 - Run dry-run first
 - Fix critical paths
 - Verify results
@@ -428,10 +463,19 @@ Best practices:
 - Use bulk operations for multiple updates
 - Keep task hierarchies shallow
 - Regular database maintenance
-- Monitor memory usage with automatic optimization
+- Advanced memory management:
+  - Progressive cache reduction
+  - Memory pressure monitoring
+  - Smart eviction strategies
+  - Cache efficiency optimization
 - Use appropriate batch sizes with retry mechanism
 - Implement circuit breakers for stability
 - Configure platform-specific optimizations
+- Monitor system health:
+  - Memory usage patterns
+  - Cache hit ratios
+  - Operation latencies
+  - Resource pressure
 
 ### Error Handling
 
