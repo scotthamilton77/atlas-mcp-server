@@ -1,5 +1,20 @@
 import { BaseError } from './base-error.js';
 import { ErrorCode, ErrorContext, ErrorSeverity } from '../types/error.js';
+import { ValidationResult } from '../types/task.js';
+
+interface ValidationPerformanceMetrics {
+  validationTime: number;
+  complexityScore: number;
+  recommendations?: string[];
+}
+
+interface TaskValidationErrorMetadata extends Record<string, unknown> {
+  validationDetails?: ValidationResult['details'];
+  warnings?: string[];
+  performance?: ValidationPerformanceMetrics;
+  securitySeverity?: 'high' | 'medium' | 'low';
+  performanceImpact?: 'high' | 'normal';
+}
 
 /**
  * Factory for creating task-specific errors
@@ -82,14 +97,38 @@ export class TaskErrorFactory {
   }
 
   /**
-   * Creates a task validation error
+   * Creates a task validation error with enhanced validation details
    */
   static createTaskValidationError(
     operation: string,
     message: string,
-    metadata?: Record<string, unknown>
+    metadata?: Record<string, unknown>,
+    validationResult?: ValidationResult
   ): BaseError {
-    return this.createError('TASK_VALIDATION', message, operation, metadata);
+    const enhancedMetadata: TaskValidationErrorMetadata = {
+      ...metadata,
+      validationDetails: validationResult?.details,
+      warnings: validationResult?.warnings,
+      performance: validationResult?.details?.performance,
+    };
+
+    // Add severity based on validation result
+    if (validationResult?.details?.security) {
+      const highSeverityIssues = validationResult.details.security.filter(
+        issue => issue.severity === 'high'
+      );
+      if (highSeverityIssues.length > 0) {
+        enhancedMetadata.securitySeverity = 'high';
+      }
+    }
+
+    // Add performance impact if available
+    if (validationResult?.details?.performance?.complexityScore !== undefined) {
+      enhancedMetadata.performanceImpact =
+        validationResult.details.performance.complexityScore > 0.7 ? 'high' : 'normal';
+    }
+
+    return this.createError('TASK_VALIDATION', message, operation, enhancedMetadata);
   }
 
   /**

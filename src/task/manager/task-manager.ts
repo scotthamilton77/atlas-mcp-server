@@ -54,7 +54,36 @@ export class TaskManager {
 
   async createTask(input: CreateTaskInput): Promise<Task> {
     try {
-      await this.validator.validateCreate(input);
+      const validationResult = await this.validator.validateCreate(input);
+
+      if (!validationResult.success) {
+        throw TaskErrorFactory.createTaskValidationError(
+          'TaskManager.createTask',
+          validationResult.errors.join('; '),
+          {
+            input,
+            validationDetails: validationResult.details,
+          }
+        );
+      }
+
+      // Log warnings if any
+      if (validationResult.warnings?.length) {
+        this.logger.warn('Task creation validation warnings', {
+          input,
+          warnings: validationResult.warnings,
+          details: validationResult.details,
+        });
+      }
+
+      // Log performance metrics if available
+      if (validationResult.details?.performance) {
+        this.logger.debug('Task creation validation performance', {
+          input,
+          performance: validationResult.details.performance,
+        });
+      }
+
       const task = await this.storage.createTask(input);
       this.cache.set(task);
       await this.events.emitTaskCreated(task);
@@ -73,7 +102,29 @@ export class TaskManager {
       }
 
       return await this.transactionManager.executeUpdate(existingTask, updates, {
-        validateUpdate: () => this.validator.validateUpdate(path, updates),
+        validateUpdate: async () => {
+          const validationResult = await this.validator.validateUpdate(path, updates);
+
+          // Log warnings and performance metrics even if validation succeeds
+          if (validationResult.warnings?.length) {
+            this.logger.warn('Task update validation warnings', {
+              path,
+              updates,
+              warnings: validationResult.warnings,
+              details: validationResult.details,
+            });
+          }
+
+          if (validationResult.details?.performance) {
+            this.logger.debug('Task update validation performance', {
+              path,
+              updates,
+              performance: validationResult.details.performance,
+            });
+          }
+
+          return validationResult;
+        },
         handleDependencyUpdates: updates.dependencies
           ? () => this.handleDependencyUpdates(existingTask, updates.dependencies!)
           : undefined,

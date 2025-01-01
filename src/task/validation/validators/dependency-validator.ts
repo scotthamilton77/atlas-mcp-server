@@ -1,66 +1,216 @@
 import { ErrorCodes, createError } from '../../../errors/index.js';
-import { Task } from '../../../types/task.js';
+import { Task, TaskStatus } from '../../../types/task.js';
+import { Logger } from '../../../logging/index.js';
 
 /**
- * Validation modes for dependency checking
+ * Enhanced validation modes for dependency checking
  */
 export enum DependencyValidationMode {
-  STRICT = 'strict', // All dependencies must exist
+  STRICT = 'strict', // All dependencies must exist and be valid
   DEFERRED = 'deferred', // Allow missing dependencies for bulk operations
+  LENIENT = 'lenient', // Allow missing dependencies but validate existing ones
 }
 
 /**
- * Result of dependency validation
+ * Detailed validation result with enhanced error reporting
  */
 export interface DependencyValidationResult {
   valid: boolean;
   missingDependencies: string[];
   error?: string;
+  details?: {
+    cyclicDependencies?: string[];
+    invalidDependencies?: Array<{
+      path: string;
+      reason: string;
+    }>;
+    statusConflicts?: Array<{
+      dependency: string;
+      status: TaskStatus;
+      conflict: string;
+    }>;
+    performanceImpact?: {
+      depth: number;
+      breadth: number;
+      warning?: string;
+    };
+  };
 }
 
 /**
- * Validates task dependencies and detects cycles
+ * Configuration options for dependency validation
+ */
+export interface DependencyValidationOptions {
+  maxDepth?: number; // Maximum depth of dependency chain
+  maxDependencies?: number; // Maximum number of direct dependencies
+  allowSelfDependency?: boolean; // Whether a task can depend on itself
+  validateStatus?: boolean; // Whether to validate dependency status
+  performanceCheck?: boolean; // Whether to check performance implications
+}
+
+// Default validation options
+const DEFAULT_OPTIONS: DependencyValidationOptions = {
+  maxDepth: 10,
+  maxDependencies: 50,
+  allowSelfDependency: false,
+  validateStatus: true,
+  performanceCheck: true,
+};
+
+/**
+ * Enhanced validator for task dependencies with comprehensive validation
  */
 export class DependencyValidator {
+  private readonly logger: Logger;
+  private readonly options: DependencyValidationOptions;
+
+  constructor(options: Partial<DependencyValidationOptions> = {}) {
+    this.options = { ...DEFAULT_OPTIONS, ...options };
+    this.logger = Logger.getInstance().child({ component: 'DependencyValidator' });
+  }
   /**
-   * Validates dependencies for a task
+   * Enhanced dependency validation with comprehensive checks
    */
   async validateDependencies(
     dependencies: string[],
     getTaskByPath: (path: string) => Promise<Task | null>,
-    mode: DependencyValidationMode = DependencyValidationMode.STRICT
+    mode: DependencyValidationMode = DependencyValidationMode.STRICT,
+    currentTask?: Task
   ): Promise<DependencyValidationResult> {
-    if (!Array.isArray(dependencies)) {
-      return {
-        valid: false,
-        missingDependencies: [],
-        error: 'Dependencies must be an array',
-      };
-    }
-
-    // Check for missing dependencies
-    const missingDeps: string[] = [];
-    for (const depPath of dependencies) {
-      const depTask = await getTaskByPath(depPath);
-      if (!depTask) {
-        missingDeps.push(depPath);
+    try {
+      // Input validation
+      if (!Array.isArray(dependencies)) {
+        return {
+          valid: false,
+          missingDependencies: [],
+          error: 'Dependencies must be an array',
+        };
       }
-    }
 
-    // In strict mode, fail if any dependencies are missing
-    if (mode === DependencyValidationMode.STRICT && missingDeps.length > 0) {
-      return {
-        valid: false,
-        missingDependencies: missingDeps,
-        error: `Missing dependencies: ${missingDeps.join(', ')}`,
+      // Validate dependency count
+      if (dependencies.length > this.options.maxDependencies!) {
+        return {
+          valid: false,
+          missingDependencies: [],
+          error: `Maximum number of dependencies (${this.options.maxDependencies}) exceeded`,
+        };
+      }
+
+      const result: DependencyValidationResult = {
+        valid: true,
+        missingDependencies: [],
+        details: {
+          invalidDependencies: [],
+          statusConflicts: [],
+          performanceImpact: {
+            depth: 0,
+            breadth: dependencies.length,
+          },
+        },
       };
+
+      // Check each dependency
+      const validationPromises = dependencies.map(async depPath => {
+        // Self-dependency check
+        if (currentTask && depPath === currentTask.path && !this.options.allowSelfDependency) {
+          result.details!.invalidDependencies!.push({
+            path: depPath,
+            reason: 'Self-dependency not allowed',
+          });
+          return;
+        }
+
+        const depTask = await getTaskByPath(depPath);
+
+        if (!depTask) {
+          result.missingDependencies.push(depPath);
+          return;
+        }
+
+        // Status validation
+        if (this.options.validateStatus) {
+          if (depTask.status === TaskStatus.CANCELLED) {
+            result.details!.statusConflicts!.push({
+              dependency: depPath,
+              status: depTask.status,
+              conflict: 'Cannot depend on cancelled task',
+            });
+          }
+        }
+
+        // Recursive depth check for nested dependencies
+        if (depTask.dependencies.length > 0) {
+          const nestedResult = await this.validateDependencies(
+            depTask.dependencies,
+            getTaskByPath,
+            mode,
+            depTask
+          );
+
+          result.details!.performanceImpact!.depth = Math.max(
+            result.details!.performanceImpact!.depth + 1,
+            nestedResult.details?.performanceImpact?.depth || 0
+          );
+        }
+      });
+
+      await Promise.all(validationPromises);
+
+      // Performance impact warning
+      if (this.options.performanceCheck) {
+        const { depth, breadth } = result.details!.performanceImpact!;
+        if (depth > 5 || breadth > 20) {
+          result.details!.performanceImpact!.warning =
+            'Complex dependency structure may impact performance';
+        }
+      }
+
+      // Determine validity based on mode
+      if (mode === DependencyValidationMode.STRICT) {
+        result.valid =
+          result.missingDependencies.length === 0 &&
+          result.details!.invalidDependencies!.length === 0 &&
+          result.details!.statusConflicts!.length === 0;
+      } else if (mode === DependencyValidationMode.LENIENT) {
+        result.valid = result.details!.invalidDependencies!.length === 0;
+      }
+
+      if (!result.valid) {
+        result.error = this.formatValidationError(result);
+      }
+
+      return result;
+    } catch (error) {
+      this.logger.error('Dependency validation failed', { error });
+      throw error;
+    }
+  }
+
+  /**
+   * Format validation errors into a clear message
+   */
+  private formatValidationError(result: DependencyValidationResult): string {
+    const errors: string[] = [];
+
+    if (result.missingDependencies.length > 0) {
+      errors.push(`Missing dependencies: ${result.missingDependencies.join(', ')}`);
     }
 
-    // In deferred mode, just return the missing dependencies
-    return {
-      valid: mode === DependencyValidationMode.DEFERRED || missingDeps.length === 0,
-      missingDependencies: missingDeps,
-    };
+    if (result.details?.invalidDependencies?.length) {
+      errors.push(
+        'Invalid dependencies: ' +
+          result.details.invalidDependencies.map(d => `${d.path} (${d.reason})`).join(', ')
+      );
+    }
+
+    if (result.details?.statusConflicts?.length) {
+      errors.push(
+        'Status conflicts: ' +
+          result.details.statusConflicts.map(c => `${c.dependency} (${c.conflict})`).join(', ')
+      );
+    }
+
+    return errors.join('; ');
   }
 
   /**

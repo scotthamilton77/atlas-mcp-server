@@ -9,8 +9,45 @@ export interface StatusTransitionResult {
   autoTransition?: boolean;
 }
 
+export interface ValidationResult {
+  success: boolean;
+  errors: string[];
+  warnings?: string[];
+  details?: {
+    metadata?: {
+      invalidFields?: string[];
+      missingRequired?: string[];
+      securityIssues?: string[];
+    };
+    dependencies?: {
+      missing?: string[];
+      invalid?: string[];
+      cycles?: string[];
+      performance?: {
+        depth: number;
+        breadth: number;
+        warning?: string;
+      };
+    };
+    hierarchy?: {
+      missingParents?: string[];
+      depthExceeded?: boolean;
+      invalidRelationships?: string[];
+    };
+    security?: {
+      issues: string[];
+      severity: 'low' | 'medium' | 'high';
+    }[];
+    performance?: {
+      validationTime: number;
+      complexityScore: number;
+      recommendations?: string[];
+    };
+  };
+}
+
 export interface StatusValidationOperations {
-  validateUpdate: () => Promise<void>;
+  validateUpdate: () => Promise<ValidationResult>;
   handleDependencyUpdates?: () => Promise<void>;
   handleStatusPropagation?: () => Promise<void>;
   validateStatusTransition?: () => Promise<StatusTransitionResult>;
@@ -43,7 +80,35 @@ export class TaskTransactionManager {
     return this.storage.executeInTransaction(async () => {
       try {
         // Validate updates first
-        await operations.validateUpdate();
+        const validationResult = await operations.validateUpdate();
+        if (!validationResult.success) {
+          throw TaskErrorFactory.createTaskValidationError(
+            'TaskTransactionManager.executeUpdate',
+            validationResult.errors.join('; '),
+            {
+              taskPath: task.path,
+              updates,
+              validationDetails: validationResult.details,
+            }
+          );
+        }
+
+        // Log warnings if any
+        if (validationResult.warnings?.length) {
+          this.logger.warn('Task update validation warnings', {
+            taskPath: task.path,
+            warnings: validationResult.warnings,
+            details: validationResult.details,
+          });
+        }
+
+        // Log performance metrics if available
+        if (validationResult.details?.performance) {
+          this.logger.debug('Task update validation performance', {
+            taskPath: task.path,
+            performance: validationResult.details.performance,
+          });
+        }
 
         // Handle dependency updates if needed
         if (updates.dependencies && operations.handleDependencyUpdates) {

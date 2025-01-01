@@ -192,23 +192,65 @@ export interface TaskMetrics {
   dependencyCount: number;
 }
 
+export interface ValidationResult {
+  success: boolean;
+  errors: string[];
+  warnings?: string[];
+  details?: {
+    metadata?: {
+      invalidFields?: string[];
+      missingRequired?: string[];
+      securityIssues?: string[];
+    };
+    dependencies?: {
+      missing?: string[];
+      invalid?: string[];
+      cycles?: string[];
+      performance?: {
+        depth: number;
+        breadth: number;
+        warning?: string;
+      };
+    };
+    hierarchy?: {
+      missingParents?: string[];
+      depthExceeded?: boolean;
+      invalidRelationships?: string[];
+    };
+    security?: {
+      issues: string[];
+      severity: 'low' | 'medium' | 'high';
+    }[];
+    performance?: {
+      validationTime: number;
+      complexityScore: number;
+      recommendations?: string[];
+    };
+  };
+}
+
 export interface TaskValidationError {
   code: string;
   message: string;
   field?: string;
-  details?: any;
+  details?: {
+    validationResult?: ValidationResult;
+    [key: string]: unknown;
+  };
 }
 
 export interface TaskOperationResult {
   success: boolean;
   task?: Task;
   errors?: TaskValidationError[];
+  validationResult?: ValidationResult;
 }
 
 export interface BulkOperationResult {
   success: boolean;
   results: TaskOperationResult[];
   errors?: TaskValidationError[];
+  validationResults?: ValidationResult[];
 }
 
 export interface TaskResponseMetadata {

@@ -76,8 +76,202 @@ Parent-Child Rules:
         },
         metadata: {
           type: 'object',
-          description:
-            'Additional task context and tracking information:\n- priority: Task urgency (low/medium/high)\n- tags: Keywords for categorization (max 100 tags, each max 100 chars)\n- reasoning: Document decision rationale (max 2000 chars)\n- tools_used: Track tool usage (max 100 entries)\n- resources_accessed: Track resource access (max 100 entries)\n- context_used: Contextual information (max 100 entries, each max 1000 chars)\n- technical_requirements: Implementation needs\n- acceptance_criteria: Success validation points\n- status_tracking: Timestamps, block reasons\n- version_control: Version numbers, previous states',
+          description: `Task metadata with structured validation:
+Core Fields:
+- priority: Task urgency (low/medium/high)
+- tags: Keywords for categorization (max 100 tags, each max 100 chars)
+- reasoning: Document decision rationale (max 2000 chars)
+
+Technical Details:
+- technicalRequirements: {
+    language: Programming language
+    framework: Framework used
+    dependencies: Array of dependencies (max 50)
+    environment: Environment details
+    performance: {
+      memory: Memory requirements
+      cpu: CPU requirements
+      storage: Storage requirements
+    }
+  }
+
+Validation & Progress:
+- acceptanceCriteria: {
+    criteria: Array of criteria (max 20, each max 500 chars)
+    testCases: Optional test cases (max 20)
+    reviewers: Optional reviewer list (max 10)
+  }
+- progress: {
+    percentage: Progress percentage (0-100)
+    milestones: Array of milestone names (max 20)
+    lastUpdated: Timestamp
+    estimatedCompletion: Timestamp
+  }
+
+Resource Tracking:
+- resources: {
+    toolsUsed: Array of tools (max 100)
+    resourcesAccessed: Array of resources (max 100)
+    contextUsed: Array of context items (max 100)
+  }
+
+Status Information:
+- blockInfo: {
+    blockedBy: Task causing block
+    blockReason: Reason for block (max 500 chars)
+    blockTimestamp: When blocked
+    unblockTimestamp: When unblocked
+    resolution: Block resolution (max 500 chars)
+  }
+
+Version Control:
+- versionControl: {
+    version: Version number
+    branch: Branch name
+    commit: Commit hash
+    previousVersions: Array of previous versions (max 10)
+  }
+
+Custom Fields:
+- customFields: Record of additional string fields`,
+          properties: {
+            priority: {
+              type: 'string',
+              enum: ['low', 'medium', 'high'],
+            },
+            tags: {
+              type: 'array',
+              items: {
+                type: 'string',
+                maxLength: 100,
+              },
+              maxItems: 100,
+            },
+            reasoning: {
+              type: 'string',
+              maxLength: 2000,
+            },
+            technicalRequirements: {
+              type: 'object',
+              properties: {
+                language: { type: 'string' },
+                framework: { type: 'string' },
+                dependencies: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  maxItems: 50,
+                },
+                environment: { type: 'string' },
+                performance: {
+                  type: 'object',
+                  properties: {
+                    memory: { type: 'string' },
+                    cpu: { type: 'string' },
+                    storage: { type: 'string' },
+                  },
+                },
+              },
+            },
+            acceptanceCriteria: {
+              type: 'object',
+              properties: {
+                criteria: {
+                  type: 'array',
+                  items: {
+                    type: 'string',
+                    maxLength: 500,
+                  },
+                  maxItems: 20,
+                },
+                testCases: {
+                  type: 'array',
+                  items: {
+                    type: 'string',
+                    maxLength: 500,
+                  },
+                  maxItems: 20,
+                },
+                reviewers: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  maxItems: 10,
+                },
+              },
+            },
+            progress: {
+              type: 'object',
+              properties: {
+                percentage: {
+                  type: 'number',
+                  minimum: 0,
+                  maximum: 100,
+                },
+                milestones: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  maxItems: 20,
+                },
+                lastUpdated: { type: 'number' },
+                estimatedCompletion: { type: 'number' },
+              },
+            },
+            resources: {
+              type: 'object',
+              properties: {
+                toolsUsed: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  maxItems: 100,
+                },
+                resourcesAccessed: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  maxItems: 100,
+                },
+                contextUsed: {
+                  type: 'array',
+                  items: {
+                    type: 'string',
+                    maxLength: 1000,
+                  },
+                  maxItems: 100,
+                },
+              },
+            },
+            blockInfo: {
+              type: 'object',
+              properties: {
+                blockedBy: { type: 'string' },
+                blockReason: {
+                  type: 'string',
+                  maxLength: 500,
+                },
+                blockTimestamp: { type: 'number' },
+                unblockTimestamp: { type: 'number' },
+                resolution: {
+                  type: 'string',
+                  maxLength: 500,
+                },
+              },
+            },
+            versionControl: {
+              type: 'object',
+              properties: {
+                version: { type: 'number' },
+                branch: { type: 'string' },
+                commit: { type: 'string' },
+                previousVersions: {
+                  type: 'array',
+                  items: { type: 'number' },
+                  maxItems: 10,
+                },
+              },
+            },
+            customFields: {
+              type: 'object',
+              additionalProperties: { type: 'string' },
+            },
+          },
         },
         planningNotes: {
           type: 'array',
