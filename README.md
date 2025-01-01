@@ -117,11 +117,12 @@ Add to your MCP client settings:
       "command": "node",
       "args": ["/path/to/atlas-mcp-server/build/index.js"],
       "env": {
-        "ATLAS_STORAGE_DIR": "/path/to/storage/directory",
-        "ATLAS_LOG_LEVEL": "info",
-        "ATLAS_DB_MAX_RETRIES": "3",
-        "ATLAS_DB_RETRY_DELAY": "500",
-        "ATLAS_DB_BUSY_TIMEOUT": "2000"
+        "ATLAS_STORAGE_DIR": "/path/to/storage/directory", // Optional, defaults to ~/Documents/Cline/mcp-workspace/ATLAS
+        "ATLAS_STORAGE_NAME": "atlas-tasks",               // Optional, defaults to atlas-tasks
+        "NODE_ENV": "production",                          // Optional, defaults to development
+        "ATLAS_LOG_LEVEL": "info",                        // Optional, defaults to debug
+        "ATLAS_MAX_MEMORY": "1024",                       // Optional, in MB, defaults to 25% of system memory
+        "ATLAS_CHECKPOINT_INTERVAL": "30000"              // Optional, in ms, defaults to 30000
       }
     }
   }
@@ -134,27 +135,71 @@ Tasks follow a structured format:
 
 ```typescript
 {
-  "path": "project/feature/task",
-  "name": "Implementation Task",
-  "description": "Implement core functionality",
-  "type": "TASK", // TASK or MILESTONE
-  "status": "PENDING",
-  "dependencies": ["project/feature/design"],
-  "metadata": {
-    "priority": "high",
-    "tags": ["core", "implementation"],
-    "technical_requirements": [
-      "Implement error handling",
-      "Add logging",
-      "Handle edge cases"
-    ]
+  // Core identification
+  "path": "project/feature/task",          // Max length: 255, Max depth: 7
+  "name": "Implementation Task",           // Max length: 200
+  "description": "Implement functionality", // Max length: 2000
+  "type": "TASK",                         // TASK or MILESTONE
+  "status": "PENDING",                    // PENDING, IN_PROGRESS, COMPLETED, BLOCKED, CANCELLED
+
+  // Relationships
+  "dependencies": ["project/feature/design"], // Max: 50 dependencies
+  "parentPath": "project/feature",
+
+  // Status metadata
+  "statusMetadata": {
+    "lastUpdated": "10:00:00 AM 1/28/2024",
+    "assignee": "developer1",
+    "progress_indicators": ["Design complete", "Implementation started"],
+    "blockedBy": [],
+    "blockedReason": "",
+    "completedBy": "",
+    "verificationStatus": "passed"
   },
+
+  // Rich metadata
+  "metadata": {
+    // Classification
+    "category": "backend",
+    "component": "authentication",
+    "platform": "node.js",
+    "scope": "internal",
+    "tags": ["security", "api"],          // Max: 10 tags
+
+    // Priority
+    "priority": "high",                   // low, medium, high
+    "criticality": "essential",
+    "impact": "high",
+
+    // Technical
+    "language": "typescript",
+    "framework": "express",
+    "tools": ["jwt", "bcrypt"],
+    "requirements": [
+      "Implement error handling",
+      "Add comprehensive logging",
+      "Handle edge cases"
+    ],
+
+    // Quality
+    "testingRequirements": [
+      "Unit tests required",
+      "Integration tests required"
+    ],
+    "qualityMetrics": {
+      "coverage": 90,
+      "complexity": 5,
+      "performance": ["<100ms response time"]
+    }
+  },
+
+  // Notes (Max 25 notes per category)
   "planningNotes": [
-    "Review requirements",
-    "Design architecture"
+    "Review security requirements",
+    "Design authentication flow"
   ],
   "progressNotes": [
-    "Implemented core functionality",
+    "Implemented JWT handling",
     "Added error handling"
   ],
   "completionNotes": [],
@@ -170,15 +215,40 @@ Create a new task in the system:
 
 ```typescript
 {
+  // Required fields
   "path": "project/backend/auth",
   "title": "Implement JWT Authentication",
-  "type": "TASK",
-  "description": "Add JWT-based authentication system",
-  "dependencies": ["project/backend/database"],
+
+  // Optional fields
+  "type": "TASK",                                    // Defaults to TASK
+  "description": "Add JWT-based authentication system with comprehensive security measures",
+  "parentPath": "project/backend",                   // For organizing subtasks
+  "dependencies": ["project/backend/database"],      // Tasks that must be completed first
+
+  // Rich metadata
   "metadata": {
     "priority": "high",
-    "tags": ["security", "api"]
-  }
+    "tags": ["security", "api"],
+    "reasoning": "Required for secure API access",
+    "technical_requirements": [
+      "Implement JWT generation and validation",
+      "Add refresh token mechanism",
+      "Implement rate limiting"
+    ],
+    "acceptance_criteria": [
+      "All security tests pass",
+      "Performance meets SLA requirements"
+    ]
+  },
+
+  // Categorized notes
+  "planningNotes": [
+    "Research JWT best practices",
+    "Design token refresh flow"
+  ],
+  "progressNotes": [],                              // Track implementation progress
+  "completionNotes": [],                            // Document completion details
+  "troubleshootingNotes": []                        // Record and resolve issues
 }
 ```
 
@@ -200,27 +270,75 @@ Execute multiple task operations atomically:
 ```typescript
 {
   "operations": [
+    // Create milestone for new feature
     {
       "type": "create",
       "path": "project/backend/oauth2",
       "data": {
-        "title": "Implement OAuth2",
+        "title": "Implement OAuth2 Authentication",
         "type": "MILESTONE",
-        "description": "OAuth2 implementation"
+        "description": "Replace JWT auth with OAuth2 implementation",
+        "metadata": {
+          "priority": "high",
+          "component": "authentication",
+          "tags": ["security", "api", "oauth2"],
+          "reasoning": "OAuth2 provides better security and standardization"
+        },
+        "planningNotes": [
+          "Research OAuth2 providers",
+          "Define integration requirements"
+        ]
       }
     },
+    // Create subtask with dependencies
     {
       "type": "create",
-      "path": "project/backend/oauth2/setup",
+      "path": "project/backend/oauth2/provider-setup",
       "data": {
-        "title": "Provider Setup",
-        "dependencies": ["project/backend/oauth2"]
+        "title": "Configure OAuth2 Providers",
+        "type": "TASK",
+        "dependencies": ["project/backend/oauth2"],
+        "metadata": {
+          "priority": "high",
+          "technical_requirements": [
+            "Configure Google OAuth2",
+            "Configure GitHub OAuth2"
+          ]
+        },
+        "planningNotes": [
+          "List required OAuth2 providers",
+          "Document configuration requirements"
+        ]
+      }
+    },
+    // Update existing task status
+    {
+      "type": "update",
+      "path": "project/backend/auth",
+      "data": {
+        "status": "CANCELLED",
+        "statusMetadata": {
+          "lastUpdated": "2024-01-28T10:00:00Z",
+          "completedBy": "system"
+        },
+        "completionNotes": [
+          "Functionality replaced by OAuth2 implementation"
+        ],
+        "metadata": {
+          "reasoning": "Replaced by OAuth2 implementation",
+          "migrationPath": "project/backend/oauth2"
+        }
       }
     }
   ],
-  "reasoning": "Implementing OAuth2 authentication"
+  "reasoning": "Transitioning authentication system to OAuth2. Creating necessary task structure and updating existing tasks to reflect the change."
 }
 ```
+
+Operations are executed in dependency order and rolled back on failure. Each operation can:
+- Create new tasks with full metadata and notes
+- Update existing tasks while preserving required fields
+- Delete tasks and update dependent references
 
 ### clear_all_tasks
 
@@ -228,32 +346,70 @@ Reset the task database:
 
 ```typescript
 {
-  "confirm": true,
-  "reasoning": "Resetting task structure for Q2 planning"
+  "confirm": true,                                // Required to prevent accidental deletion
+  "reasoning": "Resetting task structure for Q2 planning. Previous tasks archived at /backup/2024Q1, new structure defined in planning/2024Q2.md"
 }
 ```
+
+When to use:
+- Starting fresh project phase
+- Major project restructuring
+- Development environment reset
+- Test environment cleanup
+
+Best practices:
+- Backup data before clearing
+- Document clear reasoning
+- Consider selective deletion
+- Plan new task structure
 
 ### vacuum_database
 
-Optimize database storage:
+Optimize database storage and performance:
 
 ```typescript
 {
-  "analyze": true,
-  "reasoning": "Running optimization after bulk deletions"
+  "analyze": true,                                // Optional, defaults to true
+  "reasoning": "Running optimization after bulk task deletion to reclaim space and update query statistics"
 }
 ```
+
+When to use:
+- After bulk operations
+- During maintenance windows
+- When performance degrades
+- After large deletions
+
+Best practices:
+- Run during low activity
+- Monitor space usage
+- Schedule regularly
+- Backup before running
+- Check performance impact
 
 ### repair_relationships
 
-Fix task hierarchy issues:
+Fix task hierarchy and dependency issues:
 
 ```typescript
 {
-  "dryRun": true,
-  "reasoning": "Checking for relationship issues"
+  "dryRun": true,                                // Optional, defaults to false
+  "reasoning": "Checking for relationship issues after recent bulk operations. Using dry-run to assess repairs needed."
 }
 ```
+
+When to use:
+- After failed operations
+- Fixing circular dependencies
+- Resolving orphaned tasks
+- Maintaining task integrity
+
+Best practices:
+- Run dry-run first
+- Fix critical paths
+- Verify results
+- Document changes
+- Update affected tasks
 
 ## Best Practices
 
