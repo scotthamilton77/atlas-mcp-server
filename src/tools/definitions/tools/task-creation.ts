@@ -21,7 +21,8 @@ export function createTaskTool(context: ToolContext): ToolImplementation {
       properties: {
         path: {
           type: 'string',
-          description: 'Hierarchical path (e.g., "project/backend/auth"). Use forward slashes to indicate task hierarchy.',
+          description:
+            'Hierarchical path (e.g., "project/backend/auth"). Use forward slashes to indicate task hierarchy.',
         },
         title: {
           type: 'string',
@@ -29,7 +30,8 @@ export function createTaskTool(context: ToolContext): ToolImplementation {
         },
         description: {
           type: 'string',
-          description: 'Detailed explanation including context, requirements, and success criteria.',
+          description:
+            'Detailed explanation including context, requirements, and success criteria.',
         },
         type: {
           type: 'string',
@@ -46,11 +48,13 @@ export function createTaskTool(context: ToolContext): ToolImplementation {
           items: {
             type: 'string',
           },
-          description: 'Paths of tasks that must be completed first. Tasks will be blocked until dependencies are met.',
+          description:
+            'Paths of tasks that must be completed first. Tasks will be blocked until dependencies are met.',
         },
         metadata: {
           type: 'object',
-          description: 'Additional task context and tracking information:\n- priority: Task urgency (low/medium/high)\n- tags: Keywords for categorization\n- reasoning: Document decision rationale\n- technical_requirements: Specific implementation needs\n- acceptance_criteria: Success validation points',
+          description:
+            'Additional task context and tracking information:\n- priority: Task urgency (low/medium/high)\n- tags: Keywords for categorization\n- reasoning: Document decision rationale\n- technical_requirements: Specific implementation needs\n- acceptance_criteria: Success validation points',
         },
         planningNotes: {
           type: 'array',
@@ -95,7 +99,9 @@ export function createTaskTool(context: ToolContext): ToolImplementation {
       planningNotes: Array.isArray(args.planningNotes) ? args.planningNotes.map(String) : [],
       progressNotes: Array.isArray(args.progressNotes) ? args.progressNotes.map(String) : [],
       completionNotes: Array.isArray(args.completionNotes) ? args.completionNotes.map(String) : [],
-      troubleshootingNotes: Array.isArray(args.troubleshootingNotes) ? args.troubleshootingNotes.map(String) : [],
+      troubleshootingNotes: Array.isArray(args.troubleshootingNotes)
+        ? args.troubleshootingNotes.map(String)
+        : [],
 
       // Metadata
       metadata: args.metadata || {},

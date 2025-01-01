@@ -202,10 +202,18 @@ Delete: No additional data needed`,
               dependencies: (op.data?.dependencies as string[]) || [],
               metadata: (op.data?.metadata as Record<string, unknown>) || {},
               statusMetadata: {},
-              planningNotes: Array.isArray(op.data?.planningNotes) ? op.data.planningNotes as string[] : [],
-              progressNotes: Array.isArray(op.data?.progressNotes) ? op.data.progressNotes as string[] : [],
-              completionNotes: Array.isArray(op.data?.completionNotes) ? op.data.completionNotes as string[] : [],
-              troubleshootingNotes: Array.isArray(op.data?.troubleshootingNotes) ? op.data.troubleshootingNotes as string[] : [],
+              planningNotes: Array.isArray(op.data?.planningNotes)
+                ? (op.data.planningNotes as string[])
+                : [],
+              progressNotes: Array.isArray(op.data?.progressNotes)
+                ? (op.data.progressNotes as string[])
+                : [],
+              completionNotes: Array.isArray(op.data?.completionNotes)
+                ? (op.data.completionNotes as string[])
+                : [],
+              troubleshootingNotes: Array.isArray(op.data?.troubleshootingNotes)
+                ? (op.data.troubleshootingNotes as string[])
+                : [],
             });
             break;
           }
