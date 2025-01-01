@@ -90,8 +90,9 @@ export class EventBatchProcessor {
     const checkMemoryPressure = () => {
       const memUsage = process.memoryUsage();
       const heapUsed = memUsage.heapUsed / memUsage.heapTotal;
-      
-      if (heapUsed > 0.8) { // 80% heap usage
+
+      if (heapUsed > 0.8) {
+        // 80% heap usage
         this.logger?.warn('High memory pressure detected', { heapUsed });
         // Force flush all batches
         this.flushAllBatches().catch(error => {
@@ -171,7 +172,7 @@ export class EventBatchProcessor {
       try {
         await Promise.race([
           callback(batch),
-          new Promise((_, reject) => 
+          new Promise((_, reject) =>
             setTimeout(() => reject(new Error('Batch processing timeout')), 30000)
           ),
         ]);
@@ -180,8 +181,8 @@ export class EventBatchProcessor {
         const metrics = this.getMetrics(type);
         metrics.processedCount += batch.length;
         metrics.lastProcessed = Date.now();
-        metrics.avgProcessingTime = 
-          (metrics.avgProcessingTime * 0.9) + ((Date.now() - startTime) * 0.1);
+        metrics.avgProcessingTime =
+          metrics.avgProcessingTime * 0.9 + (Date.now() - startTime) * 0.1;
 
         this.logger?.debug('Batch processed successfully', {
           eventType: type,
@@ -209,10 +210,10 @@ export class EventBatchProcessor {
             attempts: metrics.retryCount,
             lastAttempt: Date.now(),
           }));
-          
+
           const existing = this.deadLetterQueue.get(type) || [];
           this.deadLetterQueue.set(type, [...existing, ...deadLetterEvents]);
-          
+
           this.logger?.error('Events moved to dead letter queue', {
             eventType: type,
             count: batch.length,
@@ -220,11 +221,8 @@ export class EventBatchProcessor {
           });
         } else {
           // Requeue with exponential backoff
-          const retryDelay = Math.min(
-            1000 * Math.pow(2, metrics.retryCount),
-            30000
-          );
-          
+          const retryDelay = Math.min(1000 * Math.pow(2, metrics.retryCount), 30000);
+
           setTimeout(() => {
             const retriedEvents = batch.map(event => ({
               ...event,
@@ -254,7 +252,7 @@ export class EventBatchProcessor {
 
   async shutdown(): Promise<void> {
     this.isShuttingDown = true;
-    
+
     // Clear periodic flush interval
     if (this.flushInterval) {
       clearInterval(this.flushInterval);
@@ -270,7 +268,7 @@ export class EventBatchProcessor {
       this.logger?.info('Waiting for active batch processing to complete', {
         remaining: this.activeProcessing.size,
       });
-      
+
       await new Promise<void>(resolve => {
         const checkInterval = setInterval(() => {
           if (this.activeProcessing.size === 0) {

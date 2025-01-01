@@ -77,7 +77,7 @@ export class EventManager {
 
     this.cleanupTimeout = setInterval(() => {
       if (this.isShuttingDown) return;
-      
+
       try {
         this.cleanupStaleStats();
         this.cleanupStaleSubscriptions();
@@ -119,8 +119,9 @@ export class EventManager {
       });
 
       // Sort by creation time and remove oldest
-      const sortedSubs = Array.from(this.activeSubscriptions)
-        .sort((a, b) => a.createdAt - b.createdAt);
+      const sortedSubs = Array.from(this.activeSubscriptions).sort(
+        (a, b) => a.createdAt - b.createdAt
+      );
 
       const toRemove = sortedSubs.slice(0, sortedSubs.length - this.maxSubscriptions);
       toRemove.forEach(sub => sub.unsubscribe());
@@ -133,9 +134,11 @@ export class EventManager {
     const ERROR_WINDOW = 60000; // 1 minute
 
     for (const [type, stats] of this.eventStats.entries()) {
-      if (stats.consecutiveErrors >= ERROR_THRESHOLD &&
-          stats.lastErrorTime &&
-          now - stats.lastErrorTime < ERROR_WINDOW) {
+      if (
+        stats.consecutiveErrors >= ERROR_THRESHOLD &&
+        stats.lastErrorTime &&
+        now - stats.lastErrorTime < ERROR_WINDOW
+      ) {
         this.emitError('event_handler_degraded', new Error('Event handler health degraded'), {
           eventType: type,
           consecutiveErrors: stats.consecutiveErrors,
@@ -225,7 +228,10 @@ export class EventManager {
     this.isShuttingDown = false;
   }
 
-  emit<T extends AtlasEvent>(event: T, options?: { batch?: boolean; priority?: 'high' | 'medium' | 'low' }): boolean {
+  emit<T extends AtlasEvent>(
+    event: T,
+    options?: { batch?: boolean; priority?: 'high' | 'medium' | 'low' }
+  ): boolean {
     if (this.isShuttingDown) {
       this.logger?.warn('Rejecting event during shutdown', {
         type: event.type,
@@ -282,9 +288,12 @@ export class EventManager {
       this.eventStats.set(event.type, stats);
 
       // Check circuit breaker
-      if (stats.consecutiveErrors >= 5 && // threshold
-          stats.lastErrorTime &&
-          Date.now() - stats.lastErrorTime < 60000) { // 1 minute window
+      if (
+        stats.consecutiveErrors >= 5 && // threshold
+        stats.lastErrorTime &&
+        Date.now() - stats.lastErrorTime < 60000
+      ) {
+        // 1 minute window
         this.logger?.warn('Circuit breaker active, rejecting event', {
           type: event.type,
           consecutiveErrors: stats.consecutiveErrors,
@@ -312,8 +321,7 @@ export class EventManager {
             if (successCount > 0) {
               stats.handled += successCount;
               stats.consecutiveErrors = 0;
-              stats.avgHandleTime = 
-                (stats.avgHandleTime * 0.9) + ((Date.now() - batchStartTime) * 0.1);
+              stats.avgHandleTime = stats.avgHandleTime * 0.9 + (Date.now() - batchStartTime) * 0.1;
             }
           } catch (error) {
             stats.errors++;
