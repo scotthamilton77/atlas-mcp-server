@@ -1,0 +1,195 @@
+{
+  "id": "llm-devops-engineer",
+  "name": "LLM DevOps Engineer Agent",
+  "description": "Task template for LLM agents performing DevOps and infrastructure automation",
+  "version": "1.0.0",
+  "author": "Atlas Team",
+  "tags": ["llm-agent", "devops", "infrastructure", "automation"],
+  "variables": [
+    {
+      "name": "projectName",
+      "description": "Name of the project/product",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "deploymentEnvironments",
+      "description": "Required deployment environments (comma-separated)",
+      "type": "string",
+      "required": true,
+      "default": "development,staging,production"
+    },
+    {
+      "name": "infrastructureType",
+      "description": "Infrastructure approach (serverless, containers, hybrid)",
+      "type": "string",
+      "required": false,
+      "default": "containers"
+    }
+  ],
+  "tasks": [
+    {
+      "path": "${projectName}/devops/infrastructure-setup",
+      "title": "Infrastructure as Code Setup",
+      "type": "TASK",
+      "description": "Establish infrastructure automation foundation",
+      "metadata": {
+        "priority": "high",
+        "tags": ["infrastructure", "automation"],
+        "agentInstructions": {
+          "objective": "Create infrastructure as code foundation",
+          "requiredCapabilities": [
+            {
+              "type": "code_generation",
+              "purpose": "Infrastructure code creation",
+              "features": ["Template generation", "Configuration management", "Variable handling"]
+            },
+            {
+              "type": "version_control",
+              "purpose": "Code management",
+              "features": ["Repository operations", "Branch management", "Commit handling"]
+            }
+          ],
+          "steps": [
+            {
+              "order": 1,
+              "action": "Initialize infrastructure code",
+              "thought": "Set up IaC repository structure",
+              "capability": "version_control",
+              "operations": [
+                {
+                  "type": "create_repository",
+                  "structure": ["infrastructure/", "modules/", "environments/"]
+                }
+              ]
+            },
+            {
+              "order": 2,
+              "action": "Generate base templates",
+              "thought": "Create infrastructure templates for ${infrastructureType}",
+              "capability": "code_generation",
+              "operations": [
+                {
+                  "type": "generate_templates",
+                  "components": [
+                    {
+                      "type": "network",
+                      "environments": "${deploymentEnvironments}"
+                    },
+                    {
+                      "type": "compute",
+                      "variant": "${infrastructureType}"
+                    },
+                    {
+                      "type": "storage",
+                      "scope": "persistent"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "outputArtifacts": [
+            {
+              "type": "code",
+              "path": "${projectName}/infrastructure/",
+              "components": ["main configuration", "environment configs", "modules"]
+            },
+            {
+              "type": "document",
+              "path": "${projectName}/infrastructure/README.md",
+              "sections": [
+                "Setup Instructions",
+                "Environment Configuration",
+                "Module Documentation"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "path": "${projectName}/devops/pipeline-automation",
+      "title": "CI/CD Pipeline Setup",
+      "type": "TASK",
+      "description": "Implement continuous integration and deployment pipelines",
+      "dependencies": ["${projectName}/devops/infrastructure-setup"],
+      "metadata": {
+        "priority": "high",
+        "tags": ["cicd", "automation"],
+        "agentInstructions": {
+          "objective": "Create automated deployment pipelines",
+          "requiredCapabilities": [
+            {
+              "type": "pipeline_automation",
+              "purpose": "CI/CD setup",
+              "features": ["Pipeline definition", "Stage configuration", "Environment management"]
+            },
+            {
+              "type": "security_automation",
+              "purpose": "Security integration",
+              "features": ["Secret management", "Security scanning", "Compliance checks"]
+            }
+          ],
+          "steps": [
+            {
+              "order": 1,
+              "action": "Define pipeline stages",
+              "thought": "Create pipeline stages for each environment",
+              "capability": "pipeline_automation",
+              "operations": [
+                {
+                  "type": "create_pipeline",
+                  "stages": [
+                    {
+                      "name": "build",
+                      "steps": ["lint", "test", "build"]
+                    },
+                    {
+                      "name": "security_scan",
+                      "steps": ["dependency_check", "code_scan", "container_scan"]
+                    },
+                    {
+                      "name": "deploy",
+                      "environments": "${deploymentEnvironments}"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "order": 2,
+              "action": "Configure security measures",
+              "thought": "Implement security automation",
+              "capability": "security_automation",
+              "operations": [
+                {
+                  "type": "setup_security",
+                  "components": ["secret_management", "vulnerability_scanning", "compliance_checks"]
+                }
+              ]
+            }
+          ],
+          "outputArtifacts": [
+            {
+              "type": "pipeline_config",
+              "path": "${projectName}/.pipeline/",
+              "files": ["pipeline.yml", "environments.yml", "security.yml"]
+            },
+            {
+              "type": "documentation",
+              "path": "${projectName}/docs/pipeline.md",
+              "sections": ["Pipeline Overview", "Environment Setup", "Security Measures"]
+            }
+          ],
+          "validationCriteria": [
+            "Pipeline successfully builds and tests code",
+            "Security scanning integrated",
+            "Deployment works in all environments",
+            "Secrets properly managed"
+          ]
+        }
+      }
+    }
+  ]
+}

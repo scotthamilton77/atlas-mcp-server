@@ -1,0 +1,196 @@
+{
+  "id": "llm-security-engineer",
+  "name": "LLM Security Engineer Agent",
+  "description": "Task template for LLM agents performing security engineering and implementation",
+  "version": "1.0.0",
+  "author": "Atlas Team",
+  "tags": ["llm-agent", "security", "compliance", "threat-modeling"],
+  "variables": [
+    {
+      "name": "projectName",
+      "description": "Name of the project/product",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "complianceFrameworks",
+      "description": "Required compliance frameworks (comma-separated)",
+      "type": "string",
+      "required": false,
+      "default": "OWASP"
+    },
+    {
+      "name": "dataClassification",
+      "description": "Highest level of data sensitivity",
+      "type": "string",
+      "required": true,
+      "default": "confidential"
+    }
+  ],
+  "tasks": [
+    {
+      "path": "${projectName}/security/threat-modeling",
+      "title": "Security Threat Modeling",
+      "type": "TASK",
+      "description": "Perform comprehensive threat modeling",
+      "metadata": {
+        "priority": "high",
+        "tags": ["security", "threat-model"],
+        "agentInstructions": {
+          "objective": "Create detailed threat model and security architecture",
+          "requiredCapabilities": [
+            {
+              "type": "threat_analysis",
+              "purpose": "Security assessment",
+              "features": ["Attack surface analysis", "Threat identification", "Risk assessment"]
+            },
+            {
+              "type": "security_documentation",
+              "purpose": "Security documentation",
+              "features": ["Threat model diagrams", "Risk matrices", "Mitigation strategies"]
+            }
+          ],
+          "steps": [
+            {
+              "order": 1,
+              "action": "System decomposition",
+              "thought": "Break down system for security analysis",
+              "capability": "threat_analysis",
+              "operations": [
+                {
+                  "type": "analyze_architecture",
+                  "aspects": ["trust_boundaries", "data_flows", "entry_points", "assets"]
+                },
+                {
+                  "type": "identify_threats",
+                  "frameworks": "${complianceFrameworks}",
+                  "categories": ["STRIDE", "OWASP_Top_10", "CWE_Top_25"]
+                }
+              ]
+            },
+            {
+              "order": 2,
+              "action": "Risk assessment",
+              "thought": "Evaluate and prioritize security risks",
+              "capability": "threat_analysis",
+              "operations": [
+                {
+                  "type": "assess_risks",
+                  "criteria": ["impact", "likelihood", "data_sensitivity", "exposure"]
+                }
+              ]
+            }
+          ],
+          "outputArtifacts": [
+            {
+              "type": "document",
+              "path": "${projectName}/security/threat-model/",
+              "files": ["threat-model.md", "risk-assessment.md", "mitigation-strategies.md"]
+            },
+            {
+              "type": "diagram",
+              "path": "${projectName}/security/diagrams/",
+              "files": ["trust-boundaries.svg", "data-flow.svg", "attack-vectors.svg"]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "path": "${projectName}/security/implementation",
+      "title": "Security Controls Implementation",
+      "type": "TASK",
+      "description": "Implement security controls and monitoring",
+      "dependencies": ["${projectName}/security/threat-modeling"],
+      "metadata": {
+        "priority": "high",
+        "tags": ["security", "implementation"],
+        "agentInstructions": {
+          "objective": "Implement and validate security controls",
+          "requiredCapabilities": [
+            {
+              "type": "security_implementation",
+              "purpose": "Security control deployment",
+              "features": ["Access control", "Encryption", "Monitoring", "Incident response"]
+            },
+            {
+              "type": "security_testing",
+              "purpose": "Security validation",
+              "features": ["Penetration testing", "Vulnerability scanning", "Security review"]
+            }
+          ],
+          "steps": [
+            {
+              "order": 1,
+              "action": "Implement controls",
+              "thought": "Deploy security measures based on threat model",
+              "capability": "security_implementation",
+              "operations": [
+                {
+                  "type": "deploy_controls",
+                  "controls": [
+                    {
+                      "type": "authentication",
+                      "level": "multi_factor"
+                    },
+                    {
+                      "type": "encryption",
+                      "scope": "data_in_transit_and_rest"
+                    },
+                    {
+                      "type": "monitoring",
+                      "components": ["activity_logs", "security_events", "anomaly_detection"]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "order": 2,
+              "action": "Security validation",
+              "thought": "Verify security control effectiveness",
+              "capability": "security_testing",
+              "operations": [
+                {
+                  "type": "security_testing",
+                  "tests": [
+                    {
+                      "type": "penetration_test",
+                      "scope": "full_system"
+                    },
+                    {
+                      "type": "vulnerability_scan",
+                      "tools": ["static", "dynamic", "composition"]
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "outputArtifacts": [
+            {
+              "type": "configuration",
+              "path": "${projectName}/security/configs/",
+              "files": ["security-controls.yml", "monitoring-rules.yml", "incident-response.yml"]
+            },
+            {
+              "type": "documentation",
+              "path": "${projectName}/security/docs/",
+              "files": [
+                "security-architecture.md",
+                "control-implementation.md",
+                "testing-results.md"
+              ]
+            }
+          ],
+          "validationCriteria": [
+            "All identified threats have corresponding controls",
+            "Security testing completed successfully",
+            "Monitoring systems operational",
+            "Compliance requirements met"
+          ]
+        }
+      }
+    }
+  ]
+}

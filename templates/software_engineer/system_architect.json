@@ -1,0 +1,200 @@
+{
+  "id": "llm-system-architect",
+  "name": "LLM System Architect Agent",
+  "description": "Task template for LLM agents performing system architecture and technical design",
+  "version": "1.0.0",
+  "author": "Atlas Team",
+  "tags": ["llm-agent", "architecture", "system-design"],
+  "variables": [
+    {
+      "name": "projectName",
+      "description": "Name of the project/product",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "scalingRequirements",
+      "description": "Expected system scale (startup, growth, enterprise)",
+      "type": "string",
+      "required": true,
+      "default": "growth"
+    },
+    {
+      "name": "securityLevel",
+      "description": "Required security level (standard, high, regulated)",
+      "type": "string",
+      "required": false,
+      "default": "standard"
+    }
+  ],
+  "tasks": [
+    {
+      "path": "${projectName}/architecture/requirements-analysis",
+      "title": "System Requirements Analysis",
+      "type": "TASK",
+      "description": "Analyze and document system requirements",
+      "metadata": {
+        "priority": "high",
+        "tags": ["requirements", "analysis"],
+        "agentInstructions": {
+          "objective": "Analyze technical requirements and constraints",
+          "requiredCapabilities": [
+            {
+              "type": "document_access",
+              "purpose": "Requirements gathering",
+              "features": [
+                "Read project documentation",
+                "Extract requirements",
+                "Cross-reference documents"
+              ]
+            },
+            {
+              "type": "technical_analysis",
+              "purpose": "System analysis",
+              "features": ["Performance modeling", "Scalability assessment", "Security evaluation"]
+            }
+          ],
+          "steps": [
+            {
+              "order": 1,
+              "action": "Gather requirements",
+              "thought": "Extract and categorize system requirements",
+              "capability": "document_access",
+              "operations": [
+                {
+                  "type": "read_documents",
+                  "sources": ["product_requirements", "user_research", "technical_constraints"]
+                },
+                {
+                  "type": "extract_requirements",
+                  "categories": ["functional", "non_functional", "security", "performance"]
+                }
+              ]
+            },
+            {
+              "order": 2,
+              "action": "Analyze scalability needs",
+              "thought": "Determine scaling requirements for ${scalingRequirements} level",
+              "capability": "technical_analysis",
+              "operations": [
+                {
+                  "type": "performance_modeling",
+                  "aspects": ["user_load", "data_volume", "transaction_rate"]
+                }
+              ]
+            }
+          ],
+          "outputArtifacts": [
+            {
+              "type": "document",
+              "path": "${projectName}/architecture/requirements.md",
+              "sections": [
+                "System Overview",
+                "Functional Requirements",
+                "Non-functional Requirements",
+                "Constraints"
+              ]
+            },
+            {
+              "type": "data",
+              "path": "${projectName}/architecture/scaling-metrics.json",
+              "format": "technical_specifications"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "path": "${projectName}/architecture/system-design",
+      "title": "High-Level System Design",
+      "type": "TASK",
+      "description": "Create high-level system architecture",
+      "dependencies": ["${projectName}/architecture/requirements-analysis"],
+      "metadata": {
+        "priority": "high",
+        "tags": ["architecture", "design"],
+        "agentInstructions": {
+          "objective": "Design high-level system architecture",
+          "requiredCapabilities": [
+            {
+              "type": "architecture_design",
+              "purpose": "System design",
+              "features": ["Component design", "Integration patterns", "Data flow modeling"]
+            },
+            {
+              "type": "diagram_generation",
+              "purpose": "Architecture visualization",
+              "features": ["System diagrams", "Component diagrams", "Data flow diagrams"]
+            }
+          ],
+          "steps": [
+            {
+              "order": 1,
+              "action": "Design core architecture",
+              "thought": "Define main system components and interactions",
+              "capability": "architecture_design",
+              "operations": [
+                {
+                  "type": "component_design",
+                  "aspects": ["service_boundaries", "data_stores", "integration_points"]
+                },
+                {
+                  "type": "pattern_selection",
+                  "considerations": ["scalability", "reliability", "maintainability"]
+                }
+              ]
+            },
+            {
+              "order": 2,
+              "action": "Create architecture diagrams",
+              "thought": "Visualize system design and interactions",
+              "capability": "diagram_generation",
+              "operations": [
+                {
+                  "type": "create_diagram",
+                  "diagrams": [
+                    {
+                      "type": "system_context",
+                      "scope": "high_level"
+                    },
+                    {
+                      "type": "component",
+                      "scope": "detailed"
+                    },
+                    {
+                      "type": "data_flow",
+                      "scope": "system_wide"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "outputArtifacts": [
+            {
+              "type": "document",
+              "path": "${projectName}/architecture/design.md",
+              "sections": [
+                "Architecture Overview",
+                "Component Design",
+                "Integration Patterns",
+                "Data Flow"
+              ]
+            },
+            {
+              "type": "diagrams",
+              "path": "${projectName}/architecture/diagrams/",
+              "formats": ["svg", "png"]
+            }
+          ],
+          "validationCriteria": [
+            "Meets ${scalingRequirements} scale requirements",
+            "Addresses ${securityLevel} security needs",
+            "Component boundaries clearly defined",
+            "Integration patterns documented"
+          ]
+        }
+      }
+    }
+  ]
+}

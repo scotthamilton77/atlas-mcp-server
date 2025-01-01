@@ -1,0 +1,202 @@
+{
+  "id": "llm-product-designer",
+  "name": "LLM Product Designer Agent",
+  "description": "Task template for LLM agents performing product design and user research roles",
+  "version": "1.0.0",
+  "author": "Atlas Team",
+  "tags": ["llm-agent", "product-design", "ux-research"],
+  "variables": [
+    {
+      "name": "projectName",
+      "description": "Name of the project/product",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "targetAudience",
+      "description": "Primary user demographic",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "competitorCount",
+      "description": "Number of main competitors to analyze",
+      "type": "number",
+      "required": false,
+      "default": 3
+    }
+  ],
+  "tasks": [
+    {
+      "path": "${projectName}/product-design/market-research",
+      "title": "Market Research Analysis",
+      "type": "TASK",
+      "description": "Analyze market conditions and competitor landscape",
+      "metadata": {
+        "priority": "high",
+        "tags": ["research", "market-analysis"],
+        "agentInstructions": {
+          "objective": "Gather and analyze market data for informed product decisions",
+          "requiredCapabilities": [
+            {
+              "type": "web_access",
+              "purpose": "Market research and data gathering",
+              "features": ["Search capability", "Page content extraction", "Data scraping"]
+            },
+            {
+              "type": "file_operation",
+              "purpose": "Document management",
+              "features": ["Read files", "Write files", "Create directories"]
+            },
+            {
+              "type": "data_analysis",
+              "purpose": "Process market data",
+              "features": ["Statistical analysis", "Pattern recognition", "Trend analysis"]
+            }
+          ],
+          "steps": [
+            {
+              "order": 1,
+              "action": "Initialize research structure",
+              "thought": "Create organized framework for findings",
+              "capability": "file_operation",
+              "operations": [
+                {
+                  "type": "create_directory",
+                  "path": "${projectName}/research"
+                },
+                {
+                  "type": "write_file",
+                  "path": "${projectName}/research/market-analysis.md",
+                  "template": "market_analysis_template"
+                }
+              ]
+            },
+            {
+              "order": 2,
+              "action": "Gather competitor data",
+              "thought": "Research top ${competitorCount} competitors",
+              "capability": "web_access",
+              "operations": [
+                {
+                  "type": "search",
+                  "queries": [
+                    "market leaders ${targetAudience}",
+                    "top companies ${targetAudience} solutions"
+                  ]
+                },
+                {
+                  "type": "extract_data",
+                  "targets": ["company profiles", "product features", "market share"]
+                }
+              ]
+            },
+            {
+              "order": 3,
+              "action": "Analyze market trends",
+              "thought": "Process and synthesize market data",
+              "capability": "data_analysis",
+              "operations": [
+                {
+                  "type": "trend_analysis",
+                  "data": "competitor_features",
+                  "metrics": ["feature_frequency", "pricing_patterns", "market_segments"]
+                }
+              ]
+            }
+          ],
+          "outputArtifacts": [
+            {
+              "type": "document",
+              "path": "${projectName}/research/market-analysis.md",
+              "sections": [
+                "Executive Summary",
+                "Competitor Analysis",
+                "Market Trends",
+                "Opportunities"
+              ]
+            },
+            {
+              "type": "data",
+              "path": "${projectName}/research/competitor-matrix.json",
+              "format": "structured_comparison"
+            }
+          ],
+          "validationCriteria": [
+            "Competitor analysis completed for ${competitorCount} companies",
+            "Market size estimation documented",
+            "Key trends identified and analyzed",
+            "Growth opportunities documented"
+          ]
+        }
+      }
+    },
+    {
+      "path": "${projectName}/product-design/user-research",
+      "title": "User Research & Personas",
+      "type": "TASK",
+      "description": "Create detailed user personas and journey maps",
+      "dependencies": ["${projectName}/product-design/market-research"],
+      "metadata": {
+        "priority": "high",
+        "tags": ["user-research", "personas"],
+        "agentInstructions": {
+          "objective": "Develop comprehensive user personas and journey maps",
+          "requiredCapabilities": [
+            {
+              "type": "data_analysis",
+              "purpose": "User behavior analysis",
+              "features": ["Pattern recognition", "Behavioral clustering", "Demographic analysis"]
+            },
+            {
+              "type": "document_generation",
+              "purpose": "Create user documentation",
+              "features": ["Template processing", "Markdown generation", "Diagram creation"]
+            }
+          ],
+          "steps": [
+            {
+              "order": 1,
+              "action": "Analyze user data",
+              "thought": "Process ${targetAudience} characteristics",
+              "capability": "data_analysis",
+              "operations": [
+                {
+                  "type": "demographic_analysis",
+                  "target": "${targetAudience}",
+                  "aspects": ["age_distribution", "technical_proficiency", "usage_patterns"]
+                }
+              ]
+            },
+            {
+              "order": 2,
+              "action": "Generate personas",
+              "thought": "Create representative user profiles",
+              "capability": "document_generation",
+              "operations": [
+                {
+                  "type": "create_document",
+                  "template": "user_persona",
+                  "count": 3,
+                  "sections": ["Background", "Goals", "Pain Points", "Technology Usage"]
+                }
+              ]
+            }
+          ],
+          "outputArtifacts": [
+            {
+              "type": "document",
+              "path": "${projectName}/research/user-personas.md",
+              "format": "markdown"
+            },
+            {
+              "type": "diagram",
+              "path": "${projectName}/research/journey-maps.svg",
+              "format": "vector"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

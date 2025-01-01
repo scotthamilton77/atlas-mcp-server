@@ -1,0 +1,206 @@
+{
+  "id": "llm-tech-lead",
+  "name": "LLM Technical Team Lead Agent",
+  "description": "Task template for LLM agents performing technical leadership and team coordination",
+  "version": "1.0.0",
+  "author": "Atlas Team",
+  "tags": ["llm-agent", "technical-leadership", "team-coordination"],
+  "variables": [
+    {
+      "name": "projectName",
+      "description": "Name of the project/product",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "teamSize",
+      "description": "Number of team members",
+      "type": "number",
+      "required": true,
+      "default": 5
+    },
+    {
+      "name": "developmentMethodology",
+      "description": "Development methodology (agile, kanban, etc)",
+      "type": "string",
+      "required": false,
+      "default": "agile"
+    }
+  ],
+  "tasks": [
+    {
+      "path": "${projectName}/tech-lead/development-standards",
+      "title": "Development Standards Setup",
+      "type": "TASK",
+      "description": "Establish development standards and best practices",
+      "metadata": {
+        "priority": "high",
+        "tags": ["standards", "best-practices"],
+        "agentInstructions": {
+          "objective": "Define and document development standards",
+          "requiredCapabilities": [
+            {
+              "type": "code_analysis",
+              "purpose": "Code quality assessment",
+              "features": ["Pattern recognition", "Best practice evaluation", "Standard compliance"]
+            },
+            {
+              "type": "documentation_generation",
+              "purpose": "Standards documentation",
+              "features": ["Template creation", "Guide generation", "Example creation"]
+            }
+          ],
+          "steps": [
+            {
+              "order": 1,
+              "action": "Define coding standards",
+              "thought": "Establish consistent coding practices",
+              "capability": "code_analysis",
+              "operations": [
+                {
+                  "type": "analyze_patterns",
+                  "aspects": [
+                    "code_organization",
+                    "naming_conventions",
+                    "error_handling",
+                    "testing_approaches"
+                  ]
+                },
+                {
+                  "type": "generate_rules",
+                  "categories": ["style", "architecture", "testing", "documentation"]
+                }
+              ]
+            },
+            {
+              "order": 2,
+              "action": "Create documentation",
+              "thought": "Document standards and practices",
+              "capability": "documentation_generation",
+              "operations": [
+                {
+                  "type": "create_guides",
+                  "documents": [
+                    {
+                      "type": "coding_standards",
+                      "sections": [
+                        "Style Guide",
+                        "Architecture Patterns",
+                        "Testing Requirements",
+                        "Documentation Rules"
+                      ]
+                    },
+                    {
+                      "type": "workflow_guide",
+                      "sections": ["Git Workflow", "Code Review Process", "Release Procedures"]
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "outputArtifacts": [
+            {
+              "type": "document",
+              "path": "${projectName}/docs/standards/",
+              "files": ["coding-standards.md", "workflow-guide.md", "review-checklist.md"]
+            },
+            {
+              "type": "code",
+              "path": "${projectName}/examples/",
+              "components": ["code-examples", "test-examples", "documentation-examples"]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "path": "${projectName}/tech-lead/quality-automation",
+      "title": "Quality Automation Setup",
+      "type": "TASK",
+      "description": "Implement automated quality checks and monitoring",
+      "dependencies": ["${projectName}/tech-lead/development-standards"],
+      "metadata": {
+        "priority": "high",
+        "tags": ["quality", "automation"],
+        "agentInstructions": {
+          "objective": "Automate code quality and standards enforcement",
+          "requiredCapabilities": [
+            {
+              "type": "tool_integration",
+              "purpose": "Quality tool setup",
+              "features": ["Linter configuration", "Test automation", "Quality gates"]
+            },
+            {
+              "type": "metrics_automation",
+              "purpose": "Quality metrics tracking",
+              "features": ["Metric collection", "Report generation", "Trend analysis"]
+            }
+          ],
+          "steps": [
+            {
+              "order": 1,
+              "action": "Configure quality tools",
+              "thought": "Set up automated quality checks",
+              "capability": "tool_integration",
+              "operations": [
+                {
+                  "type": "setup_tools",
+                  "tools": [
+                    {
+                      "category": "linting",
+                      "config": "standards_based"
+                    },
+                    {
+                      "category": "testing",
+                      "config": "coverage_enforced"
+                    },
+                    {
+                      "category": "security",
+                      "config": "continuous_scanning"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "order": 2,
+              "action": "Implement metrics collection",
+              "thought": "Set up quality metrics tracking",
+              "capability": "metrics_automation",
+              "operations": [
+                {
+                  "type": "configure_metrics",
+                  "metrics": [
+                    "code_coverage",
+                    "technical_debt",
+                    "bug_density",
+                    "documentation_coverage"
+                  ]
+                }
+              ]
+            }
+          ],
+          "outputArtifacts": [
+            {
+              "type": "configuration",
+              "path": "${projectName}/.quality/",
+              "files": ["linter-config.json", "test-config.json", "quality-gates.yml"]
+            },
+            {
+              "type": "documentation",
+              "path": "${projectName}/docs/quality/",
+              "files": ["quality-metrics.md", "tool-guides.md", "troubleshooting.md"]
+            }
+          ],
+          "validationCriteria": [
+            "All quality tools configured and running",
+            "Metrics collection operational",
+            "Documentation complete and accurate",
+            "Team has tool access and training"
+          ]
+        }
+      }
+    }
+  ]
+}
