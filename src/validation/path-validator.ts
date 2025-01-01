@@ -38,7 +38,7 @@ export class PathValidator {
 
   constructor(rules?: Partial<PathValidationRules>) {
     this.rules = {
-      maxDepth: rules?.maxDepth ?? 5,
+      maxDepth: rules?.maxDepth ?? 10,
       maxLength: rules?.maxLength ?? 255,
       allowedCharacters: rules?.allowedCharacters ?? /^[a-zA-Z0-9-_/]+$/,
       projectNamePattern: rules?.projectNamePattern ?? /^[a-zA-Z][a-zA-Z0-9-_]*$/,

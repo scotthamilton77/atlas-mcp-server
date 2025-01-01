@@ -8,7 +8,7 @@
 [![GitHub](https://img.shields.io/github/stars/cyanheads/atlas-mcp-server?style=social)](https://github.com/cyanheads/atlas-mcp-server)
 
 ATLAS (Adaptive Task & Logic Automation System) is a Model Context Protocol server that provides
-hierarchical task management capabilities to Large Language Models. This tool enables LLMs to manage
+path-based task management capabilities to Large Language Models. This tool enables LLMs to manage
 complex tasks and dependencies through a robust and flexible API.
 
 ## Table of Contents
@@ -48,7 +48,7 @@ and external systems through:
 
 ### Task Management
 
-- Hierarchical task organization
+- Path-based task organization
 - Strong type validation (TASK, MILESTONE)
 - Status management with transition rules
 - Parent-child relationship validation
@@ -187,12 +187,13 @@ See [templates/README.md](templates/README.md) for detailed template documentati
 
 ## Task Structure
 
-Tasks follow a structured format:
+Tasks follow a path-based format where relationships are established through forward-slash separated
+paths:
 
 ```typescript
 {
   // Core identification
-  "path": "project/feature/task",          // Max length: 255, Max depth: 7
+  "path": "project/feature/task",          // Max length: 1000, Max depth: 10
   "name": "Implementation Task",           // Max length: 200
   "description": "Implement functionality", // Max length: 2000
   "type": "TASK",                         // TASK or MILESTONE
@@ -220,7 +221,7 @@ Tasks follow a structured format:
     "component": "authentication",
     "platform": "node.js",
     "scope": "internal",
-    "tags": ["security", "api"],          // Max: 10 tags
+    "tags": ["security", "api"],          // Max: 10 tags, each max 1000 chars
 
     // Priority
     "priority": "high",                   // low, medium, high
@@ -230,26 +231,26 @@ Tasks follow a structured format:
     // Technical
     "language": "typescript",
     "framework": "express",
-    "tools": ["jwt", "bcrypt"],
-    "requirements": [
+    "tools": ["jwt", "bcrypt"],           // Max: 100 items, each max 1000 chars
+    "requirements": [                      // Max: 100 items, each max 1000 chars
       "Implement error handling",
       "Add comprehensive logging",
       "Handle edge cases"
     ],
 
     // Quality
-    "testingRequirements": [
+    "testingRequirements": [              // Max: 100 items, each max 1000 chars
       "Unit tests required",
       "Integration tests required"
     ],
     "qualityMetrics": {
       "coverage": 90,
       "complexity": 5,
-      "performance": ["<100ms response time"]
+      "performance": ["<100ms response time"] // Max: 100 items, each max 1000 chars
     }
   },
 
-  // Notes (Max 25 notes per category)
+  // Notes (Max 25 notes per category, max 2000 chars each)
   "planningNotes": [
     "Review security requirements",
     "Design authentication flow"
@@ -281,7 +282,7 @@ Create a new task in the system:
   "parentPath": "project/backend",                   // For organizing subtasks
   "dependencies": ["project/backend/database"],      // Tasks that must be completed first
 
-  // Rich metadata
+  // Rich metadata (Max total size: 32KB)
   "metadata": {
     "priority": "high",
     "tags": ["security", "api"],
@@ -455,7 +456,7 @@ Best practices:
 
 ### repair_relationships
 
-Fix task hierarchy and dependency issues:
+Fix task path and dependency issues:
 
 ```typescript
 {
@@ -483,7 +484,7 @@ Best practices:
 
 ### Task Management
 
-- Use descriptive paths reflecting hierarchy
+- Use descriptive, well-structured paths (e.g., "project/component/feature")
 - Keep dependencies manageable
 - Document changes in metadata
 - Use batch operations for related changes
@@ -494,7 +495,7 @@ Best practices:
 ### Performance
 
 - Use bulk operations for multiple updates
-- Keep task hierarchies shallow
+- Keep path structures shallow (max 10 levels, enforced by path validation)
 - Regular database maintenance
 - Advanced memory management:
   - Progressive cache reduction

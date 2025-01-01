@@ -279,7 +279,7 @@ export interface TaskResponse<T = Task> {
 export const CONSTRAINTS = {
   // Path constraints
   PATH_MAX_LENGTH: 255,
-  MAX_PATH_DEPTH: 7,
+  MAX_PATH_DEPTH: 10,
 
   // Field length constraints
   NAME_MAX_LENGTH: 200,
