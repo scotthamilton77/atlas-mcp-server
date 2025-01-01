@@ -1,26 +1,20 @@
 #!/usr/bin/env node
 /* eslint-env node */
+/* global process, console */
 import { readdir, writeFile } from 'fs/promises';
 import { join } from 'path';
 
-const IGNORE_PATTERNS = [
-  'node_modules',
-  '.git',
-  'build',
-  '.DS_Store',
-  'coverage',
-  'dist',
-  '*.log'
-];
+const IGNORE_PATTERNS = ['node_modules', '.git', 'build', '.DS_Store', 'coverage', 'dist', '*.log'];
 
 async function generateTree(dir, indent = '', isRoot = false) {
   const entries = await readdir(dir, { withFileTypes: true });
   const filteredEntries = entries
-    .filter(entry => !IGNORE_PATTERNS.some(pattern => 
-      pattern.includes('*') 
-        ? entry.name.endsWith(pattern.slice(1))
-        : entry.name === pattern
-    ))
+    .filter(
+      entry =>
+        !IGNORE_PATTERNS.some(pattern =>
+          pattern.includes('*') ? entry.name.endsWith(pattern.slice(1)) : entry.name === pattern
+        )
+    )
     .sort((a, b) => {
       // Directories first, then files
       if (a.isDirectory() && !b.isDirectory()) return -1;
@@ -29,10 +23,10 @@ async function generateTree(dir, indent = '', isRoot = false) {
     });
 
   const tree = [];
-  
+
   if (isRoot) {
     // Add project name header
-    tree.push('atlas-mcp-server\n');
+    tree.push('atlas-mcp-server');
   }
 
   for (let i = 0; i < filteredEntries.length; i++) {
@@ -44,7 +38,7 @@ async function generateTree(dir, indent = '', isRoot = false) {
     if (entry.isDirectory()) {
       // Add directory entry
       tree.push(`${indent}${prefix}${entry.name}/`);
-      
+
       // Recursively process subdirectory with updated indent
       const nextIndent = indent + (isLastEntry ? '    ' : '│   ');
       const subtree = await generateTree(fullPath, nextIndent);
@@ -63,7 +57,7 @@ const targetDir = process.argv[2] || '.';
 
 generateTree(targetDir, '', true)
   .then(async tree => {
-    const treeContent = tree.join('\n');
+    const treeContent = '```text\n' + tree.join('\n') + '\n```';
     // Write to file
     await writeFile(join(process.cwd(), 'repo-tree.md'), treeContent);
     // Also log to console for feedback
