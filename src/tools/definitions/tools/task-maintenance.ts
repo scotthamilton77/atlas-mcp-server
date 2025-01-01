@@ -13,6 +13,13 @@ export const clearAllTasksTool: ToolFactory = (context): ToolImplementation => (
     name: 'clear_all_tasks',
     description: `Remove all tasks from the database.
 
+Impact:
+- Deletes ALL tasks permanently
+- Removes all relationships and dependencies
+- Clears all metadata and notes
+- Resets database to initial state
+- Cannot be undone
+
 When to Use:
 - Starting fresh project phase
 - Major project restructuring
@@ -20,11 +27,18 @@ When to Use:
 - Test environment cleanup
 
 Best Practices:
-- Backup data before clearing
+- Export tasks before clearing
 - Verify confirmation flag
 - Document clear reasoning
 - Consider selective deletion
 - Plan new task structure
+- Archive important metadata
+
+Safety Checks:
+- Requires explicit confirmation
+- Validates database state
+- Ensures clean deletion
+- Prevents partial clears
 
 Example:
 {
@@ -69,11 +83,19 @@ export const vacuumDatabaseTool: ToolFactory = (context): ToolImplementation => 
     name: 'vacuum_database',
     description: `Optimize database storage and performance.
 
+Performance Impact:
+- Reclaims unused space
+- Rebuilds indexes
+- Updates statistics
+- Optimizes query plans
+- May take several minutes
+
 When to Use:
-- After bulk operations
+- After bulk operations (creates/deletes)
 - During maintenance windows
 - When performance degrades
 - After large deletions
+- Before major operations
 
 Best Practices:
 - Run during low activity
@@ -81,6 +103,14 @@ Best Practices:
 - Schedule regularly
 - Backup before running
 - Check performance impact
+- Allow sufficient time
+- Monitor system resources
+
+Resource Usage:
+- CPU: Moderate to high
+- Memory: Temporary increase
+- Disk I/O: Heavy
+- Storage: Temporary spike
 
 Example:
 {
@@ -125,11 +155,19 @@ export const repairRelationshipsTool: ToolFactory = (context): ToolImplementatio
     name: 'repair_relationships',
     description: `Fix task hierarchy and dependency issues.
 
+Repairs Performed:
+- Resolves circular dependencies
+- Fixes broken parent-child links
+- Removes invalid dependencies
+- Updates status inconsistencies
+- Corrects metadata anomalies
+
 When to Use:
 - After failed operations
 - Fixing circular dependencies
 - Resolving orphaned tasks
 - Maintaining task integrity
+- Before major updates
 
 Best Practices:
 - Run dry-run first
@@ -137,6 +175,14 @@ Best Practices:
 - Verify results
 - Document changes
 - Update affected tasks
+- Monitor cascading effects
+
+Validation Steps:
+- Path integrity check
+- Dependency cycle detection
+- Parent-child validation
+- Status consistency check
+- Metadata validation
 
 Example:
 {

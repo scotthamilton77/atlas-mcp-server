@@ -9,20 +9,35 @@ import { ErrorCodes, createError } from '../../../errors/index.js';
 export const updateTaskTool: ToolFactory = (context): ToolImplementation => ({
   definition: {
     name: 'update_task',
-    description: `Update an existing task's properties and status.
+    description: `Update task properties and status.
 
-When to Use:
-- Tracking task progress
-- Modifying task details or requirements
-- Updating dependencies or relationships
-- Documenting progress and decisions
+Status Transitions:
+- PENDING → IN_PROGRESS, BLOCKED, CANCELLED
+- IN_PROGRESS → COMPLETED, CANCELLED, BLOCKED
+- COMPLETED → No transitions allowed
+- CANCELLED → PENDING (for retry)
+- BLOCKED → PENDING, IN_PROGRESS
+
+Automatic Behaviors:
+- Auto-transition to BLOCKED if dependencies block
+- Parent completion requires all children complete
+- Cancelled parent cancels non-completed children
+- Blocked siblings prevent task completion
+- Failed siblings prevent task start
+
+Validation Rules:
+- Same constraints as create_task
+- Dependencies checked before status changes
+- Parent-child status rules enforced
+- Metadata schema validated
+- Notes length and count limits applied
 
 Best Practices:
-- Update status to reflect current progress
-- Document changes in metadata
-- Maintain accurate dependencies
-- Preserve task hierarchy
-- Include reasoning for significant changes
+- Document status change reasoning
+- Update progress indicators
+- Track technical implementation details
+- Record blockers and resolutions
+- Maintain dependency accuracy
 
 Example:
 {

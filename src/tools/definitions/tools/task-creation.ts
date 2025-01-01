@@ -15,7 +15,29 @@ interface ToolContext {
 export function createTaskTool(context: ToolContext): ToolImplementation {
   const definition: Tool = {
     name: 'create_task',
-    description: 'Create a new task in the hierarchical task system.',
+    description: `Create a new task in the hierarchical task system.
+
+Validation Constraints:
+- Path: max length 1000 chars, max depth 10 levels, alphanumeric with -_/
+- Name: max length 200 chars
+- Description: max length 2000 chars
+- Notes: max 100 notes per category, each max 1000 chars
+- Dependencies: max 50 tasks
+- Reasoning: max 2000 chars
+
+Metadata Fields:
+- Priority: low/medium/high
+- Tags: max 100 tags, each max 100 chars
+- Tools Used: max 100 entries
+- Resources Accessed: max 100 entries
+- Context Used: max 100 entries, each max 1000 chars
+- Status Tracking: timestamps, block reasons
+- Version Control: version numbers, previous states
+
+Parent-Child Rules:
+- Parent must exist if parentPath specified
+- Parent status affects child task constraints
+- Child tasks inherit certain parent properties`,
     inputSchema: {
       type: 'object',
       properties: {

@@ -13,18 +13,31 @@ export const bulkTaskOperationsTool: ToolFactory = (context): ToolImplementation
     name: 'bulk_task_operations',
     description: `Execute multiple task operations atomically.
 
-When to Use:
-- Creating related tasks
-- Implementing new features
-- Restructuring task hierarchy
-- Updating multiple dependencies
+Performance Optimization:
+- Operations processed in dependency order
+- Single-operation batches for consistency
+- Full transaction rollback on failure
+- Retry mechanism: 3 retries, 1s delay
+
+Validation:
+- All create/update constraints apply
+- Cross-operation dependency validation
+- Status transition rules enforced
+- Parent-child relationships validated
+- Metadata schema checked
 
 Best Practices:
 - Group related operations
-- Order logically
-- Maintain dependencies
-- Handle failures gracefully
-- Document operation reasoning
+- Order operations by dependencies
+- Include clear operation reasoning
+- Handle parent-child updates together
+- Consider status propagation effects
+
+Operation Limits:
+- Path: max length 1000 chars, max depth 10
+- Notes: max 100 per category
+- Dependencies: max 50 per task
+- Metadata fields: max 100 entries each
 
 Example:
 {
