@@ -46,10 +46,10 @@ Parent-Child Rules:
           description:
             'Hierarchical path (e.g., "project/backend/auth"). Max length 1000 chars, max depth 10 levels. Must be alphanumeric with -_/ characters. Use forward slashes to indicate task hierarchy.',
         },
-        title: {
+        name: {
           type: 'string',
           description:
-            'Clear, action-oriented title describing the task objective. Max length 200 chars.',
+            'Clear, action-oriented name describing the task objective. Max length 200 chars.',
         },
         description: {
           type: 'string',
@@ -295,7 +295,7 @@ Custom Fields:
             'Notes about issues and their resolution. Max 100 notes, each max 1000 chars.',
         },
       },
-      required: ['path', 'title'],
+      required: ['path', 'name'],
     },
   };
 
@@ -305,7 +305,7 @@ Custom Fields:
     const task = await taskManager.createTask({
       // Required fields
       path: String(args.path),
-      name: String(args.title),
+      name: String(args.name),
       type: (args.type as TaskType) || TaskType.TASK,
 
       // Optional fields
