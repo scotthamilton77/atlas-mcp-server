@@ -552,9 +552,7 @@ export class SqliteStorage extends TaskOperations implements TaskStorage {
         db.all<{ status: TaskStatus; count: number }[]>(
           'SELECT status, COUNT(*) as count FROM tasks GROUP BY status'
         ),
-        db.get<{ noteCount: number }>(
-          'SELECT COUNT(*) as noteCount FROM tasks WHERE notes IS NOT NULL'
-        ),
+        db.get<{ noteCount: number }>('SELECT COUNT(*) as noteCount FROM task_notes'),
         db.get<{ dependencyCount: number }>(
           'SELECT COUNT(*) as dependencyCount FROM task_dependencies'
         ),
@@ -589,7 +587,7 @@ export class SqliteStorage extends TaskOperations implements TaskStorage {
     try {
       return await this.connection.execute(async db => {
         const result = await db.get<{ size: number }>(
-          "SELECT page_count * page_size as size FROM pragma_page_count, pragma_page_size WHERE name = 'main-wal'"
+          "SELECT (SELECT page_count FROM pragma_page_count('main-wal')) * page_size as size FROM pragma_page_size"
         );
         return result?.size ?? 0;
       }, 'getWalSize');
