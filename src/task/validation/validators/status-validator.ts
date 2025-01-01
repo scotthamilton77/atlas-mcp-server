@@ -120,7 +120,7 @@ export class StatusValidator {
   ): Promise<{
     isBlocked: boolean;
     reason?: string;
-    blockingDeps?: Array<{ path: string; status: TaskStatus }>;
+    blockingDeps?: Array<{ path: string; status: TaskStatus; details?: string }>;
   }> {
     if (!Array.isArray(task.dependencies)) {
       throw createError(
@@ -130,22 +130,51 @@ export class StatusValidator {
       );
     }
 
-    const blockingDeps: Array<{ path: string; status: TaskStatus }> = [];
+    const blockingDeps: Array<{ path: string; status: TaskStatus; details?: string }> = [];
+    const depCache = new Map<string, Task>();
 
+    // First pass: Check direct dependencies
     for (const depPath of task.dependencies) {
       const depTask = await getTaskByPath(depPath);
+      if (depTask) {
+        depCache.set(depPath, depTask);
+      }
+
       if (!depTask) {
-        blockingDeps.push({ path: depPath, status: TaskStatus.PENDING });
+        blockingDeps.push({
+          path: depPath,
+          status: TaskStatus.PENDING,
+          details: 'Dependency not found',
+        });
         continue;
       }
 
-      if ([TaskStatus.CANCELLED, TaskStatus.BLOCKED, TaskStatus.PENDING].includes(depTask.status)) {
-        blockingDeps.push({ path: depPath, status: depTask.status });
+      // Strict status validation
+      if (depTask.status !== TaskStatus.COMPLETED) {
+        blockingDeps.push({
+          path: depPath,
+          status: depTask.status,
+          details: this.getDependencyBlockReason(depTask),
+        });
+      }
+
+      // Check transitive dependencies if blocked
+      if (depTask.status === TaskStatus.BLOCKED) {
+        const transitiveCheck = await this.checkDependencyStatus(depTask, getTaskByPath);
+        if (transitiveCheck.blockingDeps) {
+          blockingDeps.push({
+            path: depPath,
+            status: TaskStatus.BLOCKED,
+            details: `Blocked by transitive dependencies: ${transitiveCheck.blockingDeps.map(d => d.path).join(', ')}`,
+          });
+        }
       }
     }
 
     if (blockingDeps.length > 0) {
-      const reasons = blockingDeps.map(dep => `${dep.path} (${dep.status})`);
+      const reasons = blockingDeps.map(
+        dep => `${dep.path} (${dep.status}${dep.details ? `: ${dep.details}` : ''})`
+      );
       return {
         isBlocked: true,
         reason: `Blocked by dependencies: ${reasons.join(', ')}`,
@@ -154,6 +183,24 @@ export class StatusValidator {
     }
 
     return { isBlocked: false };
+  }
+
+  /**
+   * Get detailed reason for dependency blocking
+   */
+  private getDependencyBlockReason(task: Task): string {
+    switch (task.status) {
+      case TaskStatus.PENDING:
+        return 'Not started';
+      case TaskStatus.IN_PROGRESS:
+        return `In progress (${task.metadata?.progress?.percentage || 0}% complete)`;
+      case TaskStatus.BLOCKED:
+        return task.metadata?.blockInfo?.blockReason || 'Blocked by dependencies';
+      case TaskStatus.CANCELLED:
+        return 'Task was cancelled';
+      default:
+        return `Invalid status: ${task.status}`;
+    }
   }
 
   /**

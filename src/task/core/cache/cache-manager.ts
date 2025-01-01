@@ -204,51 +204,133 @@ export class CacheManager {
   private checkCacheSize(): void {
     const currentSize = this.cache.size;
     const maxSize = this.options.maxSize;
+    const memoryUsage = process.memoryUsage();
+    const heapUsed = memoryUsage.heapUsed / memoryUsage.heapTotal;
 
-    if (currentSize > maxSize * 0.7) {
-      // Over 70% capacity for VSCode
-      this.logger.warn('Cache near capacity', {
-        currentSize,
-        maxSize,
-        usage: `${Math.round((currentSize / maxSize) * 100)}%`,
+    // Check both cache size and memory pressure
+    const isHighCacheUsage = currentSize > maxSize * 0.6; // Lowered threshold
+    const isHighMemoryPressure = heapUsed > 0.7;
+
+    if (isHighCacheUsage || isHighMemoryPressure) {
+      const reductionRatio = this.calculateReductionRatio(heapUsed, currentSize / maxSize);
+
+      this.logger.warn('Resource pressure detected', {
+        cacheUsage: {
+          currentSize,
+          maxSize,
+          usage: `${Math.round((currentSize / maxSize) * 100)}%`,
+        },
+        memoryUsage: {
+          heapUsed: `${Math.round(heapUsed * 100)}%`,
+          rss: `${Math.round(memoryUsage.rss / 1024 / 1024)}MB`,
+          heapTotal: `${Math.round(memoryUsage.heapTotal / 1024 / 1024)}MB`,
+        },
+        action: {
+          type: 'cache_reduction',
+          ratio: reductionRatio,
+          trigger: isHighMemoryPressure ? 'memory_pressure' : 'cache_usage',
+        },
       });
 
-      // More aggressive reduction for VSCode environment
-      this.reduce(0.4).catch(error => {
-        this.logger.error('Failed to reduce cache size', { error });
-      });
+      // Immediate cleanup followed by reduction if needed
+      this.cleanup()
+        .then(() => {
+          if (this.cache.size > maxSize * 0.5) {
+            return this.reduce(reductionRatio);
+          }
+          return Promise.resolve();
+        })
+        .catch(error => {
+          this.logger.error('Failed to manage cache size', { error });
+          return Promise.reject(error);
+        });
     }
+  }
+
+  /**
+   * Calculate cache reduction ratio based on pressure metrics
+   */
+  private calculateReductionRatio(heapUsage: number, cacheUsage: number): number {
+    // Base reduction on the more severe pressure metric
+    const memoryPressure = Math.max(0, (heapUsage - 0.7) / 0.3); // Scale 0-1 above 70%
+    const cachePressure = Math.max(0, (cacheUsage - 0.6) / 0.4); // Scale 0-1 above 60%
+    const pressure = Math.max(memoryPressure, cachePressure);
+
+    // Progressive reduction: more pressure = more aggressive reduction
+    if (pressure > 0.8) return 0.6; // Critical: 60% reduction
+    if (pressure > 0.5) return 0.4; // High: 40% reduction
+    if (pressure > 0.3) return 0.25; // Moderate: 25% reduction
+    return 0.15; // Low: 15% reduction
   }
 
   private async cleanup(): Promise<void> {
     const now = Date.now();
     let removed = 0;
     let totalSize = 0;
+    const totalMemoryBefore = process.memoryUsage().heapUsed;
 
-    // Two-phase cleanup: First mark, then sweep
-    const toRemove: string[] = [];
+    // Enhanced two-phase cleanup with priority
+    const toRemove: Array<{ key: string; priority: number }> = [];
 
-    // Mark phase
+    // Mark phase with priority calculation
     for (const [key, entry] of this.cache.entries()) {
+      const age = now - entry.lastAccessed;
+      const timeToExpire = entry.expires - now;
+      const size = entry.size || 0;
+      totalSize += size;
+
+      // Calculate removal priority
+      let priority = 0;
       if (now > entry.expires) {
-        toRemove.push(key);
+        priority = 1; // Expired entries highest priority
       } else {
-        totalSize += entry.size || 0;
+        // Priority based on age, size, and time to expire
+        const ageFactor = age / this.options.ttl;
+        const sizeFactor = size / (totalSize / this.cache.size); // Relative to average size
+        const expireFactor = 1 - timeToExpire / this.options.ttl;
+        priority = ageFactor * 0.4 + sizeFactor * 0.3 + expireFactor * 0.3;
+      }
+
+      toRemove.push({ key, priority });
+    }
+
+    // Sort by priority and remove top candidates
+    toRemove.sort((a, b) => b.priority - a.priority);
+
+    // Remove entries with high priority or if memory pressure is high
+    const memoryPressure = process.memoryUsage().heapUsed / process.memoryUsage().heapTotal;
+    const removalThreshold = memoryPressure > 0.8 ? 0.3 : 0.7; // More aggressive under pressure
+
+    for (const { key, priority } of toRemove) {
+      if (priority > removalThreshold) {
+        this.cache.delete(key);
+        removed++;
       }
     }
 
-    // Sweep phase
-    for (const key of toRemove) {
-      this.cache.delete(key);
-      removed++;
-    }
-
     if (removed > 0) {
+      const totalMemoryAfter = process.memoryUsage().heapUsed;
+      const memorySaved = Math.max(0, totalMemoryBefore - totalMemoryAfter);
+
       this.updateMetrics();
       this.logger.debug('Cache cleanup completed', {
         entriesRemoved: removed,
         remainingEntries: this.cache.size,
         totalSize: `${Math.round(totalSize / 1024)}KB`,
+        memorySaved: `${Math.round(memorySaved / 1024)}KB`,
+        memoryPressure: `${Math.round(memoryPressure * 100)}%`,
+      });
+
+      // Emit cleanup event
+      this.eventManager.emit({
+        type: EventTypes.CACHE_CLEANED,
+        timestamp: now,
+        batchId: `cache_cleanup_${now}`,
+        metadata: {
+          entriesRemoved: removed,
+          memorySaved,
+          trigger: memoryPressure > 0.8 ? 'high_memory_pressure' : 'routine',
+        },
       });
     }
   }

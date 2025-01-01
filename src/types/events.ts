@@ -143,6 +143,7 @@ export enum EventTypes {
   // Cache events
   MEMORY_PRESSURE = 'memory_pressure',
   CACHE_CLEARED = 'cache_cleared',
+  CACHE_CLEANED = 'cache_cleaned',
   CACHE_INVALIDATED = 'cache_invalidated',
 
   // Logger events
