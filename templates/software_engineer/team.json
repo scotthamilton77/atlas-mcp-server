@@ -1,0 +1,275 @@
+{
+  "id": "llm-software-team",
+  "name": "LLM Software Engineering Team",
+  "description": "Coordinated team of LLM agents performing specialized software engineering roles",
+  "version": "1.0.0",
+  "author": "Atlas Team",
+  "tags": ["llm-agent", "team-coordination", "software-engineering"],
+  "variables": [
+    {
+      "name": "projectName",
+      "description": "Name of the project/product",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "teamScale",
+      "description": "Size/scale of the team (startup, growth, enterprise)",
+      "type": "string",
+      "required": true,
+      "default": "growth"
+    },
+    {
+      "name": "developmentMethodology",
+      "description": "Development methodology (agile, kanban)",
+      "type": "string",
+      "required": false,
+      "default": "agile"
+    },
+    {
+      "name": "securityLevel",
+      "description": "Required security level (standard, high, regulated)",
+      "type": "string",
+      "required": false,
+      "default": "standard"
+    },
+    {
+      "name": "complianceFrameworks",
+      "description": "Required compliance frameworks",
+      "type": "string",
+      "required": false,
+      "default": "OWASP"
+    }
+  ],
+  "tasks": [
+    {
+      "path": "${projectName}/team-setup",
+      "title": "Team Setup & Coordination",
+      "type": "MILESTONE",
+      "description": "Initialize and coordinate specialized engineering roles",
+      "metadata": {
+        "priority": "high",
+        "tags": ["team-structure", "coordination"],
+        "agentInstructions": {
+          "objective": "Set up and coordinate specialized engineering roles",
+          "requiredCapabilities": [
+            {
+              "type": "template_management",
+              "purpose": "Role initialization",
+              "features": ["Template instantiation", "Variable management", "Dependency tracking"]
+            },
+            {
+              "type": "team_coordination",
+              "purpose": "Role coordination",
+              "features": ["Task synchronization", "Communication management", "Progress tracking"]
+            }
+          ],
+          "steps": [
+            {
+              "order": 1,
+              "action": "Initialize product design role",
+              "thought": "Set up product design capabilities",
+              "capability": "template_management",
+              "operations": [
+                {
+                  "type": "instantiate_template",
+                  "template": "llm-product-designer",
+                  "variables": {
+                    "projectName": "${projectName}",
+                    "targetAudience": "determined_from_requirements"
+                  }
+                }
+              ]
+            },
+            {
+              "order": 2,
+              "action": "Initialize architecture role",
+              "thought": "Set up system architecture capabilities",
+              "capability": "template_management",
+              "operations": [
+                {
+                  "type": "instantiate_template",
+                  "template": "llm-system-architect",
+                  "variables": {
+                    "projectName": "${projectName}",
+                    "scalingRequirements": "${teamScale}",
+                    "securityLevel": "${securityLevel}"
+                  }
+                }
+              ]
+            },
+            {
+              "order": 3,
+              "action": "Initialize security role",
+              "thought": "Set up security engineering capabilities",
+              "capability": "template_management",
+              "operations": [
+                {
+                  "type": "instantiate_template",
+                  "template": "llm-security-engineer",
+                  "variables": {
+                    "projectName": "${projectName}",
+                    "complianceFrameworks": "${complianceFrameworks}",
+                    "dataClassification": "derived_from_security_level"
+                  }
+                }
+              ]
+            },
+            {
+              "order": 4,
+              "action": "Initialize DevOps role",
+              "thought": "Set up DevOps capabilities",
+              "capability": "template_management",
+              "operations": [
+                {
+                  "type": "instantiate_template",
+                  "template": "llm-devops-engineer",
+                  "variables": {
+                    "projectName": "${projectName}",
+                    "deploymentEnvironments": "development,staging,production",
+                    "infrastructureType": "determined_from_architecture"
+                  }
+                }
+              ]
+            },
+            {
+              "order": 5,
+              "action": "Initialize tech lead role",
+              "thought": "Set up technical leadership",
+              "capability": "template_management",
+              "operations": [
+                {
+                  "type": "instantiate_template",
+                  "template": "llm-tech-lead",
+                  "variables": {
+                    "projectName": "${projectName}",
+                    "teamSize": "derived_from_scale",
+                    "developmentMethodology": "${developmentMethodology}"
+                  }
+                }
+              ]
+            }
+          ],
+          "outputArtifacts": [
+            {
+              "type": "document",
+              "path": "${projectName}/team/structure.md",
+              "sections": [
+                "Team Overview",
+                "Role Responsibilities",
+                "Coordination Patterns",
+                "Communication Channels"
+              ]
+            },
+            {
+              "type": "configuration",
+              "path": "${projectName}/team/config/",
+              "files": ["roles.yml", "coordination.yml", "communication.yml"]
+            }
+          ],
+          "validationCriteria": [
+            "All specialized roles initialized",
+            "Dependencies properly configured",
+            "Communication channels established",
+            "Coordination patterns documented"
+          ]
+        }
+      }
+    },
+    {
+      "path": "${projectName}/team-coordination",
+      "title": "Team Coordination",
+      "type": "TASK",
+      "description": "Coordinate activities between specialized roles",
+      "dependencies": ["${projectName}/team-setup"],
+      "metadata": {
+        "priority": "high",
+        "tags": ["coordination", "communication"],
+        "agentInstructions": {
+          "objective": "Facilitate communication and coordination between roles",
+          "requiredCapabilities": [
+            {
+              "type": "workflow_management",
+              "purpose": "Process coordination",
+              "features": ["Dependency tracking", "Progress monitoring", "Blocker resolution"]
+            },
+            {
+              "type": "communication_management",
+              "purpose": "Team communication",
+              "features": ["Status updates", "Cross-role coordination", "Decision tracking"]
+            }
+          ],
+          "steps": [
+            {
+              "order": 1,
+              "action": "Establish coordination workflow",
+              "thought": "Define how roles interact and share information",
+              "capability": "workflow_management",
+              "operations": [
+                {
+                  "type": "create_workflow",
+                  "components": [
+                    {
+                      "type": "handoffs",
+                      "between": [
+                        "product_design_to_architecture",
+                        "architecture_to_security",
+                        "security_to_devops"
+                      ]
+                    },
+                    {
+                      "type": "reviews",
+                      "patterns": [
+                        "security_review_architecture",
+                        "tech_lead_review_all",
+                        "devops_review_deployment"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "order": 2,
+              "action": "Set up communication channels",
+              "thought": "Establish effective communication patterns",
+              "capability": "communication_management",
+              "operations": [
+                {
+                  "type": "define_channels",
+                  "channels": [
+                    {
+                      "type": "status_updates",
+                      "frequency": "daily"
+                    },
+                    {
+                      "type": "technical_discussions",
+                      "participants": "all_roles"
+                    },
+                    {
+                      "type": "security_reviews",
+                      "participants": ["security", "architecture", "tech_lead"]
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "outputArtifacts": [
+            {
+              "type": "document",
+              "path": "${projectName}/team/coordination/",
+              "files": ["workflow.md", "communication.md", "decision-log.md"]
+            }
+          ],
+          "validationCriteria": [
+            "Clear handoff processes defined",
+            "Communication channels established",
+            "Review processes documented",
+            "Decision tracking implemented"
+          ]
+        }
+      }
+    }
+  ]
+}
