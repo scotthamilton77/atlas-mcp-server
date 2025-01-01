@@ -2,6 +2,7 @@ import { watch, FSWatcher } from 'fs';
 import { readFile, readdir } from 'fs/promises';
 import { join, basename } from 'path';
 import { nanoid } from 'nanoid';
+import { Resource, ResourceTemplate } from '@modelcontextprotocol/sdk/types.js';
 
 import { TemplateStorage } from '../storage/interfaces/template-storage.js';
 import { Logger } from '../logging/index.js';
@@ -317,5 +318,59 @@ export class TemplateManager {
     }
     this.watchers.clear();
     await this.storage.close();
+  }
+
+  // Resource-related methods
+  async listTemplateResources(): Promise<Resource[]> {
+    return [{
+      uri: 'templates://current',
+      name: 'Available Templates',
+      description: 'List of all available task templates with their metadata and variables',
+      mimeType: 'application/json'
+    }];
+  }
+
+  async getTemplateResource(uri: string): Promise<Resource> {
+    if (uri !== 'templates://current') {
+      throw new Error(`Invalid template resource URI: ${uri}`);
+    }
+
+    // Get full template details for each template
+    const templateInfos = await this.listTemplates();
+    const fullTemplates = await Promise.all(
+      templateInfos.map(info => this.getTemplate(info.id))
+    );
+    
+    const templateOverview = {
+      timestamp: new Date().toISOString(),
+      totalTemplates: fullTemplates.length,
+      templates: fullTemplates.map(template => ({
+        id: template.id,
+        name: template.name,
+        description: template.description,
+        tags: template.tags,
+        variables: template.variables.map(v => ({
+          name: v.name,
+          description: v.description,
+          required: v.required,
+          default: v.default
+        }))
+      }))
+    };
+
+    return {
+      uri,
+      name: 'Available Templates',
+      mimeType: 'application/json',
+      text: JSON.stringify(templateOverview, null, 2)
+    };
+  }
+
+  async getResourceTemplates(): Promise<ResourceTemplate[]> {
+    return [];  // No dynamic templates needed since we use a single resource
+  }
+
+  async resolveResourceTemplate(_template: string, _vars: Record<string, string>): Promise<Resource> {
+    throw new Error('Resource templates not supported - use templates://current instead');
   }
 }

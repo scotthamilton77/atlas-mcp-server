@@ -208,6 +208,16 @@ async function main(): Promise<void> {
           getStorageMetrics: async () => storage.getMetrics(),
           clearCaches: async () => taskManager.clearCaches(),
           cleanup: ProcessManager.cleanup,
+          // Add resource-related methods
+          getTaskResource: async (uri: string) => taskManager.getTaskResource(uri),
+          listTaskResources: async () => taskManager.listTaskResources(),
+          getTemplateResource: async (uri: string) => templateManager.getTemplateResource(uri),
+          listTemplateResources: async () => templateManager.listTemplateResources(),
+          getHierarchyResource: async (rootPath: string) => taskManager.getHierarchyResource(rootPath),
+          getStatusResource: async (taskPath: string) => taskManager.getStatusResource(taskPath),
+          getResourceTemplates: async () => templateManager.getResourceTemplates(),
+          resolveResourceTemplate: async (template: string, vars: Record<string, string>) => 
+            templateManager.resolveResourceTemplate(template, vars),
         }
       );
 

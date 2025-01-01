@@ -1,6 +1,7 @@
 import { Task, TaskStatus } from '../../types/task.js';
 import { EventManager } from '../../events/event-manager.js';
 import { EventTypes } from '../../types/events.js';
+import { TaskResourceHandler } from '../core/task-resource-handler.js';
 
 import { TaskStatusMetadata, TaskDependencyMetadata } from '../../types/events.js';
 
@@ -12,10 +13,12 @@ type TaskEventCallback = (
 export class TaskEventHandler {
   private readonly eventManager: EventManager;
   private readonly handlers: Map<string, Set<TaskEventCallback>>;
+  private readonly resourceHandler: TaskResourceHandler;
 
-  constructor() {
+  constructor(resourceHandler: TaskResourceHandler) {
     this.eventManager = EventManager.getInstance();
     this.handlers = new Map();
+    this.resourceHandler = resourceHandler;
   }
 
   /**
@@ -69,6 +72,9 @@ export class TaskEventHandler {
       task,
     });
 
+    // Invalidate task resource cache
+    await this.resourceHandler.invalidateCache(task.path);
+
     const handlers = this.handlers.get('updated');
     if (handlers) {
       await Promise.all(Array.from(handlers).map(handler => handler(task)));
@@ -85,6 +91,9 @@ export class TaskEventHandler {
       taskId: task.id,
       task,
     });
+
+    // Invalidate task resource cache
+    await this.resourceHandler.invalidateCache(task.path);
 
     const handlers = this.handlers.get('deleted');
     if (handlers) {

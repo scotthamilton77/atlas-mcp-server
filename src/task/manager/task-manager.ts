@@ -1,9 +1,11 @@
+import { Resource } from '@modelcontextprotocol/sdk/types.js';
 import { Logger } from '../../logging/index.js';
 import { TaskStorage } from '../../types/storage.js';
 import { Task, TaskStatus, CreateTaskInput, UpdateTaskInput } from '../../types/task.js';
 import { TaskValidator } from '../validation/task-validator.js';
 import { TaskCacheManager } from './task-cache-manager.js';
 import { TaskEventHandler } from './task-event-handler.js';
+import { TaskResourceHandler } from '../core/task-resource-handler.js';
 import { TaskErrorFactory } from '../../errors/task-error.js';
 import { TaskTransactionManager } from '../core/transactions/task-transaction-manager.js';
 
@@ -14,12 +16,14 @@ export class TaskManager {
   private readonly cache: TaskCacheManager;
   private readonly events: TaskEventHandler;
   private readonly transactionManager: TaskTransactionManager;
+  private readonly resourceHandler: TaskResourceHandler;
 
   protected constructor(private readonly storage: TaskStorage) {
     this.logger = Logger.getInstance().child({ component: 'TaskManager' });
     this.validator = new TaskValidator(storage);
     this.cache = new TaskCacheManager();
-    this.events = new TaskEventHandler();
+    this.resourceHandler = TaskResourceHandler.getInstance(storage);
+    this.events = new TaskEventHandler(this.resourceHandler);
     this.transactionManager = new TaskTransactionManager(storage);
   }
 
@@ -512,5 +516,77 @@ export class TaskManager {
     await this.storage.close();
     this.cache.clear();
     this.events.removeAllListeners();
+  }
+
+  // Resource-related methods
+  async getTaskResource(uri: string): Promise<Resource> {
+    return this.resourceHandler.getTaskResource(uri);
+  }
+
+  async listTaskResources(): Promise<Resource[]> {
+    const resources = await this.resourceHandler.listTaskResources();
+    // Add the dynamic task list resource
+    resources.push({
+      uri: 'tasklist://current',
+      name: 'Current Task List Overview',
+      mimeType: 'application/json',
+      description: 'Dynamic overview of all tasks including status counts, recent updates, and metrics. Updates in real-time when accessed.'
+    });
+    return resources;
+  }
+
+  async getHierarchyResource(rootPath: string): Promise<Resource> {
+    const tasks = await this.getTasksByPattern(`${rootPath}/*`);
+    return {
+      uri: `hierarchy://${rootPath}`,
+      name: `Task Hierarchy: ${rootPath}`,
+      mimeType: 'application/json',
+      text: JSON.stringify(tasks.map(task => ({
+        id: task.id,
+        path: task.path,
+        name: task.name,
+        type: task.type,
+        status: task.status,
+        parentPath: task.parentPath,
+        dependencies: task.dependencies
+      })), null, 2)
+    };
+  }
+
+  async getStatusResource(taskPath: string): Promise<Resource> {
+    const task = await this.getTask(taskPath);
+    if (!task) {
+      throw new Error(`Task not found: ${taskPath}`);
+    }
+
+    const children = await this.getChildren(taskPath);
+    const dependencies = await this.getTasks(task.dependencies);
+
+    return {
+      uri: `status://${taskPath}`,
+      name: `Task Status: ${task.name}`,
+      mimeType: 'application/json',
+      text: JSON.stringify({
+        task: {
+          id: task.id,
+          path: task.path,
+          name: task.name,
+          status: task.status,
+          statusMetadata: task.statusMetadata
+        },
+        children: children.map(child => ({
+          id: child.id,
+          path: child.path,
+          name: child.name,
+          status: child.status
+        })),
+        dependencies: dependencies.map(dep => ({
+          id: dep.id,
+          path: dep.path,
+          name: dep.name,
+          status: dep.status
+        }))
+      }, null, 2)
+    };
   }
 }

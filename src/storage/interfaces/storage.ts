@@ -1,4 +1,5 @@
 import { Task, CreateTaskInput, UpdateTaskInput, TaskStatus } from '../../types/task.js';
+import { Resource, ResourceTemplate } from '@modelcontextprotocol/sdk/types.js';
 
 /**
  * Core storage interface for task persistence
@@ -37,6 +38,17 @@ export interface TaskStorage {
   repairRelationships(dryRun?: boolean): Promise<{ fixed: number; issues: string[] }>;
   clearCache(): Promise<void>;
   verifyIntegrity(): Promise<boolean>;
+
+  // Resource operations
+  getTaskResource(uri: string): Promise<Resource>;
+  listTaskResources(): Promise<Resource[]>;
+  getTemplateResource(uri: string): Promise<Resource>;
+  listTemplateResources(): Promise<Resource[]>;
+  getHierarchyResource(rootPath: string): Promise<Resource>;
+  getStatusResource(taskPath: string): Promise<Resource>;
+  getResourceTemplates(): Promise<ResourceTemplate[]>;
+  resolveResourceTemplate(template: string, vars: Record<string, string>): Promise<Resource>;
+  notifyResourceUpdate(uri: string): Promise<void>;
 
   // Metrics and stats
   getStats(): Promise<{

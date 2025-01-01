@@ -8,8 +8,13 @@ import {
   CallToolRequestSchema,
   ErrorCode,
   ListToolsRequestSchema,
+  ListResourcesRequestSchema,
+  ListResourceTemplatesRequestSchema,
+  ReadResourceRequestSchema,
   McpError,
   Request,
+  Resource,
+  ResourceTemplate
 } from '@modelcontextprotocol/sdk/types.js';
 import { Logger } from '../logging/index.js';
 import { RateLimiter } from './rate-limiter.js';
@@ -37,6 +42,14 @@ export interface ToolHandler {
   getStorageMetrics: () => Promise<any>;
   clearCaches?: () => Promise<void>;
   cleanup?: () => Promise<void>;
+  getTaskResource?: (uri: string) => Promise<Resource>;
+  listTaskResources?: () => Promise<Resource[]>;
+  getTemplateResource?: (uri: string) => Promise<Resource>;
+  listTemplateResources?: () => Promise<Resource[]>;
+  getHierarchyResource?: (rootPath: string) => Promise<Resource>;
+  getStatusResource?: (taskPath: string) => Promise<Resource>;
+  getResourceTemplates?: () => Promise<ResourceTemplate[]>;
+  resolveResourceTemplate?: (template: string, vars: Record<string, string>) => Promise<Resource>;
 }
 
 /**
@@ -174,6 +187,29 @@ export class AtlasServer {
         toolCapabilities[tool.name] = {};
       }
 
+      // Get available resources
+      const resources = [];
+      
+      // Add tasklist resource if available
+      if (this.toolHandler.listTaskResources) {
+        resources.push({
+          uri: 'tasklist://current',
+          name: 'Current Task List Overview',
+          description: 'Dynamic overview of all tasks including status counts, recent updates, and metrics. Updates in real-time when accessed.',
+          mimeType: 'application/json'
+        });
+      }
+
+      // Add templates resource if available
+      if (this.toolHandler.listTemplateResources) {
+        resources.push({
+          uri: 'templates://current',
+          name: 'Available Templates',
+          description: 'List of all available task templates with their metadata and variables',
+          mimeType: 'application/json'
+        });
+      }
+
       this.server = new Server(
         {
           name: this.config.name,
@@ -182,12 +218,17 @@ export class AtlasServer {
         {
           capabilities: {
             tools: toolCapabilities,
+            resources: {
+              resources: resources
+            },
+            resourceTemplates: {}
           },
         }
       );
 
       this.setupErrorHandling();
       this.setupToolHandlers();
+      this.setupResourceHandlers();
       this.setupHealthCheck();
       this.setupMemoryMonitoring();
 
@@ -272,6 +313,157 @@ export class AtlasServer {
         });
       }
       this.shutdown().finally(() => process.exit(1));
+    });
+  }
+
+  private setupResourceHandlers(): void {
+    // Handler for listing available resources
+    this.server.setRequestHandler(ListResourcesRequestSchema, async () => {
+      const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const traceEvent: TraceEvent = {
+        type: 'list_resources',
+        timestamp: Date.now(),
+      };
+
+      try {
+        await this.rateLimiter.checkLimit();
+        this.activeRequests.add(requestId);
+        this.recordClientActivity();
+
+        this.requestTracer.startTrace(requestId, traceEvent);
+
+        if (!this.toolHandler.listTaskResources || !this.toolHandler.listTemplateResources) {
+          return { resources: [] };
+        }
+
+        const [taskResources, templateResources] = await Promise.all([
+          this.toolHandler.listTaskResources(),
+          this.toolHandler.listTemplateResources()
+        ]);
+
+        const metricEvent: MetricEvent = {
+          type: 'list_resources',
+          timestamp: Date.now(),
+          duration: Date.now() - traceEvent.timestamp,
+        };
+        this.metricsCollector.recordSuccess(metricEvent);
+
+        return {
+          resources: [...taskResources, ...templateResources]
+        };
+      } catch (error) {
+        this.handleToolError(error);
+        throw error;
+      } finally {
+        this.activeRequests.delete(requestId);
+        this.requestTracer.endTrace(requestId, {
+          ...traceEvent,
+          timestamp: Date.now(),
+        });
+      }
+    });
+
+    // Handler for listing resource templates
+    this.server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => {
+      const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const traceEvent: TraceEvent = {
+        type: 'list_resource_templates',
+        timestamp: Date.now(),
+      };
+
+      try {
+        await this.rateLimiter.checkLimit();
+        this.activeRequests.add(requestId);
+        this.recordClientActivity();
+
+        this.requestTracer.startTrace(requestId, traceEvent);
+
+        if (!this.toolHandler.getResourceTemplates) {
+          return { resourceTemplates: [] };
+        }
+
+        const templates = await this.toolHandler.getResourceTemplates();
+
+        const metricEvent: MetricEvent = {
+          type: 'list_resource_templates',
+          timestamp: Date.now(),
+          duration: Date.now() - traceEvent.timestamp,
+        };
+        this.metricsCollector.recordSuccess(metricEvent);
+
+        return { resourceTemplates: templates };
+      } catch (error) {
+        this.handleToolError(error);
+        throw error;
+      } finally {
+        this.activeRequests.delete(requestId);
+        this.requestTracer.endTrace(requestId, {
+          ...traceEvent,
+          timestamp: Date.now(),
+        });
+      }
+    });
+
+    // Handler for reading resources
+    this.server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+      if (!request.params?.uri) {
+        throw new McpError(ErrorCode.InvalidRequest, 'Missing resource URI');
+      }
+
+      const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const traceEvent: TraceEvent = {
+        type: 'read_resource',
+        uri: request.params.uri,
+        timestamp: Date.now(),
+      };
+
+      try {
+        await this.rateLimiter.checkLimit();
+        this.activeRequests.add(requestId);
+        this.recordClientActivity();
+
+        this.requestTracer.startTrace(requestId, traceEvent);
+
+        let resource: Resource | null = null;
+        const uri = request.params.uri;
+
+        if (uri === 'tasklist://current' && this.toolHandler.getTaskResource) {
+          resource = await this.toolHandler.getTaskResource(uri);
+        } else if (uri === 'templates://current' && this.toolHandler.getTemplateResource) {
+          resource = await this.toolHandler.getTemplateResource(uri);
+        } else if (uri.startsWith('task://') && this.toolHandler.getTaskResource) {
+          resource = await this.toolHandler.getTaskResource(uri);
+        } else if (uri.startsWith('hierarchy://') && this.toolHandler.getHierarchyResource) {
+          const rootPath = uri.replace('hierarchy://', '');
+          resource = await this.toolHandler.getHierarchyResource(rootPath);
+        } else if (uri.startsWith('status://') && this.toolHandler.getStatusResource) {
+          const taskPath = uri.replace('status://', '');
+          resource = await this.toolHandler.getStatusResource(taskPath);
+        }
+
+        if (!resource) {
+          throw new McpError(ErrorCode.MethodNotFound, `Resource not found: ${uri}`);
+        }
+
+        const metricEvent: MetricEvent = {
+          type: 'read_resource',
+          uri: request.params.uri,
+          timestamp: Date.now(),
+          duration: Date.now() - traceEvent.timestamp,
+        };
+        this.metricsCollector.recordSuccess(metricEvent);
+
+        return { contents: [resource] };
+      } catch (error) {
+        this.handleToolError(error);
+        throw error;
+      } finally {
+        this.activeRequests.delete(requestId);
+        this.requestTracer.endTrace(requestId, {
+          ...traceEvent,
+          timestamp: Date.now(),
+        });
+      }
     });
   }
 
