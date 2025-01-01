@@ -5,7 +5,7 @@ import { Logger } from '../../../logging/index.js';
 import { ErrorCodes, createError } from '../../../errors/index.js';
 import { WALFileInfo } from './types.js';
 import { promises as fs } from 'fs';
-import { join, dirname, basename } from 'path';
+import { join, dirname } from 'path';
 
 export class FileHandler {
   private readonly logger: Logger;
@@ -64,8 +64,9 @@ export class FileHandler {
    * Get WAL file information
    */
   async getWALInfo(): Promise<WALFileInfo> {
-    const walPath = join(dirname(this.dbPath), basename(this.dbPath) + '-wal');
-    const shmPath = join(dirname(this.dbPath), basename(this.dbPath) + '-shm');
+    // SQLite uses 'main-wal' and 'main-shm' for the default database connection
+    const walPath = join(dirname(this.dbPath), 'main-wal');
+    const shmPath = join(dirname(this.dbPath), 'main-shm');
 
     try {
       const walStats = await fs.stat(walPath);
@@ -79,6 +80,15 @@ export class FileHandler {
       };
     } catch (error) {
       // WAL file might not exist yet
+      this.logger.debug('WAL file not found or inaccessible', {
+        walPath,
+        error: error instanceof Error ? error.message : String(error),
+        context: {
+          operation: 'getWALInfo',
+          timestamp: Date.now(),
+        },
+      });
+
       return {
         walPath,
         shmPath,
