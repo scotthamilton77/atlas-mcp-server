@@ -1,6 +1,6 @@
 import { BaseError } from './base-error.js';
 import { ErrorCode, ErrorContext, ErrorSeverity } from '../types/error.js';
-import { ValidationResult } from '../types/task.js';
+import { ValidationResult } from '../task/validation/task-validator.js';
 
 interface ValidationPerformanceMetrics {
   validationTime: number;

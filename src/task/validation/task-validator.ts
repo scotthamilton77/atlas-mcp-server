@@ -1,14 +1,11 @@
 import { Logger } from '../../logging/index.js';
 import { formatTimestamp } from '../../utils/date-formatter.js';
 import { TaskStorage } from '../../types/storage.js';
-import { TaskType, TaskStatus, Task } from '../../types/task.js';
+import { TaskType } from '../../types/task-types.js';
+import { TaskStatus } from '../../types/task-core.js';
+import { Task, TaskMetadata, CreateTaskInput, UpdateTaskInput } from '../../types/task.js';
 import { bulkOperationsSchema } from './schemas/bulk-operations-schema.js';
-import {
-  createTaskSchema,
-  updateTaskSchema,
-  CreateTaskInput,
-  UpdateTaskInput,
-} from './schemas/index.js';
+import { createTaskSchema, updateTaskSchema } from './schemas/task-schemas.js';
 import { TaskValidators } from './validators/index.js';
 import { DependencyValidationMode } from './validators/dependency-validator.js';
 import { HierarchyValidationMode } from './validators/hierarchy-validator.js';
@@ -194,10 +191,10 @@ export class TaskValidator {
     try {
       // Schema validation with performance monitoring
       const { result: validatedInput, duration: schemaValidationTime } =
-        await this.monitorPerformance<CreateTaskInput>(
-          'schema-validation',
-          () => createTaskSchema.parse(input) as CreateTaskInput
-        );
+        await this.monitorPerformance<CreateTaskInput>('schema-validation', () => {
+          const parsed = createTaskSchema.parse(input);
+          return parsed as CreateTaskInput;
+        });
 
       result.details!.performance!.validationTime += schemaValidationTime;
 
@@ -225,12 +222,45 @@ export class TaskValidator {
         }
       }
 
-      // Create and validate task object
+      // Create task object
       const { result: task, duration: taskCreationTime } = await this.monitorPerformance<Task>(
         'task-creation',
         () => {
           const now = Date.now();
-          return {
+          const defaultMetadata: TaskMetadata = {
+            status: TaskStatus.PENDING,
+            statusUpdatedAt: now,
+            tags: [],
+            technicalRequirements: {
+              language: undefined,
+              framework: undefined,
+              dependencies: [],
+              environment: undefined,
+              performance: {
+                memory: undefined,
+                cpu: undefined,
+                storage: undefined,
+              },
+              requirements: [],
+            },
+            progress: {
+              percentage: 0,
+              milestones: [],
+              lastUpdated: now,
+              estimatedCompletion: undefined,
+            },
+            resources: {
+              toolsUsed: [],
+              resourcesAccessed: [],
+              contextUsed: [],
+            },
+            blockInfo: undefined,
+            versionControl: undefined,
+            deliverables: [],
+            customFields: {},
+          };
+
+          const newTask: Task = {
             id: `task_${now}_${Math.random().toString(36).substr(2, 9)}`,
             path: validatedInput.path,
             name: validatedInput.name,
@@ -243,116 +273,73 @@ export class TaskValidator {
             description: validatedInput.description,
             parentPath: validatedInput.parentPath,
             dependencies: validatedInput.dependencies || [],
-            metadata: validatedInput.metadata || {},
-            statusMetadata: {},
+            metadata: {
+              ...defaultMetadata,
+              ...validatedInput.metadata,
+            },
+            statusMetadata: validatedInput.statusMetadata || {},
             planningNotes: validatedInput.planningNotes || [],
             progressNotes: validatedInput.progressNotes || [],
             completionNotes: validatedInput.completionNotes || [],
             troubleshootingNotes: validatedInput.troubleshootingNotes || [],
+            reasoning: validatedInput.reasoning,
           };
+
+          return newTask;
         }
       );
 
       result.details!.performance!.validationTime += taskCreationTime;
 
-      // Hierarchy validation
+      // Hierarchy validation using the validator
       if (validatedInput.parentPath) {
-        type HierarchyValidationResult = {
-          valid: boolean;
-          error?: string;
-          missingParents: string[];
-          depth: number;
-        };
-
-        const { result: hierarchyResult, duration: hierarchyTime } =
-          await this.monitorPerformance<HierarchyValidationResult>(
-            'hierarchy-validation',
-            async () => {
-              const baseResult = await this.validators.validateHierarchy(
-                validatedInput.parentPath!,
-                this.storage.getTask.bind(this.storage),
-                hierarchyMode
-              );
-              return {
-                valid: baseResult.valid,
-                error: baseResult.error,
-                missingParents: baseResult.missingParents || [],
-                depth: (validatedInput.parentPath?.split('/').length || 0) + 1,
-              } as HierarchyValidationResult;
-            }
-          );
-
-        result.details!.performance!.validationTime += hierarchyTime;
-        result.details!.hierarchy = {
-          missingParents: hierarchyResult.missingParents,
-          depthExceeded: hierarchyResult.depth > this.options.maxHierarchyDepth,
-        };
-
-        if (!hierarchyResult.valid && hierarchyMode === HierarchyValidationMode.STRICT) {
-          result.success = false;
-          result.errors.push(hierarchyResult.error || 'Hierarchy validation failed');
-        }
-      }
-
-      // Dependency validation with enhanced monitoring
-      type EnhancedDependencyResult = {
-        valid: boolean;
-        error?: string;
-        missingDependencies: string[];
-        details: {
-          invalidDependencies: Array<{ path: string; reason: string }>;
-          cyclicDependencies: string[];
-          performanceImpact: {
-            depth: number;
-            breadth: number;
-            warning?: string;
-          };
-        };
-      };
-
-      const { result: dependencyResult, duration: dependencyTime } =
-        await this.monitorPerformance<EnhancedDependencyResult>(
-          'dependency-validation',
+        const { duration: hierarchyTime } = await this.monitorPerformance<HierarchyValidationMode>(
+          'hierarchy-validation',
           async () => {
-            const baseResult = await this.validators.validateDependencyConstraints(
-              task,
-              validatedInput.dependencies || [],
+            const validationResult = await this.validators.validateHierarchy(
+              validatedInput.parentPath!,
               this.storage.getTask.bind(this.storage),
-              dependencyMode
+              hierarchyMode
             );
 
-            // Create enhanced result with required structure
-            const enhancedResult: EnhancedDependencyResult = {
-              valid: baseResult.valid,
-              error: baseResult.error,
-              missingDependencies: baseResult.missingDependencies || [],
-              details: {
-                invalidDependencies: [],
-                cyclicDependencies: [],
-                performanceImpact: {
-                  depth: 0,
-                  breadth: (validatedInput.dependencies || []).length,
-                },
-                ...(baseResult as any).details, // Type assertion since we're enhancing the base result
-              },
+            if (!validationResult.valid && hierarchyMode === HierarchyValidationMode.STRICT) {
+              result.success = false;
+              result.errors.push(validationResult.error || 'Hierarchy validation failed');
+            }
+
+            result.details!.hierarchy = {
+              missingParents: validationResult.missingParents,
+              depthExceeded: false, // Set by performance monitoring
             };
 
-            return enhancedResult;
+            return hierarchyMode;
           }
         );
 
-      result.details!.performance!.validationTime += dependencyTime;
-      result.details!.dependencies = {
-        missing: dependencyResult.missingDependencies,
-        invalid: dependencyResult.details.invalidDependencies.map(d => d.path),
-        cycles: dependencyResult.details.cyclicDependencies,
-        performance: dependencyResult.details.performanceImpact,
-      };
-
-      if (!dependencyResult.valid && dependencyMode === DependencyValidationMode.STRICT) {
-        result.success = false;
-        result.errors.push(dependencyResult.error || 'Dependency validation failed');
+        result.details!.performance!.validationTime += hierarchyTime;
       }
+
+      // Dependency validation using the validator
+      const { duration: dependencyTime } = await this.monitorPerformance(
+        'dependency-validation',
+        async () => {
+          const validationResult = await this.validators.validateDependencyConstraints(
+            task,
+            validatedInput.dependencies || [],
+            this.storage.getTask.bind(this.storage),
+            dependencyMode
+          );
+
+          if (!validationResult.valid && dependencyMode === DependencyValidationMode.STRICT) {
+            result.success = false;
+            result.errors.push(validationResult.error || 'Dependency validation failed');
+          }
+
+          return validationResult;
+        }
+      );
+
+      result.details!.performance!.validationTime += dependencyTime;
 
       // Calculate complexity score
       result.details!.performance!.complexityScore = this.calculateComplexityScore({
@@ -426,12 +413,69 @@ export class TaskValidator {
   }
 
   /**
-   * Enhanced task update validation with comprehensive checks
+   * Validate status transition using the status validator
+   */
+  async validateStatusTransition(
+    task: Task,
+    newStatus: TaskStatus,
+    getTaskByPath: (path: string) => Promise<Task | null>
+  ): Promise<{ status: TaskStatus; autoTransition?: boolean }> {
+    return await this.validators.statusValidator.validateStatusTransition(
+      task,
+      newStatus,
+      getTaskByPath
+    );
+  }
+
+  /**
+   * Get status validation result using the status validator
+   */
+  async getStatusValidationResult(
+    task: Task,
+    newStatus: TaskStatus,
+    getTaskByPath: (path: string) => Promise<Task | null>
+  ): Promise<{ status: TaskStatus; autoTransition?: boolean }> {
+    return await this.validators.statusValidator.validateStatusTransition(
+      task,
+      newStatus,
+      getTaskByPath
+    );
+  }
+
+  /**
+   * Validate parent-child status constraints using the status validator
+   */
+  async validateParentChildStatus(
+    task: Task,
+    newStatus: TaskStatus,
+    siblings: Task[],
+    getTaskByPath: (path: string) => Promise<Task | null>
+  ): Promise<{ parentUpdate?: { path: string; status: TaskStatus } }> {
+    return await this.validators.statusValidator.validateParentChildStatus(
+      task,
+      newStatus,
+      siblings,
+      getTaskByPath
+    );
+  }
+
+  /**
+   * Sort tasks by dependency order using the dependency validator
+   */
+  async sortTasksByDependencies(
+    tasks: Array<{ path: string; dependencies: string[] }>
+  ): Promise<string[]> {
+    return await this.validators.sortTasksByDependencies(tasks);
+  }
+
+  /**
+   * Validate task update
    */
   async validateUpdate(
     path: string,
     updates: UpdateTaskInput,
-    mode: DependencyValidationMode = DependencyValidationMode.STRICT
+    dependencyMode: DependencyValidationMode = DependencyValidationMode.STRICT,
+    hierarchyMode: HierarchyValidationMode = HierarchyValidationMode.STRICT
   ): Promise<ValidationResult> {
     const result: ValidationResult = {
       success: true,
@@ -452,16 +496,7 @@ export class TaskValidator {
     const startTime = Date.now();
 
     try {
-      // Schema validation with performance monitoring
-      const { result: validatedUpdates, duration: schemaValidationTime } =
-        await this.monitorPerformance<UpdateTaskInput>(
-          'schema-validation',
-          () => updateTaskSchema.parse(updates) as UpdateTaskInput
-        );
-
-      result.details!.performance!.validationTime += schemaValidationTime;
-
-      // Get and validate existing task
+      // Get existing task
       const existingTask = await this.storage.getTask(path);
       if (!existingTask) {
         result.success = false;
@@ -469,14 +504,18 @@ export class TaskValidator {
         return result;
       }
 
-      // Security validation for metadata updates
-      if (this.options.validateSecurity && validatedUpdates.metadata) {
-        const mergedMetadata = {
-          ...existingTask.metadata,
-          ...validatedUpdates.metadata,
-        };
+      // Schema validation with performance monitoring
+      const { result: validatedUpdates, duration: schemaValidationTime } =
+        await this.monitorPerformance<UpdateTaskInput>('schema-validation', () => {
+          const parsed = updateTaskSchema.parse(updates);
+          return parsed as UpdateTaskInput;
+        });
 
-        const securityIssues = this.validateMetadataSecurity(mergedMetadata);
+      result.details!.performance!.validationTime += schemaValidationTime;
+
+      // Security validation for metadata
+      if (this.options.validateSecurity && validatedUpdates.metadata) {
+        const securityIssues = this.validateMetadataSecurity(validatedUpdates.metadata);
         if (securityIssues.length > 0) {
           result.details!.security!.push({
             issues: securityIssues,
@@ -490,71 +529,89 @@ export class TaskValidator {
         }
       }
 
+      // Hierarchy validation if parent path is being updated
+      if (validatedUpdates.parentPath) {
+        const { duration: hierarchyTime } = await this.monitorPerformance(
+          'hierarchy-validation',
+          async () => {
+            const validationResult = await this.validators.validateHierarchy(
+              validatedUpdates.parentPath!,
+              this.storage.getTask.bind(this.storage),
+              hierarchyMode
+            );
+
+            if (!validationResult.valid && hierarchyMode === HierarchyValidationMode.STRICT) {
+              result.success = false;
+              result.errors.push(validationResult.error || 'Hierarchy validation failed');
+            }
+
+            result.details!.hierarchy = {
+              missingParents: validationResult.missingParents,
+              depthExceeded: false,
+            };
+
+            return validationResult;
+          }
+        );
+
+        result.details!.performance!.validationTime += hierarchyTime;
+      }
+
       // Dependency validation if dependencies are being updated
       if (validatedUpdates.dependencies) {
-        type EnhancedDependencyResult = {
-          valid: boolean;
-          error?: string;
-          missingDependencies: string[];
-          details: {
-            invalidDependencies: Array<{ path: string; reason: string }>;
-            cyclicDependencies: string[];
-            performanceImpact: {
-              depth: number;
-              breadth: number;
-              warning?: string;
-            };
-          };
-        };
+        const { duration: dependencyTime } = await this.monitorPerformance(
+          'dependency-validation',
+          async () => {
+            const validationResult = await this.validators.validateDependencyConstraints(
+              existingTask,
+              validatedUpdates.dependencies!,
+              this.storage.getTask.bind(this.storage),
+              dependencyMode
+            );
 
-        const { result: dependencyResult, duration: dependencyTime } =
-          await this.monitorPerformance<EnhancedDependencyResult>(
-            'dependency-validation',
-            async () => {
-              const baseResult = await this.validators.validateDependencyConstraints(
-                existingTask,
-                validatedUpdates.dependencies!,
-                this.storage.getTask.bind(this.storage),
-                mode
-              );
-
-              return {
-                valid: baseResult.valid,
-                error: baseResult.error,
-                missingDependencies: baseResult.missingDependencies || [],
-                details: {
-                  invalidDependencies: [],
-                  cyclicDependencies: [],
-                  performanceImpact: {
-                    depth: 0,
-                    breadth: validatedUpdates.dependencies!.length,
-                  },
-                  ...(baseResult as any).details,
-                },
-              };
+            if (!validationResult.valid && dependencyMode === DependencyValidationMode.STRICT) {
+              result.success = false;
+              result.errors.push(validationResult.error || 'Dependency validation failed');
             }
-          );
+
+            return validationResult;
+          }
+        );
 
         result.details!.performance!.validationTime += dependencyTime;
-        result.details!.dependencies = {
-          missing: dependencyResult.missingDependencies,
-          invalid: dependencyResult.details.invalidDependencies.map(d => d.path),
-          cycles: dependencyResult.details.cyclicDependencies,
-          performance: dependencyResult.details.performanceImpact,
-        };
+      }
 
-        if (!dependencyResult.valid && mode === DependencyValidationMode.STRICT) {
-          result.success = false;
-          result.errors.push(dependencyResult.error || 'Dependency validation failed');
-        }
+      // Status transition validation if status is being updated
+      if (validatedUpdates.status) {
+        const { duration: statusTime } = await this.monitorPerformance(
+          'status-validation',
+          async () => {
+            const validationResult = await this.validateStatusTransition(
+              existingTask,
+              validatedUpdates.status!,
+              this.storage.getTask.bind(this.storage)
+            );
+
+            if (!validationResult.status) {
+              result.success = false;
+              result.errors.push('Invalid status transition');
+            }
+
+            return validationResult;
+          }
+        );
+
+        result.details!.performance!.validationTime += statusTime;
       }
 
       // Calculate complexity score
       result.details!.performance!.complexityScore = this.calculateComplexityScore({
-        hierarchyDepth: 0, // Updates don't change hierarchy
+        hierarchyDepth: result.details!.hierarchy?.depthExceeded
+          ? this.options.maxHierarchyDepth
+          : 0,
         dependencyCount: validatedUpdates.dependencies?.length || 0,
         metadataSize: validatedUpdates.metadata
-          ? JSON.stringify({ ...existingTask.metadata, ...validatedUpdates.metadata }).length
+          ? JSON.stringify(validatedUpdates.metadata).length
           : 0,
         validationTime: result.details!.performance!.validationTime,
       });
@@ -562,9 +619,9 @@ export class TaskValidator {
       // Add performance recommendations if needed
       if (result.details!.performance!.complexityScore > 0.7) {
         result.details!.performance!.recommendations = [
-          'Consider batching updates',
+          'Consider reducing dependency chain depth',
           'Optimize metadata size',
-          'Review dependency structure',
+          'Review hierarchy structure',
         ];
       }
 
@@ -591,64 +648,5 @@ export class TaskValidator {
         },
       };
     }
-  }
-
-  /**
-   * Validate status transition
-   */
-  async validateStatusTransition(
-    task: Task,
-    newStatus: TaskStatus,
-    getTaskByPath: (path: string) => Promise<Task | null>
-  ): Promise<{ status: TaskStatus; autoTransition?: boolean }> {
-    const validTask = this.validators.ensureTaskArrays(task);
-    return await this.validators.statusValidator.validateStatusTransition(
-      validTask,
-      newStatus,
-      getTaskByPath
-    );
-  }
-
-  /**
-   * Get status validation result
-   */
-  async getStatusValidationResult(
-    task: Task,
-    newStatus: TaskStatus,
-    getTaskByPath: (path: string) => Promise<Task | null>
-  ): Promise<{ status: TaskStatus; autoTransition?: boolean }> {
-    const validTask = this.validators.ensureTaskArrays(task);
-    return await this.validators.statusValidator.validateStatusTransition(
-      validTask,
-      newStatus,
-      getTaskByPath
-    );
-  }
-
-  /**
-   * Validate parent-child status constraints
-   */
-  async validateParentChildStatus(
-    task: Task,
-    newStatus: TaskStatus,
-    siblings: Task[],
-    getTaskByPath: (path: string) => Promise<Task | null>
-  ): Promise<{ parentUpdate?: { path: string; status: TaskStatus } }> {
-    const validTask = this.validators.ensureTaskArrays(task);
-    return await this.validators.statusValidator.validateParentChildStatus(
-      validTask,
-      newStatus,
-      siblings,
-      getTaskByPath
-    );
-  }
-
-  /**
-   * Sort tasks by dependency order
-   */
-  async sortTasksByDependencies(
-    tasks: Array<{ path: string; dependencies: string[] }>
-  ): Promise<string[]> {
-    return await this.validators.sortTasksByDependencies(tasks);
   }
 }
