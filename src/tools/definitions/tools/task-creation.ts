@@ -17,27 +17,73 @@ export function createTaskTool(context: ToolContext): ToolImplementation {
     name: 'create_task',
     description: `Create a new task in the hierarchical task system.
 
-Validation Constraints:
-- Path: max length 1000 chars, max depth 10 levels, alphanumeric with -_/
-- Name: max length 200 chars
-- Description: max length 2000 chars
-- Notes: max 100 notes per category, each max 1000 chars
-- Dependencies: max 50 tasks
-- Reasoning: max 2000 chars
+Core Task Properties:
+- Path: Hierarchical identifier (e.g., "project/backend/auth")
+  * Max length: 1000 chars
+  * Max depth: 10 levels
+  * Allowed chars: alphanumeric, hyphen, underscore, forward slash
+  * Forward slashes indicate hierarchy levels
+- Name: Clear, action-oriented task title
+  * Max length: 200 chars
+  * Should describe concrete objective
+- Description: Detailed task explanation
+  * Max length: 2000 chars
+  * Include context, requirements, success criteria
+- Type: TASK or MILESTONE
+  * TASK: Concrete work item with specific deliverable
+  * MILESTONE: Organizational container for related tasks
 
-Metadata Fields:
-- Priority: low/medium/high
-- Tags: max 100 tags, each max 100 chars
-- Tools Used: max 100 entries
-- Resources Accessed: max 100 entries
-- Context Used: max 100 entries, each max 1000 chars
-- Status Tracking: timestamps, block reasons
-- Version Control: version numbers, previous states
+Validation & Dependencies:
+- Dependencies: Tasks that must complete first
+  * Max dependencies: 50 tasks
+  * Tasks blocked until dependencies met
+  * Circular dependencies prevented
+- Parent-Child Rules:
+  * Parent task must exist if parentPath specified
+  * Child tasks inherit certain parent properties
+  * Parent status affects child task constraints
+  * Proper task hierarchy maintained
 
-Parent-Child Rules:
-- Parent must exist if parentPath specified
-- Parent status affects child task constraints
-- Child tasks inherit certain parent properties`,
+Notes & Documentation:
+Each category limited to 100 notes, 1000 chars per note
+- Planning Notes: Initial task preparation
+- Progress Notes: Implementation updates
+- Completion Notes: Final outcomes
+- Troubleshooting Notes: Issue resolution
+
+Metadata Categories:
+1. Core Fields:
+   - Priority: low/medium/high
+   - Tags: Keywords for categorization (max 100)
+   - Reasoning: Decision rationale (max 2000 chars)
+
+2. Technical Details:
+   - Language & Framework
+   - Dependencies (max 50)
+   - Environment specifications
+
+3. Validation & Progress:
+   - Acceptance criteria (max 20)
+   - Test cases (max 20)
+   - Progress percentage (0-100)
+   - Milestone tracking
+   - Timestamps
+
+4. Resource Tracking:
+   - Tools used (max 100)
+   - Resources accessed (max 100)
+   - Context references (max 100)
+
+5. Status Information:
+   - Block tracking
+   - Resolution details
+   - Timestamps
+
+6. Version Control:
+   - Version numbers
+   - Branch information
+   - Commit references
+   - Version history (max 10)`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -77,63 +123,60 @@ Parent-Child Rules:
         metadata: {
           type: 'object',
           description: `Task metadata with structured validation:
-Core Fields:
-- priority: Task urgency (low/medium/high)
-- tags: Keywords for categorization (max 100 tags, each max 100 chars)
-- reasoning: Document decision rationale (max 2000 chars)
 
-Technical Details:
-- technicalRequirements: {
-    language: Programming language
-    framework: Framework used
-    dependencies: Array of dependencies (max 50)
-    environment: Environment details
-    performance: {
-      memory: Memory requirements
-      cpu: CPU requirements
-      storage: Storage requirements
-    }
-  }
+1. Core Fields:
+   - priority: Task urgency (low/medium/high)
+   - tags: Keywords for categorization (max 100 tags, each max 100 chars)
+   - reasoning: Document decision rationale (max 2000 chars)
 
-Validation & Progress:
-- acceptanceCriteria: {
-    criteria: Array of criteria (max 20, each max 500 chars)
-    testCases: Optional test cases (max 20)
-    reviewers: Optional reviewer list (max 10)
-  }
-- progress: {
-    percentage: Progress percentage (0-100)
-    milestones: Array of milestone names (max 20)
-    lastUpdated: Timestamp
-    estimatedCompletion: Timestamp
-  }
+2. Technical Details:
+   technicalRequirements: {
+     - language: Programming language used
+     - framework: Framework/libraries used
+     - dependencies: Array of required dependencies (max 50)
+     - environment: Runtime environment details
+     - performance: Resource requirements
+   }
 
-Resource Tracking:
-- resources: {
-    toolsUsed: Array of tools (max 100)
-    resourcesAccessed: Array of resources (max 100)
-    contextUsed: Array of context items (max 100)
-  }
+3. Validation & Progress:
+   acceptanceCriteria: {
+     - criteria: Success validation points (max 20, each max 500 chars)
+     - testCases: Test scenarios (max 20, each max 500 chars)
+     - reviewers: Required reviewers list (max 10)
+   }
+   progress: {
+     - percentage: Task completion (0-100)
+     - milestones: Key progress points (max 20)
+     - lastUpdated: Last status update timestamp
+     - estimatedCompletion: Target completion timestamp
+   }
 
-Status Information:
-- blockInfo: {
-    blockedBy: Task causing block
-    blockReason: Reason for block (max 500 chars)
-    blockTimestamp: When blocked
-    unblockTimestamp: When unblocked
-    resolution: Block resolution (max 500 chars)
-  }
+4. Resource Tracking:
+   resources: {
+     - toolsUsed: Tools/utilities used (max 100)
+     - resourcesAccessed: Data/systems accessed (max 100)
+     - contextUsed: Related information (max 100, each max 1000 chars)
+   }
 
-Version Control:
-- versionControl: {
-    version: Version number
-    branch: Branch name
-    commit: Commit hash
-    previousVersions: Array of previous versions (max 10)
-  }
+5. Status Information:
+   blockInfo: {
+     - blockedBy: Task causing the block
+     - blockReason: Block description (max 500 chars)
+     - blockTimestamp: When block occurred
+     - unblockTimestamp: When block was resolved
+     - resolution: How block was resolved (max 500 chars)
+   }
 
-Custom Fields:
-- customFields: Record of additional string fields`,
+6. Version Control:
+   versionControl: {
+     - version: Current version number
+     - branch: Active branch name
+     - commit: Latest commit hash
+     - previousVersions: Version history (max 10)
+   }
+
+7. Custom Fields:
+   customFields: Record of additional string fields for extensibility`,
           properties: {
             priority: {
               type: 'string',
