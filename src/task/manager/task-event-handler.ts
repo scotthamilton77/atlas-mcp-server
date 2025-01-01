@@ -193,12 +193,37 @@ export class TaskEventHandler {
   /**
    * Emit memory pressure event
    */
-  emitMemoryPressure(memoryUsage: NodeJS.MemoryUsage, threshold: number): void {
+  emitMemoryPressure(
+    memoryUsage: NodeJS.MemoryUsage,
+    threshold: number,
+    currentCacheSize: number,
+    maxCacheSize: number
+  ): void {
+    const heapUsage = memoryUsage.heapUsed / memoryUsage.heapTotal;
+    const cacheUsage = currentCacheSize / maxCacheSize;
+
     this.eventManager.emitCacheEvent({
       type: EventTypes.MEMORY_PRESSURE,
       timestamp: Date.now(),
       metadata: {
-        memoryUsage,
+        memoryUsage: {
+          heapUsed: memoryUsage.heapUsed,
+          heapTotal: memoryUsage.heapTotal,
+          rss: memoryUsage.rss,
+          external: memoryUsage.external,
+        },
+        cacheUsage: {
+          currentSize: currentCacheSize,
+          maxSize: maxCacheSize,
+          usagePercentage: Math.round(cacheUsage * 100),
+        },
+        pressure: {
+          memoryPressure: Math.max(0, (heapUsage - 0.7) / 0.3),
+          cachePressure: Math.max(0, (cacheUsage - 0.6) / 0.4),
+          totalPressure:
+            Math.max(0, (heapUsage - 0.7) / 0.3) * 0.6 +
+            Math.max(0, (cacheUsage - 0.6) / 0.4) * 0.4,
+        },
         threshold,
       },
     });

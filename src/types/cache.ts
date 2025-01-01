@@ -24,6 +24,41 @@ export interface CacheMetricsData extends Record<string, unknown> {
   invalidations: number;
   clears: number;
   memoryUsage: number;
+  memoryPressure: number;
+  cachePressure: number;
+  totalPressure: number;
+  cleanups: {
+    total: number;
+    byTrigger: {
+      routine: number;
+      memoryPressure: number;
+      cacheUsage: number;
+    };
+    lastResult?: {
+      entriesRemoved: number;
+      memorySaved: number;
+      trigger: 'high_memory_pressure' | 'routine' | 'cache_usage';
+    };
+  };
+  reductions: {
+    total: number;
+    totalEntriesRemoved: number;
+    totalMemorySaved: number;
+    lastReduction?: {
+      startSize: number;
+      endSize: number;
+      reductionRatio: number;
+      trigger: 'memory_pressure' | 'cache_usage';
+    };
+  };
+}
+
+export interface CachePressureMetrics {
+  memoryPressure: number;
+  cachePressure: number;
+  totalPressure: number;
+  heapUsage: number;
+  cacheUsage: number;
 }
 
 export interface CacheCoordinatorOptions {

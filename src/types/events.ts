@@ -68,9 +68,45 @@ export interface CacheEvent extends BaseEvent {
       heapUsed: number;
       heapTotal: number;
       rss: number;
+      external?: number;
+    };
+    cacheUsage: {
+      currentSize: number;
+      maxSize: number;
+      usagePercentage: number;
+    };
+    pressure?: {
+      memoryPressure: number;
+      cachePressure: number;
+      totalPressure: number;
+    };
+    action?: {
+      type: 'cleanup' | 'reduction' | 'eviction';
+      trigger: 'memory_pressure' | 'cache_usage' | 'routine';
+      entriesAffected?: number;
+      memorySaved?: number;
+      reductionRatio?: number;
     };
     threshold: number;
   };
+}
+
+export interface CacheCleanupMetadata {
+  entriesRemoved: number;
+  memorySaved: number;
+  trigger: 'high_memory_pressure' | 'routine';
+  remainingEntries?: number;
+  totalSize?: string;
+  memoryPressure?: string;
+}
+
+export interface CacheReductionMetadata {
+  startSize: number;
+  endSize: number;
+  reduction: number;
+  targetReduction: number;
+  trigger: 'memory_pressure' | 'cache_usage';
+  reductionRatio: number;
 }
 
 export interface SerializableError {
