@@ -22,11 +22,9 @@ atlas-mcp-server
 │   └── pre-commit
 ├── examples/
 │   ├── portfolio-website/
-│   │   ├── atlas-tasks.db
 │   │   ├── prompt.md
 │   │   ├── README.md
-│   │   ├── task-hierarchy-full.json
-│   │   └── task-hierarchy-full.txt
+│   │   └── task-hierarchy-full.json
 │   └── README.md
 ├── scripts/
 │   ├── generate-tree.js

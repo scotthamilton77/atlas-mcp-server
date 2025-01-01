@@ -213,10 +213,11 @@ async function main(): Promise<void> {
           listTaskResources: async () => taskManager.listTaskResources(),
           getTemplateResource: async (uri: string) => templateManager.getTemplateResource(uri),
           listTemplateResources: async () => templateManager.listTemplateResources(),
-          getHierarchyResource: async (rootPath: string) => taskManager.getHierarchyResource(rootPath),
+          getHierarchyResource: async (rootPath: string) =>
+            taskManager.getHierarchyResource(rootPath),
           getStatusResource: async (taskPath: string) => taskManager.getStatusResource(taskPath),
           getResourceTemplates: async () => templateManager.getResourceTemplates(),
-          resolveResourceTemplate: async (template: string, vars: Record<string, string>) => 
+          resolveResourceTemplate: async (template: string, vars: Record<string, string>) =>
             templateManager.resolveResourceTemplate(template, vars),
         }
       );

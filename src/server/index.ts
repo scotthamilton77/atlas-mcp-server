@@ -14,7 +14,7 @@ import {
   McpError,
   Request,
   Resource,
-  ResourceTemplate
+  ResourceTemplate,
 } from '@modelcontextprotocol/sdk/types.js';
 import { Logger } from '../logging/index.js';
 import { RateLimiter } from './rate-limiter.js';
@@ -189,14 +189,15 @@ export class AtlasServer {
 
       // Get available resources
       const resources = [];
-      
+
       // Add tasklist resource if available
       if (this.toolHandler.listTaskResources) {
         resources.push({
           uri: 'tasklist://current',
           name: 'Current Task List Overview',
-          description: 'Dynamic overview of all tasks including status counts, recent updates, and metrics. Updates in real-time when accessed.',
-          mimeType: 'application/json'
+          description:
+            'Dynamic overview of all tasks including status counts, recent updates, and metrics. Updates in real-time when accessed.',
+          mimeType: 'application/json',
         });
       }
 
@@ -206,7 +207,7 @@ export class AtlasServer {
           uri: 'templates://current',
           name: 'Available Templates',
           description: 'List of all available task templates with their metadata and variables',
-          mimeType: 'application/json'
+          mimeType: 'application/json',
         });
       }
 
@@ -219,9 +220,9 @@ export class AtlasServer {
           capabilities: {
             tools: toolCapabilities,
             resources: {
-              resources: resources
+              resources: resources,
             },
-            resourceTemplates: {}
+            resourceTemplates: {},
           },
         }
       );
@@ -338,7 +339,7 @@ export class AtlasServer {
 
         const [taskResources, templateResources] = await Promise.all([
           this.toolHandler.listTaskResources(),
-          this.toolHandler.listTemplateResources()
+          this.toolHandler.listTemplateResources(),
         ]);
 
         const metricEvent: MetricEvent = {
@@ -349,7 +350,7 @@ export class AtlasServer {
         this.metricsCollector.recordSuccess(metricEvent);
 
         return {
-          resources: [...taskResources, ...templateResources]
+          resources: [...taskResources, ...templateResources],
         };
       } catch (error) {
         this.handleToolError(error);
@@ -405,7 +406,7 @@ export class AtlasServer {
     });
 
     // Handler for reading resources
-    this.server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+    this.server.setRequestHandler(ReadResourceRequestSchema, async request => {
       if (!request.params?.uri) {
         throw new McpError(ErrorCode.InvalidRequest, 'Missing resource URI');
       }
