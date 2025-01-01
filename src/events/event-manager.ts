@@ -17,24 +17,30 @@ import {
   SerializableError,
 } from '../types/events.js';
 
+interface EventStats {
+  emitted: number;
+  handled: number;
+  errors: number;
+  lastEmitted?: number;
+  avgHandleTime: number;
+  lastErrorTime?: number;
+  consecutiveErrors: number;
+}
+
 export class EventManager {
   private static instance: EventManager | null = null;
   private static initializationPromise: Promise<EventManager> | null = null;
   private readonly emitter: EventEmitter;
   private static logger: Logger | null = null;
+  private logger?: Logger;
   private readonly maxListeners: number = 100;
   private readonly debugMode: boolean = false; // Force debug mode off for MCP compatibility
   private initialized = false;
   private readonly activeSubscriptions = new Set<EventSubscription>();
-  private readonly eventStats = new Map<
-    EventTypes | '*',
-    {
-      emitted: number;
-      handled: number;
-      errors: number;
-      lastEmitted?: number;
-    }
-  >();
+  private readonly maxSubscriptions = 1000; // Prevent unbounded growth
+  private readonly subscriptionTimeouts = new Map<string, NodeJS.Timeout>();
+  private isShuttingDown = false;
+  private readonly eventStats = new Map<EventTypes | '*', EventStats>();
   private readonly healthMonitor: EventHealthMonitor;
   private readonly batchProcessor: EventBatchProcessor;
   private cleanupTimeout?: NodeJS.Timeout;
@@ -43,6 +49,7 @@ export class EventManager {
   setLogger(logger: Logger): void {
     if (!EventManager.logger) {
       EventManager.logger = logger.child({ component: 'EventManager' });
+      this.logger = EventManager.logger;
     }
   }
 
@@ -68,19 +75,17 @@ export class EventManager {
       clearInterval(this.cleanupTimeout);
     }
 
-    // Set up cleanup interval with weak reference
-    const weakThis = new WeakRef(this);
     this.cleanupTimeout = setInterval(() => {
-      const instance = weakThis.deref();
-      if (!instance) {
-        // If instance is garbage collected, stop interval
-        if (this.cleanupTimeout) {
-          clearInterval(this.cleanupTimeout);
-        }
-        return;
+      if (this.isShuttingDown) return;
+      
+      try {
+        this.cleanupStaleStats();
+        this.cleanupStaleSubscriptions();
+        this.checkSubscriptionLimit();
+        this.monitorEventHealth();
+      } catch (error) {
+        this.logger?.error('Cleanup interval error', { error });
       }
-
-      instance.cleanupStaleStats();
     }, this.CLEANUP_INTERVAL);
 
     // Ensure interval is cleaned up if process exits
@@ -89,6 +94,55 @@ export class EventManager {
         clearInterval(this.cleanupTimeout);
       }
     });
+  }
+
+  private cleanupStaleSubscriptions(): void {
+    const now = Date.now();
+    const SUBSCRIPTION_TIMEOUT = 24 * 60 * 60 * 1000; // 24 hours
+
+    for (const subscription of this.activeSubscriptions) {
+      if (now - subscription.createdAt > SUBSCRIPTION_TIMEOUT) {
+        subscription.unsubscribe();
+        this.logger?.debug('Removed stale subscription', {
+          type: subscription.type,
+          age: now - subscription.createdAt,
+        });
+      }
+    }
+  }
+
+  private checkSubscriptionLimit(): void {
+    if (this.activeSubscriptions.size > this.maxSubscriptions) {
+      this.logger?.warn('Subscription limit exceeded, removing oldest', {
+        current: this.activeSubscriptions.size,
+        limit: this.maxSubscriptions,
+      });
+
+      // Sort by creation time and remove oldest
+      const sortedSubs = Array.from(this.activeSubscriptions)
+        .sort((a, b) => a.createdAt - b.createdAt);
+
+      const toRemove = sortedSubs.slice(0, sortedSubs.length - this.maxSubscriptions);
+      toRemove.forEach(sub => sub.unsubscribe());
+    }
+  }
+
+  private monitorEventHealth(): void {
+    const now = Date.now();
+    const ERROR_THRESHOLD = 5; // consecutive errors
+    const ERROR_WINDOW = 60000; // 1 minute
+
+    for (const [type, stats] of this.eventStats.entries()) {
+      if (stats.consecutiveErrors >= ERROR_THRESHOLD &&
+          stats.lastErrorTime &&
+          now - stats.lastErrorTime < ERROR_WINDOW) {
+        this.emitError('event_handler_degraded', new Error('Event handler health degraded'), {
+          eventType: type,
+          consecutiveErrors: stats.consecutiveErrors,
+          avgHandleTime: stats.avgHandleTime,
+        });
+      }
+    }
   }
 
   private cleanupStaleStats(): void {
@@ -144,7 +198,42 @@ export class EventManager {
     return EventManager.instance;
   }
 
-  emit<T extends AtlasEvent>(event: T, options?: { batch?: boolean }): boolean {
+  async shutdown(): Promise<void> {
+    this.isShuttingDown = true;
+
+    // Clear cleanup interval
+    if (this.cleanupTimeout) {
+      clearInterval(this.cleanupTimeout);
+      this.cleanupTimeout = undefined;
+    }
+
+    // Clear all subscription timeouts
+    for (const timeout of this.subscriptionTimeouts.values()) {
+      clearTimeout(timeout);
+    }
+    this.subscriptionTimeouts.clear();
+
+    // Wait for active handlers to complete
+    await this.healthMonitor.waitForActiveHandlers();
+
+    // Cleanup resources
+    this.removeAllListeners();
+    this.eventStats.clear();
+    await this.batchProcessor.shutdown();
+    this.healthMonitor.cleanup();
+
+    this.isShuttingDown = false;
+  }
+
+  emit<T extends AtlasEvent>(event: T, options?: { batch?: boolean; priority?: 'high' | 'medium' | 'low' }): boolean {
+    if (this.isShuttingDown) {
+      this.logger?.warn('Rejecting event during shutdown', {
+        type: event.type,
+        timestamp: event.timestamp,
+      });
+      return false;
+    }
+
     try {
       if (this.debugMode && EventManager.logger !== null) {
         try {
@@ -175,32 +264,62 @@ export class EventManager {
         }
       }
 
-      // Add timestamp if not present
+      // Add timestamp and metadata
       if (!event.timestamp) {
         event.timestamp = Date.now();
       }
 
       // Update event stats
-      const stats = this.eventStats.get(event.type) || { emitted: 0, handled: 0, errors: 0 };
+      const stats = this.eventStats.get(event.type) || {
+        emitted: 0,
+        handled: 0,
+        errors: 0,
+        avgHandleTime: 0,
+        consecutiveErrors: 0,
+      };
       stats.emitted++;
       stats.lastEmitted = event.timestamp;
       this.eventStats.set(event.type, stats);
 
+      // Check circuit breaker
+      if (stats.consecutiveErrors >= 5 && // threshold
+          stats.lastErrorTime &&
+          Date.now() - stats.lastErrorTime < 60000) { // 1 minute window
+        this.logger?.warn('Circuit breaker active, rejecting event', {
+          type: event.type,
+          consecutiveErrors: stats.consecutiveErrors,
+          lastError: new Date(stats.lastErrorTime).toISOString(),
+        });
+        return false;
+      }
+
       // Check if event should be batched
       if (options?.batch) {
         this.batchProcessor.addEvent(event, async events => {
-          const results = await Promise.all(
-            events.map(e => {
-              const typeResult = this.emitter.emit(e.type, e);
-              const wildcardResult = this.emitter.emit('*', e);
-              return typeResult || wildcardResult;
-            })
-          );
+          const batchStartTime = Date.now();
+          let batchResults;
+          try {
+            batchResults = await Promise.all(
+              events.map(e => {
+                const typeResult = this.emitter.emit(e.type, e);
+                const wildcardResult = this.emitter.emit('*', e);
+                return typeResult || wildcardResult;
+              })
+            );
 
-          // Update stats for batched events
-          const successCount = results.filter(Boolean).length;
-          if (successCount > 0) {
-            stats.handled += successCount;
+            // Update success metrics
+            const successCount = batchResults.filter(Boolean).length;
+            if (successCount > 0) {
+              stats.handled += successCount;
+              stats.consecutiveErrors = 0;
+              stats.avgHandleTime = 
+                (stats.avgHandleTime * 0.9) + ((Date.now() - batchStartTime) * 0.1);
+            }
+          } catch (error) {
+            stats.errors++;
+            stats.consecutiveErrors++;
+            stats.lastErrorTime = Date.now();
+            throw error;
           }
         });
         return true; // Batch queued successfully
@@ -269,7 +388,13 @@ export class EventManager {
           break;
         } catch (error) {
           attempts++;
-          const stats = this.eventStats.get(type) || { emitted: 0, handled: 0, errors: 0 };
+          const stats = this.eventStats.get(type) || {
+            emitted: 0,
+            handled: 0,
+            errors: 0,
+            avgHandleTime: 0,
+            consecutiveErrors: 0,
+          };
           stats.errors++;
           this.eventStats.set(type, stats);
 
@@ -349,7 +474,13 @@ export class EventManager {
           break;
         } catch (error) {
           attempts++;
-          const stats = this.eventStats.get(type) || { emitted: 0, handled: 0, errors: 0 };
+          const stats = this.eventStats.get(type) || {
+            emitted: 0,
+            handled: 0,
+            errors: 0,
+            avgHandleTime: 0,
+            consecutiveErrors: 0,
+          };
           stats.errors++;
           this.eventStats.set(type, stats);
 

@@ -13,16 +13,15 @@
   "scripts": {
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,md}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx,json,md}\"",
-    "build": "tsc",
-    "prepare": "husky && husky install",
-    "postbuild": "node scripts/set-build-permissions.js",
+    "build": "tsc && node scripts/set-build-permissions.js",
+    "prepare": "husky install",
     "watch": "tsc --watch",
     "inspector": "npx @modelcontextprotocol/inspector build/index.js",
-    "prestart": "node --expose-gc --max-old-space-size=4096 -e \"import('child_process').then(cp => cp.spawnSync('npm', ['run', 'build'], { stdio: 'inherit' }))\"",
+    "prestart": "node scripts/prestart.js",
     "start": "node --expose-gc build/index.js",
-    "dev": "npm run build && concurrently \"npm run watch\" \"npm run start\"",
-    "tree": "echo '# atlas-mcp-server\n' > repo-tree.md && node --expose-gc scripts/generate-tree.js >> repo-tree.md",
-    "postinstall": "node --expose-gc --max-old-space-size=4096 --eval \"console.log('Atlas MCP Server installed successfully. Run npm run build to compile, then restart the MCP Client.')\""
+    "dev": "concurrently \"npm run watch\" \"npm run start\"",
+    "tree": "node scripts/generate-tree.js",
+    "postinstall": "node scripts/postinstall.js"
   },
   "repository": {
     "type": "git",
@@ -72,16 +71,5 @@
     "lint-staged": "^15.3.0",
     "prettier": "^3.4.2",
     "typescript-eslint": "^8.18.2"
-  },
-  "eslintConfig": {
-    "extends": [
-      "eslint:recommended",
-      "plugin:@typescript-eslint/recommended"
-    ],
-    "parser": "@typescript-eslint/parser",
-    "plugins": [
-      "@typescript-eslint"
-    ],
-    "root": true
   }
 }

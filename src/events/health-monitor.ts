@@ -11,6 +11,12 @@ interface HandlerStats {
   nextRetryTime?: number;
 }
 
+interface ActiveHandler {
+  id: string;
+  startTime: number;
+  promise: Promise<void>;
+}
+
 export class EventHealthMonitor {
   private static readonly CIRCUIT_BREAKER_THRESHOLD = 5; // consecutive failures
   private static readonly CIRCUIT_RESET_TIMEOUT = 30000; // 30 seconds
@@ -18,6 +24,7 @@ export class EventHealthMonitor {
   private static readonly HEALTH_CHECK_INTERVAL = 60000; // 1 minute
 
   private readonly handlerStats = new Map<string, HandlerStats>();
+  private readonly activeHandlers = new Set<ActiveHandler>();
   private logger?: Logger;
   private healthCheckInterval?: NodeJS.Timeout;
 
@@ -71,7 +78,7 @@ export class EventHealthMonitor {
   }
 
   wrapHandler<T extends AtlasEvent>(
-    _eventType: EventTypes | '*', // Prefix with underscore to indicate intentionally unused
+    _eventType: EventTypes | '*',
     handler: EventHandler<T>,
     handlerId: string
   ): EventHandler<T> {
@@ -100,8 +107,18 @@ export class EventHealthMonitor {
       }
 
       const startTime = Date.now();
+      const activeHandler: ActiveHandler = {
+        id: handlerId,
+        startTime,
+        promise: Promise.resolve(),
+      };
+
       try {
-        await handler(event);
+        // Track active handler
+        activeHandler.promise = Promise.resolve(handler(event));
+        this.activeHandlers.add(activeHandler);
+
+        await activeHandler.promise;
 
         // Update success stats
         stats.successCount++;
@@ -133,8 +150,21 @@ export class EventHealthMonitor {
 
         this.handlerStats.set(handlerId, stats);
         throw error;
+      } finally {
+        this.activeHandlers.delete(activeHandler);
       }
     };
+  }
+
+  async waitForActiveHandlers(): Promise<void> {
+    if (this.activeHandlers.size === 0) return;
+
+    this.logger?.info('Waiting for active handlers to complete', {
+      count: this.activeHandlers.size,
+    });
+
+    const promises = Array.from(this.activeHandlers).map(handler => handler.promise);
+    await Promise.all(promises);
   }
 
   getHandlerStats(handlerId: string): HandlerStats | undefined {
@@ -162,5 +192,6 @@ export class EventHealthMonitor {
       clearInterval(this.healthCheckInterval);
     }
     this.handlerStats.clear();
+    this.activeHandlers.clear();
   }
 }
