@@ -1,6 +1,7 @@
 import { Logger } from '../../../logging/index.js';
 import { Connection } from '../../connection/index.js';
 import { SqliteQueryBuilder } from '../builder/sqlite-query-builder.js';
+import { JoinType } from '../builder/query-builder.js';
 import { StorageErrorHandler, STORAGE_CONSTANTS, PlatformCapabilities } from '../../utils/index.js';
 import { QueryOptimizer } from './index.js';
 
@@ -396,7 +397,7 @@ export class SqliteOptimizer implements QueryOptimizer {
     for (const step of joinSteps) {
       optimizedBuilder.join([
         {
-          type: step.details.joinType || 'INNER',
+          type: (step.details.joinType?.replace(' JOIN', '') || 'INNER') as JoinType,
           table: step.table,
           on: {
             leftColumn: step.details.leftColumn || '',

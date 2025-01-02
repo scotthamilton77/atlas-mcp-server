@@ -1,4 +1,5 @@
 import { Logger } from '../../logging/index.js';
+import { TransactionLogger } from '../../logging/transaction-logger.js';
 import { TaskStorage } from '../../types/storage.js';
 import { Task, TaskStatus, CreateTaskInput, UpdateTaskInput } from '../../types/task.js';
 import { TaskIndexManager } from './indexing/index-manager.js';
@@ -12,6 +13,7 @@ import path from 'path';
  */
 export class TaskStore {
   private readonly logger: Logger;
+  private readonly transactionLogger: TransactionLogger;
   private readonly indexManager: TaskIndexManager;
   private readonly cacheManager: TaskCacheManager;
 
@@ -22,6 +24,7 @@ export class TaskStore {
     config: { workspaceDir: string }
   ) {
     this.logger = Logger.getInstance().child({ component: 'TaskStore' });
+    this.transactionLogger = TransactionLogger.getInstance();
     this.indexManager = new TaskIndexManager();
     this.cacheManager = new TaskCacheManager();
 
@@ -61,6 +64,7 @@ export class TaskStore {
    * Create a new task
    */
   async createTask(input: CreateTaskInput): Promise<Task> {
+    const startTime = Date.now();
     try {
       const task = await this.storage.createTask(input);
       await this.indexManager.indexTask(task);
@@ -70,8 +74,30 @@ export class TaskStore {
       const allTasks = await this.storage.getTasksByPattern('**');
       await this.visualizer.updateVisualizations(allTasks);
 
+      await this.transactionLogger.logTransaction(
+        'createTask',
+        task,
+        {
+          toStatus: task.status,
+          dependencies: task.dependencies,
+          metadata: task.metadata,
+        },
+        startTime
+      );
+
       return task;
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      await this.transactionLogger.logTransaction(
+        'createTask',
+        { path: input.path } as Task, // Minimal task info for logging
+        {
+          error: errorMessage,
+          metadata: input.metadata,
+        },
+        startTime
+      );
+
       this.logger.error('Failed to create task', {
         error,
         context: { input },
@@ -84,7 +110,12 @@ export class TaskStore {
    * Update an existing task
    */
   async updateTask(path: string, updates: UpdateTaskInput): Promise<Task> {
+    const startTime = Date.now();
     try {
+      const existingTask = await this.storage.getTask(path);
+      if (!existingTask) {
+        throw new Error(`Task not found: ${path}`);
+      }
       const task = await this.storage.updateTask(path, updates);
       await this.indexManager.indexTask(task);
       this.cacheManager.set(task);
@@ -93,8 +124,32 @@ export class TaskStore {
       const allTasks = await this.storage.getTasksByPattern('**');
       await this.visualizer.updateVisualizations(allTasks);
 
+      await this.transactionLogger.logTransaction(
+        'updateTask',
+        task,
+        {
+          fromStatus: existingTask.status,
+          toStatus: updates.status,
+          dependencies: updates.dependencies,
+          metadata: updates.metadata,
+          warnings: this.getUpdateWarnings(existingTask, updates),
+        },
+        startTime
+      );
+
       return task;
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      await this.transactionLogger.logTransaction(
+        'updateTask',
+        { path } as Task,
+        {
+          error: errorMessage,
+          metadata: updates.metadata,
+        },
+        startTime
+      );
+
       this.logger.error('Failed to update task', {
         error,
         context: { path, updates },
@@ -266,8 +321,47 @@ export class TaskStore {
   /**
    * Delete a task
    */
+  /**
+   * Get warnings for task updates
+   */
+  private getUpdateWarnings(existingTask: Task, updates: UpdateTaskInput): string[] {
+    const warnings: string[] = [];
+
+    // Check for potentially risky status changes
+    if (updates.status === 'COMPLETED' && existingTask.status === 'BLOCKED') {
+      warnings.push('Completing task that was previously blocked');
+    }
+
+    // Check for dependency changes
+    if (updates.dependencies && existingTask.dependencies) {
+      const removedDeps = existingTask.dependencies.filter(
+        dep => !updates.dependencies?.includes(dep)
+      );
+      if (removedDeps.length > 0) {
+        warnings.push(`Removing dependencies: ${removedDeps.join(', ')}`);
+      }
+    }
+
+    // Check metadata changes
+    if (updates.metadata && existingTask.metadata) {
+      const existingKeys = Object.keys(existingTask.metadata);
+      const updatedKeys = Object.keys(updates.metadata);
+      const removedKeys = existingKeys.filter(key => !updatedKeys.includes(key));
+      if (removedKeys.length > 0) {
+        warnings.push(`Removing metadata fields: ${removedKeys.join(', ')}`);
+      }
+    }
+
+    return warnings;
+  }
+
   async deleteTask(path: string): Promise<void> {
+    const startTime = Date.now();
     try {
+      const existingTask = await this.storage.getTask(path);
+      if (!existingTask) {
+        throw new Error(`Task not found: ${path}`);
+      }
       await this.storage.deleteTask(path);
       await this.indexManager.removeTask(path);
       this.cacheManager.delete(path);
@@ -275,7 +369,26 @@ export class TaskStore {
       // Update visualizations
       const allTasks = await this.storage.getTasksByPattern('**');
       await this.visualizer.updateVisualizations(allTasks);
+
+      await this.transactionLogger.logTransaction(
+        'deleteTask',
+        existingTask,
+        {
+          fromStatus: existingTask.status,
+          dependencies: existingTask.dependencies,
+          metadata: existingTask.metadata,
+        },
+        startTime
+      );
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      await this.transactionLogger.logTransaction(
+        'deleteTask',
+        { path } as Task,
+        { error: errorMessage },
+        startTime
+      );
+
       this.logger.error('Failed to delete task', {
         error,
         context: { path },
