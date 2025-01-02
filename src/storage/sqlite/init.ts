@@ -14,49 +14,34 @@ export async function createStorage(config: StorageConfig): Promise<SqliteStorag
   let storage: SqliteStorage | undefined;
 
   try {
-    const baseDir = config.baseDir || './data';
-    const name = config.name || 'sqlite-db';
+    const { baseDir, name } = config;
+    const path = await import('path');
+    const dbPath = path.join(baseDir, `${name}.db`);
 
     logger.info('Initializing SQLite storage', {
       operation: 'createStorage',
-      baseDir,
-      name,
       config: {
-        ...config,
         baseDir,
         name,
-        connection: {
-          maxConnections: config.connection?.maxConnections ?? 3,
-          idleTimeout: config.connection?.idleTimeout ?? 15000,
-          busyTimeout: config.connection?.busyTimeout ?? 5000,
-        },
-        performance: {
-          cacheSize: config.performance?.cacheSize ?? 8000,
-          pageSize: config.performance?.pageSize ?? 4096,
-          mmapSize: config.performance?.mmapSize ?? 67108864, // 64MB
-          maxMemory: config.performance?.maxMemory ?? 134217728, // 128MB
-        },
+        dbPath,
       },
     });
 
     // Ensure storage directory exists with proper permissions
     const fs = await import('fs/promises');
-    const path = await import('path');
-    const storageDir = baseDir;
-    const dbPath = path.join(storageDir, `${name}.db`);
 
     try {
       // Create directory with platform-appropriate permissions
-      await fs.mkdir(storageDir, {
+      await fs.mkdir(baseDir, {
         recursive: true,
         mode: PlatformCapabilities.getDefaultMode(),
       });
 
       // Verify directory permissions
-      const dirStats = await fs.stat(storageDir);
+      const dirStats = await fs.stat(baseDir);
       logger.info('Storage directory ready', {
         operation: 'createStorage',
-        storageDir,
+        baseDir,
         mode: dirStats.mode,
         uid: dirStats.uid,
         gid: dirStats.gid,
@@ -84,7 +69,7 @@ export async function createStorage(config: StorageConfig): Promise<SqliteStorag
     } catch (error) {
       logger.error('Storage directory error', {
         operation: 'createStorage',
-        storageDir,
+        baseDir,
         dbPath,
         error:
           error instanceof Error
@@ -99,28 +84,31 @@ export async function createStorage(config: StorageConfig): Promise<SqliteStorag
       throw error;
     }
 
-    // Get platform-specific SQLite settings
+    // Create SQLite config with platform-specific settings and required fields
     const platformSqlite = PlatformCapabilities.getSqliteConfig();
-
     const sqliteConfig = createConfig({
       path: dbPath,
-      baseDir,
-      name,
+      baseDir: config.baseDir,
+      name: config.name,
       connection: {
-        maxConnections: config.connection?.maxConnections ?? 3,
+        maxConnections: config.connection?.maxConnections ?? 1,
         maxRetries: config.connection?.maxRetries ?? 3,
         retryDelay: config.connection?.retryDelay ?? 1000,
-        busyTimeout: config.connection?.busyTimeout ?? 5000,
+        busyTimeout: config.connection?.busyTimeout ?? 2000,
         idleTimeout: config.connection?.idleTimeout ?? 15000,
       },
       performance: {
         checkpointInterval: config.performance?.checkpointInterval ?? 30000,
-        cacheSize: config.performance?.cacheSize ?? 8000,
+        cacheSize: config.performance?.cacheSize ?? 2000,
         mmapSize: config.performance?.mmapSize ?? 67108864,
         pageSize: config.performance?.pageSize ?? platformSqlite.pageSize,
         maxMemory: config.performance?.maxMemory ?? 134217728,
         sharedMemory: platformSqlite.sharedMemory,
       },
+      journalMode: config.journalMode ?? 'wal',
+      synchronous: config.synchronous ?? 'normal',
+      tempStore: config.tempStore ?? 'memory',
+      readonly: config.readonly ?? false,
     });
 
     const connection = new SqliteConnection(sqliteConfig);
@@ -131,21 +119,18 @@ export async function createStorage(config: StorageConfig): Promise<SqliteStorag
     logger.info('SQLite storage initialized successfully', {
       operation: 'createStorage',
       config: {
-        baseDir,
-        name,
+        baseDir: config.baseDir,
+        name: config.name,
       },
     });
 
     return storage;
   } catch (error) {
-    const baseDir = config.baseDir || './data';
-    const name = config.name || 'sqlite-db';
-
     logger.error('Failed to initialize SQLite storage', error, {
       operation: 'createStorage',
       config: {
-        baseDir,
-        name,
+        baseDir: config.baseDir,
+        name: config.name,
       },
     });
 
@@ -164,10 +149,9 @@ export async function createStorage(config: StorageConfig): Promise<SqliteStorag
     return errorHandler.handleInitError(error, {
       operation: 'createStorage',
       config: {
-        baseDir,
-        name,
+        baseDir: config.baseDir,
+        name: config.name,
       },
-      storageDir: baseDir,
       error: error instanceof Error ? error : new Error(String(error)),
     }) as never;
   }

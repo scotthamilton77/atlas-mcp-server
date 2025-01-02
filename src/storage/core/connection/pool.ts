@@ -11,7 +11,6 @@ import { WALManager } from '../wal/manager.js';
 import { join } from 'path';
 import crypto from 'crypto';
 import { isDatabaseError, isTransientError } from '../../../utils/error-utils.js';
-import { DEFAULT_BUSY_TIMEOUT } from '../../sqlite/config.js';
 
 interface PoolConnection {
   db: Database;
@@ -382,7 +381,7 @@ export class ConnectionPool {
               }
             )
           );
-        }, this.config.connection?.busyTimeout || DEFAULT_BUSY_TIMEOUT);
+        }, this.config.connection?.busyTimeout || 2000);
 
         const checkConnection = async () => {
           for (const [id] of this.connections.entries()) {

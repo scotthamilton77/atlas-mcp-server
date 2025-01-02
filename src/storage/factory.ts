@@ -18,15 +18,19 @@ export async function createDefaultStorage(): Promise<TaskStorage> {
     baseDir,
     name: process.env.ATLAS_STORAGE_NAME || 'atlas-tasks',
     connection: {
-      maxConnections: 3, // Limit concurrent connections
-      idleTimeout: 15000, // 15 second idle timeout
+      maxConnections: 3,
+      maxRetries: 3,
+      retryDelay: 1000,
       busyTimeout: 2000,
+      idleTimeout: 15000,
     },
     performance: {
-      cacheSize: 500, // Reduced cache size
+      cacheSize: 500,
       pageSize: 4096,
       mmapSize: 0, // Disable memory mapping
       maxMemory: 32 * 1024 * 1024, // 32MB max memory
+      checkpointInterval: 30000,
+      sharedMemory: false,
     },
   };
 
