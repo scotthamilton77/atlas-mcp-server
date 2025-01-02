@@ -125,17 +125,27 @@ export class SqliteConnection {
       throw new Error('Connection not open');
     }
 
-    if (this.inTransaction) {
-      throw new Error('Transaction already in progress');
-    }
-
     try {
-      await this.db.run('BEGIN TRANSACTION');
-      this.inTransaction = true;
-      this.logger.debug('Transaction started');
+      // Use savepoint for nested transactions
+      const savepointName = `sp_${Date.now()}`;
+      if (this.inTransaction) {
+        await this.db.run(`SAVEPOINT ${savepointName}`);
+        this.transactionStack.push(savepointName);
+        this.logger.debug('Savepoint created', {
+          savepointName,
+          stackDepth: this.transactionStack.length,
+        });
+      } else {
+        await this.db.run('BEGIN TRANSACTION');
+        this.inTransaction = true;
+        this.logger.debug('Transaction started');
+      }
     } catch (error) {
       this.stats.errors++;
-      this.logger.error('Failed to begin transaction', { error });
+      this.logger.error('Failed to begin transaction', {
+        error,
+        stackDepth: this.transactionStack.length,
+      });
       throw error;
     }
   }
@@ -143,6 +153,8 @@ export class SqliteConnection {
   /**
    * Commit transaction
    */
+  private transactionStack: string[] = [];
+
   async commitTransaction(): Promise<void> {
     if (!this.isOpen || !this.db) {
       throw new Error('Connection not open');
@@ -153,9 +165,17 @@ export class SqliteConnection {
     }
 
     try {
-      await this.db.run('COMMIT');
-      this.inTransaction = false;
-      this.logger.debug('Transaction committed');
+      if (this.transactionStack.length > 0) {
+        // Release the latest savepoint
+        const savepointName = this.transactionStack.pop();
+        await this.db.run(`RELEASE SAVEPOINT ${savepointName}`);
+        this.logger.debug('Savepoint released', { savepointName });
+      } else {
+        // Commit the main transaction
+        await this.db.run('COMMIT');
+        this.inTransaction = false;
+        this.logger.debug('Transaction committed');
+      }
     } catch (error) {
       this.stats.errors++;
       this.logger.error('Failed to commit transaction', { error });
@@ -176,9 +196,17 @@ export class SqliteConnection {
     }
 
     try {
-      await this.db.run('ROLLBACK');
-      this.inTransaction = false;
-      this.logger.debug('Transaction rolled back');
+      if (this.transactionStack.length > 0) {
+        // Rollback to the latest savepoint
+        const savepointName = this.transactionStack.pop();
+        await this.db.run(`ROLLBACK TO SAVEPOINT ${savepointName}`);
+        this.logger.debug('Rolled back to savepoint', { savepointName });
+      } else {
+        // Rollback the main transaction
+        await this.db.run('ROLLBACK');
+        this.inTransaction = false;
+        this.logger.debug('Transaction rolled back');
+      }
     } catch (error) {
       this.stats.errors++;
       this.logger.error('Failed to rollback transaction', { error });
