@@ -430,44 +430,31 @@ export class TaskOperations {
   async getChildren(parentPath: string): Promise<Task[]> {
     try {
       return await this.connection.execute(async db => {
-        // Get child tasks
+        // Get immediate children using task_hierarchy view
         const rows = await db.all<Record<string, unknown>[]>(
-          'SELECT * FROM tasks WHERE parent_path = ?',
+          `SELECT t.*, 
+                  tdv.dependencies,
+                  tdv.dependency_count,
+                  tdv.completed_dependencies
+           FROM task_hierarchy h
+           JOIN tasks t ON t.path = h.path
+           LEFT JOIN task_dependencies_view tdv ON t.id = tdv.id
+           WHERE h.parent_path = ? AND h.depth = 1`,
           parentPath
         );
 
-        // Get task IDs for dependency lookup
-        const taskIds = rows.map(row => String(row.id));
+        this.logger.debug('Retrieved child tasks', {
+          parentPath,
+          count: rows.length,
+          childPaths: rows.map(r => r.path),
+        });
 
-        if (taskIds.length === 0) {
-          return [];
-        }
-
-        // Get dependencies for child tasks
-        const placeholders = taskIds.map(() => '?').join(',');
-        const dependencies = await db.all<{ task_id: string; dependency_path: string }[]>(
-          `SELECT task_id, dependency_path FROM task_dependencies WHERE task_id IN (${placeholders})`,
-          ...taskIds
+        return rows.map(row =>
+          this.rowToTask({
+            ...row,
+            dependencies: row.dependencies || '[]',
+          })
         );
-
-        // Group dependencies by task
-        const dependenciesByTask = dependencies.reduce(
-          (acc, dep) => {
-            acc[dep.task_id] = acc[dep.task_id] || [];
-            acc[dep.task_id].push(dep.dependency_path);
-            return acc;
-          },
-          {} as Record<string, string[]>
-        );
-
-        // Add dependencies to each row
-        const rowsWithDeps = rows.map(row => ({
-          ...row,
-          dependencies: JSON.stringify(dependenciesByTask[String(row.id)] || []),
-        }));
-
-        this.logger.debug('Retrieved child tasks', { parentPath, count: rows.length });
-        return rowsWithDeps.map(row => this.rowToTask(row));
       }, 'getChildren');
     } catch (error) {
       this.logger.error('Failed to get child tasks', {

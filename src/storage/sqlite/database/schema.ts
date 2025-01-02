@@ -10,6 +10,9 @@ export interface SqliteSchema {
   task_notes: string;
   task_dependencies: string;
   indexes: string[];
+  triggers: {
+    [key: string]: string;
+  };
   views: {
     active_tasks: string;
     task_hierarchy: string;
@@ -97,6 +100,64 @@ export const SCHEMA: SqliteSchema = {
     'CREATE INDEX IF NOT EXISTS idx_tasks_status_metadata ON tasks(status_metadata) WHERE json_valid(status_metadata)',
   ],
 
+  // Triggers for enforcing task constraints
+  triggers: {
+    dependency_status_check: `
+      CREATE TRIGGER IF NOT EXISTS check_dependency_status
+      BEFORE UPDATE ON tasks
+      WHEN NEW.status = 'COMPLETED'
+      BEGIN
+        SELECT CASE
+          WHEN EXISTS (
+            SELECT 1 FROM task_dependencies td
+            JOIN tasks t ON td.dependency_path = t.path
+            WHERE td.task_id = NEW.id
+            AND t.status != 'COMPLETED'
+          )
+        THEN RAISE(ABORT, 'Cannot complete task with incomplete dependencies')
+        END;
+      END;
+    `,
+
+    prevent_circular_dependencies: `
+      CREATE TRIGGER IF NOT EXISTS prevent_circular_deps
+      BEFORE INSERT ON task_dependencies
+      BEGIN
+        SELECT CASE
+          WHEN EXISTS (
+            WITH RECURSIVE dep_chain(task_id, dependency_path, depth) AS (
+              SELECT task_id, dependency_path, 1
+              FROM task_dependencies
+              WHERE task_id = NEW.dependency_path
+              UNION ALL
+              SELECT td.task_id, td.dependency_path, dc.depth + 1
+              FROM task_dependencies td
+              JOIN dep_chain dc ON td.task_id = dc.dependency_path
+              WHERE dc.depth < 100
+            )
+            SELECT 1 FROM dep_chain WHERE dependency_path = NEW.task_id
+          )
+        THEN RAISE(ABORT, 'Circular dependency detected')
+        END;
+      END;
+    `,
+
+    cascade_blocked_status: `
+      CREATE TRIGGER IF NOT EXISTS cascade_blocked_status
+      AFTER UPDATE ON tasks
+      WHEN NEW.status = 'BLOCKED'
+      BEGIN
+        UPDATE tasks
+        SET status = 'BLOCKED',
+            status_metadata = json_set(COALESCE(status_metadata, '{}'), '$.blocked_by', NEW.path)
+        WHERE id IN (
+          SELECT task_id FROM task_dependencies
+          WHERE dependency_path = NEW.path
+        );
+      END;
+    `,
+  },
+
   // Views for common queries
   views: {
     // Active tasks view
@@ -109,7 +170,7 @@ export const SCHEMA: SqliteSchema = {
       WHERE t.status IN ('PENDING', 'IN_PROGRESS', 'BLOCKED')
     `,
 
-    // Task hierarchy view
+    // Enhanced task hierarchy view with materialized path
     task_hierarchy: `
       CREATE VIEW IF NOT EXISTS task_hierarchy AS
       WITH RECURSIVE hierarchy AS (
@@ -144,47 +205,109 @@ export const SCHEMA: SqliteSchema = {
       SELECT * FROM hierarchy
     `,
 
-    // Task dependencies view
+    // Enhanced task dependencies view with validation info
     task_dependencies_view: `
       CREATE VIEW IF NOT EXISTS task_dependencies_view AS
+      WITH RECURSIVE dependency_chain AS (
+        SELECT 
+          t.id,
+          t.path,
+          td.dependency_path,
+          1 as depth,
+          t.path || '>' || td.dependency_path as chain
+        FROM tasks t
+        JOIN task_dependencies td ON t.id = td.task_id
+        
+        UNION ALL
+        
+        SELECT 
+          dc.id,
+          dc.path,
+          td.dependency_path,
+          dc.depth + 1,
+          dc.chain || '>' || td.dependency_path
+        FROM dependency_chain dc
+        JOIN task_dependencies td ON td.task_id = dc.dependency_path
+        WHERE dc.depth < 100
+      )
       SELECT 
         t.id,
         t.path,
         t.name,
         t.status,
-        GROUP_CONCAT(d.dependency_path) as dependencies,
-        COUNT(d.dependency_path) as dependency_count,
-        SUM(CASE WHEN dt.status = 'COMPLETED' THEN 1 ELSE 0 END) as completed_dependencies
+        GROUP_CONCAT(DISTINCT d.dependency_path) as dependencies,
+        COUNT(DISTINCT d.dependency_path) as dependency_count,
+        SUM(CASE WHEN dt.status = 'COMPLETED' THEN 1 ELSE 0 END) as completed_dependencies,
+        GROUP_CONCAT(DISTINCT dc.chain) as dependency_chains,
+        MAX(dc.depth) as max_depth
       FROM tasks t
       LEFT JOIN task_dependencies d ON t.id = d.task_id
       LEFT JOIN tasks dt ON d.dependency_path = dt.path
+      LEFT JOIN dependency_chain dc ON t.id = dc.id
       GROUP BY t.id
     `,
   },
 };
 
 /**
- * Database initialization function
+ * Database initialization function with improved error handling and validation
  */
 export async function initializeDatabase(db: any): Promise<void> {
-  // Enable foreign keys
-  await db.run('PRAGMA foreign_keys = ON');
+  try {
+    // Enable foreign keys and WAL mode
+    await db.run('PRAGMA foreign_keys = ON');
+    await db.run('PRAGMA journal_mode = WAL');
 
-  // Enable WAL mode for better concurrency
-  await db.run('PRAGMA journal_mode = WAL');
+    // Set optimal page size and cache size
+    await db.run('PRAGMA page_size = 4096');
+    await db.run('PRAGMA cache_size = -2000'); // 2MB cache
 
-  // Create tables
-  await db.run(SCHEMA.tasks);
-  await db.run(SCHEMA.task_notes);
-  await db.run(SCHEMA.task_dependencies);
+    // Create tables with error handling
+    await Promise.all([
+      db.run(SCHEMA.tasks).catch((e: Error) => {
+        throw new Error(`Failed to create tasks table: ${e.message}`);
+      }),
+      db.run(SCHEMA.task_notes).catch((e: Error) => {
+        throw new Error(`Failed to create task_notes table: ${e.message}`);
+      }),
+      db.run(SCHEMA.task_dependencies).catch((e: Error) => {
+        throw new Error(`Failed to create task_dependencies table: ${e.message}`);
+      }),
+    ]);
 
-  // Create indexes
-  for (const index of SCHEMA.indexes) {
-    await db.run(index);
+    // Create indexes with progress tracking
+    for (const index of SCHEMA.indexes) {
+      await db.run(index).catch((e: Error) => {
+        throw new Error(`Failed to create index: ${e.message}`);
+      });
+    }
+
+    // Create triggers for constraint enforcement
+    for (const [name, trigger] of Object.entries(SCHEMA.triggers)) {
+      await db.run(trigger).catch((e: Error) => {
+        throw new Error(`Failed to create trigger ${name}: ${e.message}`);
+      });
+    }
+
+    // Create views with dependency tracking
+    await Promise.all([
+      db.run(SCHEMA.views.active_tasks),
+      db.run(SCHEMA.views.task_hierarchy),
+      db.run(SCHEMA.views.task_dependencies_view),
+    ]).catch((e: Error) => {
+      throw new Error(`Failed to create views: ${e.message}`);
+    });
+
+    // Verify database integrity
+    const integrityCheck = await db.get('PRAGMA integrity_check');
+    if (integrityCheck?.integrity_check !== 'ok') {
+      throw new Error('Database integrity check failed');
+    }
+
+    // Optimize database
+    await db.run('ANALYZE');
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to initialize database: ${message}`);
   }
-
-  // Create views
-  await db.run(SCHEMA.views.active_tasks);
-  await db.run(SCHEMA.views.task_hierarchy);
-  await db.run(SCHEMA.views.task_dependencies_view);
 }
