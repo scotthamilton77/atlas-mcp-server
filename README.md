@@ -95,11 +95,11 @@ flowchart TB
     Task --> SQL
     Template --> SQL
 
-    classDef layer fill:#f0f7ff,stroke:#0366d6,stroke-width:2px,rx:5
-    classDef component fill:#fff,stroke:#666,stroke-width:1px,rx:3
-    classDef api fill:#e1effe,stroke:#3182ce,stroke-width:1px,rx:3
-    classDef core fill:#ebf8ff,stroke:#0987a0,stroke-width:1px,rx:3
-    classDef storage fill:#f0fff4,stroke:#2f855a,stroke-width:1px,rx:3
+    classDef layer fill:#2d3748,stroke:#4299e1,stroke-width:3px,rx:5,color:#fff
+    classDef component fill:#1a202c,stroke:#a0aec0,stroke-width:2px,rx:3,color:#fff
+    classDef api fill:#3182ce,stroke:#90cdf4,stroke-width:2px,rx:3,color:#fff
+    classDef core fill:#319795,stroke:#81e6d9,stroke-width:2px,rx:3,color:#fff
+    classDef storage fill:#2f855a,stroke:#9ae6b4,stroke-width:2px,rx:3,color:#fff
 
     class API,Core,Storage layer
     class MCP,Val,Rate api
