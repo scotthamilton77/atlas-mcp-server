@@ -1,5 +1,12 @@
 import { Task, TaskStatus } from '../../../types/task.js';
 import { Logger } from '../../../logging/index.js';
+import { TaskErrorFactory } from '../../../errors/task-error.js';
+
+interface DependencyDetail {
+  path: string;
+  status: TaskStatus;
+  reason?: string;
+}
 
 /**
  * Validates task status transitions and dependencies
@@ -19,70 +26,94 @@ export class StatusValidator {
     newStatus: TaskStatus,
     getTaskByPath: (path: string) => Promise<Task | null>
   ): Promise<{ status: TaskStatus; autoTransition?: boolean }> {
-    // Define valid status transitions with more flexibility
+    // Define valid status transitions
     const validTransitions: Record<TaskStatus, TaskStatus[]> = {
-      [TaskStatus.PENDING]: [
-        TaskStatus.IN_PROGRESS,
-        TaskStatus.BLOCKED,
-        TaskStatus.CANCELLED,
-        TaskStatus.COMPLETED,
-      ],
-      [TaskStatus.IN_PROGRESS]: [
-        TaskStatus.COMPLETED,
-        TaskStatus.CANCELLED,
-        TaskStatus.BLOCKED,
-        TaskStatus.PENDING,
-      ],
-      [TaskStatus.COMPLETED]: [TaskStatus.IN_PROGRESS, TaskStatus.PENDING], // Allow reopening completed tasks
-      [TaskStatus.CANCELLED]: [TaskStatus.PENDING, TaskStatus.IN_PROGRESS], // More flexible retry options
-      [TaskStatus.BLOCKED]: [TaskStatus.PENDING, TaskStatus.IN_PROGRESS, TaskStatus.CANCELLED], // More unblock options
+      [TaskStatus.PENDING]: [TaskStatus.IN_PROGRESS, TaskStatus.BLOCKED, TaskStatus.CANCELLED],
+      [TaskStatus.IN_PROGRESS]: [TaskStatus.COMPLETED, TaskStatus.CANCELLED, TaskStatus.BLOCKED],
+      [TaskStatus.COMPLETED]: [TaskStatus.IN_PROGRESS], // Allow reopening for testing
+      [TaskStatus.CANCELLED]: [TaskStatus.PENDING], // Only allow restart from cancelled
+      [TaskStatus.BLOCKED]: [TaskStatus.PENDING, TaskStatus.CANCELLED], // Can unblock or cancel
     };
 
-    // Special case: Allow auto-transition to BLOCKED
-    if (newStatus !== TaskStatus.BLOCKED) {
-      // Check if transition is valid
-      if (!validTransitions[task.status]?.includes(newStatus)) {
-        this.logger.warn('Invalid status transition attempted', {
+    // Check if transition is valid with detailed messaging
+    if (!validTransitions[task.status]?.includes(newStatus)) {
+      const allowedTransitions = validTransitions[task.status]?.join(', ') || 'none';
+      throw TaskErrorFactory.createTaskStatusError(
+        'StatusValidator.validateStatusTransition',
+        `Invalid status transition from ${task.status} to ${newStatus}. ` +
+          `Allowed transitions from ${task.status}: ${allowedTransitions}. ` +
+          `Consider updating dependencies or parent tasks first.`,
+        {
           taskPath: task.path,
           currentStatus: task.status,
           newStatus,
-          validTransitions: validTransitions[task.status],
-        });
-        // Return current status instead of throwing error
-        return { status: task.status };
-      }
+          allowedTransitions: validTransitions[task.status],
+          metadata: task.metadata,
+        }
+      );
     }
 
-    // Check dependencies for COMPLETED status - now with warnings instead of errors
+    // Log transition attempt for debugging
+    this.logger.debug('Attempting status transition', {
+      taskPath: task.path,
+      fromStatus: task.status,
+      toStatus: newStatus,
+      hasParent: !!task.parentPath,
+      dependencyCount: task.dependencies?.length || 0,
+      metadata: task.metadata,
+    });
+
+    // Enhanced dependency checking for completion
     if (newStatus === TaskStatus.COMPLETED) {
-      const incompleteDepsPaths = await this.checkCompletionDependencies(task, getTaskByPath);
-      if (incompleteDepsPaths.length > 0) {
-        this.logger.warn('Completing task with incomplete dependencies', {
-          taskPath: task.path,
-          incompleteDependencies: incompleteDepsPaths,
-        });
+      const { incompleteDeps, details } = await this.checkCompletionDependencies(
+        task,
+        getTaskByPath
+      );
+      if (incompleteDeps.length > 0) {
+        const depDetails = details
+          .map(d => `${d.path} (${d.status}${d.reason ? `: ${d.reason}` : ''})`)
+          .join('\n- ');
+
+        throw TaskErrorFactory.createTaskDependencyError(
+          'StatusValidator.validateStatusTransition',
+          `Cannot complete task: Dependencies not ready:\n- ${depDetails}\n\n` +
+            `All dependencies must be COMPLETED before marking this task as COMPLETED.`,
+          {
+            taskPath: task.path,
+            incompleteDependencies: incompleteDeps,
+            dependencyDetails: details,
+          }
+        );
       }
     }
 
-    // Relaxed dependency checking for IN_PROGRESS
+    // Strict dependency checking for IN_PROGRESS
     if (newStatus === TaskStatus.IN_PROGRESS) {
-      const { isBlocked, reason } = await this.checkDependencyStatus(task, getTaskByPath);
+      const { isBlocked, blockingDeps } = await this.checkDependencyStatus(task, getTaskByPath);
       if (isBlocked) {
-        this.logger.warn('Starting task with blocked dependencies', {
+        // Auto-transition to BLOCKED if dependencies are blocking
+        this.logger.warn('Task blocked by dependencies', {
           taskPath: task.path,
-          reason,
+          blockingDeps,
+          currentStatus: task.status,
+          newStatus: TaskStatus.BLOCKED,
         });
+        return {
+          status: TaskStatus.BLOCKED,
+          autoTransition: true,
+        };
       }
     }
 
-    // More flexible unblocking
+    // Validate unblocking
     if (task.status === TaskStatus.BLOCKED && newStatus === TaskStatus.PENDING) {
       const { isBlocked, reason } = await this.checkDependencyStatus(task, getTaskByPath);
       if (isBlocked) {
-        this.logger.warn('Unblocking task with incomplete dependencies', {
-          taskPath: task.path,
-          reason,
-        });
+        throw TaskErrorFactory.createTaskDependencyError(
+          'StatusValidator.validateStatusTransition',
+          `Cannot unblock task: ${reason || 'Dependencies are blocking'}`,
+          { taskPath: task.path }
+        );
       }
     }
 
@@ -95,20 +126,27 @@ export class StatusValidator {
   private async checkCompletionDependencies(
     task: Task,
     getTaskByPath: (path: string) => Promise<Task | null>
-  ): Promise<string[]> {
+  ): Promise<{ incompleteDeps: string[]; details: DependencyDetail[] }> {
     if (!Array.isArray(task.dependencies)) {
-      return [];
+      return { incompleteDeps: [], details: [] };
     }
 
     const incompleteDeps: string[] = [];
+    const details: DependencyDetail[] = [];
+
     for (const depPath of task.dependencies) {
       const depTask = await getTaskByPath(depPath);
       if (!depTask || depTask.status !== TaskStatus.COMPLETED) {
         incompleteDeps.push(depPath);
+        details.push({
+          path: depPath,
+          status: depTask?.status || TaskStatus.PENDING,
+          reason: !depTask ? 'Dependency not found' : this.getDependencyBlockReason(depTask),
+        });
       }
     }
 
-    return incompleteDeps;
+    return { incompleteDeps, details };
   }
 
   /**
@@ -145,8 +183,8 @@ export class StatusValidator {
         continue;
       }
 
-      // Relaxed status validation - only consider CANCELLED as blocking
-      if (depTask.status === TaskStatus.CANCELLED) {
+      // Consider both CANCELLED and BLOCKED as potential blockers
+      if (depTask.status === TaskStatus.CANCELLED || depTask.status === TaskStatus.BLOCKED) {
         blockingDeps.push({
           path: depPath,
           status: depTask.status,

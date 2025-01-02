@@ -30,21 +30,82 @@ export class TaskCacheManager {
    * Set a task in cache
    */
   set(task: Task): void {
-    this.cache.set(task.path, {
-      task: {
+    // Get existing entry to check for status changes
+    const existing = this.cache.get(task.path);
+    const now = Date.now();
+
+    // Track status transition in metadata
+    if (existing && existing.task.status !== task.status) {
+      const statusMetadata = {
+        ...(task.statusMetadata || {}),
+        lastTransition: {
+          from: existing.task.status,
+          to: task.status,
+          timestamp: now,
+        },
+      };
+
+      // Update progress metadata for status changes
+      const metadata = {
+        ...(task.metadata || {}),
+        progress: {
+          ...(task.metadata?.progress || {}),
+          lastUpdated: now,
+        },
+      };
+
+      // Deep clone task with updated metadata
+      const clonedTask = {
         ...task,
         // Ensure arrays are initialized
-        dependencies: task.dependencies || [],
-        planningNotes: task.planningNotes || [],
-        progressNotes: task.progressNotes || [],
-        completionNotes: task.completionNotes || [],
-        troubleshootingNotes: task.troubleshootingNotes || [],
-        // Initialize metadata
-        metadata: task.metadata || {},
-        statusMetadata: task.statusMetadata || {},
-      },
-      timestamp: Date.now(),
-    });
+        dependencies: [...(task.dependencies || [])],
+        planningNotes: [...(task.planningNotes || [])],
+        progressNotes: [...(task.progressNotes || [])],
+        completionNotes: [...(task.completionNotes || [])],
+        troubleshootingNotes: [...(task.troubleshootingNotes || [])],
+        // Use updated metadata
+        metadata,
+        statusMetadata,
+      };
+
+      this.cache.set(task.path, {
+        task: clonedTask,
+        timestamp: now,
+      });
+    } else {
+      // No status change, just clone and cache
+      const clonedTask = {
+        ...task,
+        dependencies: [...(task.dependencies || [])],
+        planningNotes: [...(task.planningNotes || [])],
+        progressNotes: [...(task.progressNotes || [])],
+        completionNotes: [...(task.completionNotes || [])],
+        troubleshootingNotes: [...(task.troubleshootingNotes || [])],
+        metadata: { ...(task.metadata || {}) },
+        statusMetadata: { ...(task.statusMetadata || {}) },
+      };
+
+      this.cache.set(task.path, {
+        task: clonedTask,
+        timestamp: now,
+      });
+    }
+  }
+
+  /**
+   * Update task status in cache
+   */
+  updateStatus(path: string, status: Task['status']): void {
+    const entry = this.cache.get(path);
+    if (entry) {
+      const updatedTask = {
+        ...entry.task,
+        status,
+        updated: new Date().toISOString(),
+        version: entry.task.version + 1,
+      };
+      this.set(updatedTask);
+    }
   }
 
   /**

@@ -98,64 +98,95 @@ export class TaskOperations {
    */
   async updateTask(path: string, updates: UpdateTaskInput): Promise<Task> {
     try {
-      const existingTask = await this.getTask(path);
-      if (!existingTask) {
+      const result = await this.connection.executeInTransaction(async () => {
+        const existingTask = await this.getTask(path);
+        if (!existingTask) {
+          throw TaskErrorFactory.createTaskNotFoundError('TaskOperations.updateTask', path);
+        }
+
+        const now = Date.now();
+
+        // Convert null to undefined for parentPath
+        const parentPath =
+          updates.parentPath === null
+            ? undefined
+            : typeof updates.parentPath === 'string'
+              ? updates.parentPath
+              : existingTask.parentPath;
+
+        // Create updated task with proper type handling
+        const updatedTask: Task = {
+          ...existingTask,
+          ...updates,
+          // Update system fields
+          updated: formatTimestamp(now),
+          version: existingTask.version + 1,
+          // Handle parentPath explicitly to ensure correct type
+          parentPath,
+          // Keep user metadata separate
+          metadata: {
+            ...existingTask.metadata,
+            ...updates.metadata,
+          },
+          // Handle dependencies explicitly
+          dependencies:
+            updates.dependencies !== undefined ? updates.dependencies : existingTask.dependencies,
+
+          // Note categories - preserve existing notes if not updated
+          planningNotes: updates.planningNotes || existingTask.planningNotes,
+          progressNotes: updates.progressNotes || existingTask.progressNotes,
+          completionNotes: updates.completionNotes || existingTask.completionNotes,
+          troubleshootingNotes: updates.troubleshootingNotes || existingTask.troubleshootingNotes,
+
+          // Status metadata
+          statusMetadata: {
+            ...existingTask.statusMetadata,
+            ...updates.statusMetadata,
+          },
+        };
+
+        // Handle parent-child relationship changes
+        if (updates.parentPath !== undefined && updates.parentPath !== existingTask.parentPath) {
+          await this.updateTaskRelationships(path, existingTask.parentPath, parentPath);
+        }
+
+        // Verify dependencies exist before saving
+        if (updatedTask.dependencies && updatedTask.dependencies.length > 0) {
+          for (const depPath of updatedTask.dependencies) {
+            const depExists = await this.getTask(depPath);
+            if (!depExists) {
+              throw TaskErrorFactory.createTaskDependencyError(
+                'TaskOperations.updateTask',
+                `Dependency not found: ${depPath}`,
+                { taskId: updatedTask.id, dependencyPath: depPath }
+              );
+            }
+          }
+        }
+
+        await this.internalSaveTask(updatedTask);
+
+        // Get fresh task with dependencies from database
+        const savedTask = await this.getTask(path);
+        if (!savedTask) {
+          throw TaskErrorFactory.createTaskNotFoundError('TaskOperations.updateTask', path);
+        }
+
+        this.logger.info('Task updated successfully', {
+          path,
+          newStatus: updates.status,
+          newParentPath: parentPath,
+          dependencies: savedTask.dependencies,
+        });
+
+        return savedTask;
+      });
+
+      if (!result) {
         throw TaskErrorFactory.createTaskNotFoundError('TaskOperations.updateTask', path);
       }
 
-      const now = Date.now();
-
-      // Convert null to undefined for parentPath
-      const parentPath =
-        updates.parentPath === null
-          ? undefined
-          : typeof updates.parentPath === 'string'
-            ? updates.parentPath
-            : existingTask.parentPath;
-
-      // Create updated task with proper type handling
-      const updatedTask: Task = {
-        ...existingTask,
-        ...updates,
-        // Update system fields
-        updated: formatTimestamp(now),
-        version: existingTask.version + 1,
-        // Handle parentPath explicitly to ensure correct type
-        parentPath,
-        // Keep user metadata separate
-        metadata: {
-          ...existingTask.metadata,
-          ...updates.metadata,
-        },
-        // Ensure arrays are initialized
-        dependencies: updates.dependencies || existingTask.dependencies,
-
-        // Note categories - preserve existing notes if not updated
-        planningNotes: updates.planningNotes || existingTask.planningNotes,
-        progressNotes: updates.progressNotes || existingTask.progressNotes,
-        completionNotes: updates.completionNotes || existingTask.completionNotes,
-        troubleshootingNotes: updates.troubleshootingNotes || existingTask.troubleshootingNotes,
-
-        // Status metadata
-        statusMetadata: {
-          ...existingTask.statusMetadata,
-          ...updates.statusMetadata,
-        },
-      };
-
-      // Handle parent-child relationship changes
-      if (updates.parentPath !== undefined && updates.parentPath !== existingTask.parentPath) {
-        await this.updateTaskRelationships(path, existingTask.parentPath, parentPath);
-      }
-
-      await this.internalSaveTask(updatedTask);
-      this.logger.info('Task updated successfully', {
-        path,
-        newStatus: updates.status,
-        newParentPath: parentPath,
-      });
-
-      return updatedTask;
+      return result;
     } catch (error) {
       this.logger.error('Failed to update task', {
         error,
@@ -399,44 +430,31 @@ export class TaskOperations {
   async getChildren(parentPath: string): Promise<Task[]> {
     try {
       return await this.connection.execute(async db => {
-        // Get child tasks
+        // Get immediate children using task_hierarchy view
         const rows = await db.all<Record<string, unknown>[]>(
-          'SELECT * FROM tasks WHERE parent_path = ?',
+          `SELECT t.*, 
+                  tdv.dependencies,
+                  tdv.dependency_count,
+                  tdv.completed_dependencies
+           FROM task_hierarchy h
+           JOIN tasks t ON t.path = h.path
+           LEFT JOIN task_dependencies_view tdv ON t.id = tdv.id
+           WHERE h.parent_path = ? AND h.depth = 1`,
           parentPath
         );
 
-        // Get task IDs for dependency lookup
-        const taskIds = rows.map(row => String(row.id));
+        this.logger.debug('Retrieved child tasks', {
+          parentPath,
+          count: rows.length,
+          childPaths: rows.map(r => r.path),
+        });
 
-        if (taskIds.length === 0) {
-          return [];
-        }
-
-        // Get dependencies for child tasks
-        const placeholders = taskIds.map(() => '?').join(',');
-        const dependencies = await db.all<{ task_id: string; dependency_path: string }[]>(
-          `SELECT task_id, dependency_path FROM task_dependencies WHERE task_id IN (${placeholders})`,
-          ...taskIds
+        return rows.map(row =>
+          this.rowToTask({
+            ...row,
+            dependencies: row.dependencies || '[]',
+          })
         );
-
-        // Group dependencies by task
-        const dependenciesByTask = dependencies.reduce(
-          (acc, dep) => {
-            acc[dep.task_id] = acc[dep.task_id] || [];
-            acc[dep.task_id].push(dep.dependency_path);
-            return acc;
-          },
-          {} as Record<string, string[]>
-        );
-
-        // Add dependencies to each row
-        const rowsWithDeps = rows.map(row => ({
-          ...row,
-          dependencies: JSON.stringify(dependenciesByTask[String(row.id)] || []),
-        }));
-
-        this.logger.debug('Retrieved child tasks', { parentPath, count: rows.length });
-        return rowsWithDeps.map(row => this.rowToTask(row));
       }, 'getChildren');
     } catch (error) {
       this.logger.error('Failed to get child tasks', {
@@ -588,12 +606,27 @@ export class TaskOperations {
     // Then insert new dependencies
     if (task.dependencies && task.dependencies.length > 0) {
       const now = Date.now();
-      const values = task.dependencies.map(dep => `('${task.id}', '${dep}', ${now})`).join(',');
+      // First verify all dependencies exist
+      for (const depPath of task.dependencies) {
+        const depExists = await db.get('SELECT path FROM tasks WHERE path = ?', depPath);
+        if (!depExists) {
+          throw TaskErrorFactory.createTaskDependencyError(
+            'TaskOperations.saveTaskToDb',
+            `Dependency not found: ${depPath}`,
+            { taskId: task.id, dependencyPath: depPath }
+          );
+        }
+      }
 
-      await db.run(`
-        INSERT INTO task_dependencies (task_id, dependency_path, created_at)
-        VALUES ${values}
-      `);
+      // Then insert dependencies
+      for (const depPath of task.dependencies) {
+        await db.run(
+          'INSERT INTO task_dependencies (task_id, dependency_path, created_at) VALUES (?, ?, ?)',
+          task.id,
+          depPath,
+          now
+        );
+      }
     }
   }
 

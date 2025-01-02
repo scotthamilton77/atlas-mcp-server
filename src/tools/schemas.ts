@@ -93,9 +93,25 @@ export const createTaskSchema = {
       },
       maxItems: CONSTRAINTS.MAX_DEPENDENCIES,
       description:
-        'Paths of tasks that must be completed first. Tasks will be automatically blocked if dependencies are not met.\n' +
-        `Maximum dependencies: ${CONSTRAINTS.MAX_DEPENDENCIES}\n` +
-        'Dependencies can be specified here (recommended) or in metadata.dependencies (legacy).',
+        'Task Dependencies - Path-Based Organization Guide:\n\n' +
+        '1. Path Format:\n' +
+        '   • Use descriptive hierarchical paths (e.g., project/backend/database)\n' +
+        '   • Follow consistent naming patterns across components\n' +
+        '   • Maximum path length: 1000 characters\n\n' +
+        '2. Example Dependencies:\n' +
+        '   • Single dependency:\n' +
+        '     ["project/backend/database"]\n' +
+        '   • Multiple dependencies:\n' +
+        '     ["project/backend/database",\n' +
+        '      "project/shared/config",\n' +
+        '      "project/frontend/types"]\n\n' +
+        '3. Best Practices:\n' +
+        '   • Organize paths by component for clarity\n' +
+        '   • Keep dependencies focused and minimal\n' +
+        '   • Document relationships in task descriptions\n' +
+        '   • Consider task hierarchy in dependencies\n\n' +
+        `Maximum dependencies per task: ${CONSTRAINTS.MAX_DEPENDENCIES}\n` +
+        'System automatically manages dependency state and task blocking.',
       uniqueItems: true,
     },
     metadata: {
@@ -232,9 +248,23 @@ export const updateTaskSchema = {
           },
           maxItems: CONSTRAINTS.MAX_DEPENDENCIES,
           description:
-            'Updated task dependencies. Tasks will be automatically blocked if new dependencies are not met.\n' +
-            `Maximum dependencies: ${CONSTRAINTS.MAX_DEPENDENCIES}\n` +
-            'Status changes propagate through dependency chain.',
+            'Task Dependencies - Best Practices for Updates:\n\n' +
+            '1. Path Organization:\n' +
+            '   • Use clear hierarchical paths\n' +
+            '   • Maintain consistent naming\n' +
+            '   • Group by logical components\n\n' +
+            '2. Example Updates:\n' +
+            '   • Adding a dependency:\n' +
+            '     ["project/shared/auth"]\n' +
+            '   • Multiple dependencies:\n' +
+            '     ["project/backend/api",\n' +
+            '      "project/shared/types"]\n\n' +
+            '3. Dependency Management:\n' +
+            '   • System tracks completion status\n' +
+            '   • Updates propagate through chain\n' +
+            '   • Automatic task blocking\n' +
+            '   • Status validation on changes\n\n' +
+            `Maximum dependencies: ${CONSTRAINTS.MAX_DEPENDENCIES}`,
           uniqueItems: true,
         },
         metadata: {
