@@ -4,13 +4,16 @@ import { randomBytes } from 'crypto';
  * ID generation constants
  */
 export const ID_CONSTANTS = {
+  // Core constants
+  LENGTH: 8, // Standard length for generated IDs
+  ALPHABET: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', // Allowed characters
+  PATTERN: /^[a-zA-Z0-9]{8}$/, // Regex pattern for validation
+
+  // Additional constants for specialized ID generation
   PREFIX_SEPARATOR: '_',
   HEX_LENGTH: 16,
   TIMESTAMP_BASE: 36,
   RANDOM_LENGTH: 6,
-  LENGTH: 8, // Standard length for generated IDs
-  ALPHABET: 'a-zA-Z0-9', // Allowed characters in IDs
-  PATTERN: /^[a-zA-Z0-9]{8}$/, // Regex pattern for validation
 };
 
 /**
