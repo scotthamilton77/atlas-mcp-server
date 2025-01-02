@@ -57,6 +57,7 @@ atlas-mcp-server
 │   │   ├── index.ts
 │   │   ├── logger.ts
 │   │   ├── README.md
+│   │   ├── transaction-logger.ts
 │   │   └── transport-manager.ts
 │   ├── server/
 │   │   ├── health-monitor.ts
@@ -68,6 +69,15 @@ atlas-mcp-server
 │   ├── storage/
 │   │   ├── base/
 │   │   │   └── base-storage.ts
+│   │   ├── connection/
+│   │   │   ├── pool/
+│   │   │   │   ├── connection-pool.ts
+│   │   │   │   ├── index.ts
+│   │   │   │   ├── sqlite-connection-factory.ts
+│   │   │   │   ├── sqlite-connection.ts
+│   │   │   │   └── types.ts
+│   │   │   ├── index.ts
+│   │   │   └── manager.ts
 │   │   ├── core/
 │   │   │   ├── connection/
 │   │   │   │   ├── health.ts
@@ -99,11 +109,21 @@ atlas-mcp-server
 │   │   ├── interfaces/
 │   │   │   ├── config.ts
 │   │   │   ├── storage.ts
-│   │   │   └── template-storage.ts
+│   │   │   ├── template-storage.ts
+│   │   │   └── types.ts
 │   │   ├── monitoring/
 │   │   │   ├── health.ts
 │   │   │   ├── index.ts
 │   │   │   └── metrics.ts
+│   │   ├── query/
+│   │   │   ├── builder/
+│   │   │   │   ├── query-builder.ts
+│   │   │   │   └── sqlite-query-builder.ts
+│   │   │   ├── optimizer/
+│   │   │   │   ├── index.ts
+│   │   │   │   └── sqlite-optimizer.ts
+│   │   │   ├── executor.ts
+│   │   │   └── index.ts
 │   │   ├── sqlite/
 │   │   │   ├── database/
 │   │   │   │   ├── connection.ts
@@ -118,6 +138,10 @@ atlas-mcp-server
 │   │   │   ├── init.ts
 │   │   │   ├── storage.ts
 │   │   │   └── template-storage.ts
+│   │   ├── utils/
+│   │   │   ├── index.ts
+│   │   │   ├── storage-error-handler.ts
+│   │   │   └── storage-path-utils.ts
 │   │   ├── factory.ts
 │   │   ├── index.ts
 │   │   └── README.md
@@ -127,6 +151,7 @@ atlas-mcp-server
 │   │   │   │   ├── common/
 │   │   │   │   │   └── batch-utils.ts
 │   │   │   │   ├── base-batch-processor.ts
+│   │   │   │   ├── bulk-operations-handler.ts
 │   │   │   │   ├── dependency-aware-batch-processor.ts
 │   │   │   │   ├── generic-batch-processor.ts
 │   │   │   │   ├── index.ts
@@ -220,6 +245,7 @@ atlas-mcp-server
 │   │   ├── index.ts
 │   │   ├── indexing.ts
 │   │   ├── logging.ts
+│   │   ├── lru-cache.d.ts
 │   │   ├── project.ts
 │   │   ├── README.md
 │   │   ├── session.ts
@@ -274,5 +300,7 @@ atlas-mcp-server
 ├── package.json
 ├── README.md
 ├── repo-tree.md
+├── repomix-output.txt
+├── storage-refactor.md
 └── tsconfig.json
 ```

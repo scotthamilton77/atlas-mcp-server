@@ -7,21 +7,34 @@
 [![Status](https://img.shields.io/badge/Status-Stable-blue.svg)]()
 [![GitHub](https://img.shields.io/github/stars/cyanheads/atlas-mcp-server?style=social)](https://github.com/cyanheads/atlas-mcp-server)
 
-ATLAS (Adaptive Task & Logic Automation System) is a Model Context Protocol server that provides
-path-based task management capabilities to Large Language Models. This tool enables LLMs to manage
-complex tasks and dependencies through a robust and flexible API.
+ATLAS (Adaptive Task & Logic Automation System) is a high-performance Model Context Protocol server
+designed for LLMs to manage complex task hierarchies. Built with TypeScript and featuring
+ACID-compliant storage, efficient task tracking, and intelligent template management, ATLAS provides
+LLM Agents task management through a clean, flexible tool interface.
 
 ## Table of Contents
 
 - [Overview](#overview)
+  - [Architecture & Components](#architecture--components)
 - [Features](#features)
+  - [Task Management](#task-management)
+  - [Performance & Reliability](#performance--reliability)
+  - [Validation & Safety](#validation--safety)
+  - [Task Tracking](#task-tracking)
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [Templates](#templates)
+  - [Core Features](#core-features)
+  - [Built-in Templates](#built-in-templates)
 - [Task Structure](#task-structure)
 - [Tools](#tools)
+  - [Task Operations](#task-operations)
+  - [Maintenance Tools](#maintenance-tools)
+- [Resources](#resources)
 - [Best Practices](#best-practices)
-- [Development](#development)
+  - [Task Organization](#task-organization)
+  - [Performance Optimization](#performance-optimization)
+  - [Error Prevention](#error-prevention)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -30,91 +43,67 @@ complex tasks and dependencies through a robust and flexible API.
 ATLAS implements the Model Context Protocol (MCP), enabling standardized communication between LLMs
 and external systems through:
 
-- **Clients** (Claude Desktop, IDEs) that maintain server connections
-- **Servers** that provide tools and resources (Like our ATLAS MCP Server)
-- **LLMs** that interact with servers through client applications
+- **Clients**: Claude Desktop, IDEs, and other MCP-compatible clients
+- **Servers**: Tools and resources for task management and automation
+- **LLM Agents**: AI models that leverage the server's task management capabilities
 
-### Core Components
+Key capabilities:
 
-- **TaskStore**: Central task storage and retrieval with ACID compliance
-- **TaskValidator**: Comprehensive validation with dependency cycle detection
-- **SqliteStorage**: Robust SQLite-based persistence with WAL and transaction support
-- **BatchProcessor**: Optimized bulk operations with retry mechanism and dead letter queue
-- **EventManager**: Enhanced event system with circuit breaker and health monitoring
-- **ProcessManager**: Robust process lifecycle management with graceful shutdown
-- **ErrorHandler**: Structured error handling with severity levels and context
-- **VisualizationManager**: Real-time task visualization with session-based file management
+- **Hierarchical Task Organization**: Intuitive path-based structure with automatic relationship
+  management
+- **Task State Management**: Status monitoring and progress tracking
+- **Smart Templates**: Pre-built and customizable templates for common workflows
+- **Enterprise Features**: ACID compliance, connection pooling, automatic maintenance
+- **Performance Focus**: Optimized caching, batch operations, and health monitoring
+
+### Architecture & Components
+
+Core system architecture:
+
+```
+┌─ API Layer ─────┐  ┌─ Core Services ──┐  ┌─ Storage Layer ─┐
+│ • MCP Protocol  │  │ • Task Store     │  │ • SQLite + WAL  │
+│ • Validation    │  │ • Event System   │  │ • Connection    │
+│ • Rate Limiting │  │ • Template Engine│  │   Pooling       │
+└────────────────┘  └─────────────────┘  └────────────────┘
+```
+
+Core Components:
+
+- **Storage Layer**: ACID-compliant SQLite with WAL and connection pooling
+- **Task Layer**: Validation, relationships, and dependency management
+- **Event System**: Health monitoring and circuit breakers
+- **Template Engine**: Inheritance and variable interpolation
 
 ## Features
 
 ### Task Management
 
-- Path-based task organization
-- Strong type validation (TASK, MILESTONE)
-- Status management with transition rules
-- Parent-child relationship validation
-- Dependency cycle detection
-- Rich metadata support
-- Automatic subtask management
-- Categorized notes (planning, progress, completion, troubleshooting)
-- Technical requirements tracking
-- Priority levels and tagging
-- Real-time visualization:
-  - Hierarchical task views
-  - Progress tracking with visual indicators
-  - Status summaries and statistics
-  - Session-based file management
-  - Both markdown and JSON formats
+- **Hierarchical Organization**: Path-based structure with automatic validation
+- **Rich Metadata**: Flexible schema for requirements, progress, and documentation
+- **Status Tracking**: State management with transition rules and dependency checks
+- **Smart Templates**: Pre-built patterns with variable interpolation
 
-### Storage & Performance
+### Performance & Reliability
 
-- SQLite backend with Write-Ahead Logging (WAL)
-- ACID-compliant transactions
-- Batch processing with retry mechanism
-- Connection pooling with health monitoring
-- Automatic checkpointing and maintenance
-- Advanced memory management:
-  - Progressive cache reduction
-  - Memory pressure monitoring
-  - Smart eviction strategies
-  - Detailed memory metrics
-- Platform-specific optimizations
-- Circuit breaker pattern for reliability
+- **Enterprise Storage**: SQLite with WAL and ACID compliance
+- **Optimized Operations**: Batch processing and automatic maintenance
+- **Health Monitoring**: System metrics and automatic recovery
+- **Resource Management**: Memory monitoring and connection pooling
 
 ### Validation & Safety
 
-- Path validation and sanitization
-- Dependency cycle prevention
-- Status transition validation
-- Schema enforcement
-- Relationship integrity checks
+- **Path Validation**: Automatic sanitization and format verification
+- **Dependency Checks**: Cycle detection and relationship integrity
+- **Schema Enforcement**: Type validation and constraint checking
+- **Status Rules**: Transition validation and state consistency
 
-### Error Handling & Monitoring
+### Task Tracking
 
-Error severity levels:
-
-- CRITICAL: Database/storage failures
-- HIGH: Missing resources, transaction issues
-- MEDIUM: Validation/dependency problems
-- LOW: Non-critical operational issues
-
-Error context tracking:
-
-- Operation details
-- Timestamps
-- Stack traces
-- Metadata
-
-Monitoring capabilities:
-
-- Memory pressure tracking
-- Cache utilization metrics
-- Performance analytics
-- Health monitoring with:
-  - Memory usage patterns
-  - Cache efficiency metrics
-  - Operation latency tracking
-  - Resource pressure alerts
+- **Status Monitoring**: Efficient task state tracking
+- **Progress Metrics**: Completion rates and status distribution
+- **Dependency Tracking**: Relationship and blocking status monitoring
+- **Performance Insights**: Resource tracking and bottleneck detection
 
 ## Installation
 
@@ -148,12 +137,28 @@ Add to your MCP client settings:
       "command": "node",
       "args": ["/path/to/atlas-mcp-server/build/index.js"],
       "env": {
+        // Storage Configuration
         "ATLAS_STORAGE_DIR": "/path/to/storage/directory", // Optional, defaults to ~/Documents/Cline/mcp-workspace/ATLAS
         "ATLAS_STORAGE_NAME": "atlas-tasks", // Optional, defaults to atlas-tasks
-        "NODE_ENV": "production", // Optional, defaults to development
-        "ATLAS_LOG_LEVEL": "info", // Optional, defaults to debug
+        "ATLAS_WAL_MODE": "true", // Optional, enables Write-Ahead Logging, defaults to true
+        "ATLAS_POOL_SIZE": "5", // Optional, connection pool size, defaults to CPU cores
+
+        // Performance Configuration
         "ATLAS_MAX_MEMORY": "1024", // Optional, in MB, defaults to 25% of system memory
-        "ATLAS_CHECKPOINT_INTERVAL": "30000" // Optional, in ms, defaults to 30000
+        "ATLAS_CACHE_SIZE": "256", // Optional, in MB, defaults to 25% of max memory
+        "ATLAS_BATCH_SIZE": "1000", // Optional, max items per batch, defaults to 1000
+        "ATLAS_CHECKPOINT_INTERVAL": "30000", // Optional, in ms, defaults to 30000
+        "ATLAS_VACUUM_INTERVAL": "3600000", // Optional, in ms, defaults to 1 hour
+
+        // Monitoring Configuration
+        "ATLAS_LOG_LEVEL": "info", // Optional, defaults to debug
+        "ATLAS_METRICS_INTERVAL": "60000", // Optional, in ms, defaults to 60000
+        "ATLAS_HEALTH_CHECK_INTERVAL": "30000", // Optional, in ms, defaults to 30000
+
+        // Environment Configuration
+        "NODE_ENV": "production", // Optional, defaults to development
+        "ATLAS_TEMPLATE_DIRS": "/path/to/templates", // Optional, additional template directories
+        "ATLAS_MAX_PATH_DEPTH": "10" // Optional, max task path depth, defaults to 10
       }
     }
   }
@@ -162,556 +167,227 @@ Add to your MCP client settings:
 
 ## Templates
 
-ATLAS provides built-in templates for common task structures:
+ATLAS provides an intelligent template system that streamlines task creation and management:
 
-### Software Engineering Team Templates
+### Core Features
 
-A comprehensive set of templates for managing software engineering teams:
+- **Smart Variables**: Type-safe interpolation with validation
+- **Inheritance**: Template composition with metadata transformation
+- **Dynamic Generation**: Conditional tasks and automated dependencies
+- **Validation**: Custom rules and relationship verification
 
-- **Team Coordinator**: Overall team coordination and milestone tracking
-- **Product Designer**: User research and product design
-- **System Architect**: System design and infrastructure planning
-- **Security Engineer**: Security implementation and compliance
-- **DevOps Engineer**: Infrastructure automation and deployment
-- **Tech Lead**: Development standards and quality
+### Built-in Templates
 
-Usage:
+ATLAS includes two types of specialized templates:
+
+1. Software Engineering Team Templates:
+
+   - **Team Coordination**: Project setup, roles, and communication channels
+   - **Product Design**: User research, requirements, and design systems
+   - **System Architecture**: Technical design and system planning
+   - **Security Engineering**: Security architecture and compliance
+   - **DevOps**: Infrastructure automation and CI/CD
+   - **Technical Leadership**: Development standards and quality assurance
+
+2. Project Setup Templates:
+   - **Web Project**: Modern web development setup with configurable features:
+     - TypeScript support
+     - Testing infrastructure
+     - CI/CD workflows
+     - CSS framework selection
+
+Example team template usage:
 
 ```typescript
 {
-  "templateId": "llm-software-team",
+  "templateId": "software_engineer/team",
   "variables": {
-    "projectName": "my-project",
+    "projectName": "atlas-web",
     "teamScale": "growth",
     "developmentMethodology": "agile",
-    "securityLevel": "high",
-    "complianceFrameworks": "OWASP,SOC2"
+    "securityLevel": "standard",
+    "complianceFrameworks": ["OWASP"],
+    "enableMetrics": true
   }
 }
 ```
 
-See [templates/README.md](templates/README.md) for detailed template documentation.
+Example web project template usage:
+
+```typescript
+{
+  "templateId": "web-project",
+  "variables": {
+    "projectName": "my-web-app",
+    "useTypeScript": true,
+    "includeTesting": true,
+    "includeCI": true,
+    "cssFramework": "tailwind"
+  }
+}
+```
+
+See [templates/README.md](templates/README.md) for the complete template catalog.
 
 ## Task Structure
 
-Tasks follow a path-based format where relationships are established through forward-slash separated
-paths:
+Tasks are organized using a hierarchical path-based format:
 
 ```typescript
 {
-  // Core identification
-  "path": "project/feature/task",          // Max length: 1000, Max depth: 10
-  "name": "Implementation Task",           // Max length: 200
-  "description": "Implement functionality", // Max length: 2000
-  "type": "TASK",                         // TASK or MILESTONE
-  "status": "PENDING",                    // PENDING, IN_PROGRESS, COMPLETED, BLOCKED, CANCELLED
-
-  // Relationships
-  "dependencies": ["project/feature/design"], // Max: 50 dependencies
-  "parentPath": "project/feature",
-
-  // Status metadata
-  "statusMetadata": {
-    "lastUpdated": "10:00:00 AM 1/28/2024",
-    "assignee": "developer1",
-    "progress_indicators": ["Design complete", "Implementation started"],
-    "blockedBy": [],
-    "blockedReason": "",
-    "completedBy": "",
-    "verificationStatus": "passed"
-  },
-
-  // Flexible metadata (Max total size: 100KB)
+  "path": "project/feature/task",
+  "name": "Authentication Service",
+  "type": "TASK",                    // or MILESTONE
+  "status": "IN_PROGRESS",
+  "dependencies": ["project/feature/design"],
   "metadata": {
-    // Common patterns (all fields optional)
     "priority": "high",
-    "tags": ["security", "api"],
-    "category": "backend",
-    "component": "authentication",
-
-    // Technical details (flexible structure)
-    "technicalRequirements": {
+    "tags": ["security"],
+    "technical": {
       "language": "typescript",
-      "framework": "express",
-      "dependencies": ["jwt", "bcrypt"],
-      "environment": "node.js",
-      // Additional fields as needed
-      "performance": {
-        "memory": "512MB",
-        "cpu": "2 cores",
-        "latency": "<100ms"
-      }
-    },
-
-    // Quality & progress (flexible structure)
-    "quality": {
-      "testingRequirements": ["unit", "integration"],
-      "coverage": 90,
-      "metrics": {
-        "complexity": 5,
-        "performance": ["<100ms response"]
-      }
-    },
-
-    // Custom fields (any additional metadata)
-    "customFields": {
-      "scope": "internal",
-      "impact": "high",
-      "criticality": "essential"
+      "performance": { "latency": "<100ms" }
     }
   },
-
-  // Notes (Max 25 notes per category, max 2000 chars each)
-  "planningNotes": [
-    "Review security requirements",
-    "Design authentication flow"
-  ],
-  "progressNotes": [
-    "Implemented JWT handling",
-    "Added error handling"
-  ],
-  "completionNotes": [],
-  "troubleshootingNotes": []
+  "notes": {
+    "planning": ["Security review"],
+    "progress": ["JWT implemented"]
+  }
 }
 ```
+
+Features:
+
+- Path-based hierarchy (max depth: 10)
+- Rich metadata and documentation
+- Automated validation
+- Progress tracking
 
 ## Tools
 
-### create_task
+ATLAS provides a comprehensive set of tools for task management:
 
-Create a new task in the system:
-
-```typescript
-{
-  // Required fields
-  "path": "project/backend/auth",
-  "title": "Implement JWT Authentication",
-
-  // Optional fields
-  "type": "TASK",                                    // Defaults to TASK
-  "description": "Add JWT-based authentication system with comprehensive security measures",
-  "parentPath": "project/backend",                   // For organizing subtasks
-  "dependencies": ["project/backend/database"],      // Tasks that must be completed first
-
-  // Flexible metadata (Max total size: 100KB)
-  "metadata": {
-    // Core fields
-    "priority": "high",
-    "tags": ["security", "api"],
-    "reasoning": "Required for secure API access",
-
-    // Technical requirements (flexible structure)
-    "technicalRequirements": {
-      "language": "typescript",
-      "framework": "node",
-      "dependencies": ["jsonwebtoken", "express-rate-limit"],
-      "environment": "Node.js v18+",
-      "requirements": [
-        "Implement JWT generation and validation",
-        "Add refresh token mechanism",
-        "Implement rate limiting"
-      ]
-    },
-
-    // Validation criteria (flexible structure)
-    "acceptanceCriteria": {
-      "criteria": [
-        "All security tests pass",
-        "Performance meets SLA requirements"
-      ],
-      "testCases": [
-        "Verify token generation",
-        "Test rate limiting"
-      ]
-    }
-  },
-
-  // Categorized notes
-  "planningNotes": [
-    "Research JWT best practices",
-    "Design token refresh flow"
-  ],
-  "progressNotes": [],                              // Track implementation progress
-  "completionNotes": [],                            // Document completion details
-  "troubleshootingNotes": []                        // Record and resolve issues
-}
-```
-
-### delete_task
-
-Remove a task and its children:
+### Task Operations
 
 ```typescript
-{
-  "path": "project/backend/deprecated-auth",
-  "reasoning": "Removing deprecated authentication implementation"
-}
+// Task Management
+create_task; // Create new tasks
+update_task; // Update existing tasks
+get_tasks_by_status; // Find tasks by status
+get_tasks_by_path; // Find tasks by path pattern
+get_children; // List child tasks
+delete_task; // Remove tasks
+
+// Bulk Operations
+bulk_task_operations; // Execute multiple task operations
+
+// Template Operations
+list_templates; // List available templates
+use_template; // Instantiate a template
+get_template_info; // Get template details
 ```
 
-### bulk_task_operations
-
-Execute multiple task operations atomically:
+### Maintenance Tools
 
 ```typescript
-{
-  "operations": [
-    // Create milestone for new feature
-    {
-      "type": "create",
-      "path": "project/backend/oauth2",
-      "data": {
-        "title": "Implement OAuth2 Authentication",
-        "type": "MILESTONE",
-        "description": "Replace JWT auth with OAuth2 implementation",
-        "metadata": {
-          "priority": "high",
-          "tags": ["security", "api", "oauth2"],
-          "reasoning": "OAuth2 provides better security and standardization",
-          "technicalRequirements": {
-            "language": "typescript",
-            "framework": "node",
-            "dependencies": ["oauth2-server", "passport"],
-            "environment": "Node.js v18+"
-          },
-          "acceptanceCriteria": {
-            "criteria": [
-              "OAuth2 flows implemented",
-              "Security best practices followed"
-            ],
-            "testCases": [
-              "Test authorization flows",
-              "Verify token handling"
-            ]
-          }
-        },
-        "planningNotes": [
-          "Research OAuth2 providers",
-          "Define integration requirements"
-        ]
-      }
-    },
-    // Create subtask with dependencies
-    {
-      "type": "create",
-      "path": "project/backend/oauth2/provider-setup",
-      "data": {
-        "title": "Configure OAuth2 Providers",
-        "type": "TASK",
-        "dependencies": ["project/backend/oauth2"],
-        "metadata": {
-          "priority": "high",
-          "technicalRequirements": {
-            "language": "typescript",
-            "framework": "node",
-            "dependencies": ["passport-google-oauth20", "passport-github2"],
-            "environment": "Node.js v18+",
-            "requirements": [
-              "Configure Google OAuth2",
-              "Configure GitHub OAuth2"
-            ]
-          },
-          "acceptanceCriteria": {
-            "criteria": [
-              "OAuth2 providers configured",
-              "Authentication flows tested"
-            ]
-          }
-        },
-        "planningNotes": [
-          "List required OAuth2 providers",
-          "Document configuration requirements"
-        ]
-      }
-    },
-    // Update existing task status
-    {
-      "type": "update",
-      "path": "project/backend/auth",
-      "data": {
-        "status": "CANCELLED",
-        "statusMetadata": {
-          "lastUpdated": "2024-01-28T10:00:00Z",
-          "completedBy": "system"
-        },
-        "completionNotes": [
-          "Functionality replaced by OAuth2 implementation"
-        ],
-        "metadata": {
-          "reasoning": "Replaced by OAuth2 implementation",
-          "migrationPath": "project/backend/oauth2"
-        }
-      }
-    }
-  ],
-  "reasoning": "Transitioning authentication system to OAuth2. Creating necessary task structure and updating existing tasks to reflect the change."
-}
+// Database Maintenance
+vacuum_database; // Optimize storage
+repair_relationships; // Fix task relationships
+clear_all_tasks; // Reset task database
 ```
-
-Operations are executed in dependency order and rolled back on failure. Each operation can:
-
-- Create new tasks with full metadata and notes
-- Update existing tasks while preserving required fields
-- Delete tasks and update dependent references
-
-### clear_all_tasks
-
-Reset the task database:
-
-```typescript
-{
-  "confirm": true,                                // Required to prevent accidental deletion
-  "reasoning": "Resetting task structure for Q2 planning. Previous tasks archived at /backup/2024Q1, new structure defined in planning/2024Q2.md"
-}
-```
-
-When to use:
-
-- Starting fresh project phase
-- Major project restructuring
-- Development environment reset
-- Test environment cleanup
-
-Best practices:
-
-- Backup data before clearing
-- Document clear reasoning
-- Consider selective deletion
-- Plan new task structure
-
-### vacuum_database
-
-Optimize database storage and performance:
-
-```typescript
-{
-  "analyze": true,                                // Optional, defaults to true
-  "reasoning": "Running optimization after bulk task deletion to reclaim space and update query statistics"
-}
-```
-
-When to use:
-
-- After bulk operations
-- During maintenance windows
-- When performance degrades
-- After large deletions
-- Under memory pressure
-
-Best practices:
-
-- Run during low activity
-- Monitor space usage
-- Schedule regularly
-- Backup before running
-- Check performance impact
-- Monitor memory metrics:
-  - Heap usage
-  - Cache pressure
-  - Memory fragmentation
-
-### repair_relationships
-
-Fix task path and dependency issues:
-
-```typescript
-{
-  "dryRun": true,                                // Optional, defaults to false
-  "reasoning": "Checking for relationship issues after recent bulk operations. Using dry-run to assess repairs needed."
-}
-```
-
-When to use:
-
-- After failed operations
-- Fixing circular dependencies
-- Resolving orphaned tasks
-- Maintaining task integrity
-
-Best practices:
-
-- Run dry-run first
-- Fix critical paths
-- Verify results
-- Document changes
-- Update affected tasks
 
 ## Resources
 
-ATLAS exposes three main resources through the MCP protocol:
+ATLAS exposes system resources through standard MCP endpoints:
 
-### Task Overview Resource
-
-Access real-time task information:
+### Task Overview (tasklist://current)
 
 ```typescript
-// Resource URI
-tasklist://current
-
-// Returns
 {
-  "timestamp": "2024-01-28T10:00:00Z",
   "totalTasks": 42,
   "statusCounts": {
-    "PENDING": 10,
     "IN_PROGRESS": 15,
-    "COMPLETED": 12,
-    "BLOCKED": 3,
-    "CANCELLED": 2
+    "COMPLETED": 12
   },
-  "recentUpdates": [
-    {
-      "path": "project/backend/auth",
-      "status": "COMPLETED",
-      "timestamp": "2024-01-28T09:55:00Z"
-    }
-  ],
   "metrics": {
-    "averageCompletionTime": "3.5 days",
-    "blockageRate": "7%",
-    "progressRate": "tasks/day: 4.2"
+    "completionRate": "35%",
+    "blockageRate": "7%"
   }
 }
 ```
 
-### Visualization Resource
-
-Access real-time task visualizations:
+### Templates (templates://current)
 
 ```typescript
-// Resource URI
-visualizations://current
-
-// Returns
 {
-  "timestamp": "2024-01-28T10:00:00Z",
-  "files": {
-    "markdown": "/visualizations/tasks-2024-01-28.md",
-    "json": "/visualizations/tasks-2024-01-28.json"
-  },
-  "summary": {
-    "totalTasks": 42,
-    "statusCounts": {
-      "PENDING": 10,
-      "IN_PROGRESS": 15,
-      "COMPLETED": 12,
-      "BLOCKED": 3,
-      "CANCELLED": 2
+  "totalTemplates": 7,
+  "templates": [{
+    "id": "software_engineer/team",
+    "name": "LLM Software Engineering Team",
+    "description": "Coordinated team of LLM agents performing specialized software engineering roles",
+    "variables": {
+      "projectName": { "required": true },
+      "teamScale": { "default": "growth" },
+      "developmentMethodology": { "default": "agile" },
+      "securityLevel": { "default": "standard" }
     }
+  }, {
+    "id": "web-project",
+    "name": "Web Project Setup",
+    "description": "Modern web development project setup with configurable features",
+    "variables": {
+      "projectName": { "required": true },
+      "useTypeScript": { "default": true },
+      "includeTesting": { "default": true },
+      "cssFramework": { "default": "tailwind" }
+    }
+  }]
+}
+```
+
+### Task Tracking (visualizations://current)
+
+```typescript
+{
+  "timestamp": "2024-01-28T12:00:00Z",
+  "summary": {
+    "total": 42,
+    "inProgress": 15,
+    "completed": 12
   },
   "format": {
     "statusIndicators": {
-      "PENDING": "⏳",
-      "IN_PROGRESS": "🔄",
       "COMPLETED": "✅",
-      "BLOCKED": "🚫",
-      "CANCELLED": "❌"
-    },
-    "progressBar": {
-      "length": 20,
-      "filled": "█",
-      "empty": "░"
+      "IN_PROGRESS": "🔄"
     }
   }
 }
-```
-
-### Template Resource
-
-Access available task templates and their metadata:
-
-```typescript
-// Resource URI
-templates://current
-
-// Returns
-{
-  "timestamp": "2024-01-28T10:00:00Z",
-  "totalTemplates": 6,
-  "templates": [
-    {
-      "id": "software-team",
-      "name": "Software Engineering Team",
-      "description": "Complete software team structure with roles and responsibilities",
-      "tags": ["software", "team", "engineering"],
-      "variables": [
-        {
-          "name": "projectName",
-          "description": "Name of the project",
-          "required": true
-        },
-        {
-          "name": "teamScale",
-          "description": "Team size category (startup, growth, enterprise)",
-          "required": true,
-          "default": "growth"
-        },
-        {
-          "name": "developmentMethodology",
-          "description": "Development methodology to use",
-          "required": false,
-          "default": "agile"
-        }
-      ]
-    }
-  ]
-}
-```
-
-Access these resources through standard MCP endpoints:
-
-```typescript
-// List available resources
-GET resources/list
--> Returns both tasklist://current and templates://current
-
-// Get task overview
-GET resources/read?uri=tasklist://current
--> Returns current task statistics
-
-// Get template overview
-GET resources/read?uri=templates://current
--> Returns all template information
 ```
 
 ## Best Practices
 
-### Task Management
+### Task Organization
 
-- Use descriptive, well-structured paths (e.g., "project/component/feature")
-- Keep dependencies manageable
+- Use descriptive paths: `project/component/feature`
+- Limit hierarchy depth (max 10 levels)
+- Group related tasks under milestones
+- Maintain clear dependencies
 - Document changes in metadata
-- Use batch operations for related changes
-- Follow status transition rules
-- Validate dependency compatibility
-- Monitor task progression
 
-### Performance
+### Performance Optimization
 
-- Use bulk operations for multiple updates
-- Keep path structures shallow (max 10 levels, enforced by path validation)
-- Regular database maintenance
-- Advanced memory management:
-  - Progressive cache reduction
-  - Memory pressure monitoring
-  - Smart eviction strategies
-  - Cache efficiency optimization
-- Use appropriate batch sizes with retry mechanism
-- Implement circuit breakers for stability
-- Configure platform-specific optimizations
-- Monitor system health:
-  - Memory usage patterns
-  - Cache hit ratios
-  - Operation latencies
-  - Resource pressure
+- Use bulk operations for batch updates
+- Enable WAL mode for concurrent access
+- Configure appropriate cache sizes
+- Schedule regular maintenance
+- Monitor system health metrics
 
-### Error Handling
+### Error Prevention
 
-- Check operation responses
-- Handle errors by severity
-- Validate inputs
-- Use transactions for related changes
+- Validate inputs before operations
+- Use atomic transactions for consistency
+- Implement retry logic with backoff
 - Monitor error patterns
-- Implement proper recovery
+- Maintain audit trails
 
 ## Contributing
 
