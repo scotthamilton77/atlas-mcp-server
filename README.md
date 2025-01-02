@@ -60,12 +60,51 @@ Key capabilities:
 
 Core system architecture:
 
-```
-┌─ API Layer ─────┐  ┌─ Core Services ──┐  ┌─ Storage Layer ─┐
-│ • MCP Protocol  │  │ • Task Store     │  │ • SQLite + WAL  │
-│ • Validation    │  │ • Event System   │  │ • Connection    │
-│ • Rate Limiting │  │ • Template Engine│  │   Pooling       │
-└────────────────┘  └─────────────────┘  └────────────────┘
+```mermaid
+flowchart TB
+    subgraph API["API Layer"]
+        direction LR
+        MCP["MCP Protocol"]
+        Val["Validation"]
+        Rate["Rate Limiting"]
+
+        MCP --> Val --> Rate
+    end
+
+    subgraph Core["Core Services"]
+        direction LR
+        Task["Task Store"]
+        Event["Event System"]
+        Template["Template Engine"]
+
+        Task <--> Event
+        Event <--> Template
+        Task <-.-> Template
+    end
+
+    subgraph Storage["Storage Layer"]
+        direction LR
+        SQL["SQLite + WAL"]
+        Pool["Connection Pooling"]
+
+        SQL <--> Pool
+    end
+
+    Rate --> Task
+    Rate --> Template
+    Task --> SQL
+    Template --> SQL
+
+    classDef layer fill:#f0f7ff,stroke:#0366d6,stroke-width:2px,rx:5
+    classDef component fill:#fff,stroke:#666,stroke-width:1px,rx:3
+    classDef api fill:#e1effe,stroke:#3182ce,stroke-width:1px,rx:3
+    classDef core fill:#ebf8ff,stroke:#0987a0,stroke-width:1px,rx:3
+    classDef storage fill:#f0fff4,stroke:#2f855a,stroke-width:1px,rx:3
+
+    class API,Core,Storage layer
+    class MCP,Val,Rate api
+    class Task,Event,Template core
+    class SQL,Pool storage
 ```
 
 Core Components:
