@@ -61,6 +61,27 @@ export class BaseError extends Error {
   }
 
   /**
+   * Checks if this is an expected error (e.g. validation failure)
+   */
+  isExpected(): boolean {
+    return this.context.expected === true;
+  }
+
+  /**
+   * Checks if this error should be logged as a warning
+   */
+  isWarningLevel(): boolean {
+    return this.context.isWarning === true;
+  }
+
+  /**
+   * Gets the error category if available
+   */
+  getCategory(): string | undefined {
+    return this.context.category;
+  }
+
+  /**
    * Sets a user-friendly message for the error
    */
   setUserMessage(message: string): void {
@@ -103,6 +124,10 @@ export class BaseError extends Error {
         severity: this.context.severity,
         correlationId: this.context.correlationId,
         metadata: this.context.metadata,
+        category: this.context.category,
+        expected: this.context.expected,
+        isWarning: this.context.isWarning,
+        component: this.context.component,
       },
       stack: this.stack,
       details: this.details,
@@ -113,7 +138,11 @@ export class BaseError extends Error {
    * Creates a string representation of the error
    */
   toString(): string {
-    return `${this.name} [${this.code}]: ${this.message}${
+    const type = this.context.expected ? 'Expected ' : '';
+    const level = this.context.isWarning ? 'Warning' : 'Error';
+    const category = this.context.category ? ` [${this.context.category}]` : '';
+
+    return `${type}${level}${category} - ${this.name} [${this.code}]: ${this.message}${
       this.userMessage ? ` (${this.userMessage})` : ''
     }`;
   }

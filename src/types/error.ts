@@ -52,6 +52,7 @@ export const ErrorCodes = {
   CONFIG_TYPE: 'CONFIG_TYPE' as const,
   CONFIG_VALIDATION: 'CONFIG_VALIDATION' as const,
   CONFIG_REQUIRED: 'CONFIG_REQUIRED' as const,
+  CONFIG_INIT_ERROR: 'CONFIG_INIT_ERROR' as const,
 
   // Tool errors
   TOOL_NOT_FOUND: 'TOOL_NOT_FOUND' as const,
@@ -118,6 +119,9 @@ export const ErrorCodes = {
   LOGGING_PERMISSION: 'LOGGING_PERMISSION' as const,
   LOGGING_DIRECTORY: 'LOGGING_DIRECTORY' as const,
 
+  // Notes errors
+  NOTES_INIT_ERROR: 'NOTES_INIT_ERROR' as const,
+
   // Generic errors
   INVALID_INPUT: 'INVALID_INPUT' as const,
   INVALID_STATE: 'INVALID_STATE' as const,
@@ -128,6 +132,18 @@ export const ErrorCodes = {
 
 // Update ErrorCode type to include all possible values
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];
+
+/**
+ * Error categories for classification
+ */
+export enum ErrorCategory {
+  VALIDATION = 'VALIDATION',
+  SYSTEM = 'SYSTEM',
+  BUSINESS = 'BUSINESS',
+  TECHNICAL = 'TECHNICAL',
+  SECURITY = 'SECURITY',
+  INFRASTRUCTURE = 'INFRASTRUCTURE',
+}
 
 /**
  * Error context information
@@ -164,13 +180,19 @@ export interface ErrorContext {
   component?: string;
 
   /** Error category for grouping */
-  category?: string;
+  category?: ErrorCategory;
 
   /** Whether error has been handled */
   handled?: boolean;
 
   /** Recovery attempts made */
   recoveryAttempts?: number;
+
+  /** Whether this is an expected error (e.g. validation failure) */
+  expected?: boolean;
+
+  /** Whether this error should be logged as a warning instead of error */
+  isWarning?: boolean;
 }
 
 /**

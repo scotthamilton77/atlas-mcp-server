@@ -27,14 +27,17 @@ export class TaskErrorFactory {
     code: ErrorCode,
     message: string,
     operation: string,
-    metadata?: Record<string, unknown>
+    metadata?: Record<string, unknown>,
+    expected: boolean = false
   ): BaseError {
     const context: ErrorContext = {
       operation,
       timestamp: Date.now(),
-      severity: ErrorSeverity.HIGH,
+      // Use lower severity for expected validation failures
+      severity: expected ? ErrorSeverity.LOW : ErrorSeverity.HIGH,
       metadata: {
         ...metadata,
+        expected,
         stackTrace: new Error().stack,
       },
       component: 'Task',
@@ -150,7 +153,12 @@ export class TaskErrorFactory {
     message: string,
     metadata?: Record<string, unknown>
   ): BaseError {
-    return this.createError('TASK_STATUS', message, operation, metadata);
+    // Extract expected flag from metadata if present
+    const expected = metadata?.expected === true;
+    const cleanMetadata = { ...metadata };
+    delete cleanMetadata.expected;
+
+    return this.createError('TASK_STATUS', message, operation, cleanMetadata, expected);
   }
 
   /**
