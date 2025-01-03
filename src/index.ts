@@ -4,9 +4,11 @@ import { VisualizationManager } from './visualization/visualization-manager.js';
 import { createStorage } from './storage/index.js';
 import { AtlasServer } from './server/index.js';
 import { EventManager } from './events/event-manager.js';
-import { ConfigManager } from './config/index.js';
+import { ConfigManager, ConfigInitializer } from './config/index.js';
+import { Environment, Environments } from './types/config.js';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { NoteManager, NotesInitializer } from './notes/index.js';
 
 // Get package root directory
 const __filename = fileURLToPath(import.meta.url);
@@ -29,11 +31,15 @@ async function main(): Promise<void> {
     const logDir = join(baseDir, 'logs');
     const dataDir = join(baseDir, 'data');
     const templateDir = join(baseDir, 'templates');
+    const notesDir = join(baseDir, 'notes');
+    const notesConfigPath = join(baseDir, 'config', 'notes.json');
 
     // Create directories with platform-appropriate permissions
     await PlatformCapabilities.ensureDirectoryPermissions(logDir, 0o755);
     await PlatformCapabilities.ensureDirectoryPermissions(dataDir, 0o755);
     await PlatformCapabilities.ensureDirectoryPermissions(templateDir, 0o755);
+    await PlatformCapabilities.ensureDirectoryPermissions(notesDir, 0o755);
+    await PlatformCapabilities.ensureDirectoryPermissions(dirname(notesConfigPath), 0o755);
 
     // Initialize logger with comprehensive file logging
     logger = await Logger.initialize({
@@ -79,9 +85,18 @@ async function main(): Promise<void> {
       // Update logger with event manager
       logger.setEventManager(eventManager);
 
-      // Initialize config manager
+      // Initialize configuration
+      const builtInConfigPath = join(packageRoot, 'config', 'default.json');
+      const configPath = join(baseDir, 'config', 'config.json');
+
+      // Initialize config with built-in and user settings
+      const configInitializer = new ConfigInitializer();
+      const configData = await configInitializer.initializeConfig(configPath, builtInConfigPath);
+
+      // Initialize config manager with merged config
       const configManager = await ConfigManager.initialize({
-        logging: {
+        env: (process.env.NODE_ENV as Environment) || Environments.DEVELOPMENT,
+        logging: configData.logging || {
           console: false,
           file: true,
           level: LogLevels.DEBUG,
@@ -89,7 +104,7 @@ async function main(): Promise<void> {
           maxSize: 10 * 1024 * 1024,
           dir: logDir,
         },
-        storage: {
+        storage: configData.storage || {
           baseDir: dataDir,
           name: process.env.ATLAS_STORAGE_NAME || 'atlas-tasks',
           connection: {
@@ -102,6 +117,7 @@ async function main(): Promise<void> {
             cacheSize: Math.floor(PlatformCapabilities.getMaxMemory() / (1024 * 1024)), // Convert to MB
             mmapSize: 32 * 1024 * 1024,
             pageSize: 4096,
+            maxMemory: 134217728, // 128MB
           },
         },
       });
@@ -112,6 +128,7 @@ async function main(): Promise<void> {
       const storage = await createStorage({
         ...config.storage!,
         baseDir: dataDir,
+        name: process.env.ATLAS_STORAGE_NAME || 'atlas-tasks',
       });
 
       // Register storage cleanup
@@ -176,8 +193,21 @@ async function main(): Promise<void> {
         await templateManager.close();
       });
 
+      // Initialize notes
+      const builtInNotesDir = join(packageRoot, 'notes');
+      const notesInitializer = new NotesInitializer();
+      await notesInitializer.initializeNotes(notesConfigPath, notesDir, builtInNotesDir);
+
+      // Initialize note manager after notes are copied
+      const noteManager = await NoteManager.getInstance(notesConfigPath, notesDir);
+
       // Initialize tool handler
-      const toolHandler = new ToolHandler(taskManager, templateManager);
+      const toolHandler = new ToolHandler(taskManager, templateManager, noteManager);
+
+      // Register note manager cleanup
+      ProcessManager.registerCleanupHandler(async () => {
+        await noteManager.reloadConfig();
+      });
 
       // Run maintenance
       await storage.vacuum();

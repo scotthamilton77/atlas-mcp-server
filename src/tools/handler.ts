@@ -7,6 +7,7 @@ import { Logger } from '../logging/index.js';
 import { ErrorCodes, createError } from '../errors/index.js';
 import { Tool, ToolResponse } from './types.js';
 import { ToolDefinitions } from './definitions/tool-definitions.js';
+import { NoteManager } from '../notes/note-manager.js';
 
 export class ToolHandler {
   private readonly logger: Logger;
@@ -19,7 +20,8 @@ export class ToolHandler {
 
   constructor(
     private readonly taskManager: TaskManager,
-    templateManager: TemplateManager
+    templateManager: TemplateManager,
+    private readonly noteManager: NoteManager
   ) {
     this.logger = Logger.getInstance().child({
       component: 'ToolHandler',
@@ -129,10 +131,24 @@ export class ToolHandler {
       this.logger.debug('Executing tool', { name, args });
       const result = await handler(args);
       this.logger.debug('Tool execution completed', { name });
-      return {
+      // Get applicable user notes
+      const notes = this.noteManager.getNotesForTool(name);
+      const formattedNotes = this.noteManager.formatNotes(notes);
+
+      // Add notes to response if present
+      const response = {
         _meta: {},
         ...result,
       };
+
+      if (formattedNotes) {
+        response.content.push({
+          type: 'text',
+          text: '\n\n' + formattedNotes,
+        });
+      }
+
+      return response;
     } catch (error) {
       this.logger.error('Tool execution failed', {
         tool: name,
