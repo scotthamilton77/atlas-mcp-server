@@ -2,7 +2,7 @@
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
 [![Model Context Protocol](https://img.shields.io/badge/MCP-1.0.4-green.svg)](https://modelcontextprotocol.io/)
-[![Version](https://img.shields.io/badge/Version-1.2.0-blue.svg)]()
+[![Version](https://img.shields.io/badge/Version-1.3.0-blue.svg)]()
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Status](https://img.shields.io/badge/Status-Stable-blue.svg)]()
 [![GitHub](https://img.shields.io/github/stars/cyanheads/atlas-mcp-server?style=social)](https://github.com/cyanheads/atlas-mcp-server)
@@ -118,9 +118,9 @@ Core Components:
 
 ### Task Management
 
-- **Hierarchical Organization**: Path-based structure with automatic validation
+- **Hierarchical Organization**: Path-based structure with automatic parent path determination
 - **Rich Metadata**: Flexible schema for requirements, progress, and documentation
-- **Status Tracking**: State management with transition rules and dependency checks
+- **Status Tracking**: State machine with strict transition rules and dependency validation
 - **Smart Templates**: Pre-built patterns with variable interpolation
 
 ### Performance & Reliability
@@ -132,10 +132,26 @@ Core Components:
 
 ### Validation & Safety
 
-- **Path Validation**: Automatic sanitization and format verification
-- **Dependency Checks**: Cycle detection and relationship integrity
-- **Schema Enforcement**: Type validation and constraint checking
-- **Status Rules**: Transition validation and state consistency
+- **Path Validation**:
+  - Automatic parent path determination
+  - Format verification and sanitization
+  - Depth and length constraints
+  - Character set restrictions
+- **Dependency Management**:
+  - Strict transition validation
+  - Automatic dependency blocking
+  - Cycle detection
+  - Parent-child integrity
+- **Schema Enforcement**:
+  - Type validation with Zod
+  - Size constraints
+  - Required field checks
+  - Custom validation rules
+- **Status Rules**:
+  - State machine transitions
+  - Dependency-aware updates
+  - Automatic status propagation
+  - Blocking state management
 
 ### Task Tracking
 
@@ -270,14 +286,14 @@ See [templates/README.md](templates/README.md) for the complete template catalog
 
 ## Task Structure
 
-Tasks are organized using a hierarchical path-based format:
+Tasks are organized using a hierarchical path-based format with automatic parent path determination:
 
 ```typescript
 {
-  "path": "project/feature/task",
+  "path": "project/feature/task",     // Parent path automatically set to "project/feature"
   "name": "Authentication Service",
-  "type": "TASK",                    // or MILESTONE
-  "status": "IN_PROGRESS",
+  "type": "TASK",                     // or MILESTONE
+  "status": "IN_PROGRESS",            // Transitions validated against dependencies
   "dependencies": ["project/feature/design"],
   "metadata": {
     "priority": "high",
@@ -296,9 +312,11 @@ Tasks are organized using a hierarchical path-based format:
 
 Features:
 
+- Automatic parent path determination
 - Path-based hierarchy (max depth: 10)
 - Rich metadata and documentation
-- Automated validation
+- Strict status transitions
+- Dependency validation
 - Progress tracking
 
 ## Tools
