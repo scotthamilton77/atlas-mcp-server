@@ -33,7 +33,12 @@ export class TaskOperations {
       }
 
       const now = Date.now();
-      const projectPath = input.path.split('/')[0];
+      const pathParts = input.path.split('/');
+      const projectPath = pathParts[0];
+
+      // Automatically set parentPath based on path structure if not provided
+      const parentPath =
+        input.parentPath || (pathParts.length > 1 ? pathParts.slice(0, -1).join('/') : undefined);
 
       const task: Task = {
         // System fields
@@ -49,7 +54,7 @@ export class TaskOperations {
 
         // Optional fields
         description: input.description,
-        parentPath: input.parentPath,
+        parentPath: parentPath, // Use automatically determined parentPath
         reasoning: input.reasoning,
         dependencies: input.dependencies || [],
 
@@ -65,6 +70,18 @@ export class TaskOperations {
         // User metadata
         metadata: input.metadata || {},
       };
+
+      // Verify parent exists if parentPath is set
+      if (task.parentPath) {
+        const parent = await this.getTask(task.parentPath);
+        if (!parent) {
+          throw TaskErrorFactory.createTaskValidationError(
+            'TaskOperations.createTask',
+            `Parent task not found: ${task.parentPath}`,
+            { input, parentPath: task.parentPath }
+          );
+        }
+      }
 
       await this.internalSaveTask(task);
       this.logger.info('Task created successfully', {
