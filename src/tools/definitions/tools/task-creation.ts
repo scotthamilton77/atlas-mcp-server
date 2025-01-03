@@ -15,102 +15,91 @@ interface ToolContext {
 export function createTaskTool(context: ToolContext): ToolImplementation {
   const definition: Tool = {
     name: 'create_task',
-    description: `Create a new task in the hierarchical task system.
+    description: `Create tasks to organize and track work. Use this tool to:
 
-Core Task Properties:
-- Path: Hierarchical identifier (e.g., "project/backend/auth")
-  * Max length: 1000 chars
-  * Max depth: 10 levels
-  * Allowed chars: alphanumeric, hyphen, underscore, forward slash
-  * Forward slashes indicate hierarchy levels
-- Name: Clear, action-oriented task title
-  * Max length: 200 chars
-  * Should describe concrete objective
-- Description: Detailed task explanation
-  * Max length: 2000 chars
-  * Include context, requirements, success criteria
-- Type: TASK or MILESTONE
-  * TASK: Concrete work item with specific deliverable
-  * MILESTONE: Organizational container for related tasks
+1. Define Work Items:
+   - Create concrete tasks for specific deliverables
+   - Set up milestones to group related tasks
+   - Organize tasks in hierarchical paths (e.g., "project/backend/auth")
+   - Add detailed descriptions and requirements
 
-Validation & Dependencies:
-- Dependencies: Tasks that must complete first
-  * Max dependencies: 50 tasks
-  * Tasks blocked until dependencies met
-  * Circular dependencies prevented
-- Parent-Child Rules:
-  * Parent task must exist if parentPath specified
-  * Child tasks inherit certain parent properties
-  * Parent status affects child task constraints
-  * Proper task hierarchy maintained
+2. Establish Dependencies:
+   - Specify tasks that must complete first
+   - Create parent-child relationships
+   - Build task hierarchies
+   - Prevent circular dependencies
 
-Notes & Documentation:
-Each category limited to 100 notes, 1000 chars per note
-- Planning Notes: Initial task preparation
-- Progress Notes: Implementation updates
-- Completion Notes: Final outcomes
-- Troubleshooting Notes: Issue resolution
+3. Document Context:
+   - Add planning notes for initial requirements
+   - Track progress with implementation notes
+   - Record completion criteria
+   - Document troubleshooting steps
 
-Metadata Categories:
-1. Core Fields:
-   - Priority: low/medium/high
-   - Tags: Keywords for categorization (max 100)
-   - Reasoning: Decision rationale (max 2000 chars)
+4. Set Technical Details:
+   - Define language and framework requirements
+   - Specify environment needs
+   - List required dependencies
+   - Set resource requirements
 
-2. Technical Details:
-   - Language & Framework
-   - Dependencies (max 50)
-   - Environment specifications
+5. Track Progress:
+   - Define acceptance criteria
+   - Create test cases
+   - Set milestones
+   - Track blockers and resolutions
 
-3. Validation & Progress:
-   - Acceptance criteria (max 20)
-   - Test cases (max 20)
-   - Progress percentage (0-100)
-   - Milestone tracking
-   - Timestamps
+6. Manage Resources:
+   - List required tools
+   - Track accessed resources
+   - Reference related documentation
+   - Link to version control
 
-4. Resource Tracking:
-   - Tools used (max 100)
-   - Resources accessed (max 100)
-   - Context references (max 100)
-
-5. Status Information:
-   - Block tracking
-   - Resolution details
-   - Timestamps
-
-6. Version Control:
-   - Version numbers
-   - Branch information
-   - Commit references
-   - Version history (max 10)`,
+Example Usage:
+{
+  "path": "project/backend/auth",
+  "name": "Implement JWT Authentication",
+  "type": "TASK",
+  "description": "Add JWT-based authentication to API endpoints",
+  "dependencies": ["project/backend/database"],
+  "metadata": {
+    "priority": "high",
+    "technicalRequirements": {
+      "language": "TypeScript",
+      "framework": "Express",
+      "dependencies": ["jsonwebtoken", "bcrypt"]
+    }
+  },
+  "planningNotes": [
+    "Research JWT best practices",
+    "Design token refresh mechanism"
+  ]
+}`,
     inputSchema: {
       type: 'object',
       properties: {
         path: {
           type: 'string',
           description:
-            'Hierarchical path (e.g., "project/backend/auth"). Max length 1000 chars, max depth 10 levels. Must be alphanumeric with -_/ characters. Use forward slashes to indicate task hierarchy.',
+            'Create hierarchical path (e.g., "project/backend/auth") to organize related tasks. Use forward slashes to indicate task hierarchy. Max length 1000 chars, max depth 10 levels.',
         },
         name: {
           type: 'string',
           description:
-            'Clear, action-oriented name describing the task objective. Max length 200 chars.',
+            'Define clear, action-oriented name describing what the task will accomplish. Max length 200 chars.',
         },
         description: {
           type: 'string',
           description:
-            'Detailed explanation including context, requirements, and success criteria. Max length 2000 chars.',
+            'Specify requirements, context, and success criteria. Include enough detail to understand the task scope. Max length 2000 chars.',
         },
         type: {
           type: 'string',
           enum: ['TASK', 'MILESTONE'],
-          description: 'TASK for concrete work items, MILESTONE for organizing related tasks.',
+          description: 'Choose TASK for concrete deliverables or MILESTONE to group related tasks.',
           default: 'TASK',
         },
         parentPath: {
           type: 'string',
-          description: 'Path of parent task. Use for organizing subtasks under a milestone.',
+          description: 'Specify parent task path to create subtasks under a milestone.',
         },
         dependencies: {
           type: 'array',
@@ -118,224 +107,92 @@ Metadata Categories:
             type: 'string',
           },
           description:
-            'Paths of tasks that must be completed first. Tasks will be blocked until dependencies are met.',
+            'List paths of tasks that must complete first. Tasks will be blocked until dependencies are met.',
         },
         metadata: {
           type: 'object',
-          description: `Task metadata with structured validation:
+          description: `Add any metadata needed to track and organize tasks. The metadata system is flexible and accepts custom fields. Some suggested fields include:
 
 1. Core Fields:
-   - priority: Task urgency (low/medium/high)
-   - tags: Keywords for categorization (max 100 tags, each max 100 chars)
-   - reasoning: Document decision rationale (max 2000 chars)
+   - priority: Set task urgency (low/medium/high)
+   - tags: Add categorization keywords
+   - reasoning: Document decision rationale
 
 2. Technical Details:
    technicalRequirements: {
-     - language: Programming language used
-     - framework: Framework/libraries used
-     - dependencies: Array of required dependencies (max 50)
-     - environment: Runtime environment details
-     - performance: Resource requirements
+     - language: Programming language
+     - framework: Frameworks/libraries
+     - dependencies: Required packages
+     - environment: Runtime needs
+     - performance: Resource needs
+     - [Add any other technical fields needed]
    }
 
-3. Validation & Progress:
+3. Validation:
    acceptanceCriteria: {
-     - criteria: Success validation points (max 20, each max 500 chars)
-     - testCases: Test scenarios (max 20, each max 500 chars)
-     - reviewers: Required reviewers list (max 10)
+     - criteria: Success criteria
+     - testCases: Test scenarios
+     - reviewers: Required reviews
+     - [Add custom validation requirements]
    }
    progress: {
-     - percentage: Task completion (0-100)
-     - milestones: Key progress points (max 20)
-     - lastUpdated: Last status update timestamp
-     - estimatedCompletion: Target completion timestamp
+     - milestones: Key checkpoints
+     - [Add custom progress tracking fields]
    }
 
-4. Resource Tracking:
+4. Resources:
    resources: {
-     - toolsUsed: Tools/utilities used (max 100)
-     - resourcesAccessed: Data/systems accessed (max 100)
-     - contextUsed: Related information (max 100, each max 1000 chars)
+     - toolsUsed: Required tools
+     - resourcesAccessed: Data sources
+     - contextUsed: Documentation links
+     - [Add other resource fields]
    }
 
-5. Status Information:
+5. Status:
    blockInfo: {
-     - blockedBy: Task causing the block
-     - blockReason: Block description (max 500 chars)
-     - blockTimestamp: When block occurred
-     - unblockTimestamp: When block was resolved
-     - resolution: How block was resolved (max 500 chars)
+     - blockedBy: Blocking task
+     - blockReason: Block description
+     - resolution: Fix details
+     - [Add custom status fields]
    }
 
 6. Version Control:
    versionControl: {
-     - version: Current version number
-     - branch: Active branch name
-     - commit: Latest commit hash
-     - previousVersions: Version history (max 10)
+     - branch: Working branch
+     - commit: Commit hash
+     - [Add other VCS fields]
    }
 
 7. Custom Fields:
-   customFields: Record of additional string fields for extensibility`,
-          properties: {
-            priority: {
-              type: 'string',
-              enum: ['low', 'medium', 'high'],
-            },
-            tags: {
-              type: 'array',
-              items: {
-                type: 'string',
-                maxLength: 100,
-              },
-              maxItems: 100,
-            },
-            reasoning: {
-              type: 'string',
-              maxLength: 2000,
-            },
-            technicalRequirements: {
-              type: 'object',
-              properties: {
-                language: { type: 'string' },
-                framework: { type: 'string' },
-                dependencies: {
-                  type: 'array',
-                  items: { type: 'string' },
-                  maxItems: 50,
-                },
-                environment: { type: 'string' },
-                performance: {
-                  type: 'object',
-                  properties: {
-                    memory: { type: 'string' },
-                    cpu: { type: 'string' },
-                    storage: { type: 'string' },
-                  },
-                },
-              },
-            },
-            acceptanceCriteria: {
-              type: 'object',
-              properties: {
-                criteria: {
-                  type: 'array',
-                  items: {
-                    type: 'string',
-                    maxLength: 500,
-                  },
-                  maxItems: 20,
-                },
-                testCases: {
-                  type: 'array',
-                  items: {
-                    type: 'string',
-                    maxLength: 500,
-                  },
-                  maxItems: 20,
-                },
-                reviewers: {
-                  type: 'array',
-                  items: { type: 'string' },
-                  maxItems: 10,
-                },
-              },
-            },
-            progress: {
-              type: 'object',
-              properties: {
-                percentage: {
-                  type: 'number',
-                  minimum: 0,
-                  maximum: 100,
-                },
-                milestones: {
-                  type: 'array',
-                  items: { type: 'string' },
-                  maxItems: 20,
-                },
-                lastUpdated: { type: 'number' },
-                estimatedCompletion: { type: 'number' },
-              },
-            },
-            resources: {
-              type: 'object',
-              properties: {
-                toolsUsed: {
-                  type: 'array',
-                  items: { type: 'string' },
-                  maxItems: 100,
-                },
-                resourcesAccessed: {
-                  type: 'array',
-                  items: { type: 'string' },
-                  maxItems: 100,
-                },
-                contextUsed: {
-                  type: 'array',
-                  items: {
-                    type: 'string',
-                    maxLength: 1000,
-                  },
-                  maxItems: 100,
-                },
-              },
-            },
-            blockInfo: {
-              type: 'object',
-              properties: {
-                blockedBy: { type: 'string' },
-                blockReason: {
-                  type: 'string',
-                  maxLength: 500,
-                },
-                blockTimestamp: { type: 'number' },
-                unblockTimestamp: { type: 'number' },
-                resolution: {
-                  type: 'string',
-                  maxLength: 500,
-                },
-              },
-            },
-            versionControl: {
-              type: 'object',
-              properties: {
-                version: { type: 'number' },
-                branch: { type: 'string' },
-                commit: { type: 'string' },
-                previousVersions: {
-                  type: 'array',
-                  items: { type: 'number' },
-                  maxItems: 10,
-                },
-              },
-            },
-            customFields: {
-              type: 'object',
-              additionalProperties: { type: 'string' },
-            },
-          },
+   - Add any additional fields needed
+   - Use nested objects for organization
+   - No strict schema requirements
+   - Fields can be added/removed as needed`,
+          // Allow any properties in metadata
+          additionalProperties: true,
         },
         planningNotes: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Initial planning notes for the task. Max 100 notes, each max 1000 chars.',
+          description:
+            'Add initial planning notes to document requirements and approach. Max 100 notes, each max 1000 chars.',
         },
         progressNotes: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Progress tracking notes. Max 100 notes, each max 1000 chars.',
+          description:
+            'Track implementation progress with detailed notes. Max 100 notes, each max 1000 chars.',
         },
         completionNotes: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Task completion notes. Max 100 notes, each max 1000 chars.',
+          description:
+            'Document task completion details and outcomes. Max 100 notes, each max 1000 chars.',
         },
         troubleshootingNotes: {
           type: 'array',
           items: { type: 'string' },
-          description:
-            'Notes about issues and their resolution. Max 100 notes, each max 1000 chars.',
+          description: 'Record issues and their resolutions. Max 100 notes, each max 1000 chars.',
         },
       },
       required: ['path', 'name'],

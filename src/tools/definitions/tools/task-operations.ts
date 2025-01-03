@@ -3,7 +3,75 @@ import { ToolFactory, ToolImplementation } from './shared/types.js';
 import { formatResponse } from './shared/response-formatter.js';
 import { DependencyAwareBatchProcessor } from '../../../task/core/batch/dependency-aware-batch-processor.js';
 import { BatchData } from '../../../task/core/batch/common/batch-utils.js';
-import { ErrorCodes, createError } from '../../../errors/index.js';
+import { ErrorCodes, createError, BaseError } from '../../../errors/index.js';
+
+interface ValidationDetails {
+  dependencies?: {
+    missing?: string[];
+    invalid?: string[];
+    cycles?: string[];
+  };
+  status?: {
+    currentStatus: TaskStatus;
+    targetStatus: TaskStatus;
+    allowedTransitions: TaskStatus[];
+    blockingDependencies?: string[];
+  };
+}
+
+interface ValidationMetadata {
+  operation: string;
+  details: ValidationDetails;
+}
+
+function getSuggestions(error: BaseError): string[] {
+  const suggestions: string[] = [];
+  const metadata = error.getMetadata() as ValidationMetadata | undefined;
+  const details = metadata?.details;
+
+  if (details?.dependencies?.missing) {
+    suggestions.push('Create missing dependency tasks before this operation');
+  }
+  if (details?.dependencies?.cycles) {
+    suggestions.push('Restructure dependencies to remove circular references');
+  }
+  if (details?.status?.blockingDependencies) {
+    suggestions.push('Complete or unblock dependent tasks before status transition');
+  }
+
+  return suggestions;
+}
+
+function getRecommendations(errors: BaseError[]): string[] {
+  const recommendations = new Set<string>();
+
+  // Analyze patterns in errors
+  const hasDependencyIssues = errors.some(e => {
+    const metadata = e.getMetadata() as ValidationMetadata | undefined;
+    return metadata?.details?.dependencies;
+  });
+
+  const hasStatusIssues = errors.some(e => {
+    const metadata = e.getMetadata() as ValidationMetadata | undefined;
+    return metadata?.details?.status;
+  });
+
+  const hasMultipleErrors = errors.length > 1;
+
+  if (hasDependencyIssues) {
+    recommendations.add('Review and validate all task dependencies before bulk operations');
+  }
+  if (hasStatusIssues) {
+    recommendations.add(
+      'Ensure tasks are updated in the correct order based on their dependencies'
+    );
+  }
+  if (hasMultipleErrors) {
+    recommendations.add('Consider breaking down bulk operations into smaller, focused updates');
+  }
+
+  return Array.from(recommendations);
+}
 
 /**
  * Bulk task operations tool implementation
@@ -20,11 +88,10 @@ Performance Optimization:
 - Retry mechanism: 3 retries, 1s delay
 
 Validation:
-- All create/update constraints apply
 - Cross-operation dependency validation
 - Status transition rules enforced
 - Parent-child relationships validated
-- Metadata schema checked
+- Flexible metadata structure
 
 Best Practices:
 - Group related operations
@@ -35,9 +102,8 @@ Best Practices:
 
 Operation Limits:
 - Path: max length 1000 chars, max depth 10
-- Notes: max 100 per category
 - Dependencies: max 50 per task
-- Metadata fields: max 100 entries each
+- Notes: max 100 per category
 
 Example:
 {
@@ -103,25 +169,18 @@ Operation Constraints:
 - Metadata fields: max 100 entries each
 
 Create Operations:
-- title: Task name (required, max 200 chars)
-- description: Task details (max 2000 chars)
+- title: Task name (required)
+- description: Task details
 - type: TASK/MILESTONE
-- dependencies: Required tasks (max 50)
-- metadata: Task tracking fields:
-  - priority: low/medium/high
-  - tags: max 100 tags, each max 100 chars
-  - reasoning: max 2000 chars
-  - tools_used: max 100 entries
-  - resources_accessed: max 100 entries
-  - context_used: max 100 entries, each max 1000 chars
-- notes: Each category max 100 notes, each max 1000 chars
+- dependencies: Required tasks
+- metadata: Flexible task tracking fields
+- notes: Task documentation
 
 Update Operations:
-- Same field constraints as create
 - Status changes validate dependencies
 - Parent-child relationships enforced
-- Metadata schema validated
-- Note limits enforced
+- Flexible metadata updates
+- Note updates supported
 
 Delete Operations:
 - Cascades to all child tasks
@@ -330,12 +389,72 @@ Delete: No additional data needed`,
       }
     );
 
+    // Process errors and create validation summaries
+    const processedErrors = (result.errors || []).map(error => {
+      if (!(error instanceof BaseError)) {
+        // Convert standard errors to BaseErrors
+        return createError(
+          ErrorCodes.OPERATION_FAILED,
+          error.message,
+          'bulk_task_operations',
+          'Operation failed',
+          {
+            operation: 'bulk_task_operations',
+            details: {
+              originalError: error,
+            },
+          }
+        );
+      }
+      return error;
+    });
+
+    // Create validation summaries
+    const dependencyIssues = processedErrors
+      .filter(error => {
+        const metadata = error.getMetadata() as ValidationMetadata | undefined;
+        return metadata?.details?.dependencies;
+      })
+      .map(error => {
+        const metadata = error.getMetadata() as ValidationMetadata | undefined;
+        return {
+          path: error.getOperation(),
+          dependencies: metadata?.details?.dependencies,
+        };
+      });
+
+    const statusIssues = processedErrors
+      .filter(error => {
+        const metadata = error.getMetadata() as ValidationMetadata | undefined;
+        return metadata?.details?.status;
+      })
+      .map(error => {
+        const metadata = error.getMetadata() as ValidationMetadata | undefined;
+        return {
+          path: error.getOperation(),
+          status: metadata?.details?.status,
+        };
+      });
+
     return formatResponse(
       {
         success: result.metadata?.successCount === operations.length,
         processedCount: result.metadata?.successCount || 0,
         failedCount: result.metadata?.errorCount || 0,
-        errors: result.errors,
+        errors: processedErrors.map(error => ({
+          code: error.code,
+          message: error.message,
+          operation: error.getOperation(),
+          severity: error.getSeverity(),
+          timestamp: error.getTimestamp(),
+          metadata: error.getMetadata(),
+          suggestions: getSuggestions(error),
+        })),
+        validationSummary: {
+          dependencyIssues: dependencyIssues.length ? dependencyIssues : undefined,
+          statusIssues: statusIssues.length ? statusIssues : undefined,
+        },
+        recommendations: getRecommendations(processedErrors),
       },
       context.logger
     );

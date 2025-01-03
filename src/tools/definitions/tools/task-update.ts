@@ -152,202 +152,65 @@ Status changes trigger:
             },
             metadata: {
               type: 'object',
-              description: `Task metadata with structured validation:
-Core Fields:
-- priority: Task urgency (low/medium/high)
-- tags: Keywords for categorization (max 100 tags, each max 100 chars)
-- reasoning: Document decision rationale (max 2000 chars)
+              description: `Update task metadata with any fields needed. The metadata system is flexible and accepts custom fields. Some commonly used fields include:
 
-Technical Details:
-- technicalRequirements: {
-    language: Programming language
-    framework: Framework used
-    dependencies: Array of dependencies (max 50)
-    environment: Environment details
-    performance: {
-      memory: Memory requirements
-      cpu: CPU requirements
-      storage: Storage requirements
-    }
-  }
+1. Core Fields:
+   - priority: Set task urgency (low/medium/high)
+   - tags: Add categorization keywords
+   - reasoning: Document decision rationale
 
-Validation & Progress:
-- acceptanceCriteria: {
-    criteria: Array of criteria (max 20, each max 500 chars)
-    testCases: Optional test cases (max 20)
-    reviewers: Optional reviewer list (max 10)
-  }
-- progress: {
-    percentage: Progress percentage (0-100)
-    milestones: Array of milestone names (max 20)
-    lastUpdated: Timestamp
-    estimatedCompletion: Timestamp
-  }
+2. Technical Details:
+   technicalRequirements: {
+     - language: Programming language
+     - framework: Frameworks/libraries
+     - dependencies: Required packages
+     - environment: Runtime needs
+     - performance: Resource needs
+     - [Add any other technical fields needed]
+   }
 
-Resource Tracking:
-- resources: {
-    toolsUsed: Array of tools (max 100)
-    resourcesAccessed: Array of resources (max 100)
-    contextUsed: Array of context items (max 100)
-  }
+3. Validation:
+   acceptanceCriteria: {
+     - criteria: Success criteria
+     - testCases: Test scenarios
+     - reviewers: Required reviews
+     - [Add custom validation requirements]
+   }
+   progress: {
+     - milestones: Key checkpoints
+     - [Add custom progress tracking fields]
+   }
 
-Status Information:
-- blockInfo: {
-    blockedBy: Task causing block
-    blockReason: Reason for block (max 500 chars)
-    blockTimestamp: When blocked
-    unblockTimestamp: When unblocked
-    resolution: Block resolution (max 500 chars)
-  }
+4. Resources:
+   resources: {
+     - toolsUsed: Required tools
+     - resourcesAccessed: Data sources
+     - contextUsed: Documentation links
+     - [Add other resource fields]
+   }
 
-Version Control:
-- versionControl: {
-    version: Version number
-    branch: Branch name
-    commit: Commit hash
-    previousVersions: Array of previous versions (max 10)
-  }
+5. Status:
+   blockInfo: {
+     - blockedBy: Blocking task
+     - blockReason: Block description
+     - resolution: Fix details
+     - [Add custom status fields]
+   }
 
-Custom Fields:
-- customFields: Record of additional string fields`,
-              properties: {
-                priority: {
-                  type: 'string',
-                  enum: ['low', 'medium', 'high'],
-                },
-                tags: {
-                  type: 'array',
-                  items: {
-                    type: 'string',
-                    maxLength: 100,
-                  },
-                  maxItems: 100,
-                },
-                reasoning: {
-                  type: 'string',
-                  maxLength: 2000,
-                },
-                technicalRequirements: {
-                  type: 'object',
-                  properties: {
-                    language: { type: 'string' },
-                    framework: { type: 'string' },
-                    dependencies: {
-                      type: 'array',
-                      items: { type: 'string' },
-                      maxItems: 50,
-                    },
-                    environment: { type: 'string' },
-                    performance: {
-                      type: 'object',
-                      properties: {
-                        memory: { type: 'string' },
-                        cpu: { type: 'string' },
-                        storage: { type: 'string' },
-                      },
-                    },
-                  },
-                },
-                acceptanceCriteria: {
-                  type: 'object',
-                  properties: {
-                    criteria: {
-                      type: 'array',
-                      items: {
-                        type: 'string',
-                        maxLength: 500,
-                      },
-                      maxItems: 20,
-                    },
-                    testCases: {
-                      type: 'array',
-                      items: {
-                        type: 'string',
-                        maxLength: 500,
-                      },
-                      maxItems: 20,
-                    },
-                    reviewers: {
-                      type: 'array',
-                      items: { type: 'string' },
-                      maxItems: 10,
-                    },
-                  },
-                },
-                progress: {
-                  type: 'object',
-                  properties: {
-                    percentage: {
-                      type: 'number',
-                      minimum: 0,
-                      maximum: 100,
-                    },
-                    milestones: {
-                      type: 'array',
-                      items: { type: 'string' },
-                      maxItems: 20,
-                    },
-                    lastUpdated: { type: 'number' },
-                    estimatedCompletion: { type: 'number' },
-                  },
-                },
-                resources: {
-                  type: 'object',
-                  properties: {
-                    toolsUsed: {
-                      type: 'array',
-                      items: { type: 'string' },
-                      maxItems: 100,
-                    },
-                    resourcesAccessed: {
-                      type: 'array',
-                      items: { type: 'string' },
-                      maxItems: 100,
-                    },
-                    contextUsed: {
-                      type: 'array',
-                      items: {
-                        type: 'string',
-                        maxLength: 1000,
-                      },
-                      maxItems: 100,
-                    },
-                  },
-                },
-                blockInfo: {
-                  type: 'object',
-                  properties: {
-                    blockedBy: { type: 'string' },
-                    blockReason: {
-                      type: 'string',
-                      maxLength: 500,
-                    },
-                    blockTimestamp: { type: 'number' },
-                    unblockTimestamp: { type: 'number' },
-                    resolution: {
-                      type: 'string',
-                      maxLength: 500,
-                    },
-                  },
-                },
-                versionControl: {
-                  type: 'object',
-                  properties: {
-                    version: { type: 'number' },
-                    branch: { type: 'string' },
-                    commit: { type: 'string' },
-                    previousVersions: {
-                      type: 'array',
-                      items: { type: 'number' },
-                      maxItems: 10,
-                    },
-                  },
-                },
-                customFields: {
-                  type: 'object',
-                  additionalProperties: { type: 'string' },
-                },
-              },
+6. Version Control:
+   versionControl: {
+     - branch: Working branch
+     - commit: Commit hash
+     - [Add other VCS fields]
+   }
+
+7. Custom Fields:
+   - Add any additional fields needed
+   - Use nested objects for organization
+   - No strict schema requirements
+   - Fields can be added/removed as needed`,
+              // Allow any properties in metadata
+              additionalProperties: true,
             },
           },
         },
