@@ -30,10 +30,6 @@ export const baseTaskSchema = z.object({
   // Optional fields
   description: z.string().max(ValidationConstants.task.descriptionMaxLength).optional(),
   parentPath: pathSchema.optional(),
-  notes: z
-    .array(z.string().max(ValidationConstants.metadata.maxStringLength))
-    .max(ValidationConstants.metadata.maxNotes)
-    .optional(),
   reasoning: z.string().max(ValidationConstants.task.descriptionMaxLength).optional(),
   dependencies: z.array(pathSchema).max(ValidationConstants.task.maxDependencies),
 

@@ -13,8 +13,10 @@ export const createTaskSchema = z.object({
   description: z.string().max(ValidationConstants.task.descriptionMaxLength).optional(),
   type: z.nativeEnum(TaskType).optional(),
   notes: z
-    .array(z.string().max(ValidationConstants.metadata.maxStringLength))
-    .max(ValidationConstants.metadata.maxNotes)
+    .never({
+      invalid_type_error:
+        "Generic 'notes' field is not supported. Please use specific note categories: planningNotes, progressNotes, completionNotes, or troubleshootingNotes",
+    })
     .optional(),
   reasoning: z.string().max(ValidationConstants.task.descriptionMaxLength).optional(),
   dependencies: z.array(pathSchema).max(ValidationConstants.task.maxDependencies).optional(),

@@ -102,52 +102,80 @@ export const statusMetadataSchema = z.object({
 /**
  * Task creation schema
  */
-export const createTaskSchema = z.object({
-  path: pathSchema,
-  name: z.string().min(1).max(VALIDATION_CONSTRAINTS.NAME_MAX_LENGTH),
-  type: z.nativeEnum(TaskType),
-  description: z.string().max(VALIDATION_CONSTRAINTS.DESCRIPTION_MAX_LENGTH).optional(),
-  reasoning: z.string().max(VALIDATION_CONSTRAINTS.REASONING_MAX_LENGTH).optional(),
-  parentPath: pathSchema.optional(),
-  dependencies: z.array(pathSchema).max(VALIDATION_CONSTRAINTS.MAX_DEPENDENCIES).optional(),
-  metadata: metadataSchema.optional(),
-  statusMetadata: statusMetadataSchema.optional(),
-  planningNotes: z.array(noteSchema).max(VALIDATION_CONSTRAINTS.MAX_NOTES_PER_CATEGORY).optional(),
-  progressNotes: z.array(noteSchema).max(VALIDATION_CONSTRAINTS.MAX_NOTES_PER_CATEGORY).optional(),
-  completionNotes: z
-    .array(noteSchema)
-    .max(VALIDATION_CONSTRAINTS.MAX_NOTES_PER_CATEGORY)
-    .optional(),
-  troubleshootingNotes: z
-    .array(noteSchema)
-    .max(VALIDATION_CONSTRAINTS.MAX_NOTES_PER_CATEGORY)
-    .optional(),
-});
+export const createTaskSchema = z
+  .object({
+    path: pathSchema,
+    name: z.string().min(1).max(VALIDATION_CONSTRAINTS.NAME_MAX_LENGTH),
+    type: z.nativeEnum(TaskType),
+    description: z.string().max(VALIDATION_CONSTRAINTS.DESCRIPTION_MAX_LENGTH).optional(),
+    notes: z
+      .never({
+        invalid_type_error:
+          "Generic 'notes' field is not supported. Please use specific note categories: planningNotes, progressNotes, completionNotes, or troubleshootingNotes",
+      })
+      .optional(),
+    reasoning: z.string().max(VALIDATION_CONSTRAINTS.REASONING_MAX_LENGTH).optional(),
+    parentPath: pathSchema.optional(),
+    dependencies: z.array(pathSchema).max(VALIDATION_CONSTRAINTS.MAX_DEPENDENCIES).optional(),
+    metadata: metadataSchema.optional(),
+    statusMetadata: statusMetadataSchema.optional(),
+    planningNotes: z
+      .array(noteSchema)
+      .max(VALIDATION_CONSTRAINTS.MAX_NOTES_PER_CATEGORY)
+      .optional(),
+    progressNotes: z
+      .array(noteSchema)
+      .max(VALIDATION_CONSTRAINTS.MAX_NOTES_PER_CATEGORY)
+      .optional(),
+    completionNotes: z
+      .array(noteSchema)
+      .max(VALIDATION_CONSTRAINTS.MAX_NOTES_PER_CATEGORY)
+      .optional(),
+    troubleshootingNotes: z
+      .array(noteSchema)
+      .max(VALIDATION_CONSTRAINTS.MAX_NOTES_PER_CATEGORY)
+      .optional(),
+  })
+  .strict();
 
 /**
  * Task update schema
  */
-export const updateTaskSchema = z.object({
-  name: z.string().min(1).max(VALIDATION_CONSTRAINTS.NAME_MAX_LENGTH).optional(),
-  type: z.nativeEnum(TaskType).optional(),
-  status: z.nativeEnum(TaskStatus).optional(),
-  description: z.string().max(VALIDATION_CONSTRAINTS.DESCRIPTION_MAX_LENGTH).optional(),
-  reasoning: z.string().max(VALIDATION_CONSTRAINTS.REASONING_MAX_LENGTH).optional(),
-  parentPath: pathSchema.optional(),
-  dependencies: z.array(pathSchema).max(VALIDATION_CONSTRAINTS.MAX_DEPENDENCIES).optional(),
-  metadata: metadataSchema.optional(),
-  statusMetadata: statusMetadataSchema.optional(),
-  planningNotes: z.array(noteSchema).max(VALIDATION_CONSTRAINTS.MAX_NOTES_PER_CATEGORY).optional(),
-  progressNotes: z.array(noteSchema).max(VALIDATION_CONSTRAINTS.MAX_NOTES_PER_CATEGORY).optional(),
-  completionNotes: z
-    .array(noteSchema)
-    .max(VALIDATION_CONSTRAINTS.MAX_NOTES_PER_CATEGORY)
-    .optional(),
-  troubleshootingNotes: z
-    .array(noteSchema)
-    .max(VALIDATION_CONSTRAINTS.MAX_NOTES_PER_CATEGORY)
-    .optional(),
-});
+export const updateTaskSchema = z
+  .object({
+    name: z.string().min(1).max(VALIDATION_CONSTRAINTS.NAME_MAX_LENGTH).optional(),
+    type: z.nativeEnum(TaskType).optional(),
+    status: z.nativeEnum(TaskStatus).optional(),
+    description: z.string().max(VALIDATION_CONSTRAINTS.DESCRIPTION_MAX_LENGTH).optional(),
+    notes: z
+      .never({
+        invalid_type_error:
+          "Generic 'notes' field is not supported. Please use specific note categories: planningNotes, progressNotes, completionNotes, or troubleshootingNotes",
+      })
+      .optional(),
+    reasoning: z.string().max(VALIDATION_CONSTRAINTS.REASONING_MAX_LENGTH).optional(),
+    parentPath: pathSchema.optional(),
+    dependencies: z.array(pathSchema).max(VALIDATION_CONSTRAINTS.MAX_DEPENDENCIES).optional(),
+    metadata: metadataSchema.optional(),
+    statusMetadata: statusMetadataSchema.optional(),
+    planningNotes: z
+      .array(noteSchema)
+      .max(VALIDATION_CONSTRAINTS.MAX_NOTES_PER_CATEGORY)
+      .optional(),
+    progressNotes: z
+      .array(noteSchema)
+      .max(VALIDATION_CONSTRAINTS.MAX_NOTES_PER_CATEGORY)
+      .optional(),
+    completionNotes: z
+      .array(noteSchema)
+      .max(VALIDATION_CONSTRAINTS.MAX_NOTES_PER_CATEGORY)
+      .optional(),
+    troubleshootingNotes: z
+      .array(noteSchema)
+      .max(VALIDATION_CONSTRAINTS.MAX_NOTES_PER_CATEGORY)
+      .optional(),
+  })
+  .strict();
 
 /**
  * Task response schema

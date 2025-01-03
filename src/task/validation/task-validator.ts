@@ -192,7 +192,8 @@ export class TaskValidator {
       // Schema validation with performance monitoring
       const { result: validatedInput, duration: schemaValidationTime } =
         await this.monitorPerformance<CreateTaskInput>('schema-validation', () => {
-          const parsed = createTaskSchema.parse(input);
+          // Parse and strip unknown fields
+          const parsed = createTaskSchema.strip().parse(input);
           return parsed as CreateTaskInput;
         });
 
@@ -503,7 +504,8 @@ export class TaskValidator {
       // Schema validation with performance monitoring
       const { result: validatedUpdates, duration: schemaValidationTime } =
         await this.monitorPerformance<UpdateTaskInput>('schema-validation', () => {
-          const parsed = updateTaskSchema.parse(updates);
+          // Parse and strip unknown fields
+          const parsed = updateTaskSchema.strip().parse(updates);
           return parsed as UpdateTaskInput;
         });
 

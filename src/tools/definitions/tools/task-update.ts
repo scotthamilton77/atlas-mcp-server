@@ -249,6 +249,9 @@ Status changes trigger:
     if (typeof updates.title === 'string') {
       updateData.name = updates.title;
     }
+    if (typeof updates.name === 'string') {
+      updateData.name = updates.name;
+    }
     if (updates.type) {
       updateData.type = (updates.type as string).toUpperCase() as TaskType;
     }
