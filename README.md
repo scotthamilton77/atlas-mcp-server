@@ -2,7 +2,7 @@
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
 [![Model Context Protocol](https://img.shields.io/badge/MCP-1.0.4-green.svg)](https://modelcontextprotocol.io/)
-[![Version](https://img.shields.io/badge/Version-1.3.0-blue.svg)]()
+[![Version](https://img.shields.io/badge/Version-1.4.0-blue.svg)]()
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Status](https://img.shields.io/badge/Status-Stable-blue.svg)]()
 [![GitHub](https://img.shields.io/github/stars/cyanheads/atlas-mcp-server?style=social)](https://github.com/cyanheads/atlas-mcp-server)
@@ -29,6 +29,7 @@ LLM Agents task management through a clean, flexible tool interface.
 - [Task Structure](#task-structure)
 - [Tools](#tools)
   - [Task Operations](#task-operations)
+  - [Template Creation](#template-creation)
   - [Maintenance Tools](#maintenance-tools)
 - [Resources](#resources)
 - [Best Practices](#best-practices)
@@ -309,6 +310,12 @@ ATLAS provides an intelligent template system that streamlines task creation and
 - **Inheritance**: Template composition with metadata transformation
 - **Dynamic Generation**: Conditional tasks and automated dependencies
 - **Validation**: Custom rules and relationship verification
+- **Programmatic Creation**: Create and validate templates via agent_builder tool with:
+  - Template ID validation
+  - Schema enforcement
+  - Dependency cycle detection
+  - Path uniqueness checks
+  - Rich error reporting
 
 ### Built-in Templates
 
@@ -420,7 +427,49 @@ bulk_task_operations; // Execute multiple task operations
 list_templates; // List available templates
 use_template; // Instantiate a template
 get_template_info; // Get template details
+agent_builder; // Create and validate task templates programmatically
 ```
+
+### Template Creation
+
+The agent_builder tool enables programmatic creation and validation of task templates with
+comprehensive validation:
+
+```typescript
+{
+  "operation": "create", // or "validate"
+  "template": {
+    "id": "my-template",
+    "name": "My Template",
+    "description": "Template description",
+    "version": "1.0.0",
+    "variables": [
+      {
+        "name": "projectName",
+        "description": "Project name",
+        "type": "string",
+        "required": true
+      }
+    ],
+    "tasks": [
+      {
+        "path": "project/setup",
+        "title": "Project Setup",
+        "type": "MILESTONE",
+        "dependencies": []
+      }
+    ]
+  }
+}
+```
+
+Features:
+
+- Template ID validation
+- Schema validation
+- Dependency validation with cycle detection
+- Task path uniqueness validation
+- Rich error and warning reporting
 
 ### Maintenance Tools
 
