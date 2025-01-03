@@ -71,7 +71,40 @@ export interface StorageConfig {
     mmapSize?: number;
     /** Page size */
     pageSize?: number;
+    /** Maximum memory usage in bytes */
+    maxMemory?: number;
+    /** Use shared memory */
+    sharedMemory?: boolean;
   };
+}
+
+/**
+ * Notes configuration
+ */
+export interface NotesConfig {
+  /** Note configurations */
+  [key: string]: {
+    /** Tools this note applies to */
+    tools: string | string[];
+    /** Path to note file */
+    path: string;
+    /** Note priority */
+    priority?: number;
+  };
+}
+
+/**
+ * Application configuration data
+ */
+export interface ConfigData {
+  /** Notes configuration */
+  notes: NotesConfig;
+  /** Environment */
+  env?: Environment;
+  /** Logging configuration */
+  logging?: LoggingConfig;
+  /** Storage configuration */
+  storage?: StorageConfig;
 }
 
 /**
