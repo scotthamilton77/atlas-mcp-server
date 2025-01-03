@@ -1,5 +1,5 @@
 import { Logger } from '../../../logging/index.js';
-import { BatchData, BatchResult, ValidationResult } from './common/batch-utils.js';
+import { BatchData, BatchResult, BatchValidationResult } from './common/batch-utils.js';
 
 export interface BatchDependencies {
   validator: any;
@@ -169,7 +169,7 @@ export abstract class BaseBatchProcessor<T = unknown> {
    * Abstract method for batch validation
    * Must be implemented by concrete classes
    */
-  protected abstract validate(batch: BatchData[]): Promise<ValidationResult>;
+  protected abstract validate(batch: BatchData[]): Promise<BatchValidationResult>;
 
   /**
    * Abstract method for batch processing
