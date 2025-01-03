@@ -114,23 +114,21 @@ export class TemplateManager {
         : undefined,
     };
 
-    // Normalize paths with parent path if provided
-    if (parentPath) {
-      // Remove any duplicate path segments and normalize
-      const normalizedPath = PathUtils.splitPath(interpolatedTask.path)
-        .filter((segment, index, array) => array.indexOf(segment) === index)
-        .join('/');
+    // Normalize paths
+    const normalizedPath = parentPath
+      ? PathUtils.normalizePath(PathUtils.joinPath(parentPath, interpolatedTask.path))
+      : PathUtils.normalizePath(interpolatedTask.path);
 
-      interpolatedTask.path = PathUtils.joinPath(parentPath, normalizedPath);
+    interpolatedTask.path = normalizedPath;
 
-      if (interpolatedTask.dependencies) {
-        interpolatedTask.dependencies = interpolatedTask.dependencies.map(d => {
-          const normalizedDep = PathUtils.splitPath(d)
-            .filter((segment, index, array) => array.indexOf(segment) === index)
-            .join('/');
-          return PathUtils.joinPath(parentPath, normalizedDep);
-        });
-      }
+    // Normalize dependency paths
+    if (interpolatedTask.dependencies) {
+      interpolatedTask.dependencies = interpolatedTask.dependencies.map(d => {
+        const normalizedDep = parentPath
+          ? PathUtils.normalizePath(PathUtils.joinPath(parentPath, d))
+          : PathUtils.normalizePath(d);
+        return normalizedDep;
+      });
     }
 
     // Transform the interpolated metadata

@@ -1,13 +1,48 @@
 import { createError, ErrorCodes } from '../errors/index.js';
 
 /**
- * Path validation and manipulation utilities
+ * Path validation, normalization and manipulation utilities
  */
 export class PathUtils {
   private static readonly PATH_SEPARATOR = '/';
   private static readonly VALID_PATH_REGEX = /^[a-zA-Z0-9-_/]+$/;
   private static readonly MAX_PATH_LENGTH = 255;
   private static readonly MAX_SEGMENTS = 10;
+
+  /**
+   * Normalizes a path by:
+   * 1. Removing duplicate segments
+   * 2. Enforcing consistent separators
+   * 3. Removing empty segments
+   * 4. Validating format
+   */
+  static normalizePath(path: string): string {
+    // Validate basic path requirements
+    this.validatePath(path);
+
+    // Split path and remove duplicates while preserving order
+    const segments = this.splitPath(path).filter(
+      (segment, index, array) => array.indexOf(segment) === index
+    );
+
+    return segments.join(this.PATH_SEPARATOR);
+  }
+
+  /**
+   * Checks if a path contains duplicate segments
+   */
+  static hasDuplicateSegments(path: string): boolean {
+    const segments = this.splitPath(path);
+    const uniqueSegments = new Set(segments);
+    return segments.length !== uniqueSegments.size;
+  }
+
+  /**
+   * Gets the depth of a path
+   */
+  static getPathDepth(path: string): number {
+    return this.splitPath(path).length;
+  }
 
   /**
    * Validates a path string
