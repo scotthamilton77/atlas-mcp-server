@@ -236,6 +236,7 @@ atlas-mcp-server
 │   │   │   │   ├── shared/
 │   │   │   │   │   ├── response-formatter.ts
 │   │   │   │   │   └── types.ts
+│   │   │   │   ├── agent-builder-tool.ts
 │   │   │   │   ├── index.ts
 │   │   │   │   ├── task-creation.ts
 │   │   │   │   ├── task-deletion.ts
@@ -244,6 +245,7 @@ atlas-mcp-server
 │   │   │   │   ├── task-queries.ts
 │   │   │   │   ├── task-update.ts
 │   │   │   │   └── template-tools.ts
+│   │   │   ├── agent-builder.ts
 │   │   │   └── tool-definitions.ts
 │   │   ├── error-handler.ts
 │   │   ├── handler.ts
