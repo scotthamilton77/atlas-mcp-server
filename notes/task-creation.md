@@ -8,5 +8,5 @@ fields and data structures.
 ## Best Practices
 
 Use hierarchical paths to organize related tasks (e.g., project/backend/auth). Keep metadata size
-reasonable (under 100KB) despite flexible schema. Document dependencies explicitly to maintain clear
-task relationships.
+reasonable despite flexible schema. Document dependencies explicitly to maintain clear task
+relationships. Review task details often to ensure accuracy and relevance to your current actions.

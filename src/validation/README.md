@@ -1,174 +1,178 @@
 # Validation System
 
-The validation system provides comprehensive input validation, schema enforcement, and data
-integrity checks throughout the Atlas Task Manager.
+The Atlas validation system provides comprehensive validation capabilities for tasks, paths, and
+metadata. It uses Zod for schema validation and provides a unified set of validation constants and
+utilities.
 
-## Overview
+## Structure
 
-The validation system provides:
-
-- Schema validation
-- Input sanitization
-- Path validation
-- ID validation
-- Configuration validation
-
-## Architecture
-
-### Core Components
-
-#### Schema Validation
-
-- Type checking
-- Constraint validation
-- Custom validators
-- Error reporting
-
-#### Path Validator
-
-- Path format checking
-- Hierarchy validation
-- Component validation
-- Length constraints
-
-#### ID Validator
-
-- Format validation
-- Uniqueness checking
-- Prefix validation
-- Pattern matching
-
-#### Config Validator
-
-- Configuration checking
-- Default handling
-- Relationship validation
-- Environment validation
-
-## Validation Schemas
-
-### Task Validation
-
-```typescript
-const taskSchema = {
-  path: {
-    type: 'string',
-    maxLength: 1000,
-    pattern: '^[a-zA-Z0-9-_/]+$',
-    required: true,
-  },
-  name: {
-    type: 'string',
-    maxLength: 200,
-    required: true,
-  },
-  type: {
-    type: 'string',
-    enum: ['TASK', 'MILESTONE'],
-    default: 'TASK',
-  },
-  status: {
-    type: 'string',
-    enum: ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'BLOCKED', 'CANCELLED'],
-    default: 'PENDING',
-  },
-};
+```
+validation/
+├── core/                     # Core validation system
+│   ├── constants.ts         # Unified validation constants
+│   ├── index.ts            # Core exports
+│   └── path/               # Path validation
+│       └── schema.ts       # Path validation schema
+├── index.ts                 # Main exports (re-exports core)
+└── README.md               # This file
 ```
 
-### Configuration Validation
+## Key Components
+
+### Constants
+
+Unified validation constants are defined in `core/constants.ts`:
+
+- Path validation rules
+- Metadata constraints
+- Task limits
+- Security rules
+
+### Path Validation
+
+The path validation system (`core/path/schema.ts`) provides:
+
+- Path format validation
+- Parent-child relationship validation
+- Path normalization
+- Project name validation
+
+### Validation Results
+
+All validation functions return a standardized `ValidationResult<T>` type:
 
 ```typescript
-const configSchema = {
-  logging: {
-    type: 'object',
-    properties: {
-      console: { type: 'boolean' },
-      file: { type: 'boolean' },
-      level: {
-        type: 'string',
-        enum: ['ERROR', 'WARN', 'INFO', 'DEBUG', 'TRACE'],
-      },
-    },
-  },
-  storage: {
-    type: 'object',
-    properties: {
-      baseDir: { type: 'string' },
-      name: { type: 'string' },
-      connection: {
-        type: 'object',
-        properties: {
-          maxRetries: { type: 'number' },
-          retryDelay: { type: 'number' },
-        },
-      },
-    },
-  },
-};
+interface ValidationResult<T = unknown> {
+  success: boolean;
+  data?: T;
+  errors?: string[];
+  warnings?: string[];
+  metadata?: {
+    validationTime?: number;
+    mode?: ValidationMode;
+    securityIssues?: string[];
+  };
+}
 ```
 
 ## Usage Examples
 
+### Path Validation
+
 ```typescript
-// Validate task input
-function validateTask(input: unknown): asserts input is Task {
-  const validator = new TaskValidator();
-  validator.validate(input);
+import { pathSchema, validateTaskPath } from './validation/core';
+
+// Using the schema directly
+const result = pathSchema.safeParse('project/task-1');
+if (result.success) {
+  const validPath = result.data;
 }
 
-// Validate configuration
-function validateConfig(config: unknown): asserts config is Config {
-  const validator = new ConfigValidator();
-  validator.validate(config);
-}
-
-// Validate path
-function validatePath(path: string): boolean {
-  return PathValidator.isValid(path);
-}
-
-// Custom validation
-class CustomValidator extends BaseValidator {
-  protected validateCustomField(value: unknown): void {
-    if (!this.isValidCustomFormat(value)) {
-      throw new ValidationError('Invalid custom format');
-    }
-  }
+// Using the helper function
+const result = validateTaskPath('project/task-1', 'project');
+if (result.success) {
+  const validPath = result.data;
 }
 ```
 
+### Task Validation
+
+```typescript
+import { createTaskSchema } from './task/validation/schemas';
+
+const result = createTaskSchema.safeParse({
+  path: 'project/task-1',
+  name: 'My Task',
+  // ... other fields
+});
+```
+
+## Migration Guide
+
+The validation system has been consolidated to provide:
+
+- Single source of truth for validation rules
+- Consistent validation behavior
+- Type-safe validation using Zod
+- Unified error handling
+
+### Migrating from Old System
+
+1. Replace PathValidator imports:
+
+   ```typescript
+   // Old
+   import { PathValidator } from '../validation';
+
+   // New
+   import { pathSchema, validateTaskPath } from '../validation/core';
+   ```
+
+2. Use ValidationConstants:
+
+   ```typescript
+   // Old
+   const MAX_LENGTH = 1000;
+
+   // New
+   import { ValidationConstants } from '../validation/core';
+   const maxLength = ValidationConstants.path.maxLength;
+   ```
+
+3. Use standardized ValidationResult:
+
+   ```typescript
+   // Old
+   interface Result {
+     isValid: boolean;
+     error?: string;
+   }
+
+   // New
+   import { ValidationResult } from '../validation/core';
+   ```
+
 ## Best Practices
 
-1. **Schema Design**
+1. Always use ValidationConstants for constraints
+2. Prefer Zod schemas over manual validation
+3. Use type inference from schemas
+4. Handle validation errors consistently
+5. Include validation metadata when relevant
 
-   - Clear constraints
-   - Sensible defaults
-   - Proper types
-   - Document requirements
+## Error Handling
 
-2. **Validation Logic**
+The system provides consistent error handling:
 
-   - Thorough checks
-   - Clear error messages
-   - Performance aware
-   - Handle edge cases
+- Detailed error messages
+- Type-safe error objects
+- Validation metadata
+- Performance tracking
 
-3. **Error Handling**
+## Security
 
-   - Specific errors
-   - Helpful messages
-   - Error context
-   - Recovery hints
+The validation system includes security features:
 
-4. **Performance**
+- Input sanitization
+- Size limits
+- Pattern validation
+- Dangerous pattern detection
 
-   - Optimize common cases
-   - Cache schemas
-   - Efficient checks
-   - Early returns
+## Performance
 
-5. **Extensibility**
-   - Custom validators
-   - Reusable logic
-   - Clear interfaces
-   - Plugin system
+Validation is optimized for:
+
+- Quick validation of common cases
+- Efficient path normalization
+- Cached schema compilation
+- Minimal allocations
+
+## Contributing
+
+When extending the validation system:
+
+1. Add new constants to ValidationConstants
+2. Create Zod schemas for new types
+3. Follow the ValidationResult pattern
+4. Add tests for new validation rules
+5. Document changes in this README
