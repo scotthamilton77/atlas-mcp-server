@@ -66,7 +66,7 @@ const DEFAULT_VALIDATION_OPTIONS: TaskValidationOptions = {
   maxMetadataSize: 100 * 1024, // 100KB
   validateSecurity: true,
   performanceMonitoring: true,
-  strictMetadataValidation: true,
+  strictMetadataValidation: false, // Allow flexible metadata
 };
 
 /**
@@ -243,12 +243,8 @@ export class TaskValidator {
               },
               requirements: [],
             },
-            progress: {
-              percentage: 0,
-              milestones: [],
-              lastUpdated: now,
-              estimatedCompletion: undefined,
-            },
+            // Progress is managed by state machine
+            progress: undefined,
             resources: {
               toolsUsed: [],
               resourcesAccessed: [],

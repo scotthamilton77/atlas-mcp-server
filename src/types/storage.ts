@@ -65,11 +65,17 @@ export interface StorageConfig {
     idleTimeout?: number;
   };
   performance?: {
+    /** WAL mode checkpoint interval */
     checkpointInterval?: number;
+    /** Cache size in pages */
     cacheSize?: number;
+    /** Memory map size */
     mmapSize?: number;
+    /** Page size */
     pageSize?: number;
+    /** Maximum memory usage in bytes */
     maxMemory?: number;
+    /** Use shared memory */
     sharedMemory?: boolean;
   };
   journalMode?: 'delete' | 'truncate' | 'persist' | 'memory' | 'wal' | 'off';

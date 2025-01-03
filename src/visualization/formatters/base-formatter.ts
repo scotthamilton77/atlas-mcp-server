@@ -53,12 +53,21 @@ export abstract class BaseFormatter implements TaskFormatter {
   }
 
   /**
-   * Get task progress percentage
+   * Get task progress value based on status
    */
   protected getTaskProgress(task: Task): number {
-    if (task.status === 'COMPLETED') return 100;
-    if (task.status === 'PENDING') return 0;
-    return task.metadata?.progress?.percentage || 50;
+    switch (task.status) {
+      case 'COMPLETED':
+        return 100;
+      case 'IN_PROGRESS':
+        return 50;
+      case 'BLOCKED':
+        return 25;
+      case 'PENDING':
+      case 'CANCELLED':
+      default:
+        return 0;
+    }
   }
 
   /**
