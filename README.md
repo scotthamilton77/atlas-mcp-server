@@ -234,6 +234,31 @@ ATLAS provides automatic contextual guidance through its notes system:
 - **Priority System**: Notes can be ordered by importance
 - **Markdown Support**: Rich formatting for documentation
 - **Dynamic Loading**: Notes hot-reloaded from configuration
+- **Built-in Documentation**: Pre-configured notes for common operations
+
+### Implementation
+
+The notes system consists of three main components:
+
+1. **Note Manager** (`src/notes/note-manager.ts`):
+
+   - Singleton pattern for centralized note management
+   - Loads and manages note configurations
+   - Filters notes by tool relevance
+   - Sorts notes by priority
+   - Formats notes for tool responses
+
+2. **Notes Initializer** (`src/notes/notes-initializer.ts`):
+
+   - Sets up initial note structure
+   - Copies built-in notes to user directory
+   - Validates note configurations
+   - Ensures directory structure
+
+3. **Built-in Notes** (`notes/`):
+   - `task-creation.md`: Best practices for creating tasks
+   - `task-maintenance.md`: Guidelines for task state management
+   - `task-update.md`: Documentation for task updates
 
 ### Configuration
 
