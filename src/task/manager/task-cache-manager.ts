@@ -45,13 +45,8 @@ export class TaskCacheManager {
         },
       };
 
-      // Update progress metadata for status changes
       const metadata = {
         ...(task.metadata || {}),
-        progress: {
-          ...(task.metadata?.progress || {}),
-          lastUpdated: now,
-        },
       };
 
       // Deep clone task with updated metadata
@@ -81,7 +76,9 @@ export class TaskCacheManager {
         progressNotes: [...(task.progressNotes || [])],
         completionNotes: [...(task.completionNotes || [])],
         troubleshootingNotes: [...(task.troubleshootingNotes || [])],
-        metadata: { ...(task.metadata || {}) },
+        metadata: {
+          ...(task.metadata || {}),
+        },
         statusMetadata: { ...(task.statusMetadata || {}) },
       };
 

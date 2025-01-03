@@ -1,85 +1,11 @@
 import { TaskStatus as CoreTaskStatus } from './task-core.js';
 import { TaskType } from './task-types.js';
+import { TaskMetadata } from './task-metadata.js';
 
 // Re-export TaskStatus and TaskType
 export { TaskStatus } from './task-core.js';
 export { TaskType } from './task-types.js';
-
-/**
- * Technical requirements type
- */
-export interface TechnicalRequirements {
-  language?: string;
-  framework?: string;
-  dependencies?: string[];
-  environment?: string;
-  performance?: {
-    memory?: string;
-    cpu?: string;
-    storage?: string;
-  };
-  requirements?: string[];
-}
-
-/**
- * Progress tracking type
- */
-export interface Progress {
-  percentage?: number;
-  milestones?: string[];
-  lastUpdated?: number;
-  estimatedCompletion?: number;
-}
-
-/**
- * Resource tracking type
- */
-export interface Resources {
-  toolsUsed?: string[];
-  resourcesAccessed?: string[];
-  contextUsed?: string[];
-}
-
-/**
- * Block information type
- */
-export interface BlockInfo {
-  blockedBy?: string;
-  blockReason?: string;
-  blockTimestamp?: number;
-  unblockTimestamp?: number;
-  resolution?: string;
-}
-
-/**
- * Version control type
- */
-export interface VersionControl {
-  version?: number;
-  branch?: string;
-  commit?: string;
-  previousVersions?: number[];
-}
-
-/**
- * Task metadata type
- */
-export interface TaskMetadata {
-  priority?: 'low' | 'medium' | 'high';
-  tags?: string[];
-  reasoning?: string;
-  status?: CoreTaskStatus;
-  statusUpdatedAt?: number;
-  previousStatus?: CoreTaskStatus;
-  technicalRequirements?: TechnicalRequirements;
-  progress?: Progress;
-  resources?: Resources;
-  blockInfo?: BlockInfo;
-  versionControl?: VersionControl;
-  deliverables?: string[];
-  customFields?: Record<string, unknown>;
-  [key: string]: unknown;
-}
+export { TaskMetadata } from './task-metadata.js';
 
 /**
  * Status metadata type
