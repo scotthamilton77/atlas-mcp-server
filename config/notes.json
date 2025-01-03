@@ -1,0 +1,19 @@
+{
+  "notes": {
+    "task-maintenance": {
+      "tools": "*",
+      "path": "task-maintenance.md",
+      "priority": 100
+    },
+    "task-creation": {
+      "tools": ["create_task"],
+      "path": "task-creation.md",
+      "priority": 90
+    },
+    "task-update": {
+      "tools": ["update_task"],
+      "path": "task-update.md",
+      "priority": 90
+    }
+  }
+}

@@ -20,12 +20,19 @@ atlas-mcp-server
 │   │   ├── pre-rebase
 │   │   └── prepare-commit-msg
 │   └── pre-commit
+├── config/
+│   ├── default.json
+│   └── notes.json
 ├── examples/
 │   ├── portfolio-website/
 │   │   ├── prompt.md
 │   │   ├── README.md
 │   │   └── task-hierarchy-full.json
 │   └── README.md
+├── notes/
+│   ├── task-creation.md
+│   ├── task-maintenance.md
+│   └── task-update.md
 ├── scripts/
 │   ├── generate-tree.js
 │   ├── postinstall.js
@@ -33,6 +40,8 @@ atlas-mcp-server
 │   └── set-build-permissions.js
 ├── src/
 │   ├── config/
+│   │   ├── config-initializer.ts
+│   │   ├── config-manager.ts
 │   │   ├── index.ts
 │   │   └── README.md
 │   ├── errors/
@@ -59,6 +68,10 @@ atlas-mcp-server
 │   │   ├── README.md
 │   │   ├── transaction-logger.ts
 │   │   └── transport-manager.ts
+│   ├── notes/
+│   │   ├── index.ts
+│   │   ├── note-manager.ts
+│   │   └── notes-initializer.ts
 │   ├── server/
 │   │   ├── health-monitor.ts
 │   │   ├── index.ts
@@ -172,6 +185,7 @@ atlas-mcp-server
 │   │   │   │   └── transaction-manager.ts
 │   │   │   ├── error-handler.ts
 │   │   │   ├── index.ts
+│   │   │   ├── status-state-machine.ts
 │   │   │   ├── task-resource-handler.ts
 │   │   │   └── task-store.ts
 │   │   ├── manager/
@@ -246,11 +260,13 @@ atlas-mcp-server
 │   │   ├── indexing.ts
 │   │   ├── logging.ts
 │   │   ├── lru-cache.d.ts
+│   │   ├── notes.ts
 │   │   ├── project.ts
 │   │   ├── README.md
 │   │   ├── session.ts
 │   │   ├── storage.ts
 │   │   ├── task-core.ts
+│   │   ├── task-metadata.ts
 │   │   ├── task-types.ts
 │   │   ├── task.ts
 │   │   ├── template.ts
