@@ -28,6 +28,10 @@ atlas-mcp-server
 │   │   ├── prompt.md
 │   │   ├── README.md
 │   │   └── task-hierarchy-full.json
+│   ├── templates_showcase/
+│   │   ├── atlas-tasks.db
+│   │   ├── tasks-2025-01-03.json
+│   │   └── tasks-2025-01-03.md
 │   └── README.md
 ├── notes/
 │   ├── task-creation.md
@@ -322,7 +326,6 @@ atlas-mcp-server
 ├── package.json
 ├── README.md
 ├── repo-tree.md
-├── repomix-output.txt
 ├── storage-refactor.md
 └── tsconfig.json
 ```
