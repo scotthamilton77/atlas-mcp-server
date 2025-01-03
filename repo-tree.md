@@ -163,13 +163,13 @@ atlas-mcp-server
 │   │   │   ├── batch/
 │   │   │   │   ├── common/
 │   │   │   │   │   └── batch-utils.ts
+│   │   │   │   ├── services/
+│   │   │   │   │   ├── dependency-validation-service.ts
+│   │   │   │   │   └── status-transition-service.ts
 │   │   │   │   ├── base-batch-processor.ts
-│   │   │   │   ├── bulk-operations-handler.ts
-│   │   │   │   ├── dependency-aware-batch-processor.ts
-│   │   │   │   ├── generic-batch-processor.ts
 │   │   │   │   ├── index.ts
-│   │   │   │   ├── status-update-batch.ts
-│   │   │   │   └── task-status-batch-processor.ts
+│   │   │   │   ├── README.md
+│   │   │   │   └── unified-batch-processor.ts
 │   │   │   ├── cache/
 │   │   │   │   ├── cache-coordinator.ts
 │   │   │   │   ├── cache-manager.ts
@@ -204,7 +204,6 @@ atlas-mcp-server
 │   │   │   │   ├── create-schema.ts
 │   │   │   │   ├── index.ts
 │   │   │   │   ├── metadata-schema.ts
-│   │   │   │   ├── path-schema.ts
 │   │   │   │   ├── task-schemas.ts
 │   │   │   │   └── update-schema.ts
 │   │   │   ├── validators/
@@ -281,11 +280,18 @@ atlas-mcp-server
 │   │   ├── platform-utils.ts
 │   │   └── README.md
 │   ├── validation/
+│   │   ├── core/
+│   │   │   ├── config/
+│   │   │   │   └── schema.ts
+│   │   │   ├── id/
+│   │   │   │   └── schema.ts
+│   │   │   ├── path/
+│   │   │   │   └── schema.ts
+│   │   │   ├── constants.ts
+│   │   │   └── index.ts
 │   │   ├── config.ts
 │   │   ├── id-schema.ts
 │   │   ├── index.ts
-│   │   ├── logging.ts
-│   │   ├── path-validator.ts
 │   │   └── README.md
 │   ├── visualization/
 │   │   ├── formatters/

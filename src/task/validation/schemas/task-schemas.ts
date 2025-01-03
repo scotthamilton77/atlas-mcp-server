@@ -4,7 +4,7 @@
 import { z } from 'zod';
 import { TaskType } from '../../../types/task-types.js';
 import { TaskStatus, VALIDATION_CONSTRAINTS } from '../../../types/task-core.js';
-import { pathValidationSchema } from './path-schema.js';
+import { pathSchema } from '../../../validation/core/index.js';
 
 /**
  * Note validation schemas
@@ -103,16 +103,13 @@ export const statusMetadataSchema = z.object({
  * Task creation schema
  */
 export const createTaskSchema = z.object({
-  path: pathValidationSchema,
+  path: pathSchema,
   name: z.string().min(1).max(VALIDATION_CONSTRAINTS.NAME_MAX_LENGTH),
   type: z.nativeEnum(TaskType),
   description: z.string().max(VALIDATION_CONSTRAINTS.DESCRIPTION_MAX_LENGTH).optional(),
   reasoning: z.string().max(VALIDATION_CONSTRAINTS.REASONING_MAX_LENGTH).optional(),
-  parentPath: pathValidationSchema.optional(),
-  dependencies: z
-    .array(pathValidationSchema)
-    .max(VALIDATION_CONSTRAINTS.MAX_DEPENDENCIES)
-    .optional(),
+  parentPath: pathSchema.optional(),
+  dependencies: z.array(pathSchema).max(VALIDATION_CONSTRAINTS.MAX_DEPENDENCIES).optional(),
   metadata: metadataSchema.optional(),
   statusMetadata: statusMetadataSchema.optional(),
   planningNotes: z.array(noteSchema).max(VALIDATION_CONSTRAINTS.MAX_NOTES_PER_CATEGORY).optional(),
@@ -136,11 +133,8 @@ export const updateTaskSchema = z.object({
   status: z.nativeEnum(TaskStatus).optional(),
   description: z.string().max(VALIDATION_CONSTRAINTS.DESCRIPTION_MAX_LENGTH).optional(),
   reasoning: z.string().max(VALIDATION_CONSTRAINTS.REASONING_MAX_LENGTH).optional(),
-  parentPath: pathValidationSchema.optional(),
-  dependencies: z
-    .array(pathValidationSchema)
-    .max(VALIDATION_CONSTRAINTS.MAX_DEPENDENCIES)
-    .optional(),
+  parentPath: pathSchema.optional(),
+  dependencies: z.array(pathSchema).max(VALIDATION_CONSTRAINTS.MAX_DEPENDENCIES).optional(),
   metadata: metadataSchema.optional(),
   statusMetadata: statusMetadataSchema.optional(),
   planningNotes: z.array(noteSchema).max(VALIDATION_CONSTRAINTS.MAX_NOTES_PER_CATEGORY).optional(),

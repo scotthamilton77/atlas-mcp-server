@@ -3,20 +3,30 @@ export { TaskErrorHandler } from './error-handler.js';
 
 // Re-export batch processors
 export {
-  TaskStatusBatchProcessor,
-  DependencyAwareBatchProcessor,
+  UnifiedBatchProcessor,
   BaseBatchProcessor,
   type BatchDependencies,
   type BatchOptions,
 } from './batch/index.js';
 
+// Re-export batch services
+export {
+  DependencyValidationService,
+  type DependencyValidationResult,
+  ValidationMode,
+} from './batch/services/dependency-validation-service.js';
+
+export {
+  StatusTransitionService,
+  type StatusTransitionResult,
+} from './batch/services/status-transition-service.js';
+
 // Re-export batch utils
 export {
   type BatchData,
   type BatchResult,
-  type ValidationResult,
-  type TaskBatchData,
-  BatchUtils,
+  type BatchValidationResult,
+  type BatchItemResult,
 } from './batch/common/batch-utils.js';
 
 // Re-export cache management
