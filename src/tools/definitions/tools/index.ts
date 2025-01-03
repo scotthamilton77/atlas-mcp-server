@@ -25,6 +25,9 @@ export {
 // Template operations
 export { createTemplateTools } from './template-tools.js';
 
+// Agent builder
+export { createAgentBuilderTool } from './agent-builder-tool.js';
+
 // Shared utilities
 export * from './shared/response-formatter.js';
 export * from './shared/types.js';

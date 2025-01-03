@@ -2,6 +2,30 @@
  * Tool-related type definitions
  */
 import { TaskType } from './task.js';
+import { TemplateVariable, TemplateTask } from './template.js';
+
+/**
+ * Agent builder template creation parameters
+ */
+export interface AgentBuilderTemplateParams {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+  author?: string;
+  tags?: string[];
+  variables: TemplateVariable[];
+  tasks: TemplateTask[];
+}
+
+/**
+ * Agent builder template validation result
+ */
+export interface AgentBuilderValidationResult {
+  isValid: boolean;
+  errors?: string[];
+  warnings?: string[];
+}
 
 /**
  * Tool definition interface

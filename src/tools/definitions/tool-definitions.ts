@@ -17,6 +17,7 @@ import {
   vacuumDatabaseTool,
   repairRelationshipsTool,
   createTemplateTools,
+  createAgentBuilderTool,
   ToolImplementation,
 } from './tools/index.js';
 
@@ -47,6 +48,7 @@ export class ToolDefinitions {
       repairRelationshipsTool(taskContext),
       // Template tools
       ...createTemplateTools(templateContext),
+      createAgentBuilderTool(templateContext),
     ];
   }
 
