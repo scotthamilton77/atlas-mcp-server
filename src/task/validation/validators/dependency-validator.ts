@@ -313,6 +313,26 @@ export class DependencyValidator {
           error: error instanceof Error ? error.message : 'Dependency cycle detected',
         };
       }
+
+      // Check dependency status constraints
+      if (task.status === TaskStatus.IN_PROGRESS) {
+        for (const depPath of dependencies) {
+          const depTask = await getTaskByPath(depPath);
+          if (depTask && depTask.status !== TaskStatus.COMPLETED) {
+            validationResult.valid = false;
+            validationResult.details!.statusConflicts!.push({
+              dependency: depPath,
+              status: depTask.status,
+              conflict: 'Cannot start task before dependencies are completed',
+            });
+          }
+        }
+
+        if (!validationResult.valid) {
+          validationResult.error = this.formatValidationError(validationResult);
+          return validationResult;
+        }
+      }
     }
 
     return validationResult;

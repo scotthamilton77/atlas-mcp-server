@@ -105,6 +105,25 @@ export class TaskManager {
         throw TaskErrorFactory.createTaskNotFoundError('TaskManager.updateTask', path);
       }
 
+      // Always validate status transitions if status is being updated
+      if (updates.status !== undefined && updates.status !== existingTask.status) {
+        const statusValidation = await this.validator.validateStatusTransition(
+          existingTask,
+          updates.status,
+          this.getTask.bind(this)
+        );
+
+        // If auto-transition is suggested (e.g., to BLOCKED), use that status instead
+        if (statusValidation.autoTransition) {
+          updates.status = statusValidation.status;
+          this.logger.info('Auto-transitioning task status', {
+            path,
+            originalStatus: updates.status,
+            newStatus: statusValidation.status,
+          });
+        }
+      }
+
       return await this.transactionManager.executeUpdate(existingTask, updates, {
         validateUpdate: async () => {
           const validationResult = await this.validator.validateUpdate(path, updates);
@@ -135,15 +154,6 @@ export class TaskManager {
         handleStatusPropagation:
           updates.status !== undefined && updates.status !== existingTask.status
             ? () => this.handleStatusPropagation(existingTask, existingTask.status, updates.status!)
-            : undefined,
-        validateStatusTransition:
-          updates.status !== undefined && updates.status !== existingTask.status
-            ? () =>
-                this.validator.getStatusValidationResult(
-                  existingTask,
-                  updates.status!,
-                  this.getTask.bind(this)
-                )
             : undefined,
         validateParentChildStatus:
           updates.status !== undefined && updates.status !== existingTask.status

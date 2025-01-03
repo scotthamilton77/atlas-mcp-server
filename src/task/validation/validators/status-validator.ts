@@ -1,6 +1,8 @@
 import { Task, TaskStatus } from '../../../types/task.js';
 import { Logger } from '../../../logging/index.js';
 import { TaskErrorFactory } from '../../../errors/task-error.js';
+import { StatusStateMachine } from '../../core/status-state-machine.js';
+import { ErrorCategory } from '../../../types/error.js';
 
 interface DependencyDetail {
   path: string;
@@ -13,9 +15,11 @@ interface DependencyDetail {
  */
 export class StatusValidator {
   private logger: Logger;
+  private stateMachine: StatusStateMachine;
 
   constructor() {
     this.logger = Logger.getInstance().child({ component: 'StatusValidator' });
+    this.stateMachine = new StatusStateMachine();
   }
 
   /**
@@ -26,30 +30,51 @@ export class StatusValidator {
     newStatus: TaskStatus,
     getTaskByPath: (path: string) => Promise<Task | null>
   ): Promise<{ status: TaskStatus; autoTransition?: boolean }> {
-    // Define valid status transitions
-    const validTransitions: Record<TaskStatus, TaskStatus[]> = {
-      [TaskStatus.PENDING]: [TaskStatus.IN_PROGRESS, TaskStatus.BLOCKED, TaskStatus.CANCELLED],
-      [TaskStatus.IN_PROGRESS]: [TaskStatus.COMPLETED, TaskStatus.CANCELLED, TaskStatus.BLOCKED],
-      [TaskStatus.COMPLETED]: [TaskStatus.IN_PROGRESS], // Allow reopening for testing
-      [TaskStatus.CANCELLED]: [TaskStatus.PENDING], // Only allow restart from cancelled
-      [TaskStatus.BLOCKED]: [TaskStatus.PENDING, TaskStatus.CANCELLED], // Can unblock or cancel
-    };
+    // First check state machine rules
+    const transitionResult = await this.stateMachine.validateTransition({
+      taskPath: task.path,
+      fromStatus: task.status,
+      toStatus: newStatus,
+      metadata: task.metadata,
+      logger: this.logger,
+      getTaskByPath,
+    });
 
-    // Check if transition is valid with detailed messaging
-    if (!validTransitions[task.status]?.includes(newStatus)) {
-      const allowedTransitions = validTransitions[task.status]?.join(', ') || 'none';
+    if (!transitionResult.valid) {
+      // For expected validation failures, use info level logging
+      if (transitionResult.expected) {
+        this.logger.info('Status transition validation failed', {
+          taskPath: task.path,
+          fromStatus: task.status,
+          toStatus: newStatus,
+          reason: transitionResult.reason,
+          metadata: task.metadata,
+        });
+      } else {
+        // For unexpected failures, use error level logging
+        this.logger.error('Unexpected error in status transition', {
+          taskPath: task.path,
+          fromStatus: task.status,
+          toStatus: newStatus,
+          reason: transitionResult.reason,
+          metadata: task.metadata,
+        });
+      }
+
+      const errorMetadata = {
+        taskPath: task.path,
+        currentStatus: task.status,
+        newStatus,
+        metadata: task.metadata,
+        expected: transitionResult.expected,
+        category: ErrorCategory.VALIDATION,
+        isWarning: transitionResult.expected,
+      };
+
       throw TaskErrorFactory.createTaskStatusError(
         'StatusValidator.validateStatusTransition',
-        `Invalid status transition from ${task.status} to ${newStatus}. ` +
-          `Allowed transitions from ${task.status}: ${allowedTransitions}. ` +
-          `Consider updating dependencies or parent tasks first.`,
-        {
-          taskPath: task.path,
-          currentStatus: task.status,
-          newStatus,
-          allowedTransitions: validTransitions[task.status],
-          metadata: task.metadata,
-        }
+        transitionResult.reason || 'Invalid status transition',
+        errorMetadata
       );
     }
 
@@ -74,15 +99,20 @@ export class StatusValidator {
           .map(d => `${d.path} (${d.status}${d.reason ? `: ${d.reason}` : ''})`)
           .join('\n- ');
 
+        const errorMetadata = {
+          taskPath: task.path,
+          incompleteDependencies: incompleteDeps,
+          dependencyDetails: details,
+          category: ErrorCategory.VALIDATION,
+          expected: true,
+          isWarning: true,
+        };
+
         throw TaskErrorFactory.createTaskDependencyError(
           'StatusValidator.validateStatusTransition',
           `Cannot complete task: Dependencies not ready:\n- ${depDetails}\n\n` +
             `All dependencies must be COMPLETED before marking this task as COMPLETED.`,
-          {
-            taskPath: task.path,
-            incompleteDependencies: incompleteDeps,
-            dependencyDetails: details,
-          }
+          errorMetadata
         );
       }
     }
@@ -109,10 +139,18 @@ export class StatusValidator {
     if (task.status === TaskStatus.BLOCKED && newStatus === TaskStatus.PENDING) {
       const { isBlocked, reason } = await this.checkDependencyStatus(task, getTaskByPath);
       if (isBlocked) {
+        const errorMetadata = {
+          taskPath: task.path,
+          category: ErrorCategory.VALIDATION,
+          expected: true,
+          isWarning: true,
+          reason,
+        };
+
         throw TaskErrorFactory.createTaskDependencyError(
           'StatusValidator.validateStatusTransition',
           `Cannot unblock task: ${reason || 'Dependencies are blocking'}`,
-          { taskPath: task.path }
+          errorMetadata
         );
       }
     }
@@ -152,6 +190,42 @@ export class StatusValidator {
   /**
    * Enhanced dependency status check with more details
    */
+  /**
+   * Detects dependency cycles in task graph
+   */
+  private async detectCycles(
+    task: Task,
+    getTaskByPath: (path: string) => Promise<Task | null>,
+    visited: Set<string> = new Set(),
+    path: Set<string> = new Set()
+  ): Promise<string[]> {
+    if (path.has(task.path)) {
+      return Array.from(path);
+    }
+
+    if (visited.has(task.path)) {
+      return [];
+    }
+
+    visited.add(task.path);
+    path.add(task.path);
+
+    if (Array.isArray(task.dependencies)) {
+      for (const depPath of task.dependencies) {
+        const depTask = await getTaskByPath(depPath);
+        if (depTask) {
+          const cycle = await this.detectCycles(depTask, getTaskByPath, visited, path);
+          if (cycle.length > 0) {
+            return cycle;
+          }
+        }
+      }
+    }
+
+    path.delete(task.path);
+    return [];
+  }
+
   private async checkDependencyStatus(
     task: Task,
     getTaskByPath: (path: string) => Promise<Task | null>
@@ -164,10 +238,67 @@ export class StatusValidator {
       return { isBlocked: false };
     }
 
+    // Check for dependency cycles first
+    const cycle = await this.detectCycles(task, getTaskByPath);
+    if (cycle.length > 0) {
+      return {
+        isBlocked: true,
+        reason: `Dependency cycle detected: ${cycle.join(' -> ')}`,
+        blockingDeps: [
+          {
+            path: cycle[0],
+            status: TaskStatus.BLOCKED,
+            details: 'Part of dependency cycle',
+          },
+        ],
+      };
+    }
+
     const blockingDeps: Array<{ path: string; status: TaskStatus; details?: string }> = [];
     const depCache = new Map<string, Task>();
 
-    // First pass: Check direct dependencies
+    // Check direct and transitive dependencies
+    const checkDep = async (depPath: string, depth: number = 0): Promise<boolean> => {
+      if (depth > 10) {
+        // Prevent infinite recursion
+        return false;
+      }
+
+      const depTask = depCache.get(depPath) || (await getTaskByPath(depPath));
+      if (!depTask) {
+        blockingDeps.push({
+          path: depPath,
+          status: TaskStatus.PENDING,
+          details: 'Dependency not found',
+        });
+        return true;
+      }
+
+      depCache.set(depPath, depTask);
+
+      // Check status of this dependency
+      if (depTask.status !== TaskStatus.COMPLETED) {
+        blockingDeps.push({
+          path: depPath,
+          status: depTask.status,
+          details: this.getDependencyBlockReason(depTask),
+        });
+        return true;
+      }
+
+      // Recursively check this dependency's dependencies
+      if (Array.isArray(depTask.dependencies)) {
+        for (const transitiveDepPath of depTask.dependencies) {
+          if (await checkDep(transitiveDepPath, depth + 1)) {
+            return true;
+          }
+        }
+      }
+
+      return false;
+    };
+
+    // Check all dependencies
     for (const depPath of task.dependencies) {
       const depTask = await getTaskByPath(depPath);
       if (depTask) {
@@ -183,8 +314,8 @@ export class StatusValidator {
         continue;
       }
 
-      // Consider both CANCELLED and BLOCKED as potential blockers
-      if (depTask.status === TaskStatus.CANCELLED || depTask.status === TaskStatus.BLOCKED) {
+      // All dependencies must be completed before starting
+      if (depTask.status !== TaskStatus.COMPLETED) {
         blockingDeps.push({
           path: depPath,
           status: depTask.status,
@@ -215,7 +346,7 @@ export class StatusValidator {
       case TaskStatus.PENDING:
         return 'Not started';
       case TaskStatus.IN_PROGRESS:
-        return `In progress (${task.metadata?.progress?.percentage || 0}% complete)`;
+        return 'In progress';
       case TaskStatus.BLOCKED:
         return task.metadata?.blockInfo?.blockReason || 'Blocked by dependencies';
       case TaskStatus.CANCELLED:
