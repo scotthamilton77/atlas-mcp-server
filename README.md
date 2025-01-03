@@ -122,6 +122,7 @@ Core Components:
 - **Rich Metadata**: Flexible schema for requirements, progress, and documentation
 - **Status Tracking**: State machine with strict transition rules and dependency validation
 - **Smart Templates**: Pre-built patterns with variable interpolation
+- **Contextual Notes**: Automatic tool-specific guidance and best practices
 
 ### Performance & Reliability
 
@@ -183,6 +184,8 @@ npm run build
 
 ## Configuration
 
+### MCP Client Settings
+
 Add to your MCP client settings:
 
 ```json
@@ -217,6 +220,57 @@ Add to your MCP client settings:
       }
     }
   }
+}
+```
+
+## Notes System
+
+ATLAS provides automatic contextual guidance through its notes system:
+
+### Core Features
+
+- **Tool-Specific Guidance**: Notes automatically attached to relevant tool responses
+- **Configurable Targeting**: Notes can target specific tools or all tools
+- **Priority System**: Notes can be ordered by importance
+- **Markdown Support**: Rich formatting for documentation
+- **Dynamic Loading**: Notes hot-reloaded from configuration
+
+### Configuration
+
+Notes are configured in `config/notes.json`:
+
+```json
+{
+  "notes": {
+    "task-maintenance": {
+      "tools": "*", // Apply to all tools
+      "path": "task-maintenance.md",
+      "priority": 100 // Higher priority notes shown first
+    },
+    "task-creation": {
+      "tools": ["create_task"], // Only for create_task tool
+      "path": "task-creation.md",
+      "priority": 90
+    }
+  }
+}
+```
+
+### Example Response
+
+When using tools, relevant notes are automatically included:
+
+```typescript
+{
+  "result": "Task created successfully",
+  "task": {
+    "path": "project/feature",
+    "name": "New Feature"
+  },
+  "notes": [
+    "# Task Creation Best Practices\n\nUse hierarchical paths...",
+    "# Task Maintenance\n\nRegularly check status..."
+  ]
 }
 ```
 
