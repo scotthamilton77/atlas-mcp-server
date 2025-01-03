@@ -480,25 +480,6 @@ ATLAS exposes system resources through standard MCP endpoints:
 }
 ```
 
-### Task Tracking (visualizations://current)
-
-```typescript
-{
-  "timestamp": "2024-01-28T12:00:00Z",
-  "summary": {
-    "total": 42,
-    "inProgress": 15,
-    "completed": 12
-  },
-  "format": {
-    "statusIndicators": {
-      "COMPLETED": "✅",
-      "IN_PROGRESS": "🔄"
-    }
-  }
-}
-```
-
 ## Best Practices
 
 ### Task Organization
