@@ -38,38 +38,42 @@ export const templateTaskMetadataSchema = z
   );
 
 /**
+ * Template path validation - allows variables in paths
+ */
+const isValidTemplatePath = (path: string): boolean => {
+  // Allow template variables ${name}
+  const templateVarPattern = /\${[a-zA-Z][a-zA-Z0-9_]*}/g;
+
+  // Replace template variables with placeholder to check format
+  const normalizedPath = path.replace(templateVarPattern, 'x');
+
+  // Check basic path structure
+  if (!normalizedPath.match(/^[a-zA-Z0-9x][a-zA-Z0-9x\-_/]*$/)) {
+    return false;
+  }
+
+  // Check path depth
+  if (normalizedPath.split('/').length > VALIDATION_CONSTRAINTS.MAX_PATH_DEPTH) {
+    return false;
+  }
+
+  // Check segment length, accounting for variables
+  const segments = path.split('/');
+  return !segments.some(segment => {
+    // Replace variables with reasonable length placeholder
+    const normalizedSegment = segment.replace(templateVarPattern, 'placeholder');
+    return normalizedSegment.length > VALIDATION_CONSTRAINTS.MAX_SEGMENT_LENGTH;
+  });
+};
+
+/**
  * Template task validation schema with enhanced path validation
  */
 export const templateTaskSchema = z.object({
-  path: z
-    .string()
-    .min(1)
-    .max(1000)
-    .refine(
-      path => {
-        // Check path format
-        if (!path.match(VALIDATION_CONSTRAINTS.PATH_ALLOWED_CHARS)) {
-          return false;
-        }
-        // Check path depth
-        if (path.split('/').length > VALIDATION_CONSTRAINTS.MAX_PATH_DEPTH) {
-          return false;
-        }
-        // Check segment length
-        if (
-          path
-            .split('/')
-            .some(segment => segment.length > VALIDATION_CONSTRAINTS.MAX_SEGMENT_LENGTH)
-        ) {
-          return false;
-        }
-        return true;
-      },
-      {
-        message:
-          'Invalid path format. Must use forward slashes, valid characters, and respect length limits.',
-      }
-    ),
+  path: z.string().min(1).max(1000).refine(isValidTemplatePath, {
+    message:
+      'Invalid template path format. Must use forward slashes, valid characters, template variables, and respect length limits.',
+  }),
   title: z.string().min(1).max(200),
   description: z.string().max(2000).optional(),
   type: z.enum(['TASK', 'MILESTONE']),
@@ -97,20 +101,12 @@ export const taskTemplateSchema = z.object({
         // Build set of all task paths
         const paths = new Set(tasks.map(t => t.path));
 
-        // Check that all parent paths exist
-        for (const task of tasks) {
-          const parentPath = PathUtils.getParentPath(task.path);
-          if (parentPath && !paths.has(parentPath)) {
-            return false;
-          }
-        }
-
-        // Check for duplicate paths
+        // For template validation, we only check basic path uniqueness
+        // Full path validation happens after variable interpolation
         return paths.size === tasks.length;
       },
       {
-        message:
-          'Invalid task hierarchy. All parent paths must exist within the template and paths must be unique.',
+        message: 'Task paths must be unique within the template.',
       }
     )
     .refine(
