@@ -38,10 +38,38 @@
   ],
   "tasks": [
     {
+      "path": "${projectName}",
+      "title": "Project Root",
+      "description": "Root task for project organization",
+      "type": "MILESTONE",
+      "metadata": {
+        "priority": "high",
+        "tags": ["project-root"]
+      }
+    },
+    {
+      "path": "${projectName}/development",
+      "title": "Development Leadership",
+      "description": "Overall development coordination and technical leadership",
+      "type": "MILESTONE",
+      "dependencies": ["${projectName}"],
+      "metadata": {
+        "priority": "high",
+        "tags": ["development", "leadership"],
+        "acceptanceCriteria": [
+          "Development standards established",
+          "Workflows defined and implemented",
+          "Quality processes in place",
+          "Team coordination effective"
+        ]
+      }
+    },
+    {
       "path": "${projectName}/development/standards",
       "title": "Development Standards Setup",
       "description": "Establish development standards and best practices",
       "type": "MILESTONE",
+      "dependencies": ["${projectName}/development"],
       "metadata": {
         "priority": "high",
         "tags": ["standards", "best-practices"],

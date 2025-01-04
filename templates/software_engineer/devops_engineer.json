@@ -45,10 +45,38 @@
   ],
   "tasks": [
     {
+      "path": "${projectName}",
+      "title": "Project Root",
+      "description": "Root task for project organization",
+      "type": "MILESTONE",
+      "metadata": {
+        "priority": "high",
+        "tags": ["project-root"]
+      }
+    },
+    {
+      "path": "${projectName}/infrastructure",
+      "title": "Infrastructure Engineering",
+      "description": "Overall infrastructure architecture, automation, and operations",
+      "type": "MILESTONE",
+      "dependencies": ["${projectName}"],
+      "metadata": {
+        "priority": "high",
+        "tags": ["infrastructure", "devops"],
+        "acceptanceCriteria": [
+          "Infrastructure requirements analyzed",
+          "Architecture designed and implemented",
+          "CI/CD pipelines established",
+          "Monitoring and security configured"
+        ]
+      }
+    },
+    {
       "path": "${projectName}/infrastructure/requirements",
       "title": "Infrastructure Requirements Analysis",
       "description": "Analyze and document infrastructure and operational requirements",
       "type": "MILESTONE",
+      "dependencies": ["${projectName}/infrastructure"],
       "metadata": {
         "priority": "high",
         "tags": ["infrastructure", "requirements"],

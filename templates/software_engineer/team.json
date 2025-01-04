@@ -57,10 +57,38 @@
   ],
   "tasks": [
     {
+      "path": "${projectName}",
+      "title": "Project Root",
+      "description": "Root task for project organization",
+      "type": "MILESTONE",
+      "metadata": {
+        "priority": "high",
+        "tags": ["project-root"]
+      }
+    },
+    {
+      "path": "${projectName}/team",
+      "title": "Team Organization",
+      "description": "Overall team structure and coordination",
+      "type": "MILESTONE",
+      "dependencies": ["${projectName}"],
+      "metadata": {
+        "priority": "high",
+        "tags": ["team", "coordination"],
+        "acceptanceCriteria": [
+          "Team structure established",
+          "Roles and responsibilities defined",
+          "Communication channels set up",
+          "Coordination mechanisms in place"
+        ]
+      }
+    },
+    {
       "path": "${projectName}/team/initialization",
       "title": "Team Initialization and Planning",
       "description": "Set up team structure, roles, and coordination mechanisms",
       "type": "MILESTONE",
+      "dependencies": ["${projectName}/team"],
       "metadata": {
         "priority": "high",
         "tags": ["team-structure", "planning"],
@@ -95,7 +123,7 @@
       "title": "Product Design Phase",
       "description": "Product design, user research, and requirements gathering",
       "type": "MILESTONE",
-      "dependencies": ["${projectName}/team/initialization"],
+      "dependencies": ["${projectName}", "${projectName}/team/initialization"],
       "metadata": {
         "priority": "high",
         "tags": ["product-design", "research"],
@@ -134,7 +162,7 @@
       "title": "System Architecture Phase",
       "description": "Technical architecture design and system planning",
       "type": "MILESTONE",
-      "dependencies": ["${projectName}/product-design"],
+      "dependencies": ["${projectName}", "${projectName}/product-design"],
       "metadata": {
         "priority": "high",
         "tags": ["architecture", "technical-design"],
@@ -173,7 +201,7 @@
       "title": "Security Engineering Phase",
       "description": "Security architecture and implementation planning",
       "type": "MILESTONE",
-      "dependencies": ["${projectName}/architecture"],
+      "dependencies": ["${projectName}", "${projectName}/architecture"],
       "metadata": {
         "priority": "high",
         "tags": ["security", "compliance"],
@@ -212,7 +240,7 @@
       "title": "Infrastructure and DevOps Phase",
       "description": "Infrastructure setup and automation implementation",
       "type": "MILESTONE",
-      "dependencies": ["${projectName}/architecture"],
+      "dependencies": ["${projectName}", "${projectName}/architecture"],
       "metadata": {
         "priority": "high",
         "tags": ["devops", "infrastructure"],
@@ -252,6 +280,7 @@
       "description": "Technical implementation coordination and quality assurance",
       "type": "MILESTONE",
       "dependencies": [
+        "${projectName}",
         "${projectName}/architecture",
         "${projectName}/security",
         "${projectName}/infrastructure"
@@ -294,7 +323,7 @@
       "title": "Ongoing Team Coordination",
       "description": "Continuous team alignment and progress tracking",
       "type": "MILESTONE",
-      "dependencies": ["${projectName}/development"],
+      "dependencies": ["${projectName}/team", "${projectName}/development"],
       "metadata": {
         "priority": "high",
         "tags": ["coordination", "agile"],

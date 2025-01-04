@@ -45,10 +45,37 @@
   ],
   "tasks": [
     {
+      "path": "${projectName}",
+      "title": "Project Root",
+      "description": "Root task for project organization",
+      "type": "MILESTONE",
+      "metadata": {
+        "priority": "high",
+        "tags": ["project-root"]
+      }
+    },
+    {
+      "path": "${projectName}/architecture",
+      "title": "System Architecture",
+      "description": "Overall system architecture and design planning",
+      "type": "MILESTONE",
+      "dependencies": ["${projectName}"],
+      "metadata": {
+        "priority": "high",
+        "tags": ["architecture", "planning"],
+        "acceptanceCriteria": [
+          "Architecture requirements analyzed",
+          "System design completed",
+          "Technology decisions documented"
+        ]
+      }
+    },
+    {
       "path": "${projectName}/architecture/requirements",
       "title": "Architecture Requirements Analysis",
       "description": "Analyze and document system requirements and constraints",
       "type": "MILESTONE",
+      "dependencies": ["${projectName}/architecture"],
       "metadata": {
         "priority": "high",
         "tags": ["requirements", "analysis"],

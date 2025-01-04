@@ -29,10 +29,38 @@
   ],
   "tasks": [
     {
+      "path": "${projectName}",
+      "title": "Project Root",
+      "description": "Root task for project organization",
+      "type": "MILESTONE",
+      "metadata": {
+        "priority": "high",
+        "tags": ["project-root"]
+      }
+    },
+    {
+      "path": "${projectName}/design",
+      "title": "Product Design",
+      "description": "Overall product design process and deliverables",
+      "type": "MILESTONE",
+      "dependencies": ["${projectName}"],
+      "metadata": {
+        "priority": "high",
+        "tags": ["design", "product"],
+        "acceptanceCriteria": [
+          "Product discovery completed",
+          "Requirements documented",
+          "Design system established",
+          "Prototypes validated"
+        ]
+      }
+    },
+    {
       "path": "${projectName}/design/discovery",
       "title": "Product Discovery",
       "description": "Initial product research and requirements gathering",
       "type": "MILESTONE",
+      "dependencies": ["${projectName}/design"],
       "metadata": {
         "priority": "high",
         "tags": ["discovery", "research"],

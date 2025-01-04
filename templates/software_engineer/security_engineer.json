@@ -48,10 +48,38 @@
   ],
   "tasks": [
     {
+      "path": "${projectName}",
+      "title": "Project Root",
+      "description": "Root task for project organization",
+      "type": "MILESTONE",
+      "metadata": {
+        "priority": "high",
+        "tags": ["project-root"]
+      }
+    },
+    {
+      "path": "${projectName}/security",
+      "title": "Security Engineering",
+      "description": "Overall security architecture, implementation, and compliance",
+      "type": "MILESTONE",
+      "dependencies": ["${projectName}"],
+      "metadata": {
+        "priority": "high",
+        "tags": ["security", "compliance"],
+        "acceptanceCriteria": [
+          "Security requirements analyzed",
+          "Threat modeling completed",
+          "Security controls implemented",
+          "Compliance requirements met"
+        ]
+      }
+    },
+    {
       "path": "${projectName}/security/requirements",
       "title": "Security Requirements Analysis",
       "description": "Analyze and document security requirements and compliance needs",
       "type": "MILESTONE",
+      "dependencies": ["${projectName}/security"],
       "metadata": {
         "priority": "high",
         "tags": ["security", "requirements"],

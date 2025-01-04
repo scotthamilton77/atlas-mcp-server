@@ -43,6 +43,16 @@
   ],
   "tasks": [
     {
+      "path": "${projectName}",
+      "title": "Project Root",
+      "description": "Root task for project organization",
+      "type": "MILESTONE",
+      "metadata": {
+        "priority": "high",
+        "tags": ["project-root"]
+      }
+    },
+    {
       "path": "${projectName}/planning",
       "title": "Project Planning",
       "description": "Initial project planning and architecture decisions",
