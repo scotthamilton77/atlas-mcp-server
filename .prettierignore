@@ -1,0 +1,18 @@
+# Build output
+build/
+dist/
+
+# Dependencies
+node_modules/
+
+# Build scripts
+scripts/
+
+# Coverage reports
+coverage/
+
+# Logs
+*.log
+
+# Environment files
+.env*

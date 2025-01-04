@@ -1,3 +1,17 @@
+/**
+ * Primary platform utilities for the Atlas MCP Server runtime.
+ *
+ * NOTE: This is the main platform utilities implementation used during normal server operation.
+ * For build and installation scripts, we use a simplified version in scripts/platform-utils.js
+ * to avoid circular dependencies during the build process (since TypeScript files aren't compiled yet).
+ *
+ * Key differences from scripts/platform-utils.js:
+ * - Full TypeScript implementation with type safety
+ * - More comprehensive platform-specific functionality
+ * - Advanced features like memory management and process signals
+ * - Used by the running server, not build scripts
+ */
+
 import { homedir, platform, totalmem } from 'os';
 import { join } from 'path';
 import { promises as fs } from 'fs';
@@ -12,17 +26,19 @@ export class PlatformPaths {
   private static readonly PLATFORM = platform();
 
   static getDocumentsDir(): string {
+    const home = homedir();
+    const xdgDocuments = process.env.XDG_DOCUMENTS_DIR;
+
     switch (this.PLATFORM) {
       case 'win32':
         return process.env.USERPROFILE
           ? join(process.env.USERPROFILE, 'Documents')
-          : join(homedir(), 'Documents');
+          : join(home, 'Documents');
       case 'darwin':
-        return join(homedir(), 'Documents');
+        return join(home, 'Documents');
       default:
         // Linux and others - check XDG first
-        const xdgDocuments = process.env.XDG_DOCUMENTS_DIR;
-        return xdgDocuments || join(homedir(), 'Documents');
+        return xdgDocuments || join(home, 'Documents');
     }
   }
 
@@ -151,13 +167,13 @@ export class ProcessManager {
   private static cleanupHandlers: Array<() => Promise<void>> = [];
   private static isShuttingDown = false;
   private static logger?: {
-    info: (message: string, ...args: any[]) => void;
-    error: (message: string, ...args: any[]) => void;
+    info: (message: string, ...args: unknown[]) => void;
+    error: (message: string, ...args: unknown[]) => void;
   };
 
   static setLogger(logger: {
-    info: (message: string, ...args: any[]) => void;
-    error: (message: string, ...args: any[]) => void;
+    info: (message: string, ...args: unknown[]) => void;
+    error: (message: string, ...args: unknown[]) => void;
   }): void {
     this.logger = logger;
   }

@@ -38,7 +38,9 @@ atlas-mcp-server
 │   ├── task-maintenance.md
 │   └── task-update.md
 ├── scripts/
+│   ├── build-utils.js
 │   ├── generate-tree.js
+│   ├── platform-utils.js
 │   ├── postinstall.js
 │   ├── prestart.js
 │   └── set-build-permissions.js

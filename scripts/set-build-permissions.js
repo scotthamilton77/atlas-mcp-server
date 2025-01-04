@@ -1,47 +1,25 @@
-import { promises as fs } from 'fs';
-import { platform } from 'os';
-import { join } from 'path';
+#!/usr/bin/env node
+/**
+ * Build permissions setup script.
+ * 
+ * Execution: Run as part of the build process
+ * Command: npm run build -> tsc -> set-build-permissions.js
+ * 
+ * Purpose:
+ * 1. Sets executable permissions on the compiled build/index.js
+ * 2. Runs in strict mode (will fail the build if permissions can't be set)
+ *    - Strict mode is appropriate here because the build files must exist
+ *    - Proper permissions are critical for the executable to work
+ * 
+ * This script runs after TypeScript compilation to ensure the build files
+ * are properly executable, especially on Unix-like systems where file
+ * permissions are enforced.
+ */
 
-const getFileMode = () => {
-    return platform() === 'win32' ? undefined : 0o755;
-};
+import { setBuildPermissions } from './build-utils.js';
 
-async function fileExists(path) {
-    try {
-        await fs.access(path);
-        return true;
-    } catch {
-        return false;
-    }
-}
-
-const setBuildPermissions = async () => {
-    const buildPath = join(process.cwd(), 'build', 'index.js');
-    const fileMode = getFileMode();
-
-    // Skip permission setting on Windows
-    if (fileMode === undefined) {
-        console.log('Skipping build permissions on Windows');
-        return;
-    }
-
-    try {
-        // Verify build file exists
-        if (!await fileExists(buildPath)) {
-            console.error('Build file not found. Please ensure TypeScript compilation succeeded.');
-            process.exit(1);
-        }
-
-        await fs.chmod(buildPath, fileMode);
-        console.log('Build permissions set successfully');
-    } catch (error) {
-        console.error('Failed to set build permissions:', error);
-        console.error('This may affect the executable nature of the build file.');
-        process.exit(1);
-    }
-};
-
-setBuildPermissions().catch(error => {
-    console.error('Unexpected error during permission setting:', error);
-    process.exit(1);
+// Set build permissions with strict error handling
+setBuildPermissions(true).catch(error => {
+  console.error('Unexpected error:', error);
+  process.exit(1);
 });
