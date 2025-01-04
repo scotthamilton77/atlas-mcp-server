@@ -1,155 +1,104 @@
-import fs from 'fs/promises';
+import { promises as fs } from 'fs';
 import path from 'path';
 import { Task } from '../types/task.js';
-import { Logger } from '../logging/index.js';
-import { JsonFormatter } from './formatters/json-formatter.js';
-import { MarkdownFormatter } from './formatters/markdown-formatter.js';
-import { TaskFormatter } from './formatters/base-formatter.js';
+import { PlatformCapabilities, PlatformPaths } from '../utils/platform-utils.js';
 
-export interface VisualizerConfig {
+interface TaskVisualizerConfig {
   outputDir: string;
-  formats: ('json' | 'markdown')[];
+  formats?: ('json' | 'markdown')[];
   autoUpdate?: boolean;
-  prettify?: boolean;
 }
 
 /**
- * Manages task visualization in various formats
+ * Handles task visualization with platform-agnostic file operations
  */
 export class TaskVisualizer {
-  private readonly logger: Logger;
-  private readonly formatters: Map<string, TaskFormatter>;
-  private readonly config: Required<VisualizerConfig>;
-  private readonly sessionFiles: Map<string, string>;
+  private readonly outputDir: string;
+  private readonly formats: ('json' | 'markdown')[];
+  private readonly autoUpdate: boolean;
+  private currentFiles: Set<string> = new Set();
 
-  constructor(config: VisualizerConfig) {
-    this.logger = Logger.getInstance().child({ component: 'TaskVisualizer' });
-
-    // Initialize formatters
-    this.formatters = new Map<string, TaskFormatter>();
-    this.formatters.set('json', new JsonFormatter());
-    this.formatters.set('markdown', new MarkdownFormatter());
-
-    // Set default config values
-    this.config = {
-      outputDir: config.outputDir,
-      formats: config.formats,
-      autoUpdate: config.autoUpdate ?? true,
-      prettify: config.prettify ?? true,
-    };
-
-    // Initialize session files map
-    this.sessionFiles = new Map();
-
-    // Ensure output directory exists
-    this.initializeOutputDir().catch(error => {
-      this.logger.error('Failed to initialize output directory', { error });
-    });
+  constructor(config: TaskVisualizerConfig) {
+    this.outputDir = PlatformPaths.normalizePath(config.outputDir);
+    this.formats = config.formats || ['markdown'];
+    this.autoUpdate = config.autoUpdate || false;
   }
 
   /**
-   * Update visualizations for tasks
+   * Update task visualizations with platform-appropriate file handling
    */
   async updateVisualizations(tasks: Task[]): Promise<void> {
-    try {
-      await Promise.all(this.config.formats.map(format => this.writeVisualization(tasks, format)));
+    const timestamp = new Date().toISOString().split('T')[0];
+    const sessionId = timestamp;
 
-      this.logger.info('Task visualizations updated', {
-        taskCount: tasks.length,
-        formats: this.config.formats,
-      });
-    } catch (error) {
-      this.logger.error('Failed to update visualizations', { error });
-      throw error;
+    for (const format of this.formats) {
+      const extension = format === 'markdown' ? 'md' : format;
+      const filename = PlatformPaths.normalizePath(
+        path.join(this.outputDir, `tasks-${sessionId}.${extension}`)
+      );
+
+      // Create directory with platform-appropriate permissions
+      await PlatformCapabilities.ensureDirectoryPermissions(path.dirname(filename), 0o755);
+
+      // Generate and write content
+      const content =
+        format === 'markdown' ? this.generateMarkdown(tasks) : this.generateJson(tasks);
+      await fs.writeFile(filename, content, 'utf-8');
+      this.currentFiles.add(filename);
     }
   }
 
   /**
-   * Write visualization in specified format
-   */
-  private async writeVisualization(tasks: Task[], format: string): Promise<void> {
-    const formatter = this.formatters.get(format);
-    if (!formatter) {
-      throw new Error(`Unsupported format: ${format}`);
-    }
-
-    try {
-      const content = formatter.format(tasks);
-      const filename = await this.getSessionFile(format);
-      await fs.writeFile(filename, content, 'utf8');
-
-      this.logger.debug('Visualization written', {
-        format,
-        filename,
-        taskCount: tasks.length,
-      });
-    } catch (error) {
-      this.logger.error('Failed to write visualization', {
-        error,
-        format,
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * Get or create session file for format
-   */
-  private async getSessionFile(format: string): Promise<string> {
-    // Check if we already have a session file for this format
-    const existing = this.sessionFiles.get(format);
-    if (existing) {
-      return existing;
-    }
-
-    // Create new session file
-    const sessionId = new Date().toISOString().split('T')[0]; // Use date as session ID
-    const extension = format === 'markdown' ? 'md' : format;
-    const filename = path.join(this.config.outputDir, `tasks-${sessionId}.${extension}`);
-
-    // Store in session files map
-    this.sessionFiles.set(format, filename);
-
-    return filename;
-  }
-
-  /**
-   * Initialize output directory
-   */
-  private async initializeOutputDir(): Promise<void> {
-    try {
-      await fs.mkdir(this.config.outputDir, { recursive: true });
-    } catch (error) {
-      this.logger.error('Failed to create output directory', {
-        error,
-        dir: this.config.outputDir,
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * Clean up old visualization files
+   * Clean up old visualization files with platform-agnostic path handling
    */
   async cleanupOldFiles(): Promise<void> {
     try {
-      const files = await fs.readdir(this.config.outputDir);
-
-      // Get current session files
-      const currentFiles = new Set(this.sessionFiles.values());
-
-      // Delete old files
-      await Promise.all(
-        files
-          .map(file => path.join(this.config.outputDir, file))
-          .filter(file => !currentFiles.has(file))
-          .map(file => fs.unlink(file))
+      const files = await fs.readdir(this.outputDir);
+      const currentFiles = new Set(
+        Array.from(this.currentFiles).map(file => PlatformPaths.normalizePath(file))
       );
 
-      this.logger.debug('Cleaned up old visualization files');
+      for (const file of files) {
+        const fullPath = PlatformPaths.normalizePath(path.join(this.outputDir, file));
+        if (!currentFiles.has(fullPath) && /^tasks-.*\.(json|md)$/.test(file)) {
+          await fs.unlink(fullPath);
+        }
+      }
     } catch (error) {
-      this.logger.error('Failed to cleanup old files', { error });
-      throw error;
+      // Ignore cleanup errors
+      console.warn('Failed to cleanup old visualization files:', error);
     }
+  }
+
+  private generateMarkdown(tasks: Task[]): string {
+    return (
+      `# Task Visualization\n\nGenerated: ${new Date().toISOString()}\n\n` +
+      tasks.map(task => this.formatTaskMarkdown(task)).join('\n\n')
+    );
+  }
+
+  private generateJson(tasks: Task[]): string {
+    return JSON.stringify(
+      {
+        generated: new Date().toISOString(),
+        tasks: tasks.map(task => ({
+          ...task,
+          visualizationMetadata: {
+            platform: process.platform,
+            timestamp: new Date().toISOString(),
+          },
+        })),
+      },
+      null,
+      2
+    );
+  }
+
+  private formatTaskMarkdown(task: Task, level = 0): string {
+    const indent = '  '.repeat(level);
+    const status = task.status ? ` [${task.status}]` : '';
+    const metadata = task.metadata ? `\n${indent}Metadata: ${JSON.stringify(task.metadata)}` : '';
+
+    return `${indent}- ${task.path}${status}${metadata}`;
   }
 }

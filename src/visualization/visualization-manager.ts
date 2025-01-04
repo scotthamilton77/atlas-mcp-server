@@ -4,10 +4,11 @@ import { TaskVisualizer } from './task-visualizer.js';
 import { Task } from '../types/task.js';
 import { EventTypes, TaskEvent } from '../types/events.js';
 import { TaskManager } from '../task/manager/task-manager.js';
+import { PlatformCapabilities, PlatformPaths } from '../utils/platform-utils.js';
 import path from 'path';
 
 /**
- * Manages task visualization system
+ * Manages task visualization system with platform-agnostic file handling
  */
 export class VisualizationManager {
   private static instance: VisualizationManager;
@@ -24,7 +25,8 @@ export class VisualizationManager {
     this.logger = Logger.getInstance().child({ component: 'VisualizationManager' });
     this.eventManager = EventManager.getInstance();
 
-    const visualizerDir = path.join(config.baseDir, 'visualizations');
+    // Use platform-agnostic path handling
+    const visualizerDir = PlatformPaths.normalizePath(path.join(config.baseDir, 'visualizations'));
     this.visualizer = new TaskVisualizer({
       outputDir: visualizerDir,
       formats: ['markdown', 'json'],
@@ -62,12 +64,17 @@ export class VisualizationManager {
   }
 
   /**
-   * Initialize visualization directory
+   * Initialize visualization directory with platform-appropriate permissions
    */
   private async initializeVisualizationDir(): Promise<void> {
     try {
-      const visualizerDir = path.join(this.config.baseDir, 'visualizations');
+      const visualizerDir = PlatformPaths.normalizePath(
+        path.join(this.config.baseDir, 'visualizations')
+      );
       this.logger.info('Initializing visualization directory', { dir: visualizerDir });
+
+      // Create directory with platform-appropriate permissions
+      await PlatformCapabilities.ensureDirectoryPermissions(visualizerDir, 0o755);
 
       // Get initial tasks
       const tasks = await this.getAllTasks();
