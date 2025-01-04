@@ -6,7 +6,6 @@ import { PlatformCapabilities, PlatformPaths } from '../utils/platform-utils.js'
 interface TaskVisualizerConfig {
   outputDir: string;
   formats?: ('json' | 'markdown')[];
-  autoUpdate?: boolean;
 }
 
 /**
@@ -15,13 +14,11 @@ interface TaskVisualizerConfig {
 export class TaskVisualizer {
   private readonly outputDir: string;
   private readonly formats: ('json' | 'markdown')[];
-  private readonly autoUpdate: boolean;
   private currentFiles: Set<string> = new Set();
 
   constructor(config: TaskVisualizerConfig) {
     this.outputDir = PlatformPaths.normalizePath(config.outputDir);
     this.formats = config.formats || ['markdown'];
-    this.autoUpdate = config.autoUpdate || false;
   }
 
   /**
