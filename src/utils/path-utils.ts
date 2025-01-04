@@ -1,185 +1,133 @@
-import { createError, ErrorCodes } from '../errors/index.js';
-
 /**
- * Path validation, normalization and manipulation utilities
+ * Path utilities for task and template management
  */
 export class PathUtils {
-  private static readonly PATH_SEPARATOR = '/';
-  private static readonly VALID_PATH_REGEX = /^[a-zA-Z0-9-_/]+$/;
-  private static readonly MAX_PATH_LENGTH = 255;
-  private static readonly MAX_SEGMENTS = 10;
-
   /**
-   * Normalizes a path by:
-   * 1. Removing duplicate segments
-   * 2. Enforcing consistent separators
-   * 3. Removing empty segments
-   * 4. Validating format
+   * Normalize a path by removing leading/trailing slashes and extra spaces
    */
   static normalizePath(path: string): string {
-    // Validate basic path requirements
-    this.validatePath(path);
-
-    // Split path and remove duplicates while preserving order
-    const segments = this.splitPath(path).filter(
-      (segment, index, array) => array.indexOf(segment) === index
-    );
-
-    return segments.join(this.PATH_SEPARATOR);
+    return path
+      .trim()
+      .replace(/^\/+|\/+$/g, '') // Remove leading/trailing slashes
+      .replace(/\/+/g, '/'); // Replace multiple slashes with single slash
   }
 
   /**
-   * Checks if a path contains duplicate segments
-   */
-  static hasDuplicateSegments(path: string): boolean {
-    const segments = this.splitPath(path);
-    const uniqueSegments = new Set(segments);
-    return segments.length !== uniqueSegments.size;
-  }
-
-  /**
-   * Gets the depth of a path
-   */
-  static getPathDepth(path: string): number {
-    return this.splitPath(path).length;
-  }
-
-  /**
-   * Validates a path string
-   */
-  static validatePath(path: string): void {
-    if (!path) {
-      throw createError(
-        ErrorCodes.VALIDATION_ERROR,
-        'Path cannot be empty',
-        'PathUtils.validatePath',
-        'Please provide a valid path'
-      );
-    }
-
-    if (path.length > this.MAX_PATH_LENGTH) {
-      throw createError(
-        ErrorCodes.VALIDATION_ERROR,
-        `Path exceeds maximum length of ${this.MAX_PATH_LENGTH} characters`,
-        'PathUtils.validatePath',
-        'Path is too long'
-      );
-    }
-
-    if (!this.VALID_PATH_REGEX.test(path)) {
-      throw createError(
-        ErrorCodes.VALIDATION_ERROR,
-        'Path contains invalid characters',
-        'PathUtils.validatePath',
-        'Path can only contain letters, numbers, hyphens, and underscores'
-      );
-    }
-
-    const segments = this.splitPath(path);
-    if (segments.length > this.MAX_SEGMENTS) {
-      throw createError(
-        ErrorCodes.VALIDATION_ERROR,
-        `Path has too many segments (max: ${this.MAX_SEGMENTS})`,
-        'PathUtils.validatePath',
-        'Path has too many segments'
-      );
-    }
-
-    for (const segment of segments) {
-      if (!segment) {
-        throw createError(
-          ErrorCodes.VALIDATION_ERROR,
-          'Path contains empty segments',
-          'PathUtils.validatePath',
-          'Path segments cannot be empty'
-        );
-      }
-    }
-  }
-
-  /**
-   * Splits a path into segments
-   */
-  static splitPath(path: string): string[] {
-    return path.split(this.PATH_SEPARATOR).filter(Boolean);
-  }
-
-  /**
-   * Joins path segments
+   * Join path segments, ensuring proper normalization
    */
   static joinPath(...segments: string[]): string {
-    return segments.filter(Boolean).join(this.PATH_SEPARATOR);
+    return this.normalizePath(segments.join('/'));
   }
 
   /**
-   * Gets the parent path
+   * Get parent path from a path string
    */
-  static getParentPath(path: string): string {
-    const segments = this.splitPath(path);
-    if (segments.length <= 1) {
-      throw createError(
-        ErrorCodes.VALIDATION_ERROR,
-        'Cannot get parent of root path',
-        'PathUtils.getParentPath',
-        'This path has no parent'
-      );
-    }
-    return segments.slice(0, -1).join(this.PATH_SEPARATOR);
+  static getParentPath(path: string): string | undefined {
+    const normalized = this.normalizePath(path);
+    const lastSlashIndex = normalized.lastIndexOf('/');
+    return lastSlashIndex > 0 ? normalized.substring(0, lastSlashIndex) : undefined;
   }
 
   /**
-   * Gets the last segment of a path
+   * Get the last segment of a path
    */
-  static getBaseName(path: string): string {
-    const segments = this.splitPath(path);
-    if (!segments.length) {
-      throw createError(
-        ErrorCodes.VALIDATION_ERROR,
-        'Cannot get base name of empty path',
-        'PathUtils.getBaseName',
-        'Path is empty'
-      );
-    }
-    return segments[segments.length - 1];
+  static getLastSegment(path: string): string {
+    const normalized = this.normalizePath(path);
+    const lastSlashIndex = normalized.lastIndexOf('/');
+    return lastSlashIndex >= 0 ? normalized.substring(lastSlashIndex + 1) : normalized;
   }
 
   /**
-   * Checks if a path is a child of another path
+   * Check if a path is a child of another path
    */
   static isChildPath(parentPath: string, childPath: string): boolean {
-    if (!parentPath || !childPath) {
-      return false;
-    }
-    const parentSegments = this.splitPath(parentPath);
-    const childSegments = this.splitPath(childPath);
-    if (childSegments.length <= parentSegments.length) {
-      return false;
-    }
-    return parentSegments.every((segment, index) => segment === childSegments[index]);
+    const normalizedParent = this.normalizePath(parentPath);
+    const normalizedChild = this.normalizePath(childPath);
+    return (
+      normalizedChild.startsWith(normalizedParent + '/') &&
+      normalizedChild.length > normalizedParent.length + 1
+    );
   }
 
   /**
-   * Gets the relative path from one path to another
+   * Get path depth (number of segments)
    */
-  static getRelativePath(from: string, to: string): string {
-    const fromSegments = this.splitPath(from);
-    const toSegments = this.splitPath(to);
-    let commonPrefixLength = 0;
+  static getPathDepth(path: string): number {
+    return this.normalizePath(path).split('/').length;
+  }
 
-    // Find common prefix
-    while (
-      commonPrefixLength < fromSegments.length &&
-      commonPrefixLength < toSegments.length &&
-      fromSegments[commonPrefixLength] === toSegments[commonPrefixLength]
-    ) {
-      commonPrefixLength++;
+  /**
+   * Get path segments
+   */
+  static getPathSegments(path: string): string[] {
+    return this.normalizePath(path).split('/');
+  }
+
+  /**
+   * Check if path is valid (follows naming conventions)
+   */
+  static isValidPath(path: string): boolean {
+    // Must start with a letter
+    if (!/^[a-zA-Z]/.test(path)) {
+      return false;
     }
 
-    // Build relative path
-    const upCount = fromSegments.length - commonPrefixLength;
-    const upSegments = Array(upCount).fill('..');
-    const downSegments = toSegments.slice(commonPrefixLength);
+    // Check allowed characters
+    if (!/^[a-zA-Z0-9-_/]+$/.test(path)) {
+      return false;
+    }
 
-    return [...upSegments, ...downSegments].join(this.PATH_SEPARATOR);
+    // Check segment length
+    const segments = path.split('/');
+    if (segments.some(s => s.length > 50)) {
+      return false;
+    }
+
+    // Check depth
+    if (segments.length > 10) {
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Get common parent path between two paths
+   */
+  static getCommonParentPath(path1: string, path2: string): string | undefined {
+    const segments1 = this.getPathSegments(path1);
+    const segments2 = this.getPathSegments(path2);
+    const commonSegments: string[] = [];
+
+    for (let i = 0; i < Math.min(segments1.length, segments2.length); i++) {
+      if (segments1[i] === segments2[i]) {
+        commonSegments.push(segments1[i]);
+      } else {
+        break;
+      }
+    }
+
+    return commonSegments.length > 0 ? commonSegments.join('/') : undefined;
+  }
+
+  /**
+   * Get relative path from one path to another
+   */
+  static getRelativePath(from: string, to: string): string {
+    const fromSegments = this.getPathSegments(from);
+    const toSegments = this.getPathSegments(to);
+    const commonParent = this.getCommonParentPath(from, to);
+
+    if (!commonParent) {
+      return to; // No common parent, return absolute path
+    }
+
+    const commonSegments = this.getPathSegments(commonParent);
+    const upCount = fromSegments.length - commonSegments.length;
+    const downSegments = toSegments.slice(commonSegments.length);
+
+    const relativePath = [...Array(upCount).fill('..'), ...downSegments];
+
+    return relativePath.join('/');
   }
 }
