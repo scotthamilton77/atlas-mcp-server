@@ -183,6 +183,31 @@ npm install
 npm run build
 ```
 
+### Build System
+
+ATLAS uses a robust build system with several key components:
+
+- **Build Scripts**: Located in `scripts/` directory:
+  - `build-utils.js`: Core utilities for build operations
+  - `platform-utils.js`: Platform-specific utilities for build scripts
+  - `postinstall.js`: Post-installation setup
+  - `prestart.js`: Pre-start validation
+  - `set-build-permissions.js`: Build file permission management
+
+- **Platform Utilities**:
+  - Build-time: Simplified version in `scripts/platform-utils.js`
+  - Runtime: Full TypeScript implementation in `src/utils/platform-utils.ts`
+
+- **NPM Scripts**:
+  ```bash
+  npm run build     # TypeScript compilation + permission setup
+  npm run clean     # Remove build artifacts
+  npm run dev       # Development mode with watch
+  npm run tree      # Generate directory structure
+  ```
+
+The build system ensures proper setup across different platforms (Windows, macOS, Linux) while maintaining security through appropriate file permissions and validation.
+
 ## Configuration
 
 ### MCP Client Settings
