@@ -40,6 +40,15 @@ export interface TemplateTask {
 }
 
 /**
+ * Template metadata
+ */
+export interface TemplateMetadata {
+  created?: string;
+  version?: string;
+  [key: string]: unknown;
+}
+
+/**
  * Represents a complete task template
  */
 export interface TaskTemplate {
@@ -51,6 +60,14 @@ export interface TaskTemplate {
   tags?: string[];
   variables: TemplateVariable[];
   tasks: TemplateTask[];
+  metadata?: TemplateMetadata;
+}
+
+/**
+ * Type guard for template object
+ */
+export function isTemplateObject(obj: unknown): obj is Record<string, unknown> {
+  return typeof obj === 'object' && obj !== null;
 }
 
 /**
@@ -104,6 +121,16 @@ export const templateTaskSchema = z.object({
 });
 
 /**
+ * Template metadata validation schema
+ */
+export const templateMetadataSchema = z
+  .object({
+    created: z.string().optional(),
+    version: z.string().optional(),
+  })
+  .catchall(z.unknown());
+
+/**
  * Complete template validation schema
  */
 export const taskTemplateSchema = z.object({
@@ -115,6 +142,7 @@ export const taskTemplateSchema = z.object({
   tags: z.array(z.string().max(50)).max(20).optional(),
   variables: z.array(templateVariableSchema).max(50),
   tasks: z.array(templateTaskSchema).min(1).max(100),
+  metadata: templateMetadataSchema.optional(),
 });
 
 /**

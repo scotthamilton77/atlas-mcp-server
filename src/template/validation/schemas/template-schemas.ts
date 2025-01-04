@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { VALIDATION_CONSTRAINTS } from '../../../types/task-core.js';
-import { PathUtils } from '../../../utils/path-utils.js';
 
 /**
  * Template variable validation schema
