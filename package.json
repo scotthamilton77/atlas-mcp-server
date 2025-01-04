@@ -1,6 +1,6 @@
 {
   "name": "atlas-mcp-server",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "A Model Context Protocol server that enables LLMs to manage complex task hierarchies with dependency tracking, status management, and rich metadata support. Provides ACID-compliant storage with caching and batch processing capabilities.",
   "private": true,
   "type": "module",
@@ -34,24 +34,24 @@
   },
   "homepage": "https://github.com/cyanheads/atlas-mcp-server#readme",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.4",
+    "@modelcontextprotocol/sdk": "^1.1.0",
     "@types/better-sqlite3": "^7.6.12",
-    "@types/node": "^22.10.3",
+    "@types/node": "^22.10.5",
     "@types/sqlite3": "^3.1.11",
     "@types/uuid": "^10.0.0",
     "better-sqlite3": "^11.7.0",
     "concurrently": "^9.1.2",
     "detect-libc": "^2.0.3",
-    "dotenv": "^16.4.1",
+    "dotenv": "^16.4.7",
     "minimist": "^1.2.8",
-    "nanoid": "^5.0.4",
+    "nanoid": "^5.0.9",
     "nopt": "^8.0.0",
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7",
-    "typescript": "^5.3.3",
-    "uuid": "^11.0.0",
-    "winston": "^3.11.0",
-    "zod": "^3.22.4"
+    "typescript": "^5.7.2",
+    "uuid": "^11.0.3",
+    "winston": "^3.17.0",
+    "zod": "^3.24.1"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx}": [
@@ -70,8 +70,8 @@
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-prettier": "^5.2.1",
     "husky": "^9.1.7",
-    "lint-staged": "^15.2.0",
-    "prettier": "^3.2.4",
-    "typescript-eslint": "^8.18.2"
+    "lint-staged": "^15.3.0",
+    "prettier": "^3.4.2",
+    "typescript-eslint": "^8.19.0"
   }
 }
