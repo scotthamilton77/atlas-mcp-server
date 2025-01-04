@@ -35,7 +35,6 @@ export class TaskStore {
     this.visualizer = new TaskVisualizer({
       outputDir: visualizerDir,
       formats: ['markdown', 'json'],
-      autoUpdate: true,
     });
   }
 
