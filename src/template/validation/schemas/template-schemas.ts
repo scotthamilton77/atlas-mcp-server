@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { VALIDATION_CONSTRAINTS } from '../../../types/task-core.js';
+import { PathUtils } from '../../../utils/path-utils.js';
 
 /**
  * Template variable validation schema
@@ -37,10 +38,38 @@ export const templateTaskMetadataSchema = z
   );
 
 /**
- * Template task validation schema
+ * Template task validation schema with enhanced path validation
  */
 export const templateTaskSchema = z.object({
-  path: z.string().min(1).max(1000),
+  path: z
+    .string()
+    .min(1)
+    .max(1000)
+    .refine(
+      path => {
+        // Check path format
+        if (!path.match(VALIDATION_CONSTRAINTS.PATH_ALLOWED_CHARS)) {
+          return false;
+        }
+        // Check path depth
+        if (path.split('/').length > VALIDATION_CONSTRAINTS.MAX_PATH_DEPTH) {
+          return false;
+        }
+        // Check segment length
+        if (
+          path
+            .split('/')
+            .some(segment => segment.length > VALIDATION_CONSTRAINTS.MAX_SEGMENT_LENGTH)
+        ) {
+          return false;
+        }
+        return true;
+      },
+      {
+        message:
+          'Invalid path format. Must use forward slashes, valid characters, and respect length limits.',
+      }
+    ),
   title: z.string().min(1).max(200),
   description: z.string().max(2000).optional(),
   type: z.enum(['TASK', 'MILESTONE']),
@@ -49,7 +78,7 @@ export const templateTaskSchema = z.object({
 });
 
 /**
- * Complete template validation schema
+ * Complete template validation schema with hierarchy validation
  */
 export const taskTemplateSchema = z.object({
   id: z.string().min(1).max(100),
@@ -59,7 +88,92 @@ export const taskTemplateSchema = z.object({
   author: z.string().max(100).optional(),
   tags: z.array(z.string().max(50)).max(20).optional(),
   variables: z.array(templateVariableSchema).max(50),
-  tasks: z.array(templateTaskSchema).min(1).max(100),
+  tasks: z
+    .array(templateTaskSchema)
+    .min(1)
+    .max(100)
+    .refine(
+      tasks => {
+        // Build set of all task paths
+        const paths = new Set(tasks.map(t => t.path));
+
+        // Check that all parent paths exist
+        for (const task of tasks) {
+          const parentPath = PathUtils.getParentPath(task.path);
+          if (parentPath && !paths.has(parentPath)) {
+            return false;
+          }
+        }
+
+        // Check for duplicate paths
+        return paths.size === tasks.length;
+      },
+      {
+        message:
+          'Invalid task hierarchy. All parent paths must exist within the template and paths must be unique.',
+      }
+    )
+    .refine(
+      tasks => {
+        // Check dependencies exist
+        for (const task of tasks) {
+          if (task.dependencies) {
+            for (const dep of task.dependencies) {
+              if (!tasks.some(t => t.path === dep)) {
+                return false;
+              }
+            }
+          }
+        }
+        return true;
+      },
+      {
+        message:
+          'Invalid dependencies. All dependencies must reference existing tasks within the template.',
+      }
+    )
+    .refine(
+      tasks => {
+        // Check for circular dependencies
+        const visited = new Set<string>();
+        const recursionStack = new Set<string>();
+
+        const hasCycle = (path: string): boolean => {
+          if (recursionStack.has(path)) {
+            return true;
+          }
+          if (visited.has(path)) {
+            return false;
+          }
+
+          visited.add(path);
+          recursionStack.add(path);
+
+          const task = tasks.find(t => t.path === path);
+          if (task?.dependencies) {
+            for (const dep of task.dependencies) {
+              if (hasCycle(dep)) {
+                return true;
+              }
+            }
+          }
+
+          recursionStack.delete(path);
+          return false;
+        };
+
+        for (const task of tasks) {
+          if (hasCycle(task.path)) {
+            return false;
+          }
+        }
+
+        return true;
+      },
+      {
+        message: 'Invalid dependencies. Circular dependencies detected.',
+      }
+    ),
 });
 
 /**
