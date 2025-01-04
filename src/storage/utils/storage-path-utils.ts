@@ -6,7 +6,7 @@ import { join } from 'path';
 /**
  * Storage-specific path utilities
  */
-export class StoragePathUtils extends PathUtils {
+export class StoragePathUtils {
   private static readonly STORAGE_PATH_REGEX = /^[a-zA-Z0-9-_/.]+$/;
   private static readonly STORAGE_FILE_EXTENSIONS = ['.db', '.sqlite', '.sqlite3'];
   private static readonly MAX_FILENAME_LENGTH = 100;
@@ -16,7 +16,7 @@ export class StoragePathUtils extends PathUtils {
    */
   static validateStoragePath(path: string): void {
     // First apply base path validation
-    this.validatePath(path);
+    PathUtils.isValidPath(path);
 
     if (!this.STORAGE_PATH_REGEX.test(path)) {
       throw createError(
@@ -27,7 +27,7 @@ export class StoragePathUtils extends PathUtils {
       );
     }
 
-    const filename = this.getBaseName(path);
+    const filename = PathUtils.getLastSegment(path);
     if (filename.length > this.MAX_FILENAME_LENGTH) {
       throw createError(
         ErrorCodes.VALIDATION_ERROR,
@@ -52,7 +52,7 @@ export class StoragePathUtils extends PathUtils {
    * Gets file extension including dot
    */
   static getFileExtension(path: string): string {
-    const filename = this.getBaseName(path);
+    const filename = PathUtils.getLastSegment(path);
     const dotIndex = filename.lastIndexOf('.');
     return dotIndex > -1 ? filename.slice(dotIndex) : '';
   }
