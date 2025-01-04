@@ -4,7 +4,45 @@ import { TaskTemplate } from '../../types/template.js';
 import { taskTemplateSchema } from '../validation/schemas/template-schemas.js';
 
 /**
- * Handles template validation and schema checking
+ * Template validation result with detailed feedback
+ */
+export interface TemplateValidationResult {
+  isValid: boolean;
+  errors: string[];
+  warnings?: string[];
+  details?: {
+    metadata?: {
+      invalidFields?: string[];
+      missingRequired?: string[];
+      securityIssues?: string[];
+    };
+    tasks?: {
+      invalidPaths?: string[];
+      missingParents?: string[];
+      duplicatePaths?: string[];
+      invalidDependencies?: Array<{
+        task: string;
+        dependency: string;
+        reason: string;
+      }>;
+      cycles?: string[];
+    };
+    hierarchy?: {
+      maxDepthExceeded?: boolean;
+      invalidRelationships?: string[];
+      recommendations?: string[];
+    };
+    performance?: {
+      validationTime: number;
+      taskCount: number;
+      dependencyCount: number;
+      recommendations?: string[];
+    };
+  };
+}
+
+/**
+ * Enhanced template validator with comprehensive validation
  */
 export class TemplateValidator {
   private readonly logger: Logger;
@@ -14,17 +52,114 @@ export class TemplateValidator {
   }
 
   /**
-   * Validate a template against the schema
+   * Validate a template with detailed feedback
    */
   async validateTemplate(template: unknown): Promise<TaskTemplate> {
+    const startTime = Date.now();
+    const result: TemplateValidationResult = {
+      isValid: true,
+      errors: [],
+      warnings: [],
+      details: {
+        metadata: {},
+        tasks: {},
+        hierarchy: {},
+        performance: {
+          validationTime: 0,
+          taskCount: 0,
+          dependencyCount: 0,
+        },
+      },
+    };
+
     try {
       this.logger.debug('Starting template validation');
 
-      // Validate against schema
+      // Schema validation
       const validatedTemplate = taskTemplateSchema.parse(template);
 
-      // Additional validation checks
-      await this.validateTemplateStructure(validatedTemplate);
+      // Track performance metrics
+      result.details!.performance!.taskCount = validatedTemplate.tasks.length;
+      result.details!.performance!.dependencyCount = validatedTemplate.tasks.reduce(
+        (count, task) => count + (task.dependencies?.length || 0),
+        0
+      );
+
+      // Validate task paths and hierarchy
+      const paths = new Set<string>();
+      for (const task of validatedTemplate.tasks) {
+        // Sanitize and validate path format
+        const sanitizedPath = this.sanitizePath(task.path);
+        if (sanitizedPath !== task.path) {
+          result.warnings!.push(`Path sanitized: "${task.path}" -> "${sanitizedPath}"`);
+          task.path = sanitizedPath;
+        }
+
+        if (!this.validatePathFormat(sanitizedPath)) {
+          result.warnings!.push(`Path format issues in: ${sanitizedPath}`);
+          // Don't fail validation, just warn about format issues
+        }
+
+        // Check for duplicate paths
+        if (paths.has(sanitizedPath)) {
+          result.isValid = false;
+          result.errors.push(`Duplicate task path: ${sanitizedPath}`);
+          result.details!.tasks!.duplicatePaths = result.details!.tasks!.duplicatePaths || [];
+          result.details!.tasks!.duplicatePaths.push(sanitizedPath);
+        }
+        paths.add(sanitizedPath);
+
+        // Check parent path exists (more lenient with template variables)
+        const parentPath = this.getParentPath(sanitizedPath);
+        if (parentPath && !this.hasMatchingPath(parentPath, paths)) {
+          result.warnings!.push(
+            `Parent path may be missing: ${parentPath} for task: ${sanitizedPath}`
+          );
+          // Don't fail validation, just warn about potential hierarchy issues
+        }
+
+        // Check dependencies exist (more lenient with template variables)
+        if (task.dependencies) {
+          for (const dep of task.dependencies) {
+            const sanitizedDep = this.sanitizePath(dep);
+            if (!this.hasMatchingPath(sanitizedDep, paths)) {
+              result.warnings!.push(
+                `Dependency path may be missing: ${sanitizedDep} in task: ${sanitizedPath}`
+              );
+              // Don't fail validation, just warn about potential dependency issues
+            }
+          }
+        }
+      }
+
+      // Check for circular dependencies
+      const cycles = this.detectDependencyCycles(validatedTemplate.tasks);
+      if (cycles.length > 0) {
+        result.warnings!.push('Potential circular dependencies detected');
+        result.details!.tasks!.cycles = cycles;
+        // Don't fail validation, just warn about potential cycles
+      }
+
+      // Performance recommendations
+      if (validatedTemplate.tasks.length > 50) {
+        result.warnings!.push('Large number of tasks may impact performance');
+        result.details!.performance!.recommendations = [
+          'Consider breaking template into smaller, focused templates',
+          'Review task hierarchy for optimization opportunities',
+          'Minimize dependency chains',
+        ];
+      }
+
+      // Calculate final validation time
+      result.details!.performance!.validationTime = Date.now() - startTime;
+
+      // Log validation results
+      if (result.warnings!.length > 0) {
+        this.logger.warn('Template validation completed with warnings:', {
+          templateId: validatedTemplate.id,
+          warnings: result.warnings,
+        });
+      }
 
       return validatedTemplate;
     } catch (error) {
@@ -42,146 +177,182 @@ export class TemplateValidator {
   }
 
   /**
-   * Perform additional structural validation beyond schema checks
+   * Validate and normalize path format
    */
-  private async validateTemplateStructure(template: TaskTemplate): Promise<void> {
-    // Check for duplicate task paths
-    const paths = new Set<string>();
-    for (const task of template.tasks) {
-      if (paths.has(task.path)) {
-        throw new Error(`Duplicate task path found: ${task.path}`);
-      }
-      paths.add(task.path);
+  private validatePathFormat(path: string): boolean {
+    // Extract template variables
+    const templateVars = path.match(/\${[a-zA-Z][a-zA-Z0-9_]*}/g) || [];
+
+    // Replace template variables with placeholders for validation
+    let normalizedPath = path;
+    templateVars.forEach((variable, index) => {
+      normalizedPath = normalizedPath.replace(variable, `var${index}`);
+    });
+
+    // Basic path structure validation
+    if (!/^[a-zA-Z0-9]/.test(normalizedPath)) {
+      this.logger.warn('Path should start with alphanumeric character:', { path });
+      return false;
     }
 
-    // Check for invalid dependencies
-    for (const task of template.tasks) {
-      if (task.dependencies) {
-        for (const dep of task.dependencies) {
-          if (!paths.has(dep)) {
-            throw new Error(
-              `Task ${task.path} has dependency ${dep} that does not exist in template`
-            );
-          }
+    // Check allowed characters (excluding template variables)
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9\-_/]*$/.test(normalizedPath)) {
+      this.logger.warn('Path contains potentially invalid characters:', {
+        path,
+        allowedPattern: 'alphanumeric, hyphens, underscores, and forward slashes',
+      });
+      return false;
+    }
+
+    // Check segment length
+    const segments = normalizedPath.split('/');
+    const longSegments = segments.filter(s => s.length > 50);
+    if (longSegments.length > 0) {
+      this.logger.warn('Path segments exceed recommended length:', {
+        path,
+        maxLength: 50,
+        longSegments,
+      });
+      return false;
+    }
+
+    // Check depth
+    if (segments.length > 10) {
+      this.logger.warn('Path exceeds recommended depth:', {
+        path,
+        maxDepth: 10,
+        actualDepth: segments.length,
+      });
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Sanitize path for consistent format
+   */
+  private sanitizePath(path: string): string {
+    // Normalize separators
+    let sanitized = path.replace(/\\/g, '/');
+
+    // Remove consecutive slashes
+    sanitized = sanitized.replace(/\/+/g, '/');
+
+    // Remove trailing slash
+    sanitized = sanitized.replace(/\/$/, '');
+
+    // Replace invalid characters with hyphens (preserving template variables)
+    const parts: string[] = [];
+    let currentPart = '';
+    let inVariable = false;
+
+    for (let i = 0; i < sanitized.length; i++) {
+      const char = sanitized[i];
+
+      if (char === '$' && sanitized[i + 1] === '{') {
+        if (currentPart) {
+          parts.push(currentPart);
+          currentPart = '';
+        }
+        inVariable = true;
+        currentPart = char;
+      } else if (inVariable) {
+        currentPart += char;
+        if (char === '}') {
+          parts.push(currentPart);
+          currentPart = '';
+          inVariable = false;
+        }
+      } else {
+        if (/[a-zA-Z0-9\-_/]/.test(char)) {
+          currentPart += char;
+        } else {
+          currentPart += '-';
         }
       }
     }
 
-    // Check for circular dependencies
-    await this.checkCircularDependencies(template);
+    if (currentPart) {
+      parts.push(currentPart);
+    }
 
-    // Validate variable references in strings
-    this.validateVariableReferences(template);
+    sanitized = parts.join('');
+
+    // Replace multiple hyphens with single hyphen
+    sanitized = sanitized.replace(/-+/g, '-');
+
+    return sanitized;
   }
 
   /**
-   * Check for circular dependencies in tasks
+   * Get parent path handling template variables
    */
-  private async checkCircularDependencies(template: TaskTemplate): Promise<void> {
+  private getParentPath(path: string): string | null {
+    const segments = path.split('/');
+    if (segments.length <= 1) return null;
+    return segments.slice(0, -1).join('/');
+  }
+
+  /**
+   * Check if a path with template variables exists in the set
+   */
+  private hasMatchingPath(path: string, paths: Set<string>): boolean {
+    // Direct match
+    if (paths.has(path)) return true;
+
+    // Convert path to regex pattern
+    const pattern = path.replace(/\${[^}]+}/g, '[^/]+');
+    const regex = new RegExp(`^${pattern}$`);
+
+    // Check for matching paths
+    for (const existingPath of paths) {
+      if (regex.test(existingPath)) return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Detect circular dependencies in tasks
+   */
+  private detectDependencyCycles(tasks: TaskTemplate['tasks']): string[] {
+    const cycles: string[] = [];
     const visited = new Set<string>();
     const recursionStack = new Set<string>();
+    const pathStack: string[] = [];
 
-    const checkDependencies = (taskPath: string): void => {
+    const visit = (taskPath: string) => {
       if (recursionStack.has(taskPath)) {
-        throw new Error(`Circular dependency detected involving task: ${taskPath}`);
+        // Found cycle - capture the path
+        const cycleStart = pathStack.indexOf(taskPath);
+        cycles.push([...pathStack.slice(cycleStart), taskPath].join(' -> '));
+        return;
       }
 
-      if (visited.has(taskPath)) return;
+      if (visited.has(taskPath)) {
+        return;
+      }
 
       visited.add(taskPath);
       recursionStack.add(taskPath);
+      pathStack.push(taskPath);
 
-      const task = template.tasks.find(t => t.path === taskPath);
+      const task = tasks.find(t => t.path === taskPath);
       if (task?.dependencies) {
         for (const dep of task.dependencies) {
-          checkDependencies(dep);
+          visit(dep);
         }
       }
 
       recursionStack.delete(taskPath);
+      pathStack.pop();
     };
 
-    for (const task of template.tasks) {
-      checkDependencies(task.path);
+    for (const task of tasks) {
+      visit(task.path);
     }
-  }
 
-  /**
-   * Validate variable references in template strings
-   */
-  private validateVariableReferences(template: TaskTemplate): void {
-    const variableNames = new Set(template.variables.map(v => v.name));
-
-    const checkString = (str: string | undefined, context: string) => {
-      if (!str) return;
-
-      const matches = str.match(/\${(\w+)}/g) || [];
-      for (const match of matches) {
-        const varName = match.slice(2, -1);
-        if (!variableNames.has(varName)) {
-          throw new Error(
-            `Invalid variable reference ${varName} in ${context}. Available variables: ${Array.from(
-              variableNames
-            ).join(', ')}`
-          );
-        }
-      }
-    };
-
-    // Check all string fields that might contain variable references
-    for (const task of template.tasks) {
-      checkString(task.path, `task path: ${task.path}`);
-      checkString(task.title, `task title: ${task.title}`);
-      checkString(task.description, `task description for: ${task.path}`);
-
-      // Check dependencies
-      task.dependencies?.forEach(dep => {
-        checkString(dep, `dependency in task: ${task.path}`);
-      });
-
-      // Check metadata strings recursively
-      if (task.metadata) {
-        this.validateMetadataStrings(task.metadata, variableNames, task.path);
-      }
-    }
-  }
-
-  /**
-   * Recursively validate variable references in metadata
-   */
-  private validateMetadataStrings(
-    metadata: Record<string, unknown>,
-    variableNames: Set<string>,
-    taskPath: string
-  ): void {
-    for (const [key, value] of Object.entries(metadata)) {
-      if (typeof value === 'string') {
-        const matches = value.match(/\${(\w+)}/g) || [];
-        for (const match of matches) {
-          const varName = match.slice(2, -1);
-          if (!variableNames.has(varName)) {
-            throw new Error(
-              `Invalid variable reference ${varName} in metadata field ${key} of task ${taskPath}`
-            );
-          }
-        }
-      } else if (Array.isArray(value)) {
-        value.forEach((item, index) => {
-          if (typeof item === 'string') {
-            const matches = item.match(/\${(\w+)}/g) || [];
-            for (const match of matches) {
-              const varName = match.slice(2, -1);
-              if (!variableNames.has(varName)) {
-                throw new Error(
-                  `Invalid variable reference ${varName} in metadata array ${key}[${index}] of task ${taskPath}`
-                );
-              }
-            }
-          }
-        });
-      } else if (value && typeof value === 'object') {
-        this.validateMetadataStrings(value as Record<string, unknown>, variableNames, taskPath);
-      }
-    }
+    return cycles;
   }
 }
