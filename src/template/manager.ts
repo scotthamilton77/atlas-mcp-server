@@ -314,6 +314,13 @@ export class TemplateManager {
   }
 
   /**
+   * Save a new template or update an existing one
+   */
+  async saveTemplate(template: TaskTemplate): Promise<void> {
+    await this.storage.saveTemplate(template);
+  }
+
+  /**
    * Clean up resources
    */
   async close(): Promise<void> {
