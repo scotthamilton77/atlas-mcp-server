@@ -10,13 +10,20 @@ export class ConfigManager {
   private static instance: ConfigManager;
   private readonly config: Record<string, any>;
 
-  private constructor() {
-    this.config = this.loadConfig();
+  private constructor(config?: Record<string, any>) {
+    this.config = config || this.loadConfig();
+  }
+
+  static async initialize(config?: Record<string, any>): Promise<ConfigManager> {
+    if (!ConfigManager.instance) {
+      ConfigManager.instance = new ConfigManager(config);
+    }
+    return ConfigManager.instance;
   }
 
   static getInstance(): ConfigManager {
     if (!ConfigManager.instance) {
-      ConfigManager.instance = new ConfigManager();
+      throw new Error('ConfigManager not initialized. Call ConfigManager.initialize() first.');
     }
     return ConfigManager.instance;
   }

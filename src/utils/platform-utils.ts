@@ -172,10 +172,22 @@ export class ProcessManager {
   };
 
   static setLogger(logger: {
-    info: (message: string, ...args: unknown[]) => void;
-    error: (message: string, ...args: unknown[]) => void;
+    info: (message: string, context?: Record<string, unknown>) => void;
+    error: (message: string, error?: unknown, context?: Record<string, unknown>) => void;
   }): void {
-    this.logger = logger;
+    // Create an adapter to match the expected interface
+    this.logger = {
+      info: (message: string, ...args: unknown[]) => {
+        logger.info(message, args.length ? { args } : undefined);
+      },
+      error: (message: string, ...args: unknown[]) => {
+        logger.error(
+          message,
+          args[0],
+          args.length > 1 ? { additionalArgs: args.slice(1) } : undefined
+        );
+      },
+    };
   }
 
   static registerCleanupHandler(handler: () => Promise<void>): void {
