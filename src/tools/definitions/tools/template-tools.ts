@@ -15,7 +15,28 @@ export interface ToolImplementation {
 export const listTemplatesToolImpl = (context: ToolContext): ToolImplementation => ({
   definition: {
     name: 'list_templates',
-    description: 'List available task templates with descriptions and metadata',
+    description: `List available task templates with descriptions and metadata. This tool enables LLM agents to:
+
+CORE CAPABILITIES:
+1. Template Discovery
+   - List available templates
+   - Filter by category
+   - View descriptions
+   - Check requirements
+
+VALIDATION RULES:
+1. Tag Requirements
+   - Optional filter
+   - Case sensitive
+   - Exact matches only
+   - Returns all if omitted
+
+EXAMPLE:
+
+We need to find templates for setting up a development team:
+{
+  "tag": "software_engineer"
+}`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -42,7 +63,35 @@ export const listTemplatesToolImpl = (context: ToolContext): ToolImplementation 
 export const useTemplateToolImpl = (context: ToolContext): ToolImplementation => ({
   definition: {
     name: 'use_template',
-    description: 'Instantiate a template with provided variables',
+    description: `Instantiate a template with provided variables. This tool enables LLM agents to:
+
+CORE CAPABILITIES:
+1. Template Usage
+   - Create task structures
+   - Set custom variables
+   - Place in hierarchy
+   - Apply patterns
+
+VALIDATION RULES:
+1. Template Requirements
+   - Must exist
+   - Variables required
+   - Parent optional
+   - Path validated
+
+EXAMPLE:
+
+We need to set up a web development project:
+{
+  "templateId": "web-project",
+  "variables": {
+    "projectName": "e-commerce",
+    "useTypeScript": true,
+    "includeTesting": true,
+    "cssFramework": "tailwind"
+  },
+  "parentPath": "projects/web"
+}`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -84,7 +133,28 @@ export const useTemplateToolImpl = (context: ToolContext): ToolImplementation =>
 export const getTemplateInfoToolImpl = (context: ToolContext): ToolImplementation => ({
   definition: {
     name: 'get_template_info',
-    description: 'Get detailed information about a template including its variables and tasks',
+    description: `Get detailed information about a template. This tool enables LLM agents to:
+
+CORE CAPABILITIES:
+1. Template Analysis
+   - View variables
+   - Check structure
+   - Review tasks
+   - Assess requirements
+
+VALIDATION RULES:
+1. Template ID
+   - Must exist
+   - Case sensitive
+   - Exact match
+   - Valid format
+
+EXAMPLE:
+
+We need to understand the web project template structure:
+{
+  "templateId": "web-project"
+}`,
     inputSchema: {
       type: 'object',
       properties: {

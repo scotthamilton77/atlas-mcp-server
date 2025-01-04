@@ -15,91 +15,145 @@ interface ToolContext {
 export function createTaskTool(context: ToolContext): ToolImplementation {
   const definition: Tool = {
     name: 'create_task',
-    description: `Create tasks to organize and track work. Use this tool to:
+    description: `Create a new task with defined outcomes, requirements, and success criteria. This tool enables LLM agents to:
 
-1. Define Work Items:
-   - Create concrete tasks for specific deliverables
-   - Set up milestones to group related tasks
-   - Organize tasks in hierarchical paths (e.g., "project/backend/auth")
-   - Add detailed descriptions and requirements
+CORE CAPABILITIES:
+1. Task Definition
+   - Create atomic work units with clear deliverables
+   - Define measurable outcomes and success criteria
+   - Establish hierarchical organization
+   - Set completion requirements
 
-2. Establish Dependencies:
-   - Specify tasks that must complete first
-   - Create parent-child relationships
-   - Build task hierarchies
+2. Relationship Management
+   - Define dependencies with validation
+   - Create parent-child hierarchies
    - Prevent circular dependencies
+   - Maintain task graph integrity
+   - Create an initial milestone or task
 
-3. Document Context:
-   - Add planning notes for initial requirements
-   - Track progress with implementation notes
-   - Record completion criteria
-   - Document troubleshooting steps
+3. Progress Tracking
+   - Document implementation steps
+   - Track completion status
+   - Record blockers and issues
+   - Maintain audit trail
 
-4. Set Technical Details:
-   - Define language and framework requirements
-   - Specify environment needs
-   - List required dependencies
-   - Set resource requirements
+VALIDATION RULES:
+1. Path Requirements
+   - Format: project/component/feature
+   - Max Length: 1000 chars
+   - Max Depth: 10 levels
+   - Valid chars: a-z, A-Z, 0-9, -, _
 
-5. Track Progress:
-   - Define acceptance criteria
-   - Create test cases
-   - Set milestones
-   - Track blockers and resolutions
+2. Content Limits
+   - Name: 200 chars max
+   - Description: 2000 chars max
+   - Notes: 100 per category, 1000 chars each
+   - Dependencies: 50 max
 
-6. Manage Resources:
-   - List required tools
-   - Track accessed resources
-   - Reference related documentation
-   - Link to version control
+3. Metadata Validation
+   - Required fields must be present
+   - Values must match defined types
+   - Arrays must not exceed limits
 
-Example Usage:
+EXAMPLES:
+
+1. Development Task:
 {
   "path": "project/backend/auth",
-  "name": "Implement JWT Authentication",
+  "name": "Implement OAuth2 Authentication",
   "type": "TASK",
-  "description": "Add JWT-based authentication to API endpoints",
+  "description": "Add OAuth2-based user authentication with refresh token support",
   "dependencies": ["project/backend/database"],
   "metadata": {
     "priority": "high",
+    "acceptanceCriteria": {
+      "requirements": [
+        "OAuth2 flow implemented per spec",
+        "Refresh tokens handled securely",
+        "Rate limiting implemented"
+      ]
+    },
     "technicalRequirements": {
       "language": "TypeScript",
       "framework": "Express",
-      "dependencies": ["jsonwebtoken", "bcrypt"]
+      "dependencies": ["passport-oauth2"]
     }
   },
   "planningNotes": [
-    "Research JWT best practices",
-    "Design token refresh mechanism"
+    "Review OAuth2 specification",
+    "Design token storage schema",
+    "Plan rate limiting strategy"
   ]
-}`,
+}
+
+2. Project Milestone:
+{
+  "path": "project/backend",
+  "name": "Backend API v1.0",
+  "type": "MILESTONE",
+  "description": "Complete core backend API implementation",
+  "metadata": {
+    "acceptanceCriteria": {
+      "requirements": [
+        "All core endpoints implemented",
+        "95% test coverage achieved",
+        "Performance benchmarks met"
+      ]
+    },
+    "versionControl": {
+      "branch": "main",
+      "tag": "v1.0.0"
+    }
+  }
+}
+
+OUTCOME REQUIREMENTS:
+1. Task Creation
+   - Unique path verified
+   - Dependencies validated
+   - Schema constraints met
+   - Metadata validated
+
+2. Success Criteria
+   - Task stored in database
+   - Relationships established
+   - Initial status set
+   - Audit trail created
+
+3. Error Conditions
+   - Path already exists
+   - Invalid dependencies
+   - Schema validation fails
+   - Relationship conflicts`,
     inputSchema: {
       type: 'object',
       properties: {
         path: {
           type: 'string',
           description:
-            'Create hierarchical path (e.g., "project/backend/auth") to organize related tasks. Use forward slashes to indicate task hierarchy. Max length 1000 chars, max depth 10 levels.',
+            'Task identifier in hierarchical format (e.g., "project/backend/auth"). VALIDATION: Max length 1000 chars, max depth 10 levels, valid chars: a-z, A-Z, 0-9, -, _',
         },
         name: {
           type: 'string',
           description:
-            'Define clear, action-oriented name describing what the task will accomplish. Max length 200 chars.',
+            'Action-oriented task name describing the specific outcome to achieve. VALIDATION: Max length 200 chars, must be descriptive and unique within parent scope.',
         },
         description: {
           type: 'string',
           description:
-            'Specify requirements, context, and success criteria. Include enough detail to understand the task scope. Max length 2000 chars.',
+            'Detailed task requirements, success criteria, and context. VALIDATION: Max length 2000 chars, should include measurable outcomes.',
         },
         type: {
           type: 'string',
           enum: ['TASK', 'MILESTONE'],
-          description: 'Choose TASK for concrete deliverables or MILESTONE to group related tasks.',
+          description:
+            'TASK: Concrete deliverable with specific outcome. MILESTONE: Group of related tasks with shared objective.',
           default: 'TASK',
         },
         parentPath: {
           type: 'string',
-          description: 'Specify parent task path to create subtasks under a milestone.',
+          description:
+            'Path of parent task/milestone. VALIDATION: Must exist if specified, cannot create circular relationships.',
         },
         dependencies: {
           type: 'array',
@@ -107,92 +161,71 @@ Example Usage:
             type: 'string',
           },
           description:
-            'List paths of tasks that must complete first. Tasks will be blocked until dependencies are met.',
+            'Paths of tasks that must complete before this task can start. VALIDATION: Max 50 dependencies, no cycles allowed, all must exist.',
         },
         metadata: {
           type: 'object',
-          description: `Add any metadata needed to track and organize tasks. The metadata system is flexible and accepts custom fields. Some suggested fields include:
+          description: `Structured task metadata for tracking and validation. VALIDATION: Max size 32KB.
 
-1. Core Fields:
-   - priority: Set task urgency (low/medium/high)
-   - tags: Add categorization keywords
-   - reasoning: Document decision rationale
+REQUIRED SECTIONS:
+1. acceptanceCriteria: {
+   requirements: string[],    // Specific, measurable criteria
+   testCases?: string[],     // Validation scenarios
+   reviewers?: string[]      // Required approvals
+}
 
-2. Technical Details:
-   technicalRequirements: {
-     - language: Programming language
-     - framework: Frameworks/libraries
-     - dependencies: Required packages
-     - environment: Runtime needs
-     - performance: Resource needs
-     - [Add any other technical fields needed]
+2. technicalRequirements?: {
+   language?: string,        // Programming language
+   framework?: string,       // Framework/platform
+   dependencies?: string[],  // Required packages/tools
+   performance?: {           // Performance requirements
+     memory?: string,
+     cpu?: string,
+     latency?: string
    }
+}
 
-3. Validation:
-   acceptanceCriteria: {
-     - criteria: Success criteria
-     - testCases: Test scenarios
-     - reviewers: Required reviews
-     - [Add custom validation requirements]
-   }
-   progress: {
-     - milestones: Key checkpoints
-     - [Add custom progress tracking fields]
-   }
+3. progress?: {
+   percentage?: number,      // 0-100
+   milestones?: string[],    // Key checkpoints
+   blockers?: string[]       // Current blockers
+}
 
-4. Resources:
-   resources: {
-     - toolsUsed: Required tools
-     - resourcesAccessed: Data sources
-     - contextUsed: Documentation links
-     - [Add other resource fields]
-   }
+4. resources?: {
+   toolsUsed: string[],      // Required tools
+   documentation: string[],   // Reference docs
+   artifacts: string[]       // Related artifacts
+}
 
-5. Status:
-   blockInfo: {
-     - blockedBy: Blocking task
-     - blockReason: Block description
-     - resolution: Fix details
-     - [Add custom status fields]
-   }
-
-6. Version Control:
-   versionControl: {
-     - branch: Working branch
-     - commit: Commit hash
-     - [Add other VCS fields]
-   }
-
-7. Custom Fields:
-   - Add any additional fields needed
-   - Use nested objects for organization
-   - No strict schema requirements
-   - Fields can be added/removed as needed`,
-          // Allow any properties in metadata
+OPTIONAL SECTIONS:
+- priority?: "low" | "medium" | "high"
+- tags?: string[]            // Max 10 tags
+- customFields?: object      // Additional metadata`,
           additionalProperties: true,
         },
         planningNotes: {
           type: 'array',
           items: { type: 'string' },
           description:
-            'Add initial planning notes to document requirements and approach. Max 100 notes, each max 1000 chars.',
+            'Initial requirements and implementation plan. VALIDATION: Max 100 notes, each max 1000 chars.',
         },
         progressNotes: {
           type: 'array',
           items: { type: 'string' },
           description:
-            'Track implementation progress with detailed notes. Max 100 notes, each max 1000 chars.',
+            'Ongoing implementation updates. VALIDATION: Max 100 notes, each max 1000 chars.',
         },
         completionNotes: {
           type: 'array',
           items: { type: 'string' },
           description:
-            'Document task completion details and outcomes. Max 100 notes, each max 1000 chars.',
+            'Final outcomes and delivery notes. VALIDATION: Max 100 notes, each max 1000 chars.',
         },
         troubleshootingNotes: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Record issues and their resolutions. Max 100 notes, each max 1000 chars.',
+          description:
+            'Issues encountered and resolutions. VALIDATION: Max 100 notes, each max 1000 chars.',
         },
       },
       required: ['path', 'name'],

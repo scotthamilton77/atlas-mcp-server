@@ -11,59 +11,47 @@ import { formatResponse } from './shared/response-formatter.js';
 export const clearAllTasksTool: ToolFactory = (context): ToolImplementation => ({
   definition: {
     name: 'clear_all_tasks',
-    description: `Remove all tasks from the database.
+    description: `Reset the task system to an empty state. This tool enables LLM agents to:
 
-Impact:
-- Deletes ALL tasks permanently
-- Removes all relationships and dependencies
-- Clears all metadata and notes
-- Resets database to initial state
-- Cannot be undone
+CORE CAPABILITIES:
+1. System Reset
+   - Remove all tasks
+   - Clear relationships
+   - Reset metadata
+   - Clean database
 
-When to Use:
-- Starting fresh project phase
-- Major project restructuring
-- Development environment reset
-- Test environment cleanup
+VALIDATION RULES:
+1. Safety Requirements
+   - Explicit confirmation
+   - Valid reasoning
+   - No active operations
+   - Clean system state
 
-Best Practices:
-- Export tasks before clearing
-- Verify confirmation flag
-- Document clear reasoning
-- Consider selective deletion
-- Plan new task structure
-- Archive important metadata
+EXAMPLE:
 
-Safety Checks:
-- Requires explicit confirmation
-- Validates database state
-- Ensures clean deletion
-- Prevents partial clears
-
-Example:
+We need to reset the system for a new project:
 {
   "confirm": true,
-  "reasoning": "Resetting task structure for Q2 planning. Previous tasks have been archived and new project structure will be implemented with updated requirements and dependencies."
+  "reasoning": "Initiating Q2 planning phase. Current tasks previously archived to project/archive/q1-2024.json. New structure will focus on platform scalability initiatives."
 }`,
     inputSchema: {
       type: 'object',
       properties: {
         confirm: {
           type: 'boolean',
-          description: `Explicit confirmation required to prevent accidental deletion.
-Note: This operation:
-- Removes ALL tasks from the database
-- Cannot be undone
-- Should be used with caution
-- Requires explicit confirmation`,
+          description: `Safety confirmation flag. VALIDATION:
+- Must be explicitly true
+- Cannot be omitted
+- Prevents accidents
+- Final check`,
         },
         reasoning: {
           type: 'string',
-          description: `Explanation for clearing all tasks. Best practices:
-- Document why a complete reset is needed
-- Note where existing tasks are archived
-- Outline plan for new structure
-- Record migration/backup details`,
+          description: `Reset justification. REQUIRED INFORMATION:
+- Purpose of reset
+- Archive location
+- New structure plan
+- Migration details`,
         },
       },
       required: ['confirm'],
@@ -81,62 +69,48 @@ Note: This operation:
 export const vacuumDatabaseTool: ToolFactory = (context): ToolImplementation => ({
   definition: {
     name: 'vacuum_database',
-    description: `Optimize database storage and performance.
+    description: `Optimize the task database for performance. This tool enables LLM agents to:
 
-Performance Impact:
-- Reclaims unused space
-- Rebuilds indexes
-- Updates statistics
-- Optimizes query plans
-- May take several minutes
+CORE CAPABILITIES:
+1. Storage Optimization
+   - Reclaim space
+   - Rebuild indexes
+   - Update statistics
+   - Improve queries
 
-When to Use:
-- After bulk operations (creates/deletes)
-- During maintenance windows
-- When performance degrades
-- After large deletions
-- Before major operations
+VALIDATION RULES:
+1. Timing Requirements
+   - No active operations
+   - Low system load
+   - Sufficient space
+   - Adequate time
 
-Best Practices:
-- Run during low activity
-- Monitor space usage
-- Schedule regularly
-- Backup before running
-- Check performance impact
-- Allow sufficient time
-- Monitor system resources
+EXAMPLE:
 
-Resource Usage:
-- CPU: Moderate to high
-- Memory: Temporary increase
-- Disk I/O: Heavy
-- Storage: Temporary spike
-
-Example:
+We need to optimize after bulk task deletions:
 {
   "analyze": true,
-  "reasoning": "Running optimization after bulk task deletion to reclaim space and update query statistics for better performance."
+  "reasoning": "Optimizing storage after removing completed Q1 tasks. Current fragmentation affecting query performance."
 }`,
     inputSchema: {
       type: 'object',
       properties: {
         analyze: {
           type: 'boolean',
-          description: `Whether to analyze after vacuum for query optimization.
-Note: This operation:
-- Reclaims unused space
-- Updates statistics
-- May take time for large datasets
-- Improves query performance`,
+          description: `Run analysis phase. VALIDATION:
+- Optional boolean
+- Defaults to true
+- Improves planning
+- Updates stats`,
           default: true,
         },
         reasoning: {
           type: 'string',
-          description: `Explanation for vacuum operation. Best practices:
-- Document performance issues
-- Note recent bulk operations
-- Record space reclamation goals
-- Track optimization results`,
+          description: `Optimization reason. REQUIRED INFORMATION:
+- Current issues
+- Expected benefits
+- System impact
+- Timing choice`,
         },
       },
     },
@@ -153,62 +127,48 @@ Note: This operation:
 export const repairRelationshipsTool: ToolFactory = (context): ToolImplementation => ({
   definition: {
     name: 'repair_relationships',
-    description: `Fix task hierarchy and dependency issues.
+    description: `Fix task relationship issues. This tool enables LLM agents to:
 
-Repairs Performed:
-- Resolves circular dependencies
-- Fixes broken parent-child links
-- Removes invalid dependencies
-- Updates status inconsistencies
-- Corrects metadata anomalies
+CORE CAPABILITIES:
+1. Relationship Repair
+   - Fix dependencies
+   - Correct hierarchies
+   - Update statuses
+   - Resolve conflicts
 
-When to Use:
-- After failed operations
-- Fixing circular dependencies
-- Resolving orphaned tasks
-- Maintaining task integrity
-- Before major updates
+VALIDATION RULES:
+1. Safety Requirements
+   - Valid system state
+   - No active changes
+   - Clean hierarchies
+   - Valid paths
 
-Best Practices:
-- Run dry-run first
-- Fix critical paths
-- Verify results
-- Document changes
-- Update affected tasks
-- Monitor cascading effects
+EXAMPLE:
 
-Validation Steps:
-- Path integrity check
-- Dependency cycle detection
-- Parent-child validation
-- Status consistency check
-- Metadata validation
-
-Example:
+We need to check and fix task relationships:
 {
   "dryRun": true,
-  "reasoning": "Checking for relationship issues after recent bulk operations. Using dry-run to assess the scope of necessary repairs before applying fixes."
+  "reasoning": "Validating task relationships after system migration. Using dry-run to assess required fixes."
 }`,
     inputSchema: {
       type: 'object',
       properties: {
         dryRun: {
           type: 'boolean',
-          description: `Preview changes without applying them.
-Note: This operation:
-- Identifies broken relationships
-- Detects circular dependencies
-- Finds orphaned tasks
-- Reports potential fixes`,
+          description: `Safety check mode. VALIDATION:
+- Optional boolean
+- Defaults to false
+- No changes made
+- Shows fixes`,
           default: false,
         },
         reasoning: {
           type: 'string',
-          description: `Explanation for repair operation. Best practices:
-- Document known issues
-- Note suspected causes
-- Record repair strategy
-- Track affected tasks`,
+          description: `Repair justification. REQUIRED INFORMATION:
+- Current issues
+- Expected fixes
+- System impact
+- Verification plan`,
         },
       },
     },

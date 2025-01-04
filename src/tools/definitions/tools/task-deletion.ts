@@ -7,45 +7,53 @@ import { formatResponse } from './shared/response-formatter.js';
 export const deleteTaskTool: ToolFactory = (context): ToolImplementation => ({
   definition: {
     name: 'delete_task',
-    description: `Remove a task and all its children from the system.
+    description: `Remove a task and its children from the system. This tool enables LLM agents to:
 
-When to Use:
-- Removing obsolete tasks
-- Cleaning up completed work
-- Restructuring project organization
-- Handling cancelled features
+CORE CAPABILITIES:
+1. Task Removal
+   - Delete specified task
+   - Remove child tasks
+   - Update dependencies
+   - Clean up relationships
 
-Best Practices:
-- Verify task is truly obsolete
-- Check for dependent tasks
-- Document deletion reasoning
-- Consider archiving instead
-- Handle child tasks appropriately
+VALIDATION RULES:
+1. Path Requirements
+   - Must exist in system
+   - Must be deletable
+   - Cannot have blockers
+   - Parent must allow deletion
 
-Example:
+2. Dependency Rules
+   - All dependents updated
+   - References removed
+   - Cycles prevented
+   - Graph maintained
+
+EXAMPLE:
+
+We have a deprecated authentication implementation at "project/backend/deprecated-auth" that needs to be removed:
 {
   "path": "project/backend/deprecated-auth",
-  "reasoning": "Removing deprecated authentication implementation as we've switched to OAuth2. All dependent tasks have been updated to reference the new OAuth2 implementation path."
+  "reasoning": "Removing deprecated JWT authentication implementation. New OAuth2 implementation is now active at project/backend/oauth2. All dependent tasks have been updated to reference the new implementation path."
 }`,
     inputSchema: {
       type: 'object',
       properties: {
         path: {
           type: 'string',
-          description: `Path of task to delete. Will also remove all child tasks.
-Note: This operation:
-- Removes the specified task
-- Removes all child tasks recursively
-- Updates dependencies in related tasks
-- Cannot be undone`,
+          description: `Task path to delete. VALIDATION:
+- Must exist in system
+- Will remove all child tasks
+- Updates dependent tasks
+- Operation cannot be undone`,
         },
         reasoning: {
           type: 'string',
-          description: `Explanation for task deletion. Best practices:
-- Document why the task is no longer needed
-- Explain impact on dependent tasks
-- Note any replacement tasks
-- Record archival location if applicable`,
+          description: `Deletion justification. REQUIRED INFORMATION:
+- Why task is obsolete
+- Impact on dependencies
+- Replacement references
+- Migration details`,
         },
       },
       required: ['path'],

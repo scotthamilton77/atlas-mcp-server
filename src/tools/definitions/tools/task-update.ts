@@ -9,207 +9,190 @@ import { ErrorCodes, createError } from '../../../errors/index.js';
 export const updateTaskTool: ToolFactory = (context): ToolImplementation => ({
   definition: {
     name: 'update_task',
-    description: `Update task properties and status.
+    description: `Update an existing task's properties, status, or metadata. This tool enables LLM agents to:
 
-Status Transitions:
-- PENDING → IN_PROGRESS, BLOCKED, CANCELLED
-- IN_PROGRESS → COMPLETED, CANCELLED, BLOCKED
-- COMPLETED → No transitions allowed
-- CANCELLED → PENDING (for retry)
-- BLOCKED → PENDING, IN_PROGRESS
+CORE CAPABILITIES:
+1. Status Management
+   - Transition task state based on progress
+   - Handle blocking conditions
+   - Manage task lifecycle
+   - Track completion status
 
-Automatic Behaviors:
-- Auto-transition to BLOCKED if dependencies block
-- Parent completion requires all children complete
-- Cancelled parent cancels non-completed children
-- Blocked siblings prevent task completion
-- Failed siblings prevent task start
+2. Content Updates
+   - Refine task descriptions
+   - Update technical requirements
+   - Add implementation notes
+   - Record progress details
 
-Validation Rules:
-- Same constraints as create_task
-- Dependencies checked before status changes
-- Parent-child status rules enforced
-- Metadata schema validated
-- Notes length and count limits applied
+3. Relationship Updates
+   - Modify dependencies
+   - Update parent-child links
+   - Handle blocking conditions
+   - Maintain task graph
 
-Best Practices:
-- Document status change reasoning
-- Update progress indicators
-- Track technical implementation details
-- Record blockers and resolutions
-- Maintain dependency accuracy
+AUTOMATIC BEHAVIORS:
+1. Status Propagation
+   - Parent completion requires all children complete
+   - Blocked dependencies auto-block dependent tasks
+   - Cancelled parent cancels non-completed children
 
-Example:
+2. Validation Rules
+   - Dependencies checked before status changes
+   - Parent-child status rules enforced
+   - Schema constraints validated
+   - Notes length limits enforced
+
+EXAMPLE:
+
+1. We have a task at path "project/backend/auth" that needs an update:
 {
   "path": "project/backend/auth",
   "updates": {
     "status": "IN_PROGRESS",
     "progressNotes": [
-      "Database schema updated",
-      "JWT library integrated",
-      "Basic token generation implemented"
+      "Starting OAuth2 implementation",
+      "Setting up authentication routes"
     ],
     "metadata": {
-      "reasoning": "Moving to IN_PROGRESS as database dependencies are completed and core JWT implementation has begun. Token refresh mechanism still pending.",
-      "technical_notes": [
-        "Using jsonwebtoken library for JWT operations",
-        "Token expiry set to 1 hour with refresh window"
-      ]
+      "reasoning": "Dependencies completed, beginning implementation",
+      "progress": {
+        "percentage": 10,
+        "currentFocus": "Route setup"
+      }
     }
   }
-}`,
+}
+
+OUTCOME REQUIREMENTS:
+1. Status Updates
+   - Valid transition verified
+   - Dependencies checked
+   - Parent-child rules enforced
+   - Audit trail updated
+
+2. Content Updates
+   - Schema validated
+   - Length limits checked
+   - Required fields present
+   - History maintained`,
     inputSchema: {
       type: 'object',
       properties: {
         path: {
           type: 'string',
-          description: 'Path of task to update',
+          description:
+            'Path of task to update. VALIDATION: Must exist, must match task-path format.',
         },
         updates: {
           type: 'object',
-          description: `Changes to apply to the task. Field constraints:
-- title: Task name (max 200 chars)
-- description: Task details (max 2000 chars)
-- type: TASK/MILESTONE classification
-- status: Task state with validation rules
-- parentPath: Parent task path (max 1000 chars, 10 levels)
-- dependencies: Required tasks (max 50)
-- metadata: Task tracking fields:
-  - priority: low/medium/high
-  - tags: max 100 tags, each max 100 chars
-  - reasoning: max 2000 chars
-  - tools_used: max 100 entries
-  - resources_accessed: max 100 entries
-  - context_used: max 100 entries, each max 1000 chars
-  - technical_requirements: implementation details
-  - acceptance_criteria: validation points
-  - status_tracking: timestamps, block reasons
-  - version_control: version numbers, states
-- notes: Each category max 100 notes, each note max 1000 chars
-  - planningNotes: Planning and preparation
-  - progressNotes: Implementation progress
-  - completionNotes: Completion details
-  - troubleshootingNotes: Issue resolution
+          description: `Changes to apply to the task. Each field triggers specific validations:
 
-Status changes trigger:
-- Automatic dependency validation
-- Status propagation to parent tasks
-- Dependent task blocking
-- Child task status updates
-- Validation of all constraints`,
+STATUS UPDATES:
+- status: Current execution state
+  PENDING → Starting state
+  IN_PROGRESS → Active development
+  COMPLETED → Work finished
+  BLOCKED → Dependencies blocking
+  CANCELLED → Work stopped
+
+CONTENT UPDATES:
+- name: Task title (max 200 chars)
+- description: Requirements (max 2000 chars)
+- type: TASK or MILESTONE
+- dependencies: Required tasks (max 50)
+
+NOTES (max 100 each, 1000 chars per note):
+- planningNotes: Requirements and approach
+- progressNotes: Implementation updates
+- completionNotes: Delivery details
+- troubleshootingNotes: Issue resolutions
+
+METADATA:
+1. Required for Status Changes:
+   - reasoning: Why the change is needed
+   - blockInfo: For BLOCKED status
+   - completionCriteria: For COMPLETED status
+
+2. Progress Tracking:
+   - percentage: 0-100
+   - currentFocus: Active work
+   - nextSteps: Planned work
+
+3. Technical Details:
+   - language: Programming language
+   - framework: Framework used
+   - dependencies: Required packages
+
+4. Version Control:
+   - branch: Working branch
+   - commit: Current commit
+   - tag: Version tag`,
           properties: {
-            title: {
+            status: {
               type: 'string',
-              description: 'New task title reflecting current focus',
+              enum: ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'BLOCKED', 'CANCELLED'],
+              description:
+                'New task status. VALIDATION: Must be valid transition, dependencies checked.',
+            },
+            name: {
+              type: 'string',
+              description: 'New task name. VALIDATION: Max 200 chars, must be descriptive.',
             },
             description: {
               type: 'string',
-              description: 'Updated task details including progress and findings',
+              description:
+                'Updated requirements. VALIDATION: Max 2000 chars, include success criteria.',
             },
             type: {
               type: 'string',
               enum: ['TASK', 'MILESTONE'],
-              description: 'Task classification (TASK/MILESTONE)',
-            },
-            status: {
-              type: 'string',
-              enum: ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'BLOCKED', 'CANCELLED'],
-              description: `Task execution state:
-- PENDING: Not started
-- IN_PROGRESS: Actively being worked on
-- COMPLETED: Successfully finished
-- BLOCKED: Waiting on dependencies
-- CANCELLED: No longer needed`,
-            },
-            parentPath: {
-              type: 'string',
-              description: 'New parent task for hierarchy changes',
+              description: 'Task classification. VALIDATION: Cannot change if has children.',
             },
             dependencies: {
               type: 'array',
               items: { type: 'string' },
-              description: 'Updated list of required tasks',
+              description: 'Required tasks. VALIDATION: Max 50, must exist, no cycles.',
             },
             planningNotes: {
               type: 'array',
               items: { type: 'string' },
-              description: 'Planning and preparation notes',
+              description: 'Requirements and approach. VALIDATION: Max 100 notes, 1000 chars each.',
             },
             progressNotes: {
               type: 'array',
               items: { type: 'string' },
-              description: 'Implementation progress notes',
+              description: 'Implementation updates. VALIDATION: Max 100 notes, 1000 chars each.',
             },
             completionNotes: {
               type: 'array',
               items: { type: 'string' },
-              description: 'Task completion notes',
+              description: 'Delivery details. VALIDATION: Max 100 notes, 1000 chars each.',
             },
             troubleshootingNotes: {
               type: 'array',
               items: { type: 'string' },
-              description: 'Issue resolution notes',
+              description: 'Issue resolutions. VALIDATION: Max 100 notes, 1000 chars each.',
             },
             metadata: {
               type: 'object',
-              description: `Update task metadata with any fields needed. The metadata system is flexible and accepts custom fields. Some commonly used fields include:
+              description: `Task metadata for tracking progress and requirements. Key sections:
 
-1. Core Fields:
-   - priority: Set task urgency (low/medium/high)
-   - tags: Add categorization keywords
-   - reasoning: Document decision rationale
-
-2. Technical Details:
-   technicalRequirements: {
-     - language: Programming language
-     - framework: Frameworks/libraries
-     - dependencies: Required packages
-     - environment: Runtime needs
-     - performance: Resource needs
-     - [Add any other technical fields needed]
+1. Status Changes:
+   reasoning: string        // Why the change is needed
+   blockInfo?: {           // Required for BLOCKED status
+     blockedBy: string[]   // Blocking task paths
+     reason: string        // Block description
+   }
+   completionCriteria?: {  // Required for COMPLETED status
+     met: string[]         // Met criteria
+     verified: boolean     // Verification status
    }
 
-3. Validation:
-   acceptanceCriteria: {
-     - criteria: Success criteria
-     - testCases: Test scenarios
-     - reviewers: Required reviews
-     - [Add custom validation requirements]
-   }
-   progress: {
-     - milestones: Key checkpoints
-     - [Add custom progress tracking fields]
-   }
-
-4. Resources:
-   resources: {
-     - toolsUsed: Required tools
-     - resourcesAccessed: Data sources
-     - contextUsed: Documentation links
-     - [Add other resource fields]
-   }
-
-5. Status:
-   blockInfo: {
-     - blockedBy: Blocking task
-     - blockReason: Block description
-     - resolution: Fix details
-     - [Add custom status fields]
-   }
-
-6. Version Control:
-   versionControl: {
-     - branch: Working branch
-     - commit: Commit hash
-     - [Add other VCS fields]
-   }
-
-7. Custom Fields:
-   - Add any additional fields needed
-   - Use nested objects for organization
-   - No strict schema requirements
-   - Fields can be added/removed as needed`,
-              // Allow any properties in metadata
+2. Progress:
+   percentage: number      // 0-100
+   currentFocus: string    // Active work
+   nextSteps: string[]     // Planned work
+   blockers: string[]      // Current issues`,
               additionalProperties: true,
             },
           },

@@ -12,25 +12,35 @@ import { formatResponse } from './shared/response-formatter.js';
 export const getTasksByStatusTool: ToolFactory = (context): ToolImplementation => ({
   definition: {
     name: 'get_tasks_by_status',
-    description: `Find tasks with a specific execution status.
+    description: `Find all tasks in a specific execution state. This tool enables LLM agents to:
 
-When to Use:
-- Identifying work in progress
-- Finding blocked tasks
-- Verifying completed work
-- Planning next actions
+CORE CAPABILITIES:
+1. Status Filtering
+   - Find tasks by current state
+   - Filter by project area
+   - Check progress status
+   - Identify blockers
 
-Best Practices:
-- Check BLOCKED tasks for dependency issues
-- Monitor IN_PROGRESS tasks for updates
-- Review COMPLETED tasks for verification
-- Use with path patterns for focused queries
+VALIDATION RULES:
+1. Status Requirements
+   - Must be valid status
+   - Case sensitive
+   - No partial matches
+   - Returns empty if none found
 
-Example:
+2. Pattern Rules (Optional)
+   - Valid glob syntax
+   - Max depth respected
+   - Case sensitive
+   - Path format validated
+
+EXAMPLE:
+
+We need to find blocked tasks in the backend to resolve dependencies:
 {
   "status": "BLOCKED",
   "pathPattern": "project/backend/*",
-  "reasoning": "Checking for blocked backend tasks to identify and resolve dependencies. This helps maintain project momentum by addressing bottlenecks early."
+  "reasoning": "Identifying blocked backend tasks to unblock development progress"
 }`,
     inputSchema: {
       type: 'object',
@@ -38,24 +48,20 @@ Example:
         status: {
           type: 'string',
           enum: ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'BLOCKED', 'CANCELLED'],
-          description: `Status to filter tasks by:
-- PENDING: Not yet started tasks
-- IN_PROGRESS: Active work items
-- COMPLETED: Successfully finished tasks
-- BLOCKED: Tasks waiting on dependencies
-- CANCELLED: Discontinued tasks
-Note: Returns all tasks in given status regardless of hierarchy`,
+          description: `Task status to find. VALIDATION:
+PENDING: Not started, ready to begin
+IN_PROGRESS: Currently being worked on
+COMPLETED: Successfully finished
+BLOCKED: Waiting on dependencies
+CANCELLED: Work discontinued`,
         },
         pathPattern: {
           type: 'string',
-          description: `Optional glob pattern to focus search:
-- Use * for single segment wildcard
-- Use ** for recursive wildcard
-- Examples:
-  - project/* (direct children)
-  - project/backend/** (all backend tasks)
-  - */security/* (security tasks at any level)
-Note: Combines with status filter for precise queries`,
+          description: `Optional path filter. VALIDATION:
+- * matches single segment
+- ** matches multiple segments
+- Must be valid path format
+- Case sensitive matching`,
         },
       },
       required: ['status'],
@@ -73,37 +79,39 @@ Note: Combines with status filter for precise queries`,
 export const getTasksByPathTool: ToolFactory = (context): ToolImplementation => ({
   definition: {
     name: 'get_tasks_by_path',
-    description: `Find tasks matching a path pattern.
+    description: `Find tasks matching a path pattern. This tool enables LLM agents to:
 
-When to Use:
-- Analyzing specific project areas
-- Reviewing component progress
-- Planning related tasks
-- Identifying gaps in coverage
+CORE CAPABILITIES:
+1. Path Matching
+   - Find tasks by location
+   - Use wildcards for patterns
+   - Search project areas
+   - Discover related tasks
 
-Best Practices:
-- Use specific patterns for focused results
-- Include wildcards for broader searches
-- Consider task hierarchy in patterns
-- Combine with status checks for detailed analysis
+VALIDATION RULES:
+1. Pattern Requirements
+   - Valid glob syntax
+   - Max depth respected
+   - Case sensitive
+   - Path format validated
 
-Example:
+EXAMPLE:
+
+We need to find all security-related tasks across components:
 {
   "pathPattern": "project/*/security/*",
-  "reasoning": "Searching for all security-related tasks across project components to ensure comprehensive security coverage and identify any missing security considerations."
+  "reasoning": "Locating security tasks to ensure consistent implementation"
 }`,
     inputSchema: {
       type: 'object',
       properties: {
         pathPattern: {
           type: 'string',
-          description: `Glob pattern for matching task paths:
-- Use * for any segment
-- Use ** for recursive matching
-- Examples:
-  - project/* (top-level tasks)
-  - project/backend/** (all backend tasks)
-  - */security/* (security tasks anywhere)`,
+          description: `Path pattern to match. VALIDATION:
+- * for single segment
+- ** for multiple segments
+- Must be valid path format
+- Case sensitive matching`,
         },
       },
       required: ['pathPattern'],
@@ -121,31 +129,39 @@ Example:
 export const getChildrenTool: ToolFactory = (context): ToolImplementation => ({
   definition: {
     name: 'get_children',
-    description: `Get all immediate child tasks under a specific path.
+    description: `Find all immediate child tasks under a path. This tool enables LLM agents to:
 
-When to Use:
-- Understanding task breakdown
-- Tracking milestone progress
-- Planning next phase
-- Identifying missing subtasks
+CORE CAPABILITIES:
+1. Child Discovery
+   - Find subtasks
+   - Check milestone progress
+   - Verify task breakdown
+   - Identify gaps
 
-Best Practices:
-- Check milestone children for coverage
-- Verify subtask relationships
-- Monitor child task status
-- Ensure logical task grouping
+VALIDATION RULES:
+1. Path Requirements
+   - Must exist in system
+   - Must be valid format
+   - Case sensitive
+   - Returns empty if none
 
-Example:
+EXAMPLE:
+
+We need to check the backend implementation progress:
 {
   "path": "project/backend",
-  "reasoning": "Examining backend tasks to understand implementation progress, identify gaps in functionality, and ensure proper task decomposition."
+  "reasoning": "Reviewing backend task progress to track milestone completion"
 }`,
     inputSchema: {
       type: 'object',
       properties: {
         path: {
           type: 'string',
-          description: 'Parent task path to get children from',
+          description: `Parent path to check. VALIDATION:
+- Must exist in system
+- Must be valid path format
+- Case sensitive matching
+- Returns immediate children only`,
         },
       },
       required: ['path'],
