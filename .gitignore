@@ -24,13 +24,6 @@ Thumbs.db
 .npm
 .eslintcache
 .rollup.cache
-*.mjs.map
-*.cjs.map
-*.d.ts.map
-*.d.ts
-!*.d.ts.template
-package-lock.json
-yarn.lock
 .pnp.js
 .pnp.cjs
 .pnp.mjs
