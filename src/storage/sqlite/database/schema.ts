@@ -254,11 +254,10 @@ export const SCHEMA: SqliteSchema = {
  */
 export async function initializeDatabase(db: any): Promise<void> {
   try {
-    // Enable foreign keys and WAL mode
+    // Enable foreign keys
     await db.run('PRAGMA foreign_keys = ON');
-    await db.run('PRAGMA journal_mode = WAL');
 
-    // Set optimal page size and cache size
+    // Set optimal cache size
     await db.run('PRAGMA page_size = 4096');
     await db.run('PRAGMA cache_size = -2000'); // 2MB cache
 

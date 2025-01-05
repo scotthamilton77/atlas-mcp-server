@@ -307,13 +307,11 @@ export class SqliteStorage extends TaskOperations implements TaskStorage {
   }
 
   /**
-   * Checkpoint database
+   * Checkpoint database using WAL manager
    */
   async checkpoint(): Promise<void> {
     try {
-      await this.connection.execute(async db => {
-        await db.run('PRAGMA wal_checkpoint(TRUNCATE)');
-      }, 'checkpoint');
+      await this.connection.checkpoint();
     } catch (error) {
       this.logger.error('Failed to checkpoint database', { error });
       throw createError(
@@ -581,16 +579,12 @@ export class SqliteStorage extends TaskOperations implements TaskStorage {
   }
 
   /**
-   * Get WAL file size
+   * Get WAL metrics including size
    */
   private async getWalSize(): Promise<number> {
     try {
-      return await this.connection.execute(async db => {
-        const result = await db.get<{ size: number }>(
-          "SELECT (SELECT page_count FROM pragma_page_count('main-wal')) * page_size as size FROM pragma_page_size"
-        );
-        return result?.size ?? 0;
-      }, 'getWalSize');
+      const metrics = await this.connection.getWALMetrics();
+      return metrics?.walSize ?? 0;
     } catch {
       return 0;
     }

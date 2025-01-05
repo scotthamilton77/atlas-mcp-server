@@ -1,3 +1,8 @@
+### Dev Note:
+
+The storage code is a mess. I have a lot of code that is not used and a second implementation of
+storage from a refactoring. I will clean this up in the future.
+
 # Storage System
 
 The storage system provides ACID-compliant data persistence for the Atlas Task Manager, with support

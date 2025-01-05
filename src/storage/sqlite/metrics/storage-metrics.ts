@@ -114,8 +114,8 @@ export class SqliteMetrics {
           // Update statistics
           await db.exec('PRAGMA optimize;');
 
-          // Checkpoint WAL
-          await db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+          // Use connection's checkpoint method which uses WALManager
+          await this.connection.checkpoint();
         }, 'maintenance');
       }, 'maintenance');
 
@@ -227,22 +227,14 @@ export class SqliteMetrics {
   }
 
   /**
-   * Get WAL file size
+   * Get WAL size from WALManager metrics
    */
   private async getWalSize(): Promise<number> {
     try {
-      const fs = await import('fs/promises');
-      const dbPath = this.connection.dbPath;
-      const walPath = `${dbPath}-wal`;
-
-      try {
-        const stats = await fs.stat(walPath);
-        return stats.size;
-      } catch {
-        return 0; // WAL file doesn't exist
-      }
+      const metrics = await this.connection.getWALMetrics();
+      return metrics?.walSize ?? 0;
     } catch {
-      return 0; // Error accessing file system
+      return 0; // WAL metrics not available
     }
   }
 }

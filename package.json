@@ -44,7 +44,7 @@
     "@types/node": "^22.10.5",
     "@types/sqlite3": "^3.1.11",
     "@types/uuid": "^10.0.0",
-    "atlas-mcp-server": "^1.5.0",
+    "atlas-mcp-server": "^1.5.2",
     "better-sqlite3": "^11.7.2",
     "concurrently": "^9.1.2",
     "detect-libc": "^2.0.3",
