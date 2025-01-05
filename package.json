@@ -2,7 +2,6 @@
   "name": "atlas-mcp-server",
   "version": "1.4.1",
   "description": "A Model Context Protocol server that enables LLMs to manage complex task hierarchies with dependency tracking, status management, and rich metadata support. Provides ACID-compliant storage with caching and batch processing capabilities.",
-  "private": true,
   "type": "module",
   "bin": {
     "atlas-mcp-server": "./build/index.js"
@@ -13,7 +12,8 @@
   "scripts": {
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,md}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx,json,md}\"",
-    "prepare": "husky install && node scripts/postinstall.js",
+    "prepare": "node scripts/postinstall.js",
+    "postinstall": "husky",
     "build": "tsc && node scripts/set-build-permissions.js",
     "watch": "tsc --watch",
     "inspector": "npx @modelcontextprotocol/inspector build/index.js",
@@ -32,13 +32,17 @@
     "url": "https://github.com/cyanheads/atlas-mcp-server/issues"
   },
   "homepage": "https://github.com/cyanheads/atlas-mcp-server#readme",
+  "main": "./build/index.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.1.0",
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.10.5",
     "@types/sqlite3": "^3.1.11",
     "@types/uuid": "^10.0.0",
-    "better-sqlite3": "^11.7.0",
+    "better-sqlite3": "^11.7.2",
     "concurrently": "^9.1.2",
     "detect-libc": "^2.0.3",
     "dotenv": "^16.4.7",
@@ -48,7 +52,7 @@
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7",
     "typescript": "^5.7.2",
-    "uuid": "^11.0.3",
+    "uuid": "^11.0.4",
     "winston": "^3.17.0",
     "zod": "^3.24.1"
   },
@@ -64,7 +68,7 @@
   "devDependencies": {
     "@eslint/js": "^9.17.0",
     "@types/eslint": "^9.6.1",
-    "@typescript-eslint/eslint-plugin": "^8.18.2",
+    "@typescript-eslint/eslint-plugin": "^8.19.0",
     "eslint": "^9.17.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-prettier": "^5.2.1",
