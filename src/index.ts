@@ -1,4 +1,10 @@
+#!/usr/bin/env node
+
 import { Logger } from './logging/index.js';
+import { EventEmitter } from 'events';
+
+// Increase max listeners to prevent warnings
+EventEmitter.defaultMaxListeners = 20;
 import { TaskManager } from './task/manager/task-manager.js';
 import { VisualizationManager } from './visualization/visualization-manager.js';
 import { createStorage } from './storage/index.js';
@@ -218,7 +224,7 @@ async function main(): Promise<void> {
       server = await AtlasServer.getInstance(
         {
           name: 'atlas-mcp-server',
-          version: '1.2.0',
+          version: '1.5.0',
           maxRequestsPerMinute: 600,
           requestTimeout: 30000,
           shutdownTimeout: 5000,
