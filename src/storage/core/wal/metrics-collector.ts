@@ -4,7 +4,7 @@
 import { Logger } from '../../../logging/index.js';
 import { WALMetrics, WALState } from './types.js';
 import { promises as fs } from 'fs';
-import { join, dirname, basename } from 'path';
+import { getWALPaths } from './wal-paths.js';
 
 export class MetricsCollector {
   private readonly logger: Logger;
@@ -132,18 +132,27 @@ export class MetricsCollector {
    */
   private async getWalSize(): Promise<number> {
     try {
-      const walPath = join(dirname(this.dbPath), basename(this.dbPath) + '-wal');
+      const { walPath } = getWALPaths(this.dbPath);
       const stats = await fs.stat(walPath);
       return stats.size;
     } catch (error) {
-      // WAL file might not exist yet
-      this.logger.debug('Could not get WAL file size', {
-        error,
-        context: {
-          operation: 'getWalSize',
-          timestamp: Date.now(),
-        },
-      });
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        // Log unexpected errors but not missing file errors
+        this.logger.warn('Error getting WAL file size', {
+          error,
+          context: {
+            operation: 'getWalSize',
+            timestamp: Date.now(),
+          },
+        });
+      } else {
+        this.logger.debug('WAL file does not exist yet', {
+          context: {
+            operation: 'getWalSize',
+            timestamp: Date.now(),
+          },
+        });
+      }
       return 0;
     }
   }

@@ -5,7 +5,8 @@ import { Logger } from '../../../logging/index.js';
 import { ErrorCodes, createError } from '../../../errors/index.js';
 import { WALFileInfo } from './types.js';
 import { promises as fs } from 'fs';
-import { join, dirname } from 'path';
+import { dirname } from 'path';
+import { getWALPaths } from './wal-paths.js';
 
 export class FileHandler {
   private readonly logger: Logger;
@@ -64,9 +65,7 @@ export class FileHandler {
    * Get WAL file information
    */
   async getWALInfo(): Promise<WALFileInfo> {
-    // SQLite uses 'main-wal' and 'main-shm' for the default database connection
-    const walPath = join(dirname(this.dbPath), 'main-wal');
-    const shmPath = join(dirname(this.dbPath), 'main-shm');
+    const { walPath, shmPath } = getWALPaths(this.dbPath);
 
     try {
       const walStats = await fs.stat(walPath);
@@ -79,15 +78,23 @@ export class FileHandler {
         lastModified: walStats.mtimeMs,
       };
     } catch (error) {
-      // WAL file might not exist yet
-      this.logger.debug('WAL file not found or inaccessible', {
-        walPath,
-        error: error instanceof Error ? error.message : String(error),
-        context: {
-          operation: 'getWALInfo',
-          timestamp: Date.now(),
-        },
-      });
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        // Log unexpected errors but not missing file errors
+        this.logger.warn('WAL file access error', {
+          error,
+          context: {
+            operation: 'getWALInfo',
+            timestamp: Date.now(),
+          },
+        });
+      } else {
+        this.logger.debug('WAL file not found - normal for initial state', {
+          context: {
+            operation: 'getWALInfo',
+            timestamp: Date.now(),
+          },
+        });
+      }
 
       return {
         walPath,

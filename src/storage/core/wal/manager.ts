@@ -141,90 +141,104 @@ export class WALManager {
               return;
             }
 
-            // Set exclusive lock to prevent other connections
-            await db.exec('PRAGMA locking_mode = EXCLUSIVE');
-
             try {
-              // Enable WAL mode
+              // Enable WAL mode without exclusive lock first
               await db.exec('PRAGMA journal_mode = WAL');
 
               // Verify WAL mode
               const mode = await db.get<{ journal_mode: string }>('PRAGMA journal_mode');
               if (mode?.journal_mode !== 'wal') {
-                throw createError(
-                  ErrorCodes.STORAGE_INIT,
-                  'Failed to enable WAL mode',
-                  'enableWAL',
-                  `Expected 'wal', got '${mode?.journal_mode}'`
-                );
+                // If failed, try with exclusive lock
+                await db.exec('PRAGMA locking_mode = EXCLUSIVE');
+                await db.exec('PRAGMA journal_mode = WAL');
+
+                // Verify again
+                const modeWithLock = await db.get<{ journal_mode: string }>('PRAGMA journal_mode');
+                if (modeWithLock?.journal_mode !== 'wal') {
+                  throw createError(
+                    ErrorCodes.STORAGE_INIT,
+                    'Failed to enable WAL mode',
+                    'enableWAL',
+                    `Expected 'wal', got '${modeWithLock?.journal_mode}'`
+                  );
+                }
               }
 
-              // Set state before configuration
-              this.state.isEnabled = true;
+              try {
+                // Set state before configuration
+                this.state.isEnabled = true;
 
-              // Configure WAL settings
-              await this.configureWAL(db);
+                // Configure WAL settings
+                await this.configureWAL(db);
 
-              // Start monitoring
-              this.metricsCollector.startCollecting();
+                // Start monitoring
+                this.metricsCollector.startCollecting();
 
-              const duration = Date.now() - enableStart;
-              this.logger.info('WAL mode enabled successfully', {
-                duration,
-                retryCount,
-                context: {
-                  operation: 'enableWAL',
-                  timestamp: Date.now(),
-                },
-              });
-
-              // Emit WAL enabled event
-              this.eventManager.emitSystemEvent({
-                type: EventTypes.STORAGE_WAL_ENABLED,
-                timestamp: Date.now(),
-                metadata: {
-                  dbPath: this.config.dbPath,
-                  duration,
-                  metrics: {
-                    connections: {
-                      total: 1,
-                      active: 1,
-                      idle: 0,
-                      errors: retryCount,
-                      avgResponseTime: duration,
-                    },
-                    cache: {
-                      hits: 0,
-                      misses: 0,
-                      size: 0,
-                      maxSize: 0,
-                      hitRate: 0,
-                      evictions: 0,
-                      memoryUsage: 0,
-                    },
-                    queries: {
-                      total: 1,
-                      errors: retryCount,
-                      avgExecutionTime: duration,
-                      slowQueries: 0,
-                    },
-                    timestamp: Date.now(),
-                  },
-                },
-              });
-
-              return;
-            } finally {
-              // Release exclusive lock
-              await db.exec('PRAGMA locking_mode = NORMAL').catch(error => {
-                this.logger.warn('Failed to release exclusive lock', {
-                  error,
+                const operationDuration = Date.now() - enableStart;
+                this.logger.info('WAL mode enabled successfully', {
+                  duration: operationDuration,
+                  retryCount,
                   context: {
                     operation: 'enableWAL',
                     timestamp: Date.now(),
                   },
                 });
-              });
+
+                // Emit WAL enabled event
+                this.eventManager.emitSystemEvent({
+                  type: EventTypes.STORAGE_WAL_ENABLED,
+                  timestamp: Date.now(),
+                  metadata: {
+                    dbPath: this.config.dbPath,
+                    duration: operationDuration,
+                    metrics: {
+                      connections: {
+                        total: 1,
+                        active: 1,
+                        idle: 0,
+                        errors: retryCount,
+                        avgResponseTime: operationDuration,
+                      },
+                      cache: {
+                        hits: 0,
+                        misses: 0,
+                        size: 0,
+                        maxSize: 0,
+                        hitRate: 0,
+                        evictions: 0,
+                        memoryUsage: 0,
+                      },
+                      queries: {
+                        total: 1,
+                        errors: retryCount,
+                        avgExecutionTime: operationDuration,
+                        slowQueries: 0,
+                      },
+                      timestamp: Date.now(),
+                    },
+                  },
+                });
+              } catch (configError) {
+                // Reset state if configuration fails
+                this.state.isEnabled = false;
+                throw configError;
+              }
+
+              return;
+            } finally {
+              // Always try to release exclusive lock
+              try {
+                await db.exec('PRAGMA locking_mode = NORMAL');
+              } catch (unlockError) {
+                this.logger.warn('Failed to release exclusive lock', {
+                  error: unlockError,
+                  context: {
+                    operation: 'enableWAL',
+                    timestamp: Date.now(),
+                  },
+                });
+                // Don't throw - we don't want to mask the original error if there was one
+              }
             }
           } catch (error) {
             lastError = error instanceof Error ? error : new Error(String(error));
@@ -301,19 +315,21 @@ export class WALManager {
    * Configure WAL settings with transaction
    */
   private async configureWAL(db: Database): Promise<void> {
-    // Set synchronous mode
-    await db.exec('PRAGMA synchronous = NORMAL');
-
-    // Configure WAL behavior
-    await db.exec('BEGIN IMMEDIATE');
     try {
+      // Configure WAL behavior one setting at a time
+      await db.exec('PRAGMA synchronous = NORMAL');
       await db.exec('PRAGMA wal_autocheckpoint = 1000');
       await db.exec(`PRAGMA journal_size_limit = ${this.config.maxWalSize}`);
       await db.exec('PRAGMA mmap_size = 67108864'); // 64MB memory mapping
       await db.exec('PRAGMA page_size = 4096');
-      await db.exec('COMMIT');
     } catch (error) {
-      await db.exec('ROLLBACK');
+      this.logger.error('Failed to configure WAL settings', {
+        error,
+        context: {
+          operation: 'configureWAL',
+          timestamp: Date.now(),
+        },
+      });
       throw error;
     }
   }

@@ -24,6 +24,24 @@ export { ConnectionManager, type ConnectionOptions } from './connection/manager.
 export { ConnectionPool } from './connection/pool.js';
 export { HealthMonitor, type ConnectionHealth, type HealthMetrics } from './connection/health.js';
 
+// WAL management
+export { WALManager } from './wal/manager.js';
+export { CheckpointManager } from './wal/checkpoint-manager.js';
+export { MetricsCollector } from './wal/metrics-collector.js';
+export { FileHandler } from './wal/file-handler.js';
+export { getWALPaths } from './wal/wal-paths.js';
+export {
+  WALConfig,
+  WALMetrics,
+  WALState,
+  WALFileInfo,
+  CheckpointResult,
+  RetryOptions,
+  DEFAULT_WAL_CONFIG,
+  DEFAULT_RETRY_OPTIONS,
+  WALOperationContext,
+} from './wal/types.js';
+
 // Query handling
 export { QueryBuilder } from './query/builder.js';
 export { QueryExecutor } from './query/executor.js';

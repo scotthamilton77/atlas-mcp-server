@@ -6,6 +6,7 @@ import { Logger } from '../../../logging/index.js';
 import { ErrorCodes, createError } from '../../../errors/index.js';
 import { isTransientError } from '../../../utils/error-utils.js';
 import { CheckpointMode, CheckpointResult, RetryOptions, DEFAULT_RETRY_OPTIONS } from './types.js';
+import { getWALPaths } from './wal-paths.js';
 
 export class CheckpointManager {
   private readonly logger: Logger;
@@ -175,12 +176,27 @@ export class CheckpointManager {
   private async getWalSize(): Promise<number> {
     try {
       const fs = await import('fs/promises');
-      const path = await import('path');
-      const walPath = path.join(path.dirname(this.dbPath), path.basename(this.dbPath) + '-wal');
+      const { walPath } = getWALPaths(this.dbPath);
       const stats = await fs.stat(walPath);
       return stats.size;
     } catch (error) {
-      // WAL file might not exist yet
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        // Log unexpected errors but not missing file errors
+        this.logger.warn('Error getting WAL file size', {
+          error,
+          context: {
+            operation: 'getWalSize',
+            timestamp: Date.now(),
+          },
+        });
+      } else {
+        this.logger.debug('WAL file does not exist yet', {
+          context: {
+            operation: 'getWalSize',
+            timestamp: Date.now(),
+          },
+        });
+      }
       return 0;
     }
   }

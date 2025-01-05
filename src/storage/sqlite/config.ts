@@ -3,9 +3,9 @@ import { PlatformCapabilities } from '../../utils/platform-utils.js';
 import { ConfigManager } from '../../config/index.js';
 
 // Default configuration values
-export const DEFAULT_PAGE_SIZE = 4096;
-export const DEFAULT_CACHE_SIZE = 2000;
-export const DEFAULT_BUSY_TIMEOUT = 2000;
+export const DEFAULT_PAGE_SIZE = 8192;
+export const DEFAULT_CACHE_SIZE = 4000;
+export const DEFAULT_BUSY_TIMEOUT = 5000; // Increased to handle WAL initialization lock contention
 
 /**
  * SQLite specific configuration extending base storage config
@@ -100,7 +100,7 @@ export function createConfig(config: Partial<SqliteConfig> = {}): Required<Sqlit
     busyTimeout: config.connection?.busyTimeout || DEFAULT_BUSY_TIMEOUT,
 
     // SQLite-specific settings
-    timeout: 5000,
+    timeout: DEFAULT_BUSY_TIMEOUT,
     maxPageCount: 1000000,
     tempStore: 'memory',
     mmap: true,

@@ -3,6 +3,7 @@ import sqlite3 from 'sqlite3';
 import { Logger } from '../../../logging/index.js';
 import { SqliteConfig } from '../config.js';
 import { ConnectionStats } from '../../../types/storage.js';
+import { WALManager } from '../../core/wal/manager.js';
 
 /**
  * SQLite connection manager
@@ -13,6 +14,7 @@ export class SqliteConnection {
   private isOpen = false;
   private inTransaction = false;
   private readonly _dbPath: string;
+  private walManager: WALManager | null = null;
 
   /**
    * Get database file path
@@ -73,16 +75,42 @@ export class SqliteConnection {
         driver: sqlite3.Database,
       });
 
-      // Configure connection
-      await this.db.run('PRAGMA foreign_keys = ON');
-      await this.db.run(`PRAGMA journal_mode = ${this.config.journalMode}`);
-      await this.db.run(`PRAGMA synchronous = ${this.config.synchronous}`);
-      await this.db.run(`PRAGMA cache_size = ${this.config.cacheSize}`);
-      await this.db.run(`PRAGMA page_size = ${this.config.pageSize}`);
-      await this.db.run(`PRAGMA max_page_count = ${this.config.maxPageCount}`);
-      await this.db.run(`PRAGMA temp_store = ${this.config.tempStore}`);
-      await this.db.run(`PRAGMA mmap_size = ${this.config.mmap ? -1 : 0}`);
+      // Set busy timeout first to handle lock contention
       await this.db.run(`PRAGMA busy_timeout = ${this.config.busyTimeout}`);
+
+      // Configure critical settings before WAL
+      await this.db.run('PRAGMA foreign_keys = ON');
+      await this.db.run(`PRAGMA temp_store = ${this.config.tempStore}`);
+      await this.db.run(`PRAGMA page_size = ${this.config.pageSize}`);
+
+      try {
+        // Initialize WAL manager if journal mode is WAL
+        if (this.config.journalMode === 'wal') {
+          this.walManager = WALManager.getInstance(this.config.path);
+          // Check and cleanup any pending transaction
+          try {
+            await this.db.get('SELECT sqlite_version()');
+          } catch (error) {
+            // If there's an error, try to rollback any stuck transaction
+            await this.db.run('ROLLBACK').catch(() => {});
+          }
+          await this.walManager.enableWAL(this.db);
+        } else {
+          // Configure non-WAL mode
+          await this.db.run(`PRAGMA journal_mode = ${this.config.journalMode}`);
+          await this.db.run(`PRAGMA synchronous = ${this.config.synchronous}`);
+        }
+
+        // Configure remaining settings
+        await this.db.run(`PRAGMA cache_size = ${this.config.cacheSize}`);
+        await this.db.run(`PRAGMA max_page_count = ${this.config.maxPageCount}`);
+        await this.db.run(`PRAGMA mmap_size = ${this.config.mmap ? -1 : 0}`);
+      } catch (error) {
+        // Ensure connection is closed on initialization failure
+        await this.db.close().catch(() => {});
+        this.db = null;
+        throw error;
+      }
 
       this.isOpen = true;
       this.stats.total++;
@@ -104,6 +132,12 @@ export class SqliteConnection {
     }
 
     try {
+      // Close WAL manager if it exists
+      if (this.walManager) {
+        await this.walManager.close();
+        this.walManager = null;
+      }
+
       await this.db.close();
       this.db = null;
       this.isOpen = false;
@@ -115,6 +149,26 @@ export class SqliteConnection {
       this.logger.error('Failed to close database connection', { error });
       throw error;
     }
+  }
+
+  /**
+   * Get WAL metrics if WAL mode is enabled
+   */
+  async getWALMetrics() {
+    if (!this.walManager) {
+      return null;
+    }
+    return await this.walManager.getMetrics();
+  }
+
+  /**
+   * Force a WAL checkpoint if WAL mode is enabled
+   */
+  async checkpoint(): Promise<void> {
+    if (!this.walManager || !this.db) {
+      throw new Error('WAL mode not enabled or connection not open');
+    }
+    await this.walManager.checkpoint(this.db);
   }
 
   /**
