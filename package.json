@@ -1,13 +1,15 @@
 {
   "name": "atlas-mcp-server",
-  "version": "1.4.1",
+  "version": "1.5.1",
   "description": "A Model Context Protocol server that enables LLMs to manage complex task hierarchies with dependency tracking, status management, and rich metadata support. Provides ACID-compliant storage with caching and batch processing capabilities.",
   "type": "module",
   "bin": {
     "atlas-mcp-server": "./build/index.js"
   },
   "files": [
-    "build"
+    "build",
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,md}\"",
@@ -27,11 +29,11 @@
     "type": "git",
     "url": "git+https://github.com/cyanheads/atlas-mcp-server.git"
   },
-  "author": "cyanheads",
+  "author": "Casey Hand @cyanheads",
   "bugs": {
     "url": "https://github.com/cyanheads/atlas-mcp-server/issues"
   },
-  "homepage": "https://github.com/cyanheads/atlas-mcp-server#readme",
+  "homepage": "https://caseyjhand.com",
   "main": "./build/index.js",
   "engines": {
     "node": ">=18.0.0"
@@ -42,6 +44,7 @@
     "@types/node": "^22.10.5",
     "@types/sqlite3": "^3.1.11",
     "@types/uuid": "^10.0.0",
+    "atlas-mcp-server": "^1.5.0",
     "better-sqlite3": "^11.7.2",
     "concurrently": "^9.1.2",
     "detect-libc": "^2.0.3",
