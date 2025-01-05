@@ -19,8 +19,6 @@ import { setBuildPermissions, ensureBuildDirectory } from './build-utils.js';
 
 async function postInstall() {
   await ensureBuildDirectory();
-  // Set permissions with lenient error handling during install
-  await setBuildPermissions(false);
 }
 
 postInstall().catch(error => {
