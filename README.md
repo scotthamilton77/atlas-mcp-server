@@ -2,7 +2,7 @@
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
 [![Model Context Protocol](https://img.shields.io/badge/MCP-1.1.0-green.svg)](https://modelcontextprotocol.io/)
-[![Version](https://img.shields.io/badge/Version-1.4.1-blue.svg)]()
+[![Version](https://img.shields.io/badge/Version-1.5.0-blue.svg)]()
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Status](https://img.shields.io/badge/Status-Stable-blue.svg)]()
 [![GitHub](https://img.shields.io/github/stars/cyanheads/atlas-mcp-server?style=social)](https://github.com/cyanheads/atlas-mcp-server)
@@ -164,21 +164,26 @@ Core Components:
 
 ## Installation
 
-1. Clone the repository:
+(Recommended) You can install ATLAS MCP Server directly using npx:
 
+```bash
+npx atlas-mcp-server
+```
+
+(Manual) Or install from source:
+
+1. Clone the repository:
 ```bash
 git clone https://github.com/cyanheads/atlas-mcp-server.git
 cd atlas-mcp-server
 ```
 
 2. Install dependencies:
-
 ```bash
 npm install
 ```
 
 3. Build the project:
-
 ```bash
 npm run build
 ```
