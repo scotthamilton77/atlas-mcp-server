@@ -164,10 +164,10 @@ Core Components:
 
 ## Installation
 
-(Recommended) You can install ATLAS MCP Server directly using npx:
+(Recommended) You can install ATLAS MCP Server directly using npm:
 
 ```bash
-npx atlas-mcp-server
+npm i atlas-mcp-server
 ```
 
 (Manual) Or install from source:
