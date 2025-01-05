@@ -133,6 +133,7 @@ target/
 # Build and Distribution
 dist/
 out/
+build/
 
 # Documentation
 docs/_build/
