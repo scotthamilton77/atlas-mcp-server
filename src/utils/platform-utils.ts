@@ -166,6 +166,8 @@ export class PlatformCapabilities {
 export class ProcessManager {
   private static cleanupHandlers: Array<() => Promise<void>> = [];
   private static isShuttingDown = false;
+  private static signalListeners = new Set<() => void>();
+  private static exceptionListeners = new Set<() => void>();
   private static logger?: {
     info: (message: string, ...args: unknown[]) => void;
     error: (message: string, ...args: unknown[]) => void;
@@ -198,6 +200,7 @@ export class ProcessManager {
     if (this.isShuttingDown) return;
     this.isShuttingDown = true;
 
+    // Clean up all registered handlers
     for (const handler of this.cleanupHandlers.reverse()) {
       try {
         await handler();
@@ -205,29 +208,64 @@ export class ProcessManager {
         this.logger?.error('Cleanup handler failed:', error);
       }
     }
+
+    // Clean up signal handlers
+    this.cleanupSignalHandlers();
+  }
+
+  private static cleanupSignalHandlers(): void {
+    // Remove all signal handlers
+    for (const removeListener of this.signalListeners) {
+      removeListener();
+    }
+    this.signalListeners.clear();
+
+    // Remove all exception handlers
+    for (const removeListener of this.exceptionListeners) {
+      removeListener();
+    }
+    this.exceptionListeners.clear();
   }
 
   static setupSignalHandlers(): void {
     const signals = PlatformCapabilities.getProcessSignals();
 
+    // Clean up any existing listeners
+    this.cleanupSignalHandlers();
+
+    // Set up signal handlers
     for (const signal of signals) {
-      process.once(signal, async () => {
+      const handler = async () => {
         this.logger?.info(`Received ${signal}, cleaning up...`);
         await this.cleanup();
         process.exit(0);
-      });
+      };
+      process.once(signal, handler);
+      this.signalListeners.add(() => process.removeListener(signal, handler));
     }
 
-    process.on('uncaughtException', async error => {
+    // Set up exception handlers
+    const uncaughtHandler = async (error: Error) => {
       this.logger?.error('Uncaught Exception:', error);
       await this.cleanup();
       process.exit(1);
-    });
+    };
+    process.on('uncaughtException', uncaughtHandler);
+    this.exceptionListeners.add(() => process.removeListener('uncaughtException', uncaughtHandler));
 
-    process.on('unhandledRejection', async reason => {
+    const rejectionHandler = async (reason: unknown) => {
       this.logger?.error('Unhandled Rejection:', reason);
       await this.cleanup();
       process.exit(1);
+    };
+    process.on('unhandledRejection', rejectionHandler);
+    this.exceptionListeners.add(() =>
+      process.removeListener('unhandledRejection', rejectionHandler)
+    );
+
+    // Register cleanup of our handlers
+    process.once('exit', () => {
+      this.cleanupSignalHandlers();
     });
   }
 }
