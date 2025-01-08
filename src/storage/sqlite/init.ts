@@ -368,14 +368,12 @@ export async function createStorage(config: StorageConfig): Promise<SqliteStorag
           continue;
         }
 
-        // Create startup backup manager
-        startupBackupManager = new StartupBackupManager(dbPath);
-
-        // Create startup backup before opening database
-        await startupBackupManager.createStartupBackup();
-
+        // Create connection first
         connection = new SqliteConnection(sqliteConfig);
         await connection.open();
+
+        // Create startup backup manager after database is opened
+        startupBackupManager = new StartupBackupManager(dbPath);
         break;
       } catch (error) {
         lastError = error;
@@ -431,6 +429,11 @@ export async function createStorage(config: StorageConfig): Promise<SqliteStorag
 
     storage = new SqliteStorage(connection, sqliteConfig, startupBackupManager);
     await storage.initialize();
+
+    // Create startup backup after successful initialization
+    if (startupBackupManager) {
+      await startupBackupManager.createStartupBackup();
+    }
 
     // Remove shutdown marker after successful initialization
     await fs.unlink(shutdownMarkerPath).catch(() => {});
