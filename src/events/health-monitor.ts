@@ -37,17 +37,19 @@ export class EventHealthMonitor {
     this.startHealthCheck();
   }
 
+  private exitHandler = () => {
+    if (this.healthCheckInterval) {
+      clearInterval(this.healthCheckInterval);
+    }
+  };
+
   private startHealthCheck(): void {
     this.healthCheckInterval = setInterval(() => {
       this.checkHandlerHealth();
     }, EventHealthMonitor.HEALTH_CHECK_INTERVAL);
 
     // Ensure cleanup on process exit
-    process.on('beforeExit', () => {
-      if (this.healthCheckInterval) {
-        clearInterval(this.healthCheckInterval);
-      }
-    });
+    process.on('beforeExit', this.exitHandler);
   }
 
   private checkHandlerHealth(): void {
@@ -190,7 +192,9 @@ export class EventHealthMonitor {
   cleanup(): void {
     if (this.healthCheckInterval) {
       clearInterval(this.healthCheckInterval);
+      this.healthCheckInterval = undefined;
     }
+    process.off('beforeExit', this.exitHandler);
     this.handlerStats.clear();
     this.activeHandlers.clear();
   }

@@ -46,6 +46,35 @@ export class EventManager {
   private cleanupTimeout?: NodeJS.Timeout;
   private readonly CLEANUP_INTERVAL = 60000; // 1 minute
 
+  private errorHandler = (error: Error) => {
+    if (EventManager.logger) {
+      EventManager.logger.error('EventEmitter error', { error });
+    }
+  };
+
+  private rejectionHandler = (reason: unknown, promise: Promise<unknown>) => {
+    if (EventManager.logger) {
+      EventManager.logger.error('Unhandled promise rejection in event handler', {
+        reason,
+        promise,
+      });
+    }
+  };
+
+  private setupErrorHandling(): void {
+    // Handle emitter errors
+    this.emitter.on('error', this.errorHandler);
+
+    // Handle uncaught promise rejections in handlers
+    process.on('unhandledRejection', this.rejectionHandler);
+  }
+
+  private cleanupErrorHandling(): void {
+    // Remove error handlers
+    this.emitter.off('error', this.errorHandler);
+    process.off('unhandledRejection', this.rejectionHandler);
+  }
+
   setLogger(logger: Logger): void {
     if (!EventManager.logger) {
       EventManager.logger = logger.child({ component: 'EventManager' });
@@ -224,6 +253,7 @@ export class EventManager {
     this.eventStats.clear();
     await this.batchProcessor.shutdown();
     this.healthMonitor.cleanup();
+    this.cleanupErrorHandling();
 
     this.isShuttingDown = false;
   }
@@ -259,7 +289,7 @@ export class EventManager {
           }
 
           EventManager.logger.debug('Emitting event', debugInfo);
-        } catch (debugError) {
+        } catch {
           // If debug logging fails, log a simpler message
           const safeDebugInfo = {
             type: event.type,
@@ -627,29 +657,11 @@ export class EventManager {
     this.eventStats.clear();
     this.healthMonitor.cleanup();
     this.batchProcessor.cleanup();
+    this.cleanupErrorHandling();
   }
 
   listenerCount(type: EventTypes | '*'): number {
     return this.emitter.listenerCount(type);
-  }
-
-  private setupErrorHandling(): void {
-    // Handle emitter errors
-    this.emitter.on('error', (error: Error) => {
-      if (EventManager.logger) {
-        EventManager.logger.error('EventEmitter error', { error });
-      }
-    });
-
-    // Handle uncaught promise rejections in handlers
-    process.on('unhandledRejection', (reason, promise) => {
-      if (EventManager.logger) {
-        EventManager.logger.error('Unhandled promise rejection in event handler', {
-          reason,
-          promise,
-        });
-      }
-    });
   }
 
   private emitError(context: string, error: Error, metadata?: Record<string, unknown>): void {
@@ -664,7 +676,7 @@ export class EventManager {
       // Add any additional enumerable properties
       for (const key of Object.keys(error)) {
         try {
-          const value = (error as any)[key];
+          const value = (error as unknown as Record<string, unknown>)[key];
           // Only include if JSON serializable
           JSON.stringify(value);
           serializableError[key] = value;

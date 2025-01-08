@@ -37,6 +37,7 @@ export class EventBatchProcessor {
   private readonly deadLetterQueue = new Map<EventTypes, DeadLetterEvent[]>();
   private readonly config: BatchConfig;
   private flushInterval?: NodeJS.Timeout;
+  private memoryCheckInterval?: NodeJS.Timeout;
   private isShuttingDown = false;
   private activeProcessing = new Set<string>();
 
@@ -63,6 +64,15 @@ export class EventBatchProcessor {
     this.setupMemoryMonitoring();
   }
 
+  private exitHandler = () => {
+    if (this.flushInterval) {
+      clearInterval(this.flushInterval);
+    }
+    if (this.memoryCheckInterval) {
+      clearInterval(this.memoryCheckInterval);
+    }
+  };
+
   private startPeriodicFlush(): void {
     // Clear any existing interval
     if (this.flushInterval) {
@@ -79,29 +89,29 @@ export class EventBatchProcessor {
     }, this.config.flushInterval);
 
     // Ensure cleanup on process exit
-    process.on('beforeExit', () => {
-      if (this.flushInterval) {
-        clearInterval(this.flushInterval);
-      }
-    });
+    process.on('beforeExit', this.exitHandler);
   }
 
+  private checkMemoryPressure = () => {
+    const memUsage = process.memoryUsage();
+    const heapUsed = memUsage.heapUsed / memUsage.heapTotal;
+
+    if (heapUsed > 0.8) {
+      // 80% heap usage
+      this.logger?.warn('High memory pressure detected', { heapUsed });
+      // Force flush all batches
+      this.flushAllBatches().catch(error => {
+        this.logger?.error('Emergency flush failed', { error });
+      });
+    }
+  };
+
   private setupMemoryMonitoring(): void {
-    const checkMemoryPressure = () => {
-      const memUsage = process.memoryUsage();
-      const heapUsed = memUsage.heapUsed / memUsage.heapTotal;
-
-      if (heapUsed > 0.8) {
-        // 80% heap usage
-        this.logger?.warn('High memory pressure detected', { heapUsed });
-        // Force flush all batches
-        this.flushAllBatches().catch(error => {
-          this.logger?.error('Emergency flush failed', { error });
-        });
-      }
-    };
-
-    setInterval(checkMemoryPressure, 30000); // Check every 30 seconds
+    // Clear any existing interval
+    if (this.memoryCheckInterval) {
+      clearInterval(this.memoryCheckInterval);
+    }
+    this.memoryCheckInterval = setInterval(this.checkMemoryPressure, 30000); // Check every 30 seconds
   }
 
   addEvent<T extends AtlasEvent>(event: T, callback: (events: T[]) => Promise<void>): void {
@@ -258,6 +268,15 @@ export class EventBatchProcessor {
       clearInterval(this.flushInterval);
       this.flushInterval = undefined;
     }
+
+    // Clear memory check interval
+    if (this.memoryCheckInterval) {
+      clearInterval(this.memoryCheckInterval);
+      this.memoryCheckInterval = undefined;
+    }
+
+    // Remove event listeners
+    process.off('beforeExit', this.exitHandler);
 
     // Clear all timers
     this.timers.forEach(timer => clearTimeout(timer));
