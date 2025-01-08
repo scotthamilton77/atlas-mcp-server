@@ -5,7 +5,7 @@ import { EventEmitter } from 'events';
 import { ConfigManager } from './config/config-manager.js';
 
 // Increase max listeners to prevent memory leak warnings
-EventEmitter.defaultMaxListeners = 100;
+EventEmitter.defaultMaxListeners = 30;
 
 // Track and cleanup process event listeners
 const processListeners = new Set<() => void>();
