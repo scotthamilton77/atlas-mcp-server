@@ -6,6 +6,8 @@ import { SqliteConnection } from './database/connection.js';
 import { initializeDatabase } from './database/schema.js';
 import { SqliteConfig } from './config.js';
 import { createError, ErrorCodes } from '../../errors/index.js';
+import { StartupBackupManager } from '../core/backup/startup-manager.js';
+import { promises as fs } from 'fs';
 
 /**
  * SQLite-based task storage implementation
@@ -17,7 +19,8 @@ export class SqliteStorage extends TaskOperations implements TaskStorage {
 
   constructor(
     protected readonly connection: SqliteConnection,
-    protected readonly config: Required<SqliteConfig>
+    protected readonly config: Required<SqliteConfig>,
+    private readonly backupManager?: StartupBackupManager
   ) {
     super(connection);
     this.logger = Logger.getInstance().child({ component: 'SqliteStorage' });
@@ -58,8 +61,62 @@ export class SqliteStorage extends TaskOperations implements TaskStorage {
     }
 
     try {
+      // Create shutdown backup if backup manager exists
+      if (this.backupManager) {
+        try {
+          await this.backupManager.createShutdownBackup();
+        } catch (backupError) {
+          this.logger.error('Failed to create shutdown backup', {
+            error: backupError,
+            context: {
+              operation: 'close.backup',
+              timestamp: Date.now(),
+            },
+          });
+          // Continue with close even if backup fails
+        }
+      }
+
+      // Ensure WAL checkpoint before closing
+      try {
+        await this.checkpoint();
+      } catch (checkpointError) {
+        this.logger.error('Failed to checkpoint database before closing', {
+          error: checkpointError,
+          context: {
+            operation: 'close.checkpoint',
+            timestamp: Date.now(),
+          },
+        });
+      }
+
+      // Close the connection
       await this.connection.close();
       this.isClosed = true;
+
+      // Write a marker file to indicate clean shutdown
+      const markerPath = `${this.config.path}.shutdown`;
+      try {
+        await fs.writeFile(markerPath, Date.now().toString());
+
+        // Schedule marker file cleanup
+        setTimeout(async () => {
+          try {
+            await fs.unlink(markerPath);
+          } catch {
+            // Ignore cleanup errors
+          }
+        }, 5000); // Clean up after 5 seconds
+      } catch (markerError) {
+        this.logger.error('Failed to write shutdown marker', {
+          error: markerError,
+          context: {
+            operation: 'close.marker',
+            timestamp: Date.now(),
+          },
+        });
+      }
+
       this.logger.info('Storage closed successfully');
     } catch (error) {
       this.logger.error('Failed to close storage', { error });

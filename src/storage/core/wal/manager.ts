@@ -11,6 +11,7 @@ import { WALConfig, WALMetrics, WALState, DEFAULT_WAL_CONFIG } from './types.js'
 import { CheckpointManager } from './checkpoint-manager.js';
 import { MetricsCollector } from './metrics-collector.js';
 import { FileHandler } from './file-handler.js';
+import { BackupManager } from '../backup/backup-manager.js';
 
 export class WALManager {
   private static instance: WALManager;
@@ -19,6 +20,7 @@ export class WALManager {
   private readonly checkpointManager: CheckpointManager;
   private readonly metricsCollector: MetricsCollector;
   private readonly fileHandler: FileHandler;
+  private readonly backupManager: BackupManager;
   private readonly config: Required<WALConfig>;
   private initializationPromise: Promise<void> | null = null;
 
@@ -50,6 +52,7 @@ export class WALManager {
     this.checkpointManager = new CheckpointManager(this.config.dbPath);
     this.metricsCollector = new MetricsCollector(this.config.dbPath, this.state);
     this.fileHandler = new FileHandler(this.config.dbPath);
+    this.backupManager = new BackupManager(this.config.dbPath);
 
     this.logger.info('WAL manager created', {
       config: this.config,
@@ -71,18 +74,38 @@ export class WALManager {
   }
 
   async enableWAL(db: Database): Promise<void> {
+    // Check for existing initialization
     if (this.initializationPromise) {
       try {
         await this.initializationPromise;
         return;
       } catch (error) {
-        this.logger.warn('Previous initialization failed, retrying', {
+        // If previous initialization failed, we need to verify database integrity
+        this.logger.warn('Previous initialization failed, checking database integrity', {
           error,
           context: {
             operation: 'enableWAL',
             timestamp: Date.now(),
           },
         });
+
+        // Check if database files exist and are potentially corrupted
+        const walInfo = await this.fileHandler.getWALInfo();
+        if (walInfo.walSize > 0) {
+          this.logger.error('Found existing WAL file during initialization retry', {
+            context: {
+              operation: 'enableWAL',
+              walInfo,
+              timestamp: Date.now(),
+            },
+          });
+          throw createError(
+            ErrorCodes.STORAGE_INIT,
+            'Database recovery required',
+            'enableWAL',
+            'Found existing WAL file during initialization retry. Manual recovery required to prevent data loss.'
+          );
+        }
       }
     }
 
@@ -99,6 +122,24 @@ export class WALManager {
             'WAL mode not supported on this system',
             'enableWAL',
             'The system does not support WAL mode'
+          );
+        }
+
+        // Verify no existing WAL files before proceeding
+        const walInfo = await this.fileHandler.getWALInfo();
+        if (walInfo.walSize > 0) {
+          this.logger.error('Found existing WAL file before initialization', {
+            context: {
+              operation: 'enableWAL',
+              walInfo,
+              timestamp: Date.now(),
+            },
+          });
+          throw createError(
+            ErrorCodes.STORAGE_INIT,
+            'Database recovery required',
+            'enableWAL',
+            'Found existing WAL file. Manual recovery required to prevent data loss.'
           );
         }
 
@@ -369,22 +410,130 @@ export class WALManager {
       );
     }
 
-    const result = await this.checkpointManager.executeCheckpoint(db, this.config.retryOptions);
+    // Get current WAL info before checkpoint
+    const walInfo = await this.fileHandler.getWALInfo();
 
-    // Update state
-    this.state.lastCheckpoint = Date.now();
-    this.state.checkpointCount++;
-    this.state.totalCheckpointTime += result.duration;
+    // If WAL file is getting large, create automatic backup
+    if (walInfo.walSize > this.config.maxWalSize * 0.8) {
+      this.logger.warn('WAL file size approaching limit - creating backup', {
+        context: {
+          operation: 'checkpoint',
+          walSize: walInfo.walSize,
+          maxSize: this.config.maxWalSize,
+          timestamp: Date.now(),
+        },
+      });
 
-    // Emit checkpoint event
-    this.eventManager.emitSystemEvent({
-      type: EventTypes.STORAGE_WAL_CHECKPOINT,
-      timestamp: Date.now(),
-      metadata: {
-        dbPath: this.config.dbPath,
-        ...result,
-      },
-    });
+      try {
+        // Create backup using backup manager
+        await this.backupManager.createBackup();
+      } catch (backupError) {
+        this.logger.error('Failed to create backup before checkpoint', {
+          error: backupError,
+          context: {
+            operation: 'checkpoint.backup',
+            timestamp: Date.now(),
+          },
+        });
+        // Continue with checkpoint even if backup fails
+      }
+    }
+
+    try {
+      const result = await this.checkpointManager.executeCheckpoint(db, this.config.retryOptions);
+
+      // Update state
+      this.state.lastCheckpoint = Date.now();
+      this.state.checkpointCount++;
+      this.state.totalCheckpointTime += result.duration;
+
+      // Track max WAL size
+      if (walInfo.walSize > this.state.maxWalSizeReached) {
+        this.state.maxWalSizeReached = walInfo.walSize;
+      }
+
+      // Emit checkpoint event with detailed metrics
+      this.eventManager.emitSystemEvent({
+        type: EventTypes.STORAGE_WAL_CHECKPOINT,
+        timestamp: Date.now(),
+        metadata: {
+          dbPath: this.config.dbPath,
+          checkpointCount: this.state.checkpointCount,
+          metrics: {
+            storage: {
+              size: walInfo.walSize, // Total size is WAL size for checkpoint metrics
+              walSize: walInfo.walSize,
+              pageSize: 4096, // Standard SQLite page size
+              pageCount: Math.ceil(walInfo.walSize / 4096),
+              journalMode: 'wal',
+            },
+            performance: {
+              queryTime: 0,
+              transactionTime: 0,
+              walCheckpointTime: this.state.totalCheckpointTime / this.state.checkpointCount,
+              cacheHitRate: 0,
+              indexHitRate: 0,
+            },
+            connections: {
+              total: 1,
+              active: 1,
+              idle: 0,
+              errors: 0,
+              avgResponseTime: result.duration,
+            },
+            queries: {
+              total: 1,
+              errors: 0,
+              slowQueries: 0,
+              avgExecutionTime: result.duration,
+            },
+            cache: {
+              hits: 0,
+              misses: 0,
+              size: 0,
+              maxSize: 0,
+              hitRate: 0,
+              evictions: 0,
+              memoryUsage: 0,
+            },
+            timestamp: Date.now(),
+          },
+        },
+      });
+
+      // Log detailed checkpoint metrics
+      this.logger.info('Checkpoint completed successfully', {
+        context: {
+          operation: 'checkpoint',
+          walSizeBefore: walInfo.walSize,
+          duration: result.duration,
+          checkpointCount: this.state.checkpointCount,
+          timestamp: Date.now(),
+        },
+      });
+    } catch (error) {
+      // Enhanced error reporting for checkpoint failures
+      this.logger.error('Checkpoint failed', {
+        error,
+        context: {
+          operation: 'checkpoint',
+          walInfo,
+          state: this.state,
+          timestamp: Date.now(),
+        },
+      });
+      throw createError(
+        ErrorCodes.STORAGE_ERROR,
+        'Checkpoint failed',
+        'checkpoint',
+        error instanceof Error ? error.message : 'Unknown error during checkpoint',
+        {
+          walSize: walInfo.walSize,
+          lastCheckpoint: this.state.lastCheckpoint,
+          checkpointCount: this.state.checkpointCount,
+        }
+      );
+    }
   }
 
   async getMetrics(): Promise<WALMetrics> {
@@ -412,6 +561,7 @@ export class WALManager {
 
       // Clean up files
       await this.fileHandler.cleanup();
+      await this.backupManager.cleanup();
 
       // Reset state
       this.state = {

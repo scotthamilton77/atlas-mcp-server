@@ -15,6 +15,7 @@ export class SqliteConnection {
   private inTransaction = false;
   private readonly _dbPath: string;
   private walManager: WALManager | null = null;
+  private retryTimeouts: Set<NodeJS.Timeout> = new Set();
 
   /**
    * Get database file path
@@ -55,7 +56,13 @@ export class SqliteConnection {
         if (attempt === maxRetries) {
           throw lastError;
         }
-        await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 100));
+        const timeout = setTimeout(() => {}, Math.pow(2, attempt) * 100);
+        this.retryTimeouts.add(timeout);
+        await new Promise(resolve => {
+          timeout.unref();
+          setTimeout(resolve, Math.pow(2, attempt) * 100);
+        });
+        this.retryTimeouts.delete(timeout);
       }
     }
     throw lastError;
@@ -90,7 +97,7 @@ export class SqliteConnection {
           // Check and cleanup any pending transaction
           try {
             await this.db.get('SELECT sqlite_version()');
-          } catch (error) {
+          } catch {
             // If there's an error, try to rollback any stuck transaction
             await this.db.run('ROLLBACK').catch(() => {});
           }
@@ -132,6 +139,12 @@ export class SqliteConnection {
     }
 
     try {
+      // Clear any pending retry timeouts
+      for (const timeout of this.retryTimeouts) {
+        clearTimeout(timeout);
+      }
+      this.retryTimeouts.clear();
+
       // Close WAL manager if it exists
       if (this.walManager) {
         await this.walManager.close();
@@ -295,7 +308,13 @@ export class SqliteConnection {
           throw error;
         }
         // Wait before retrying
-        await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 100));
+        const timeout = setTimeout(() => {}, Math.pow(2, attempt) * 100);
+        this.retryTimeouts.add(timeout);
+        await new Promise(resolve => {
+          timeout.unref();
+          setTimeout(resolve, Math.pow(2, attempt) * 100);
+        });
+        this.retryTimeouts.delete(timeout);
       }
     }
     throw new Error('Transaction failed after max retries');
