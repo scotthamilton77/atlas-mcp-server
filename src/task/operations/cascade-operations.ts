@@ -35,21 +35,30 @@ export class CascadeOperations {
 
       const children = await this.storage.getChildren(path);
 
-      // Check for dependent tasks
+      // Get dependent tasks
       const dependentTasks = await this.storage.getDependentTasks(path);
-      if (dependentTasks.length > 0) {
-        const dependentPaths = dependentTasks.map(t => t.path);
-        throw TaskErrorFactory.createTaskDependencyError(
-          'CascadeOperations.deleteWithChildren',
-          `Cannot delete task with dependencies: ${dependentPaths.join(', ')}`,
-          { taskPath: path, dependentPaths }
-        );
-      }
+      const dependentPaths = dependentTasks.map(t => t.path);
 
-      // Handle children based on strategy
+      // Handle based on strategy
       switch (strategy) {
         case 'cascade':
-          // Delete all children recursively
+          // For cascade, update dependent tasks to remove the dependency
+          for (const depTask of dependentTasks) {
+            const updatedDeps = depTask.dependencies.filter(d => d !== path);
+            await this.storage.updateTask(depTask.path, {
+              dependencies: updatedDeps,
+              metadata: {
+                ...depTask.metadata,
+                removedDependencies: Array.isArray(depTask.metadata?.removedDependencies)
+                  ? [
+                      ...depTask.metadata.removedDependencies,
+                      { path, removedAt: new Date().toISOString() },
+                    ]
+                  : [{ path, removedAt: new Date().toISOString() }],
+              },
+            });
+          }
+          // Then delete all children recursively
           for (const child of children) {
             const childResult = await this.deleteWithChildren(child.path, 'cascade');
             result.deleted.push(...childResult.deleted);
@@ -59,7 +68,23 @@ export class CascadeOperations {
           break;
 
         case 'orphan':
-          // Update children to remove parent reference
+          // For orphan, update dependent tasks to remove the dependency
+          for (const depTask of dependentTasks) {
+            const updatedDeps = depTask.dependencies.filter(d => d !== path);
+            await this.storage.updateTask(depTask.path, {
+              dependencies: updatedDeps,
+              metadata: {
+                ...depTask.metadata,
+                removedDependencies: Array.isArray(depTask.metadata?.removedDependencies)
+                  ? [
+                      ...depTask.metadata.removedDependencies,
+                      { path, removedAt: new Date().toISOString() },
+                    ]
+                  : [{ path, removedAt: new Date().toISOString() }],
+              },
+            });
+          }
+          // Then update children to remove parent reference
           for (const child of children) {
             await this.storage.updateTask(child.path, {
               parentPath: undefined,
@@ -76,13 +101,27 @@ export class CascadeOperations {
           break;
 
         case 'block':
-          // Only allow deletion if no children exist
-          if (children.length > 0) {
+          // For block strategy, prevent deletion if there are children OR dependent tasks
+          if (children.length > 0 || dependentTasks.length > 0) {
             result.blocked.push(path);
+            const reason = [];
+            if (children.length > 0) {
+              reason.push(`has ${children.length} child task(s)`);
+            }
+            if (dependentTasks.length > 0) {
+              reason.push(
+                `has ${dependentTasks.length} dependent task(s): ${dependentPaths.join(', ')}`
+              );
+            }
             throw TaskErrorFactory.createTaskOperationError(
               'CascadeOperations.deleteWithChildren',
-              'Cannot delete task with children',
-              { taskPath: path, childCount: children.length }
+              `Cannot delete task that ${reason.join(' and ')}`,
+              {
+                taskPath: path,
+                childCount: children.length,
+                dependentCount: dependentTasks.length,
+                dependentPaths,
+              }
             );
           }
           result.deleted.push(path);
