@@ -124,6 +124,7 @@ Core Components:
 - **Status Tracking**: State machine with strict transition rules and dependency validation
 - **Smart Templates**: Pre-built patterns with variable interpolation
 - **Contextual Notes**: Automatic tool-specific guidance and best practices
+- **Cascade Operations**: Flexible deletion strategies for hierarchical task management
 
 ### Performance & Reliability
 
@@ -400,7 +401,7 @@ update_task; // Update existing tasks
 get_tasks_by_status; // Find tasks by status
 get_tasks_by_path; // Find tasks by path pattern
 get_children; // List child tasks
-delete_task; // Remove tasks
+delete_task; // Remove tasks with cascade/orphan/block strategies
 
 // Bulk Operations
 bulk_task_operations; // Execute multiple task operations
