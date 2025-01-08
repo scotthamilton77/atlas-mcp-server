@@ -55,126 +55,120 @@ export async function createStorage(config: StorageConfig): Promise<SqliteStorag
         gid: dirStats.gid,
       });
 
-      // Check if database file exists and is accessible
+      // Single stat call to check if database exists and get its info
       try {
-        await fs.access(dbPath, fs.constants.F_OK);
-        // File exists, check if we can read/write
-        await fs.access(dbPath, fs.constants.R_OK | fs.constants.W_OK);
         const fileStats = await fs.stat(dbPath);
 
-        // If database exists, check for WAL and SHM files
-        const walPath = `${dbPath}-wal`;
-        const shmPath = `${dbPath}-shm`;
-        const walExists = await fs
-          .access(walPath, fs.constants.F_OK)
-          .then(() => true)
-          .catch(() => false);
-        const shmExists = await fs
-          .access(shmPath, fs.constants.F_OK)
-          .then(() => true)
-          .catch(() => false);
+        // Only check WAL/SHM if database exists and has content
+        if (fileStats.size > 0) {
+          // Check for WAL/SHM files
+          const walPath = `${dbPath}-wal`;
+          const shmPath = `${dbPath}-shm`;
+          const [walExists, shmExists] = await Promise.all([
+            fs
+              .access(walPath, fs.constants.F_OK)
+              .then(() => true)
+              .catch(() => false),
+            fs
+              .access(shmPath, fs.constants.F_OK)
+              .then(() => true)
+              .catch(() => false),
+          ]);
 
-        // If database exists with WAL/SHM files, attempt recovery
-        if (fileStats.size > 0 && (walExists || shmExists)) {
-          logger.warn('Database exists with WAL/SHM files - attempting recovery', {
-            operation: 'createStorage',
-            dbPath,
-            dbSize: fileStats.size,
-            walExists,
-            shmExists,
-          });
-
-          // Attempt safe WAL checkpoint first
-          const sqlite3 = await import('better-sqlite3');
-          try {
-            const tempDb = new sqlite3.default(dbPath, {
-              verbose: (...args: unknown[]) => {
-                if (typeof args[0] === 'string') {
-                  logger.debug(args[0]);
-                }
-              },
-              timeout: 30000,
-              readonly: true, // Open readonly first to prevent modifications
-            });
-            tempConnections.add(tempDb);
-
-            // Check database integrity first
-            const integrityResult = tempDb.pragma('integrity_check');
-            const isCorrupted = Array.isArray(integrityResult)
-              ? integrityResult.some(r => r !== 'ok')
-              : integrityResult !== 'ok';
-
-            if (!isCorrupted) {
-              // Database is healthy, perform safe checkpoint
-              await tempDb.exec('PRAGMA wal_checkpoint(PASSIVE)');
-              tempDb.close();
-              tempConnections.delete(tempDb);
-
-              logger.info('Successfully checkpointed database files', {
-                operation: 'createStorage',
-                dbPath,
-              });
-            } else {
-              // Database is corrupted, attempt recovery
-              tempDb.close();
-              tempConnections.delete(tempDb);
-
-              logger.warn('Database corruption detected - attempting recovery', {
-                operation: 'createStorage',
-                dbPath,
-              });
-
-              // Create backup before recovery attempt
-              const backupPath = `${dbPath}.backup-${Date.now()}`;
-              await fs.copyFile(dbPath, backupPath);
-
-              // Attempt recovery with new connection
-              const recoveryDb = new sqlite3.default(dbPath, {
-                timeout: 30000,
-              });
-              tempConnections.add(recoveryDb);
-
-              try {
-                await recoveryDb.exec('PRAGMA wal_checkpoint(TRUNCATE)');
-                recoveryDb.close();
-                tempConnections.delete(recoveryDb);
-
-                logger.info('Successfully recovered database files', {
-                  operation: 'createStorage',
-                  dbPath,
-                });
-              } catch (recoveryError) {
-                logger.error('Recovery failed - restoring from backup', {
-                  error:
-                    recoveryError instanceof Error ? recoveryError.message : String(recoveryError),
-                  operation: 'createStorage',
-                  dbPath,
-                });
-
-                // Restore from backup
-                await fs.copyFile(backupPath, dbPath);
-              } finally {
-                // Clean up backup
-                await fs.unlink(backupPath).catch(() => {});
-              }
-            }
-          } catch (error) {
-            logger.error('Database access error during recovery', {
-              error: error instanceof Error ? error.message : String(error),
+          if (walExists || shmExists) {
+            logger.warn('Database exists with WAL/SHM files - attempting recovery', {
               operation: 'createStorage',
               dbPath,
+              dbSize: fileStats.size,
+              walExists,
+              shmExists,
             });
-            throw error;
-          }
 
-          // Small delay after recovery attempt
-          const recoveryTimeout = setTimeout(() => {}, 2000);
-          tempTimeouts.add(recoveryTimeout);
-          await new Promise(resolve => {
-            recoveryTimeout.unref();
-            setTimeout(resolve, 2000);
-          });
-          tempTimeouts.delete(recoveryTimeout);
+            // Attempt safe WAL checkpoint first
+            const sqlite3 = await import('better-sqlite3');
+            try {
+              const tempDb = new sqlite3.default(dbPath, {
+                verbose: (...args: unknown[]) => {
+                  if (typeof args[0] === 'string') {
+                    logger.debug(args[0]);
+                  }
+                },
+                timeout: 30000,
+                readonly: true, // Open readonly first to prevent modifications
+              });
+              tempConnections.add(tempDb);
+
+              // Check database integrity first
+              const integrityResult = tempDb.pragma('integrity_check');
+              const isCorrupted = Array.isArray(integrityResult)
+                ? integrityResult.some(r => r !== 'ok')
+                : integrityResult !== 'ok';
+
+              if (!isCorrupted) {
+                // Database is healthy, perform safe checkpoint
+                await tempDb.exec('PRAGMA wal_checkpoint(PASSIVE)');
+                tempDb.close();
+                tempConnections.delete(tempDb);
+
+                logger.info('Successfully checkpointed database files', {
+                  operation: 'createStorage',
+                  dbPath,
+                });
+              } else {
+                // Database is corrupted, attempt recovery
+                tempDb.close();
+                tempConnections.delete(tempDb);
+
+                logger.warn('Database corruption detected - attempting recovery', {
+                  operation: 'createStorage',
+                  dbPath,
+                });
+
+                // Create backup before recovery attempt
+                const backupPath = `${dbPath}.backup-${Date.now()}`;
+                await fs.copyFile(dbPath, backupPath);
+
+                // Attempt recovery with new connection
+                const recoveryDb = new sqlite3.default(dbPath, {
+                  timeout: 30000,
+                });
+                tempConnections.add(recoveryDb);
+
+                try {
+                  await recoveryDb.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+                  recoveryDb.close();
+                  tempConnections.delete(recoveryDb);
+
+                  logger.info('Successfully recovered database files', {
+                    operation: 'createStorage',
+                    dbPath,
+                  });
+                } catch (recoveryError) {
+                  logger.error('Recovery failed - restoring from backup', {
+                    error:
+                      recoveryError instanceof Error
+                        ? recoveryError.message
+                        : String(recoveryError),
+                    operation: 'createStorage',
+                    dbPath,
+                  });
+
+                  // Restore from backup
+                  await fs.copyFile(backupPath, dbPath);
+                } finally {
+                  // Clean up backup
+                  await fs.unlink(backupPath).catch(() => {});
+                }
+              }
+            } catch (error) {
+              logger.error('Database access error during recovery', {
+                error: error instanceof Error ? error.message : String(error),
+                operation: 'createStorage',
+                dbPath,
+              });
+              throw error;
+            }
+          }
         }
 
         logger.info('Database file accessible', {
@@ -241,9 +235,9 @@ export async function createStorage(config: StorageConfig): Promise<SqliteStorag
       readonly: config.readonly ?? false,
     });
 
-    // Check if database is locked
-    const retryDelay = 5000; // Increased delay between attempts
-    const maxWaitTime = 30000; // Increased maximum time to wait for locks to clear
+    // Reduce retry delay and max wait time
+    const retryDelay = 1000; // Reduced from 5000ms
+    const maxWaitTime = 10000; // Reduced from 30000ms
     let lastError: unknown;
     const startTime = Date.now();
 
@@ -262,9 +256,9 @@ export async function createStorage(config: StorageConfig): Promise<SqliteStorag
           const shutdownTime = parseInt(markerContent, 10);
           const elapsed = Date.now() - shutdownTime;
 
-          if (elapsed < 10000) {
-            // Increased wait time for cleanup if shutdown was recent
-            const waitTime = 10000 - elapsed;
+          if (elapsed < 3000) {
+            // Reduced wait time for cleanup if shutdown was recent
+            const waitTime = 3000 - elapsed;
             logger.info('Recent shutdown detected, waiting for cleanup', {
               operation: 'createStorage',
               shutdownTime,
@@ -417,10 +411,27 @@ export async function createStorage(config: StorageConfig): Promise<SqliteStorag
     storage = new SqliteStorage(connection, sqliteConfig, startupBackupManager);
     await storage.initialize();
 
-    // Create startup backup after successful initialization
+    // Create startup backup and initialize templates in parallel after initialization
+    const initPromises = [];
+
     if (startupBackupManager) {
-      await startupBackupManager.createStartupBackup();
+      initPromises.push(
+        startupBackupManager.createStartupBackup().catch(error => {
+          logger.error('Failed to create startup backup', {
+            error: error instanceof Error ? error.message : String(error),
+            operation: 'createStorage.backup',
+          });
+        })
+      );
     }
+
+    // Let initialization continue while backup and templates load
+    Promise.all(initPromises).catch(error => {
+      logger.error('Background initialization error', {
+        error: error instanceof Error ? error.message : String(error),
+        operation: 'createStorage.background',
+      });
+    });
 
     // Remove shutdown marker after successful initialization
     await fs.unlink(shutdownMarkerPath).catch(() => {});
