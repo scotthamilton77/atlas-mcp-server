@@ -2,7 +2,7 @@
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
 [![Model Context Protocol](https://img.shields.io/badge/MCP-1.1.0-green.svg)](https://modelcontextprotocol.io/)
-[![Version](https://img.shields.io/badge/Version-1.5.0-blue.svg)]()
+[![Version](https://img.shields.io/badge/Version-1.5.2-blue.svg)]()
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Status](https://img.shields.io/badge/Status-Stable-blue.svg)]()
 [![GitHub](https://img.shields.io/github/stars/cyanheads/atlas-mcp-server?style=social)](https://github.com/cyanheads/atlas-mcp-server)
@@ -129,6 +129,7 @@ Core Components:
 ### Performance & Reliability
 
 - **Enterprise Storage**: SQLite with WAL and ACID compliance
+- **Automated Backups**: Configurable backup schedules with compression
 - **Optimized Operations**: Batch processing and automatic maintenance
 - **Health Monitoring**: System metrics and automatic recovery
 - **Resource Management**: Memory monitoring and connection pooling
@@ -162,6 +163,16 @@ Core Components:
 - **Progress Metrics**: Completion rates and status distribution
 - **Dependency Tracking**: Relationship and blocking status monitoring
 - **Performance Insights**: Resource tracking and bottleneck detection
+
+### Database Backups
+
+- **Automated Scheduling**: Configurable backup intervals with retention policies
+- **Compression Support**: Efficient storage with optional compression
+- **Point-in-Time Recovery**: Maintain multiple backup points for recovery
+- **Backup Validation**: Automatic integrity checks of backup files
+- **Flexible Storage**: Configurable backup location and naming conventions
+- **Secure Operations**: Atomic backup operations with WAL mode support
+- **Monitoring**: Backup status tracking and error reporting
 
 ## Installation
 
@@ -239,6 +250,12 @@ Add to your MCP client settings:
         "ATLAS_BATCH_SIZE": "1000", // Optional, max items per batch, defaults to 1000
         "ATLAS_CHECKPOINT_INTERVAL": "30000", // Optional, in ms, defaults to 30000
         "ATLAS_VACUUM_INTERVAL": "3600000", // Optional, in ms, defaults to 1 hour
+        
+        // Backup Configuration
+        "ATLAS_BACKUP_DIR": "/path/to/backup/directory", // Optional, defaults to storage_dir/backups
+        "ATLAS_BACKUP_INTERVAL": "86400000", // Optional, in ms, defaults to 24 hours
+        "ATLAS_BACKUP_RETENTION": "7", // Optional, number of backups to keep, defaults to 7
+        "ATLAS_BACKUP_COMPRESSION": "true", // Optional, enable backup compression, defaults to true
 
         // Monitoring Configuration
         "ATLAS_LOG_LEVEL": "info", // Optional, defaults to debug
