@@ -12,6 +12,10 @@ interface TransactionLogEntry {
     metadata?: Record<string, unknown>;
     error?: string;
     warnings?: string[];
+    strategy?: 'cascade' | 'orphan' | 'block';
+    deleted?: string[];
+    orphaned?: string[];
+    blocked?: string[];
   };
   duration: number;
 }
@@ -48,6 +52,10 @@ export class TransactionLogger {
       metadata?: Record<string, unknown>;
       error?: string;
       warnings?: string[];
+      strategy?: 'cascade' | 'orphan' | 'block';
+      deleted?: string[];
+      orphaned?: string[];
+      blocked?: string[];
     },
     startTime: number
   ): Promise<void> {

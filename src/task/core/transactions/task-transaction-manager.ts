@@ -111,8 +111,28 @@ export class TaskTransactionManager {
         }
 
         // Handle dependency updates if needed
-        if (updates.dependencies && operations.handleDependencyUpdates) {
-          await operations.handleDependencyUpdates();
+        if (updates.dependencies !== undefined) {
+          if (operations.handleDependencyUpdates) {
+            await operations.handleDependencyUpdates();
+          }
+
+          // Ensure dependencies are properly set in storage
+          const updatedTask = await this.executeTaskUpdate(task.path, {
+            ...updates,
+            dependencies: updates.dependencies,
+            metadata: {
+              ...task.metadata,
+              ...updates.metadata,
+              lastDependencyUpdate: new Date().toISOString(),
+              previousDependencies: task.dependencies,
+            },
+          });
+
+          // Update cache and emit events
+          operations.updateCache(updatedTask);
+          await operations.emitEvents(updatedTask);
+
+          return updatedTask;
         }
 
         // Handle status updates
