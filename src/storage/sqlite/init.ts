@@ -84,7 +84,7 @@ export async function createStorage(config: StorageConfig): Promise<SqliteStorag
             shmExists,
           });
 
-          // Force close any existing connections
+          // Attempt safe WAL checkpoint first
           const sqlite3 = await import('better-sqlite3');
           try {
             const tempDb = new sqlite3.default(dbPath, {
@@ -94,34 +94,77 @@ export async function createStorage(config: StorageConfig): Promise<SqliteStorag
                 }
               },
               timeout: 30000,
+              readonly: true, // Open readonly first to prevent modifications
             });
             tempConnections.add(tempDb);
 
-            // Force TRUNCATE checkpoint directly
-            await tempDb.exec('PRAGMA wal_checkpoint(TRUNCATE)');
-            tempDb.close();
-            tempConnections.delete(tempDb);
+            // Check database integrity first
+            const integrityResult = tempDb.pragma('integrity_check');
+            const isCorrupted = Array.isArray(integrityResult)
+              ? integrityResult.some(r => r !== 'ok')
+              : integrityResult !== 'ok';
 
-            // Remove WAL and SHM files after clean shutdown
-            await fs.unlink(`${dbPath}-wal`).catch(() => {});
-            await fs.unlink(`${dbPath}-shm`).catch(() => {});
+            if (!isCorrupted) {
+              // Database is healthy, perform safe checkpoint
+              await tempDb.exec('PRAGMA wal_checkpoint(PASSIVE)');
+              tempDb.close();
+              tempConnections.delete(tempDb);
 
-            logger.info('Successfully recovered database files', {
+              logger.info('Successfully checkpointed database files', {
+                operation: 'createStorage',
+                dbPath,
+              });
+            } else {
+              // Database is corrupted, attempt recovery
+              tempDb.close();
+              tempConnections.delete(tempDb);
+
+              logger.warn('Database corruption detected - attempting recovery', {
+                operation: 'createStorage',
+                dbPath,
+              });
+
+              // Create backup before recovery attempt
+              const backupPath = `${dbPath}.backup-${Date.now()}`;
+              await fs.copyFile(dbPath, backupPath);
+
+              // Attempt recovery with new connection
+              const recoveryDb = new sqlite3.default(dbPath, {
+                timeout: 30000,
+              });
+              tempConnections.add(recoveryDb);
+
+              try {
+                await recoveryDb.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+                recoveryDb.close();
+                tempConnections.delete(recoveryDb);
+
+                logger.info('Successfully recovered database files', {
+                  operation: 'createStorage',
+                  dbPath,
+                });
+              } catch (recoveryError) {
+                logger.error('Recovery failed - restoring from backup', {
+                  error:
+                    recoveryError instanceof Error ? recoveryError.message : String(recoveryError),
+                  operation: 'createStorage',
+                  dbPath,
+                });
+
+                // Restore from backup
+                await fs.copyFile(backupPath, dbPath);
+              } finally {
+                // Clean up backup
+                await fs.unlink(backupPath).catch(() => {});
+              }
+            }
+          } catch (error) {
+            logger.error('Database access error during recovery', {
+              error: error instanceof Error ? error.message : String(error),
               operation: 'createStorage',
               dbPath,
             });
-          } catch (recoveryError) {
-            logger.error('Failed to recover database - forcing cleanup', {
-              error: recoveryError instanceof Error ? recoveryError.message : String(recoveryError),
-              operation: 'createStorage',
-              dbPath,
-            });
-
-            // Force remove all files if recovery fails
-            await fs.unlink(dbPath).catch(() => {});
-            await fs.unlink(`${dbPath}-wal`).catch(() => {});
-            await fs.unlink(`${dbPath}-shm`).catch(() => {});
-            await fs.unlink(`${dbPath}-journal`).catch(() => {});
+            throw error;
           }
 
           // Small delay after recovery attempt
@@ -249,30 +292,18 @@ export async function createStorage(config: StorageConfig): Promise<SqliteStorag
           }
         }
 
-        // Force cleanup of all database-related files on startup
-        try {
-          // Remove all database files to ensure clean start
-          await fs.unlink(dbPath).catch(() => {});
+        // Only clean up auxiliary files if they exist without a main database
+        const dbExists = await fs
+          .access(dbPath)
+          .then(() => true)
+          .catch(() => false);
+        if (!dbExists) {
+          // Clean up orphaned WAL/SHM files only if main DB doesn't exist
           await fs.unlink(`${dbPath}-wal`).catch(() => {});
           await fs.unlink(`${dbPath}-shm`).catch(() => {});
           await fs.unlink(`${dbPath}-journal`).catch(() => {});
 
-          logger.info('Cleaned up all database files on startup', {
-            operation: 'createStorage',
-            dbPath,
-          });
-
-          // Small delay after cleanup
-          const cleanupTimeout = setTimeout(() => {}, 1000);
-          tempTimeouts.add(cleanupTimeout);
-          await new Promise(resolve => {
-            cleanupTimeout.unref();
-            setTimeout(resolve, 1000);
-          });
-          tempTimeouts.delete(cleanupTimeout);
-        } catch (cleanupError) {
-          logger.warn('Failed to clean up database files on startup', {
-            error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+          logger.info('Cleaned up orphaned auxiliary files', {
             operation: 'createStorage',
             dbPath,
           });
@@ -303,7 +334,7 @@ export async function createStorage(config: StorageConfig): Promise<SqliteStorag
             throw new Error('Database lock timeout - manual cleanup may be required');
           }
 
-          logger.warn('Database files still locked, waiting...', {
+          logger.info('Database files still locked, waiting for natural release...', {
             elapsed,
             maxWaitTime,
             context: {
@@ -313,50 +344,6 @@ export async function createStorage(config: StorageConfig): Promise<SqliteStorag
               dbPath,
             },
           });
-
-          // Attempt recovery by forcing database recreation
-          try {
-            logger.info('Attempting database recovery...', {
-              operation: 'createStorage',
-              dbPath,
-            });
-
-            // Remove all database files
-            await fs.unlink(dbPath).catch(() => {});
-            await fs.unlink(`${dbPath}-wal`).catch(() => {});
-            await fs.unlink(`${dbPath}-shm`).catch(() => {});
-            await fs.unlink(`${dbPath}-journal`).catch(() => {});
-
-            // Create fresh database connection
-            const sqlite3 = await import('better-sqlite3');
-            const tempDb = new sqlite3.default(dbPath, {
-              verbose: (...args: unknown[]) => {
-                if (typeof args[0] === 'string') {
-                  logger.debug(args[0]);
-                }
-              },
-              timeout: 30000,
-            });
-            tempConnections.add(tempDb);
-
-            // Force rollback journal mode
-            tempDb.pragma('journal_mode = DELETE');
-            tempDb.pragma('synchronous = FULL');
-
-            tempDb.close();
-            tempConnections.delete(tempDb);
-
-            logger.info('Database recovery completed', {
-              operation: 'createStorage',
-              dbPath,
-            });
-          } catch (recoveryError) {
-            logger.error('Database recovery failed', {
-              error: recoveryError instanceof Error ? recoveryError.message : String(recoveryError),
-              operation: 'createStorage',
-              dbPath,
-            });
-          }
 
           const retryTimeout = setTimeout(() => {}, retryDelay);
           tempTimeouts.add(retryTimeout);
