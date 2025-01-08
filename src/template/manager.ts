@@ -246,9 +246,20 @@ export class TemplateManager {
     };
 
     // Normalize paths
-    const normalizedPath = parentPath
+    let normalizedPath = parentPath
       ? PathUtils.normalizePath(PathUtils.joinPath(parentPath, interpolatedTask.path))
       : PathUtils.normalizePath(interpolatedTask.path);
+
+    // Remove redundant project name segments
+    const pathSegments = normalizedPath.split('/');
+    const projectName = pathSegments[0];
+    const cleanedSegments = pathSegments.filter((segment, index) => {
+      // Keep the first occurrence of project name
+      if (index === 0) return true;
+      // Remove redundant project name segments
+      return !segment.toLowerCase().includes(projectName.toLowerCase());
+    });
+    normalizedPath = cleanedSegments.join('/');
 
     interpolatedTask.path = normalizedPath;
 
@@ -259,9 +270,18 @@ export class TemplateManager {
     // Normalize dependency paths
     if (interpolatedTask.dependencies) {
       interpolatedTask.dependencies = interpolatedTask.dependencies.map(d => {
-        const normalizedDep = parentPath
+        let normalizedDep = parentPath
           ? PathUtils.normalizePath(PathUtils.joinPath(parentPath, d))
           : PathUtils.normalizePath(d);
+
+        // Clean dependency paths too
+        const depSegments = normalizedDep.split('/');
+        const cleanedDepSegments = depSegments.filter((segment, index) => {
+          if (index === 0) return true;
+          return !segment.toLowerCase().includes(projectName.toLowerCase());
+        });
+        normalizedDep = cleanedDepSegments.join('/');
+
         return normalizedDep;
       });
     }
@@ -382,14 +402,11 @@ export class TemplateManager {
     return []; // No dynamic templates needed since we use a single resource
   }
 
-  async resolveResourceTemplate(
-    _template: string,
-    _vars: Record<string, string>
-  ): Promise<Resource> {
+  async resolveResourceTemplate(template: string, vars: Record<string, string>): Promise<Resource> {
     throw TemplateErrorFactory.createValidationError(
-      'Resource templates not supported - use templates://current instead',
+      `Resource templates not supported - use templates://current instead (attempted to resolve template "${template}" with variables ${JSON.stringify(vars)})`,
       'TemplateManager.resolveResourceTemplate',
-      {}
+      { template, vars }
     );
   }
 }
