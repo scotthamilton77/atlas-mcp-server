@@ -33,29 +33,60 @@ export class StartupBackupManager {
       const backupDir = path.join(startupBackupDir, backupName);
       await fs.mkdir(backupDir);
 
-      // Copy database files
-      const filesToBackup = [this.dbPath, `${this.dbPath}-wal`, `${this.dbPath}-shm`];
+      // Always try to backup the main database file first
+      const mainDbExists = await fs
+        .access(this.dbPath)
+        .then(() => true)
+        .catch(() => false);
 
-      for (const file of filesToBackup) {
-        try {
-          const exists = await fs
-            .access(file)
-            .then(() => true)
-            .catch(() => false);
-          if (exists) {
-            const destFile = path.join(backupDir, path.basename(file));
-            await fs.copyFile(file, destFile);
-          }
-        } catch (error) {
-          this.logger.warn(`Failed to backup file ${file} during startup`, {
-            error,
-            context: {
-              operation: 'createStartupBackup',
-              timestamp,
-              file,
-            },
-          });
-        }
+      if (!mainDbExists) {
+        this.logger.error('Main database file not found during startup backup', {
+          context: {
+            operation: 'createStartupBackup',
+            dbPath: this.dbPath,
+          },
+        });
+        await fs.rm(backupDir, { recursive: true, force: true });
+        return;
+      }
+
+      // Copy main database file
+      const mainDbDest = path.join(backupDir, path.basename(this.dbPath));
+      await fs.copyFile(this.dbPath, mainDbDest);
+
+      // Check for WAL mode files only if they exist
+      const walFile = `${this.dbPath}-wal`;
+      const shmFile = `${this.dbPath}-shm`;
+
+      const walExists = await fs
+        .access(walFile)
+        .then(() => true)
+        .catch(() => false);
+
+      const shmExists = await fs
+        .access(shmFile)
+        .then(() => true)
+        .catch(() => false);
+
+      if (walExists) {
+        await fs.copyFile(walFile, path.join(backupDir, path.basename(walFile)));
+      }
+
+      if (shmExists) {
+        await fs.copyFile(shmFile, path.join(backupDir, path.basename(shmFile)));
+      }
+
+      // Verify backup contains at least the main database file
+      const backupFiles = await fs.readdir(backupDir);
+      if (backupFiles.length === 0) {
+        this.logger.error('Backup directory is empty after copy operations', {
+          context: {
+            operation: 'createStartupBackup',
+            backupDir,
+          },
+        });
+        await fs.rm(backupDir, { recursive: true, force: true });
+        return;
       }
 
       // Rotate old startup backups

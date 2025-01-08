@@ -31,35 +31,74 @@ export class BackupManager {
       // Ensure backup directory exists
       await fs.mkdir(this.backupDir, { recursive: true });
 
-      // Get list of files to backup
-      const filesToBackup = [this.dbPath, `${this.dbPath}-wal`, `${this.dbPath}-shm`];
-
       // Create backup directory for this set
       const backupSetDir = path.join(this.backupDir, backupName);
       await fs.mkdir(backupSetDir);
 
-      // Copy all files
-      for (const file of filesToBackup) {
-        try {
-          const exists = await fs
-            .access(file)
-            .then(() => true)
-            .catch(() => false);
-          if (exists) {
-            const destFile = path.join(backupSetDir, path.basename(file));
-            await fs.copyFile(file, destFile);
-          }
-        } catch (error) {
-          this.logger.warn(`Failed to backup file ${file}`, {
-            error,
-            context: {
-              operation: 'createBackup',
-              timestamp,
-              file,
-            },
-          });
-          // Continue with other files even if one fails
-        }
+      // Always try to backup the main database file first
+      const mainDbExists = await fs
+        .access(this.dbPath)
+        .then(() => true)
+        .catch(() => false);
+
+      if (!mainDbExists) {
+        this.logger.error('Main database file not found during backup', {
+          context: {
+            operation: 'createBackup',
+            dbPath: this.dbPath,
+          },
+        });
+        await fs.rm(backupSetDir, { recursive: true, force: true });
+        throw createError(
+          ErrorCodes.STORAGE_ERROR,
+          'Main database file not found',
+          'createBackup',
+          `Database file not found at ${this.dbPath}`
+        );
+      }
+
+      // Copy main database file
+      const mainDbDest = path.join(backupSetDir, path.basename(this.dbPath));
+      await fs.copyFile(this.dbPath, mainDbDest);
+
+      // Check for WAL mode files only if they exist
+      const walFile = `${this.dbPath}-wal`;
+      const shmFile = `${this.dbPath}-shm`;
+
+      const walExists = await fs
+        .access(walFile)
+        .then(() => true)
+        .catch(() => false);
+
+      const shmExists = await fs
+        .access(shmFile)
+        .then(() => true)
+        .catch(() => false);
+
+      if (walExists) {
+        await fs.copyFile(walFile, path.join(backupSetDir, path.basename(walFile)));
+      }
+
+      if (shmExists) {
+        await fs.copyFile(shmFile, path.join(backupSetDir, path.basename(shmFile)));
+      }
+
+      // Verify backup contains at least the main database file
+      const backupFiles = await fs.readdir(backupSetDir);
+      if (backupFiles.length === 0) {
+        this.logger.error('Backup directory is empty after copy operations', {
+          context: {
+            operation: 'createBackup',
+            backupSetDir,
+          },
+        });
+        await fs.rm(backupSetDir, { recursive: true, force: true });
+        throw createError(
+          ErrorCodes.STORAGE_ERROR,
+          'Backup creation failed - no files copied',
+          'createBackup',
+          'Backup directory is empty after copy operations'
+        );
       }
 
       this.logger.info('Backup set created', {
