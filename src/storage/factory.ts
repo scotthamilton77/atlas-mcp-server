@@ -1,6 +1,8 @@
 import { StorageConfig, TaskStorage } from '../types/storage.js';
 import { createStorage } from './sqlite/init.js';
 import path from 'path';
+import { promises as fs } from 'fs';
+import { ErrorCodes, createError } from '../errors/index.js';
 import { StorageFactoryErrorHandler } from './factory/error-handler.js';
 
 /**
@@ -37,7 +39,36 @@ export async function createDefaultStorage(): Promise<TaskStorage> {
   };
 
   try {
-    return await createStorage(config);
+    // Ensure base directory exists
+    await fs.mkdir(baseDir, { recursive: true });
+
+    // Ensure data directory exists
+    const dataDir = path.join(baseDir, 'data');
+    await fs.mkdir(dataDir, { recursive: true });
+
+    // Update config to use data directory
+    config.baseDir = dataDir;
+
+    // Initialize storage
+    const storage = await createStorage(config);
+
+    // Verify database file exists after initialization
+    const dbPath = path.join(dataDir, `${config.name}.db`);
+    const exists = await fs
+      .access(dbPath)
+      .then(() => true)
+      .catch(() => false);
+
+    if (!exists) {
+      throw createError(
+        ErrorCodes.STORAGE_ERROR,
+        'Database initialization failed',
+        'createDefaultStorage',
+        `Database file not created at ${dbPath}`
+      );
+    }
+
+    return storage;
   } catch (error) {
     return errorHandler.handleCreateError(error, 'createDefaultStorage', { config });
   }
