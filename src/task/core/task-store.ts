@@ -6,6 +6,7 @@ import { TaskIndexManager } from './indexing/index-manager.js';
 import { TaskCacheManager } from '../manager/task-cache-manager.js';
 import { TaskErrorFactory } from '../../errors/task-error.js';
 import { TaskVisualizer } from '../../visualization/task-visualizer.js';
+import { CascadeOperations } from '../operations/cascade-operations.js';
 import path from 'path';
 
 /**
@@ -16,8 +17,8 @@ export class TaskStore {
   private readonly transactionLogger: TransactionLogger;
   private readonly indexManager: TaskIndexManager;
   private readonly cacheManager: TaskCacheManager;
-
   private readonly visualizer: TaskVisualizer;
+  private readonly cascadeOps: CascadeOperations;
 
   constructor(
     private readonly storage: TaskStorage,
@@ -27,6 +28,7 @@ export class TaskStore {
     this.transactionLogger = TransactionLogger.getInstance();
     this.indexManager = new TaskIndexManager();
     this.cacheManager = new TaskCacheManager();
+    this.cascadeOps = new CascadeOperations(storage);
 
     // Initialize visualizer with workspace directory
     const visualizerDir = path.join(config.workspaceDir, 'visualizations');
@@ -318,8 +320,120 @@ export class TaskStore {
   }
 
   /**
-   * Delete a task
+   * Delete a task with specified strategy for handling children
    */
+  async deleteTask(
+    path: string,
+    strategy: 'cascade' | 'orphan' | 'block' = 'block'
+  ): Promise<void> {
+    const startTime = Date.now();
+    try {
+      const existingTask = await this.storage.getTask(path);
+      if (!existingTask) {
+        throw new Error(`Task not found: ${path}`);
+      }
+
+      // Use cascade operations to handle deletion with children
+      const result = await this.cascadeOps.deleteWithChildren(path, strategy);
+
+      // Update cache and index for all affected tasks
+      for (const deletedPath of result.deleted) {
+        await this.indexManager.removeTask(deletedPath);
+        this.cacheManager.delete(deletedPath);
+      }
+
+      // Update visualizations
+      const allTasks = await this.storage.getTasksByPattern('**');
+      await this.visualizer.updateVisualizations(allTasks);
+
+      await this.transactionLogger.logTransaction(
+        'deleteTask',
+        existingTask,
+        {
+          strategy,
+          deleted: result.deleted,
+          orphaned: result.orphaned,
+          blocked: result.blocked,
+          fromStatus: existingTask.status,
+          dependencies: existingTask.dependencies,
+          metadata: existingTask.metadata,
+        },
+        startTime
+      );
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      await this.transactionLogger.logTransaction(
+        'deleteTask',
+        { path } as Task,
+        { error: errorMessage },
+        startTime
+      );
+
+      this.logger.error('Failed to delete task', {
+        error,
+        context: { path, strategy },
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Delete multiple tasks
+   */
+  async deleteTasks(
+    paths: string[],
+    strategy: 'cascade' | 'orphan' | 'block' = 'block'
+  ): Promise<void> {
+    try {
+      for (const path of paths) {
+        await this.deleteTask(path, strategy);
+      }
+    } catch (error) {
+      this.logger.error('Failed to delete tasks', {
+        error,
+        context: { paths, strategy },
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Clear all tasks
+   */
+  async clearAllTasks(): Promise<void> {
+    try {
+      await this.storage.clearAllTasks();
+      await this.indexManager.clearIndex();
+      this.cacheManager.clear();
+
+      // Update visualizations with empty task list
+      await this.visualizer.updateVisualizations([]);
+    } catch (error) {
+      this.logger.error('Failed to clear all tasks', { error });
+      throw error;
+    }
+  }
+
+  /**
+   * Clean up orphaned tasks
+   */
+  async cleanupOrphans(): Promise<{
+    fixed: number;
+    errors: Array<{ path: string; error: string }>;
+  }> {
+    return await this.cascadeOps.cleanupOrphans();
+  }
+
+  /**
+   * Validate parent-child relationships
+   */
+  async validateRelationships(): Promise<{
+    valid: boolean;
+    issues: Array<{ type: string; path: string; details: string }>;
+  }> {
+    return await this.cascadeOps.validateRelationships();
+  }
+
   /**
    * Get warnings for task updates
    */
@@ -352,84 +466,6 @@ export class TaskStore {
     }
 
     return warnings;
-  }
-
-  async deleteTask(path: string): Promise<void> {
-    const startTime = Date.now();
-    try {
-      const existingTask = await this.storage.getTask(path);
-      if (!existingTask) {
-        throw new Error(`Task not found: ${path}`);
-      }
-      await this.storage.deleteTask(path);
-      await this.indexManager.removeTask(path);
-      this.cacheManager.delete(path);
-
-      // Update visualizations
-      const allTasks = await this.storage.getTasksByPattern('**');
-      await this.visualizer.updateVisualizations(allTasks);
-
-      await this.transactionLogger.logTransaction(
-        'deleteTask',
-        existingTask,
-        {
-          fromStatus: existingTask.status,
-          dependencies: existingTask.dependencies,
-          metadata: existingTask.metadata,
-        },
-        startTime
-      );
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      await this.transactionLogger.logTransaction(
-        'deleteTask',
-        { path } as Task,
-        { error: errorMessage },
-        startTime
-      );
-
-      this.logger.error('Failed to delete task', {
-        error,
-        context: { path },
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * Delete multiple tasks
-   */
-  async deleteTasks(paths: string[]): Promise<void> {
-    try {
-      await this.storage.deleteTasks(paths);
-      for (const path of paths) {
-        await this.indexManager.removeTask(path);
-        this.cacheManager.delete(path);
-      }
-    } catch (error) {
-      this.logger.error('Failed to delete tasks', {
-        error,
-        context: { paths },
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * Clear all tasks
-   */
-  async clearAllTasks(): Promise<void> {
-    try {
-      await this.storage.clearAllTasks();
-      await this.indexManager.clearIndex();
-      this.cacheManager.clear();
-
-      // Update visualizations with empty task list
-      await this.visualizer.updateVisualizations([]);
-    } catch (error) {
-      this.logger.error('Failed to clear all tasks', { error });
-      throw error;
-    }
   }
 
   /**

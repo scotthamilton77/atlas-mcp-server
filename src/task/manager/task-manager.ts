@@ -8,6 +8,7 @@ import { TaskEventHandler } from './task-event-handler.js';
 import { TaskResourceHandler } from '../core/task-resource-handler.js';
 import { TaskErrorFactory } from '../../errors/task-error.js';
 import { TaskTransactionManager } from '../core/transactions/task-transaction-manager.js';
+import { CascadeOperations } from '../operations/cascade-operations.js';
 
 export class TaskManager {
   private static instance: TaskManager;
@@ -367,32 +368,60 @@ export class TaskManager {
     }
   }
 
-  async deleteTask(path: string): Promise<void> {
+  async deleteTask(
+    path: string,
+    strategy: 'cascade' | 'orphan' | 'block' = 'block'
+  ): Promise<{ deleted: string[]; orphaned: string[]; blocked: string[] }> {
     try {
       const task = await this.getTask(path);
       if (!task) {
         throw TaskErrorFactory.createTaskNotFoundError('TaskManager.deleteTask', path);
       }
 
-      await this.storage.deleteTask(path);
-      this.cache.delete(path);
+      // Create cascade operations instance
+      const cascadeOps = new CascadeOperations(this.storage);
+      const result = await cascadeOps.deleteWithChildren(path, strategy);
+
+      // Update cache for all affected tasks
+      result.deleted.forEach((deletedPath: string) => this.cache.delete(deletedPath));
+
+      // Emit events
       await this.events.emitTaskDeleted(task);
+      if (result.orphaned.length > 0) {
+        const orphanedTasks = await this.getTasks(result.orphaned);
+        for (const orphanedTask of orphanedTasks) {
+          await this.events.emitTaskUpdated(orphanedTask);
+        }
+      }
+
+      return result;
     } catch (error) {
-      this.logger.error('Failed to delete task', { error, path });
+      this.logger.error('Failed to delete task', { error, path, strategy });
       throw error;
     }
   }
 
-  async deleteTasks(paths: string[]): Promise<void> {
+  async deleteTasks(
+    paths: string[],
+    strategy: 'cascade' | 'orphan' | 'block' = 'block'
+  ): Promise<{ deleted: string[]; orphaned: string[]; blocked: string[] }> {
     try {
-      const tasks = await this.getTasks(paths);
-      await this.storage.deleteTasks(paths);
-      paths.forEach(path => this.cache.delete(path));
-      for (const task of tasks) {
-        await this.events.emitTaskDeleted(task);
+      const result = {
+        deleted: [] as string[],
+        orphaned: [] as string[],
+        blocked: [] as string[],
+      };
+
+      for (const path of paths) {
+        const taskResult = await this.deleteTask(path, strategy);
+        result.deleted.push(...taskResult.deleted);
+        result.orphaned.push(...taskResult.orphaned);
+        result.blocked.push(...taskResult.blocked);
       }
+
+      return result;
     } catch (error) {
-      this.logger.error('Failed to delete tasks', { error, paths });
+      this.logger.error('Failed to delete tasks', { error, paths, strategy });
       throw error;
     }
   }

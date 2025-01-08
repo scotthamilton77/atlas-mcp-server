@@ -47,6 +47,15 @@ We have a deprecated authentication implementation at "project/backend/deprecate
 - Updates dependent tasks
 - Operation cannot be undone`,
         },
+        strategy: {
+          type: 'string',
+          enum: ['cascade', 'orphan', 'block'],
+          default: 'block',
+          description: `Strategy for handling child tasks:
+- cascade: Delete all child tasks recursively
+- orphan: Remove parent reference from child tasks
+- block: Prevent deletion if task has children`,
+        },
         reasoning: {
           type: 'string',
           description: `Deletion justification. REQUIRED INFORMATION:
@@ -60,7 +69,24 @@ We have a deprecated authentication implementation at "project/backend/deprecate
     },
   },
   handler: async (args: Record<string, unknown>) => {
-    await context.taskManager.deleteTask(args.path as string);
-    return formatResponse({ success: true }, context.logger);
+    const { path, strategy = 'block' } = args;
+    const result = await context.taskManager.deleteTask(
+      path as string,
+      strategy as 'cascade' | 'orphan' | 'block'
+    );
+    return formatResponse(
+      {
+        success: true,
+        data: {
+          path,
+          strategy,
+          deleted: result.deleted,
+          orphaned: result.orphaned,
+          blocked: result.blocked,
+          message: `Task deletion completed. ${result.deleted.length} tasks deleted, ${result.orphaned.length} tasks orphaned, ${result.blocked.length} tasks blocked.`,
+        },
+      },
+      context.logger
+    );
   },
 });
