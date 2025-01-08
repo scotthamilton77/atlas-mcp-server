@@ -36,10 +36,14 @@ export interface ServerConfig {
   };
 }
 
+import { StorageMetrics } from '../types/storage.js';
+
 export interface ToolHandler {
-  listTools: () => Promise<any>;
-  handleToolCall: (request: Request) => Promise<any>;
-  getStorageMetrics: () => Promise<any>;
+  listTools: () => Promise<{
+    tools: Array<{ name: string; description?: string; inputSchema?: unknown }>;
+  }>;
+  handleToolCall: (request: Request) => Promise<{ content: Array<{ type: string; text: string }> }>;
+  getStorageMetrics: () => Promise<StorageMetrics>;
   clearCaches?: () => Promise<void>;
   cleanup?: () => Promise<void>;
   getTaskResource?: (uri: string) => Promise<Resource>;
@@ -77,6 +81,14 @@ export class AtlasServer {
   private isInitialized: boolean = false;
   private memoryMonitor?: NodeJS.Timeout;
   private healthCheckInterval?: NodeJS.Timeout;
+  private shutdownTimeouts: Set<NodeJS.Timeout> = new Set();
+  private requestTimeouts: Set<NodeJS.Timeout> = new Set();
+  private boundHandlers: {
+    sigint?: () => Promise<void>;
+    sigterm?: () => Promise<void>;
+    unhandledRejection?: (reason: unknown, promise: Promise<unknown>) => void;
+    uncaughtException?: (error: Error) => void;
+  } = {};
 
   private static initLogger(): void {
     if (!AtlasServer.logger) {
@@ -160,7 +172,7 @@ export class AtlasServer {
 
     try {
       // Get available tools with retries
-      let tools = [];
+      let tools: Array<{ name: string; description?: string; inputSchema?: unknown }> = [];
       let retryCount = 0;
       const maxRetries = 3;
 
@@ -292,15 +304,14 @@ export class AtlasServer {
       }
     };
 
-    process.on('SIGINT', async () => {
+    // Store bound handlers for cleanup
+    this.boundHandlers.sigint = async () => {
       await this.shutdown();
-    });
-
-    process.on('SIGTERM', async () => {
+    };
+    this.boundHandlers.sigterm = async () => {
       await this.shutdown();
-    });
-
-    process.on('unhandledRejection', (reason: unknown, promise: Promise<unknown>) => {
+    };
+    this.boundHandlers.unhandledRejection = (reason: unknown, promise: Promise<unknown>) => {
       if (AtlasServer.logger) {
         AtlasServer.logger.error('Unhandled Rejection:', {
           reason,
@@ -308,9 +319,8 @@ export class AtlasServer {
           metrics: this.metricsCollector.getMetrics(),
         });
       }
-    });
-
-    process.on('uncaughtException', (error: Error) => {
+    };
+    this.boundHandlers.uncaughtException = (error: Error) => {
       const errorMessage =
         error instanceof Error
           ? { name: error.name, message: error.message, stack: error.stack }
@@ -325,7 +335,13 @@ export class AtlasServer {
         });
       }
       this.shutdown().finally(() => process.exit(1));
-    });
+    };
+
+    // Add event listeners
+    process.on('SIGINT', this.boundHandlers.sigint);
+    process.on('SIGTERM', this.boundHandlers.sigterm);
+    process.on('unhandledRejection', this.boundHandlers.unhandledRejection);
+    process.on('uncaughtException', this.boundHandlers.uncaughtException);
   }
 
   private setupResourceHandlers(): void {
@@ -663,9 +679,13 @@ export class AtlasServer {
 
   private createTimeout(ms: number): Promise<never> {
     return new Promise((_, reject) => {
-      setTimeout(() => {
+      const timeout = setTimeout(() => {
+        this.requestTimeouts.delete(timeout);
         reject(new McpError(ErrorCode.InternalError, `Request timed out after ${ms}ms`));
       }, ms);
+      timeout.unref();
+      this.requestTimeouts.add(timeout);
+      return timeout;
     });
   }
 
@@ -745,8 +765,38 @@ export class AtlasServer {
           this.activeRequests.clear();
           break;
         }
+        const waitTimeout = setTimeout(() => {}, 100);
+        waitTimeout.unref();
+        this.shutdownTimeouts.add(waitTimeout);
         await new Promise(resolve => setTimeout(resolve, 100));
+        this.shutdownTimeouts.delete(waitTimeout);
       }
+
+      // Clean up all timeouts
+      for (const timeout of this.requestTimeouts) {
+        clearTimeout(timeout);
+      }
+      this.requestTimeouts.clear();
+
+      for (const timeout of this.shutdownTimeouts) {
+        clearTimeout(timeout);
+      }
+      this.shutdownTimeouts.clear();
+
+      // Remove event listeners
+      if (this.boundHandlers.sigint) {
+        process.off('SIGINT', this.boundHandlers.sigint);
+      }
+      if (this.boundHandlers.sigterm) {
+        process.off('SIGTERM', this.boundHandlers.sigterm);
+      }
+      if (this.boundHandlers.unhandledRejection) {
+        process.off('unhandledRejection', this.boundHandlers.unhandledRejection);
+      }
+      if (this.boundHandlers.uncaughtException) {
+        process.off('uncaughtException', this.boundHandlers.uncaughtException);
+      }
+      this.boundHandlers = {};
 
       // Clean up resources
       await this.toolHandler.cleanup?.();

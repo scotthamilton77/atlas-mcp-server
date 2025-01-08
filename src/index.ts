@@ -2,16 +2,33 @@
 
 import { Logger } from './logging/index.js';
 import { EventEmitter } from 'events';
+import { ConfigManager } from './config/config-manager.js';
 
-// Increase max listeners to prevent warnings
-EventEmitter.defaultMaxListeners = 20;
+// Increase max listeners to prevent memory leak warnings
+EventEmitter.defaultMaxListeners = 100;
+
+// Track and cleanup process event listeners
+const processListeners = new Set<() => void>();
+const addProcessListener = (event: string, listener: () => void) => {
+  process.on(event, listener);
+  processListeners.add(listener);
+};
+
+// Cleanup function to remove all registered listeners
+const cleanupProcessListeners = () => {
+  for (const listener of processListeners) {
+    process.removeListener('beforeExit', listener);
+  }
+  processListeners.clear();
+};
+
+// Register cleanup for process exit
+process.on('exit', cleanupProcessListeners);
 import { TaskManager } from './task/manager/task-manager.js';
 import { VisualizationManager } from './visualization/visualization-manager.js';
-import { createStorage } from './storage/index.js';
+import { createStorage, TaskStorage } from './storage/index.js';
 import { AtlasServer } from './server/index.js';
 import { EventManager } from './events/event-manager.js';
-import { ConfigManager, ConfigInitializer } from './config/index.js';
-import { Environment, Environments } from './types/config.js';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { NoteManager, NotesInitializer } from './notes/index.js';
@@ -21,6 +38,7 @@ const __filename = fileURLToPath(import.meta.url);
 const packageRoot = join(dirname(__filename), '..');
 import { PlatformPaths, PlatformCapabilities, ProcessManager } from './utils/platform-utils.js';
 import { LogLevels } from './types/logging.js';
+import { StorageConfig } from './types/config.js';
 import { ToolHandler } from './tools/handler.js';
 import { TemplateManager } from './template/manager.js';
 import { SqliteTemplateStorage } from './storage/sqlite/template-storage.js';
@@ -91,69 +109,100 @@ async function main(): Promise<void> {
       // Update logger with event manager
       logger.setEventManager(eventManager);
 
-      // Initialize configuration
-      const builtInConfigPath = join(packageRoot, 'config', 'default.json');
-      const configPath = join(baseDir, 'config', 'config.json');
+      // Initialize ConfigManager
+      await ConfigManager.initialize();
+      const config = ConfigManager.getInstance();
 
-      // Initialize config with built-in and user settings
-      const configInitializer = new ConfigInitializer();
-      const configData = await configInitializer.initializeConfig(configPath, builtInConfigPath);
+      // Initialize storage with retries
+      let storage: TaskStorage | undefined;
+      let retryCount = 0;
+      const maxRetries = 3;
 
-      // Initialize config manager with merged config
-      const configManager = await ConfigManager.initialize({
-        env: (process.env.NODE_ENV as Environment) || Environments.DEVELOPMENT,
-        logging: configData.logging || {
-          console: false,
-          file: true,
-          level: LogLevels.DEBUG,
-          maxFiles: 10,
-          maxSize: 10 * 1024 * 1024,
-          dir: logDir,
-        },
-        storage: configData.storage || {
-          baseDir: dataDir,
-          name: process.env.ATLAS_STORAGE_NAME || 'atlas-tasks',
-          connection: {
-            maxRetries: 3,
-            retryDelay: 1000,
-            busyTimeout: 5000,
-          },
-          performance: {
-            checkpointInterval: 30000,
-            cacheSize: Math.floor(PlatformCapabilities.getMaxMemory() / (1024 * 1024)), // Convert to MB
-            mmapSize: 32 * 1024 * 1024,
-            pageSize: 4096,
-            maxMemory: 134217728, // 128MB
-          },
-        },
-      });
+      while (retryCount < maxRetries) {
+        try {
+          // Initialize storage using config values
+          storage = await createStorage({
+            baseDir: dataDir,
+            name: config.get<StorageConfig>('storage').name,
+            journalMode: 'wal', // Use Write-Ahead Logging mode
+            synchronous: 'normal', // Use normal synchronization for WAL mode
+            connection: {
+              maxConnections: 1,
+              maxRetries: 5,
+              retryDelay: 3000,
+              busyTimeout: 10000,
+              idleTimeout: 30000,
+            },
+            performance: {
+              ...(config.get<StorageConfig>('storage').performance || {}),
+              checkpointInterval: 30000, // More frequent checkpoints for WAL mode
+              cacheSize: 2000,
+              mmapSize: 33554432, // 32MB mmap size for WAL mode
+              pageSize: 4096,
+              maxMemory: 134217728, // 128MB for better WAL performance
+              sharedMemory: true, // Enable shared memory for WAL mode
+            },
+          });
 
-      const config = configManager.getConfig();
+          // Wait for database initialization (matches init.ts timing)
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          logger.info('Storage initialized successfully', {
+            component: 'Storage',
+            config: {
+              journalMode: 'wal',
+              synchronous: 'normal',
+              performance: {
+                checkpointInterval: 30000,
+                mmapSize: 33554432,
+                maxMemory: 134217728,
+                sharedMemory: true,
+              },
+            },
+          });
 
-      // Initialize storage
-      const storage = await createStorage({
-        ...config.storage!,
-        baseDir: dataDir,
-        name: process.env.ATLAS_STORAGE_NAME || 'atlas-tasks',
-      });
+          break;
+        } catch (error) {
+          retryCount++;
+          logger.warn(`Storage initialization attempt ${retryCount} failed:`, {
+            error: error instanceof Error ? error.message : String(error),
+            retryCount,
+            maxRetries,
+          });
 
-      // Register storage cleanup
-      ProcessManager.registerCleanupHandler(async () => {
-        await storage.close();
-      });
+          if (retryCount === maxRetries) {
+            throw error;
+          }
+
+          // Wait before retrying
+          await new Promise(resolve => setTimeout(resolve, 3000));
+        }
+      }
+
+      if (!storage) {
+        throw new Error('Failed to initialize storage after retries');
+      }
+
+      // Register storage cleanup using managed listener
+      const storageCleanup = async () => {
+        await storage?.close();
+      };
+      addProcessListener('beforeExit', storageCleanup);
+      ProcessManager.registerCleanupHandler(storageCleanup);
 
       // Initialize task manager
-      const taskManager = await TaskManager.getInstance(storage);
+      const taskManager = await TaskManager.getInstance(storage as TaskStorage);
 
       // Initialize visualization manager
       const visualizationManager = await VisualizationManager.initialize(taskManager, {
         baseDir,
       });
 
-      // Register visualization cleanup
-      ProcessManager.registerCleanupHandler(async () => {
+      // Register visualization cleanup using managed listener
+      const visualizationCleanup = async () => {
         await visualizationManager.cleanup();
-      });
+      };
+      addProcessListener('beforeExit', visualizationCleanup);
+      ProcessManager.registerCleanupHandler(visualizationCleanup);
 
       // Initialize template storage and manager
       const templateStorage = new SqliteTemplateStorage(storage, logger);
@@ -189,15 +238,17 @@ async function main(): Promise<void> {
         throw error;
       }
 
-      // Register task manager cleanup
-      ProcessManager.registerCleanupHandler(async () => {
+      // Register task and template manager cleanup using managed listeners
+      const taskCleanup = async () => {
         await taskManager.close();
-      });
-
-      // Register template manager cleanup
-      ProcessManager.registerCleanupHandler(async () => {
+      };
+      const templateCleanup = async () => {
         await templateManager.close();
-      });
+      };
+      addProcessListener('beforeExit', taskCleanup);
+      addProcessListener('beforeExit', templateCleanup);
+      ProcessManager.registerCleanupHandler(taskCleanup);
+      ProcessManager.registerCleanupHandler(templateCleanup);
 
       // Initialize notes
       const builtInNotesDir = join(packageRoot, 'notes');
@@ -210,15 +261,53 @@ async function main(): Promise<void> {
       // Initialize tool handler
       const toolHandler = new ToolHandler(taskManager, templateManager, noteManager);
 
-      // Register note manager cleanup
-      ProcessManager.registerCleanupHandler(async () => {
+      // Register note manager cleanup using managed listener
+      const noteCleanup = async () => {
         await noteManager.reloadConfig();
-      });
+      };
+      addProcessListener('beforeExit', noteCleanup);
+      ProcessManager.registerCleanupHandler(noteCleanup);
 
-      // Run maintenance
-      await storage.vacuum();
-      await storage.analyze();
-      await storage.checkpoint();
+      // Run maintenance with retries
+      if (storage) {
+        let maintenanceRetries = 0;
+        const maxMaintenanceRetries = 3;
+
+        while (maintenanceRetries < maxMaintenanceRetries) {
+          try {
+            // Wait before attempting maintenance
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            // Run maintenance operations one at a time with delays
+            await storage.vacuum();
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            await storage.analyze();
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            await storage.checkpoint();
+            break;
+          } catch (error) {
+            maintenanceRetries++;
+            logger.warn(`Maintenance attempt ${maintenanceRetries} failed:`, {
+              error: error instanceof Error ? error.message : String(error),
+              retryCount: maintenanceRetries,
+              maxRetries: maxMaintenanceRetries,
+            });
+
+            if (maintenanceRetries === maxMaintenanceRetries) {
+              logger.error('Failed to complete maintenance operations', {
+                error: error instanceof Error ? error.message : String(error),
+              });
+              // Continue without maintenance rather than failing startup
+              break;
+            }
+
+            // Wait before retrying
+            await new Promise(resolve => setTimeout(resolve, 3000));
+          }
+        }
+      }
 
       // Initialize server
       server = await AtlasServer.getInstance(
@@ -252,7 +341,32 @@ async function main(): Promise<void> {
               },
             });
           },
-          getStorageMetrics: async () => storage.getMetrics(),
+          getStorageMetrics: async () =>
+            storage?.getMetrics() ?? {
+              tasks: {
+                total: 0,
+                byStatus: {
+                  PENDING: 0,
+                  IN_PROGRESS: 0,
+                  COMPLETED: 0,
+                  CANCELLED: 0,
+                  BLOCKED: 0,
+                },
+                noteCount: 0,
+                dependencyCount: 0,
+              },
+              storage: {
+                totalSize: 0,
+                pageSize: 4096,
+                pageCount: 0,
+                walSize: 0,
+                cache: {
+                  hitRate: 0,
+                  memoryUsage: 0,
+                  entryCount: 0,
+                },
+              },
+            },
           clearCaches: async () => taskManager.clearCaches(),
           cleanup: ProcessManager.cleanup,
           // Add resource-related methods
@@ -301,15 +415,17 @@ async function main(): Promise<void> {
         }
       );
 
-      // Register server cleanup
-      ProcessManager.registerCleanupHandler(async () => {
+      // Register server and event manager cleanup using managed listeners
+      const serverCleanup = async () => {
         await server?.shutdown();
-      });
-
-      // Register event manager cleanup
-      ProcessManager.registerCleanupHandler(async () => {
+      };
+      const eventCleanup = async () => {
         await eventManager.shutdown();
-      });
+      };
+      addProcessListener('beforeExit', serverCleanup);
+      addProcessListener('beforeExit', eventCleanup);
+      ProcessManager.registerCleanupHandler(serverCleanup);
+      ProcessManager.registerCleanupHandler(eventCleanup);
 
       // Set up signal handlers
       ProcessManager.setupSignalHandlers();
