@@ -313,7 +313,7 @@ async function main(): Promise<void> {
       server = await AtlasServer.getInstance(
         {
           name: 'atlas-mcp-server',
-          version: '1.5.0',
+          version: '1.5.3',
           maxRequestsPerMinute: 600,
           requestTimeout: 30000,
           shutdownTimeout: 5000,
