@@ -164,3 +164,4 @@ coverage/
 .history/
 repomix*
 .backup
+package-lock.json

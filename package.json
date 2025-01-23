@@ -39,22 +39,22 @@
     "node": ">=20.0.0"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.1.0",
+    "@modelcontextprotocol/sdk": "^1.4.0",
     "@types/better-sqlite3": "^7.6.12",
-    "@types/node": "^22.10.5",
+    "@types/node": "^22.10.10",
     "@types/sqlite3": "^3.1.11",
     "@types/uuid": "^10.0.0",
-    "better-sqlite3": "^11.7.2",
+    "better-sqlite3": "^11.8.1",
     "concurrently": "^9.1.2",
     "detect-libc": "^2.0.3",
     "dotenv": "^16.4.7",
     "minimist": "^1.2.8",
     "nanoid": "^5.0.9",
-    "nopt": "^8.0.0",
+    "nopt": "^8.1.0",
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7",
-    "typescript": "^5.7.2",
-    "uuid": "^11.0.4",
+    "typescript": "^5.7.3",
+    "uuid": "^11.0.5",
     "winston": "^3.17.0",
     "zod": "^3.24.1"
   },
@@ -68,18 +68,18 @@
     ]
   },
   "devDependencies": {
-    "@eslint/js": "^9.17.0",
+    "@eslint/js": "^9.18.0",
     "@types/eslint": "^9.6.1",
-    "@typescript-eslint/eslint-plugin": "^8.19.0",
-    "eslint": "^9.17.0",
-    "eslint-config-prettier": "^9.1.0",
-    "eslint-plugin-prettier": "^5.2.1",
-    "eslint-plugin-react": "^7.37.3",
+    "@typescript-eslint/eslint-plugin": "^8.21.0",
+    "eslint": "^9.18.0",
+    "eslint-config-prettier": "^10.0.1",
+    "eslint-plugin-prettier": "^5.2.3",
+    "eslint-plugin-react": "^7.37.4",
     "globals": "^15.14.0",
     "husky": "^9.1.7",
-    "lint-staged": "^15.3.0",
+    "lint-staged": "^15.4.2",
     "prettier": "^3.4.2",
     "rimraf": "^6.0.1",
-    "typescript-eslint": "^8.19.0"
+    "typescript-eslint": "^8.21.0"
   }
 }
