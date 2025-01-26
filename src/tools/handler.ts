@@ -5,9 +5,17 @@ import { TaskManager } from '../task/manager/task-manager.js';
 import { TemplateManager } from '../template/manager.js';
 import { Logger } from '../logging/index.js';
 import { ErrorCodes, createError } from '../errors/index.js';
-import { Tool, ToolResponse } from './types.js';
+import { Tool, ToolResponse, StorageMetrics, InputSchema, ToolDefinition } from './types.js';
 import { ToolDefinitions } from './definitions/tool-definitions.js';
 import { NoteManager } from '../notes/note-manager.js';
+import { SamplingHandler } from './sampling-handler.js';
+
+interface TaskArgs extends Record<string, unknown> {
+  metadata?: {
+    dependencies?: string[];
+    [key: string]: unknown;
+  };
+}
 
 export class ToolHandler {
   private readonly logger: Logger;
@@ -17,6 +25,7 @@ export class ToolHandler {
     (args: Record<string, unknown>) => Promise<ToolResponse>
   > = new Map();
   private readonly toolDefinitions: ToolDefinitions;
+  private readonly samplingHandler: SamplingHandler;
 
   constructor(
     private readonly taskManager: TaskManager,
@@ -31,6 +40,7 @@ export class ToolHandler {
     });
 
     this.toolDefinitions = new ToolDefinitions(taskManager, templateManager);
+    this.samplingHandler = new SamplingHandler();
     this.registerTools();
 
     this.logger.info('Tool registration completed', {
@@ -46,7 +56,7 @@ export class ToolHandler {
   private registerTools(): void {
     const tools = this.toolDefinitions.getTools();
     for (const tool of tools) {
-      const { handler, ...toolDef } = tool;
+      const { handler, ...toolDef } = tool as ToolDefinition;
       this.tools.set(tool.name, toolDef);
       this.toolHandlers.set(tool.name, handler);
       this.logger.debug('Tool registered', {
@@ -58,6 +68,118 @@ export class ToolHandler {
         },
       });
     }
+
+    // Register sampling tools
+    const samplingSchema: InputSchema = {
+      type: 'object',
+      properties: {
+        messages: {
+          type: 'array',
+          description: 'Conversation history for context',
+          items: {
+            type: 'object',
+            properties: {
+              role: {
+                type: 'string',
+                enum: ['user', 'assistant'],
+              },
+              content: {
+                type: 'object',
+                properties: {
+                  type: {
+                    type: 'string',
+                    enum: ['text', 'image'],
+                  },
+                  text: { type: 'string' },
+                  data: { type: 'string' },
+                  mimeType: { type: 'string' },
+                },
+                required: ['type'],
+              },
+            },
+            required: ['role', 'content'],
+          },
+        },
+        modelPreferences: {
+          type: 'object',
+          properties: {
+            hints: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string' },
+                },
+              },
+            },
+            costPriority: {
+              type: 'number',
+              minimum: 0,
+              maximum: 1,
+            },
+            speedPriority: {
+              type: 'number',
+              minimum: 0,
+              maximum: 1,
+            },
+            intelligencePriority: {
+              type: 'number',
+              minimum: 0,
+              maximum: 1,
+            },
+          },
+        },
+      },
+      required: ['messages'],
+    };
+
+    const progressSchema: InputSchema = {
+      type: 'object',
+      properties: {
+        operationId: {
+          type: 'string',
+          description: 'Operation identifier',
+        },
+      },
+      required: ['operationId'],
+    };
+
+    this.tools.set('create_sampling', {
+      name: 'create_sampling',
+      description: 'Request LLM sampling with progress tracking',
+      inputSchema: samplingSchema,
+    });
+
+    this.tools.set('get_progress', {
+      name: 'get_progress',
+      description: 'Get progress of a long-running operation',
+      inputSchema: progressSchema,
+    });
+
+    // Register sampling handlers
+    this.toolHandlers.set('create_sampling', args =>
+      this.samplingHandler.createSamplingMessage(args)
+    );
+    this.toolHandlers.set('get_progress', async args => {
+      const progress = await this.samplingHandler.getProgress(args.operationId as string);
+      if (!progress) {
+        throw createError(
+          ErrorCodes.IO_NOT_FOUND,
+          'Operation not found',
+          'getProgress',
+          undefined,
+          { operationId: args.operationId }
+        );
+      }
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(progress, null, 2),
+          },
+        ],
+      };
+    });
   }
 
   async listTools(): Promise<{ tools: Tool[] }> {
@@ -91,10 +213,7 @@ export class ToolHandler {
 
   async handleToolCall(request: {
     params: { name: string; arguments?: Record<string, unknown> };
-  }): Promise<{
-    _meta?: Record<string, unknown>;
-    content: Array<{ type: string; text: string }>;
-  }> {
+  }): Promise<ToolResponse> {
     const { name, arguments: args = {} } = request.params;
 
     const tool = this.tools.get(name);
@@ -116,10 +235,10 @@ export class ToolHandler {
     }
 
     try {
-      // Validate dependencies are at root level
+      // Validate dependencies are at root level for task operations
       if (
         (name === 'create_task' || name === 'update_task') &&
-        (args as any).metadata?.dependencies
+        (args as TaskArgs).metadata?.dependencies
       ) {
         throw createError(
           ErrorCodes.INVALID_INPUT,
@@ -131,14 +250,15 @@ export class ToolHandler {
       this.logger.debug('Executing tool', { name, args });
       const result = await handler(args);
       this.logger.debug('Tool execution completed', { name });
+
       // Get applicable user notes
       const notes = this.noteManager.getNotesForTool(name);
       const formattedNotes = this.noteManager.formatNotes(notes);
 
       // Add notes to response if present
-      const response = {
-        _meta: {},
-        ...result,
+      const response: ToolResponse = {
+        _meta: result._meta,
+        content: [...result.content],
       };
 
       if (formattedNotes) {
@@ -158,7 +278,7 @@ export class ToolHandler {
     }
   }
 
-  async getStorageMetrics(): Promise<any> {
+  async getStorageMetrics(): Promise<StorageMetrics> {
     return await this.taskManager.getStorage().getMetrics();
   }
 }

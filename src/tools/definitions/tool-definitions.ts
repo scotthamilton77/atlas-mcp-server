@@ -20,6 +20,8 @@ import {
   createAgentBuilderTool,
   ToolImplementation,
 } from './tools/index.js';
+import { createSamplingTools } from './tools/sampling-tools.js';
+import { SamplingHandler } from '../sampling-handler.js';
 
 export class ToolDefinitions {
   private readonly logger: Logger;
@@ -30,9 +32,13 @@ export class ToolDefinitions {
       component: 'ToolDefinitions',
     });
 
-    // Initialize all tools with context
+    // Initialize handlers
+    const samplingHandler = new SamplingHandler();
+
+    // Initialize contexts
     const taskContext = { taskManager, logger: this.logger };
     const templateContext = { templateManager, logger: this.logger };
+    const samplingContext = { samplingHandler, logger: this.logger };
 
     this.tools = [
       // Task tools
@@ -49,7 +55,14 @@ export class ToolDefinitions {
       // Template tools
       ...createTemplateTools(templateContext),
       createAgentBuilderTool(templateContext),
+      // Sampling tools
+      ...createSamplingTools(samplingContext),
     ];
+
+    this.logger.info('Tool registration completed', {
+      count: this.tools.length,
+      tools: this.tools.map(t => t.definition.name),
+    });
   }
 
   /**
