@@ -16,13 +16,13 @@ export function createSamplingTools(context: SamplingContext): ToolImplementatio
       definition: {
         name: 'create_sampling',
         description:
-          'Request LLM sampling with progress tracking. Supports text/image content, model preferences, and completion monitoring.',
+          'Request LLM sampling with progress tracking. Supports conversation history, model preferences, and completion monitoring.',
         inputSchema: {
           type: 'object',
           properties: {
             messages: {
               type: 'array',
-              description: 'Conversation history',
+              description: 'Messages with role (user/assistant) and content (text/image)',
               items: {
                 type: 'object',
                 properties: {
@@ -46,6 +46,7 @@ export function createSamplingTools(context: SamplingContext): ToolImplementatio
             },
             modelPreferences: {
               type: 'object',
+              description: 'Optional model selection preferences (cost, speed, capabilities)',
               properties: {
                 hints: {
                   type: 'array',
@@ -69,13 +70,13 @@ export function createSamplingTools(context: SamplingContext): ToolImplementatio
       definition: {
         name: 'get_progress',
         description:
-          'Get progress of a long-running operation. Returns completion status and details.',
+          'Get progress of a long-running operation. Returns completion status, progress percentage, and details.',
         inputSchema: {
           type: 'object',
           properties: {
             operationId: {
               type: 'string',
-              description: 'Operation identifier',
+              description: 'Operation identifier from create_sampling response',
             },
           },
           required: ['operationId'],
