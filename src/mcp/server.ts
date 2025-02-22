@@ -26,9 +26,6 @@ import { registerProjectLinksResource } from "./resources/projectLinks/index.js"
 import { registerProjectDependenciesResource } from "./resources/projectDependencies/index.js";
 import { registerProjectMembersResource } from "./resources/projectMembers/index.js";
 
-// Import prompt registrations
-import { registerProjectSummaryPrompt } from "./prompts/projectSummary/index.js";
-
 export const createMcpServer = async () => {
   try {
     // Configure security settings
@@ -74,9 +71,6 @@ export const createMcpServer = async () => {
     registerProjectLinksResource(server);
     registerProjectDependenciesResource(server);
     registerProjectMembersResource(server);
-
-    // Register prompts
-    registerProjectSummaryPrompt(server);
 
     // Connect using stdio transport
     const transport = new StdioServerTransport();
