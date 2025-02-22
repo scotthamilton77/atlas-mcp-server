@@ -1,10 +1,6 @@
 # Project Directory Structure
 
 ```
-├── .github
-    ├── workflows
-    │   └── publish.yml
-    └── .DS_Store
 ├── docs
     └── tree.md
 ├── scripts
@@ -15,11 +11,6 @@
     ├── config
     │   └── index.ts
     ├── mcp
-    │   ├── prompts
-    │   │   └── projectSummary
-    │   │   │   ├── index.ts
-    │   │   │   ├── projectSummary.ts
-    │   │   │   └── types.ts
     │   ├── resources
     │   │   ├── projectDependencies
     │   │   │   ├── getProjectDependencies.ts
@@ -118,17 +109,12 @@
     │   ├── logger.ts
     │   ├── projectHelpers.ts
     │   └── security.ts
-    ├── .DS_Store
     └── index.ts
-├── .DS_Store
-├── .env
 ├── .env.example
-├── .gitignore
 ├── docker-compose.yml
 ├── LICENSE
 ├── package-lock.json
 ├── package.json
-├── project-spec.md
 ├── README.md
 └── tsconfig.json
 ```
