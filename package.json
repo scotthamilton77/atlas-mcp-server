@@ -1,86 +1,42 @@
 {
   "name": "atlas-mcp-server",
-  "version": "1.5.4",
-  "description": "A Model Context Protocol server that enables LLMs to manage complex task hierarchies with dependency tracking, status management, and rich metadata support. Provides ACID-compliant storage with caching and batch processing capabilities.",
+  "version": "2.0.0",
+  "description": "Neo4j-backed project management system exposed through MCP",
   "type": "module",
+  "main": "dist/index.js",
   "bin": {
-    "atlas-mcp-server": "./build/index.js"
+    "atlas-mcp": "./dist/index.js",
+    "migrate-project-ids": "./dist/scripts/migrateProjectIds.js"
   },
-  "files": [
-    "build",
-    "README.md",
-    "LICENSE"
-  ],
   "scripts": {
-    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,md}\"",
-    "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx,json,md}\"",
-    "prepare": "node scripts/postinstall.js",
-    "postinstall": "husky",
-    "build": "tsc && node scripts/set-build-permissions.js",
-    "rebuild": "npm run clean && npm run build",
-    "watch": "tsc --watch",
-    "inspector": "npx @modelcontextprotocol/inspector build/index.js",
-    "prestart": "node scripts/prestart.js",
-    "start": "node --expose-gc build/index.js",
-    "dev": "concurrently \"npm run watch\" \"npm run start\"",
-    "tree": "node scripts/generate-tree.js",
-    "clean": "rimraf build"
+    "build": "tsc && node scripts/make-executable.js",
+    "start": "node dist/index.js",
+    "dev": "tsc -w",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f",
+    "rebuild": "node scripts/clean.js && npm run build",
+    "tree": "node scripts/generate-tree.js"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/cyanheads/atlas-mcp-server.git"
-  },
-  "author": "Casey Hand @cyanheads",
-  "bugs": {
-    "url": "https://github.com/cyanheads/atlas-mcp-server/issues"
-  },
-  "homepage": "https://caseyjhand.com",
-  "main": "./build/index.js",
-  "engines": {
-    "node": ">=20.0.0"
-  },
+  "keywords": [
+    "mcp",
+    "neo4j",
+    "project-management"
+  ],
+  "author": "",
+  "license": "MIT",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.4.1",
-    "@types/better-sqlite3": "^7.6.12",
-    "@types/node": "^22.10.10",
-    "@types/sqlite3": "^3.1.11",
-    "@types/uuid": "^10.0.0",
-    "better-sqlite3": "^11.8.1",
-    "concurrently": "^9.1.2",
-    "detect-libc": "^2.0.3",
+    "@modelcontextprotocol/sdk": "^1.5.0",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.13.5",
     "dotenv": "^16.4.7",
-    "minimist": "^1.2.8",
-    "nanoid": "^5.0.9",
-    "nopt": "^8.1.0",
-    "sqlite": "^5.1.1",
-    "sqlite3": "^5.1.7",
+    "express": "^4.21.2",
+    "fuzzysort": "^3.1.0",
+    "neo4j-driver": "^5.28.1",
+    "ts-node": "^10.9.2",
     "typescript": "^5.7.3",
-    "uuid": "^11.0.5",
     "winston": "^3.17.0",
-    "zod": "^3.24.1"
-  },
-  "lint-staged": {
-    "!(scripts)/**/*.{ts,tsx,js,jsx}": [
-      "eslint --fix",
-      "prettier --write"
-    ],
-    "!(scripts)/**/*.{json,md}": [
-      "prettier --write"
-    ]
-  },
-  "devDependencies": {
-    "@eslint/js": "^9.19.0",
-    "@types/eslint": "^9.6.1",
-    "@typescript-eslint/eslint-plugin": "^8.21.0",
-    "eslint": "^9.19.0",
-    "eslint-config-prettier": "^10.0.1",
-    "eslint-plugin-prettier": "^5.2.3",
-    "eslint-plugin-react": "^7.37.4",
-    "globals": "^15.14.0",
-    "husky": "^9.1.7",
-    "lint-staged": "^15.4.2",
-    "prettier": "^3.4.2",
-    "rimraf": "^6.0.1",
-    "typescript-eslint": "^8.21.0"
+    "zod": "^3.24.2",
+    "cross-env": "^7.0.3"
   }
 }

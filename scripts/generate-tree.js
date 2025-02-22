@@ -1,20 +1,17 @@
 #!/usr/bin/env node
-/* eslint-env node */
-/* global process, console */
-import { readdir, writeFile } from 'fs/promises';
-import { join } from 'path';
 
-const IGNORE_PATTERNS = ['node_modules', '.git', 'build', '.DS_Store', 'coverage', 'dist', '*.log'];
+import fs from 'fs/promises';
+import path from 'path';
 
-async function generateTree(dir, indent = '', isRoot = false) {
-  const entries = await readdir(dir, { withFileTypes: true });
+const IGNORE_PATTERNS = ['node_modules', 'dist', '.git'];
+
+async function generateTree(dir, prefix = '', isLast = true) {
+  const entries = await fs.readdir(dir, { withFileTypes: true });
+  let output = '';
+
+  // Filter and sort entries
   const filteredEntries = entries
-    .filter(
-      entry =>
-        !IGNORE_PATTERNS.some(pattern =>
-          pattern.includes('*') ? entry.name.endsWith(pattern.slice(1)) : entry.name === pattern
-        )
-    )
+    .filter(entry => !IGNORE_PATTERNS.includes(entry.name))
     .sort((a, b) => {
       // Directories first, then files
       if (a.isDirectory() && !b.isDirectory()) return -1;
@@ -22,48 +19,49 @@ async function generateTree(dir, indent = '', isRoot = false) {
       return a.name.localeCompare(b.name);
     });
 
-  const tree = [];
-
-  if (isRoot) {
-    // Add project name header
-    tree.push('atlas-mcp-server');
-  }
-
   for (let i = 0; i < filteredEntries.length; i++) {
     const entry = filteredEntries[i];
     const isLastEntry = i === filteredEntries.length - 1;
-    const prefix = isLastEntry ? '└── ' : '├── ';
-    const fullPath = join(dir, entry.name);
+    const newPrefix = prefix + (isLast ? '    ' : '│   ');
+    
+    output += prefix + (isLastEntry ? '└── ' : '├── ') + entry.name + '\n';
 
     if (entry.isDirectory()) {
-      // Add directory entry
-      tree.push(`${indent}${prefix}${entry.name}/`);
-
-      // Recursively process subdirectory with updated indent
-      const nextIndent = indent + (isLastEntry ? '    ' : '│   ');
-      const subtree = await generateTree(fullPath, nextIndent);
-      tree.push(...subtree);
-    } else {
-      // Add file entry
-      tree.push(`${indent}${prefix}${entry.name}`);
+      output += await generateTree(
+        path.join(dir, entry.name),
+        newPrefix,
+        isLastEntry
+      );
     }
   }
 
-  return tree;
+  return output;
 }
 
-// Get directory from command line args or use current directory
-const targetDir = process.argv[2] || '.';
+const writeTree = async () => {
+  try {
+    const rootDir = process.cwd();
+    const treeContent = await generateTree(rootDir);
+    
+    // Ensure docs directory exists
+    const docsDir = path.join(rootDir, 'docs');
+    try {
+      await fs.access(docsDir);
+    } catch {
+      await fs.mkdir(docsDir);
+    }
 
-generateTree(targetDir, '', true)
-  .then(async tree => {
-    const treeContent = '```text\n' + tree.join('\n') + '\n```';
-    // Write to file
-    await writeFile(join(process.cwd(), 'repo-tree.md'), treeContent);
-    // Also log to console for feedback
-    console.log(treeContent);
-  })
-  .catch(error => {
+    // Write tree to file
+    await fs.writeFile(
+      path.join(docsDir, 'tree.md'),
+      '# Project Directory Structure\n\n```\n' + treeContent + '```\n'
+    );
+    
+    console.log('Successfully generated tree structure in docs/tree.md');
+  } catch (error) {
     console.error('Error generating tree:', error);
     process.exit(1);
-  });
+  }
+};
+
+writeTree();
