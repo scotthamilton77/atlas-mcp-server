@@ -2,7 +2,7 @@
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
 [![Model Context Protocol](https://img.shields.io/badge/MCP-1.5.0-green.svg)](https://modelcontextprotocol.io/)
-[![Version](https://img.shields.io/badge/Version-2.0.0-blue.svg)]()
+[![Version](https://img.shields.io/badge/Version-2.0.1-blue.svg)]()
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Status](https://img.shields.io/badge/Status-Stable-blue.svg)]()
 [![GitHub](https://img.shields.io/github/stars/cyanheads/atlas-mcp-server?style=social)](https://github.com/cyanheads/atlas-mcp-server-2)
@@ -153,6 +153,14 @@ Core Components:
 - **Advanced Search**: Property-based search with fuzzy matching and wildcards
 
 ## Installation
+
+### Option 1: Install via npm
+
+```bash
+npm install atlas-mcp-server
+```
+
+### Option 2: Install from source
 
 1. Clone the repository:
 ```bash
