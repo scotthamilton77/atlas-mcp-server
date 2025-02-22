@@ -2,7 +2,6 @@
 
 ```
 ├── docs
-    └── tree.md
 ├── scripts
     ├── clean.js
     ├── generate-tree.js
