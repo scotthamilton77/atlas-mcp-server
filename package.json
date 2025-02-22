@@ -1,12 +1,11 @@
 {
   "name": "atlas-mcp-server",
-  "version": "2.0.0",
-  "description": "Neo4j-backed project management system exposed through MCP",
+  "version": "2.0.1",
+  "description": "An adaptive Model Context Protocol server built in TypeScript. Leveraging Neo4j's graph database, it delivers intelligent project and task management, empowering LLM agents with seamless collaboration and guidance.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "atlas-mcp": "./dist/index.js",
-    "migrate-project-ids": "./dist/scripts/migrateProjectIds.js"
+    "atlas-mcp": "./dist/index.js"
   },
   "scripts": {
     "build": "tsc && node scripts/make-executable.js",
@@ -21,10 +20,17 @@
   "keywords": [
     "mcp",
     "neo4j",
-    "project-management"
+    "project-management",
+    "typescript",
+    "llm",
+    "agent",
+    "collaboration",
+    "task-management",
+    "whiteboard",
+    "graph-database"
   ],
-  "author": "",
-  "license": "MIT",
+  "author": "@cyanheads",
+  "license": "Apache-2.0",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.5.0",
     "@types/express": "^5.0.0",
