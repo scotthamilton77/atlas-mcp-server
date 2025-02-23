@@ -1,15 +1,14 @@
 # ATLAS MCP Server 2.0
 
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
-[![Model Context Protocol](https://img.shields.io/badge/MCP-1.5.0-green.svg)](https://modelcontextprotocol.io/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
+[![Model Context Protocol](https://img.shields.io/badge/MCP-1.5-green.svg)](https://modelcontextprotocol.io/)
 [![Version](https://img.shields.io/badge/Version-2.0.1-blue.svg)]()
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Status](https://img.shields.io/badge/Status-Stable-blue.svg)]()
-[![GitHub](https://img.shields.io/github/stars/cyanheads/atlas-mcp-server?style=social)](https://github.com/cyanheads/atlas-mcp-server-2)
+[![GitHub](https://img.shields.io/github/stars/cyanheads/atlas-mcp-server?style=social)](https://github.com/cyanheads/atlas-mcp-server)
 
-ATLAS 2.0 (Adaptive Task & Logic Automation System) is a Model Context Protocol server
-designed for LLMs to manage complex projects. Built with TypeScript and featuring
-Neo4j graph database integration, efficient project management, and collaborative features, ATLAS 2.0 provides LLM Agents project management capabilities through a clean, flexible tool interface.
+ATLAS (Adaptive Task & Logic Automation System) is a Model Context Protocol server designed for LLMs to manage complex projects. Built with TypeScript and featuring
+Neo4j graph database integration, efficient project management, and collaborative features, ATLAS provides LLM Agents project management capabilities through a clean, flexible tool interface.
 
 > **Important Version Note**: [Version 1.5.4](https://github.com/cyanheads/atlas-mcp-server/releases/tag/v1.5.4) is the last version that uses SQLite as the database. Version 2.0 and onwards has been completely rewritten to use Neo4j, which requires either:
 > - Self-hosting using Docker (docker-compose included in repository)
@@ -44,8 +43,7 @@ Neo4j graph database integration, efficient project management, and collaborativ
 
 ## Overview
 
-ATLAS 2.0 implements the Model Context Protocol (MCP), enabling standardized communication between LLMs
-and external systems through:
+ATLAS implements the Model Context Protocol (MCP), enabling standardized communication between LLMs and external systems through:
 
 - **Clients**: Claude Desktop, IDEs, and other MCP-compatible clients
 - **Servers**: Tools and resources for project management and collaboration
@@ -193,13 +191,11 @@ Create a `.env` file based on `.env.example`:
 ```bash
 # Neo4j Configuration
 NEO4J_URI=bolt://localhost:7687
-NEO4J_USERNAME=neo4j
-NEO4J_PASSWORD=password
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=password2
 
-# Logging Configuration
+# Application Configuration
 LOG_LEVEL=info # debug, info, warn, error
-
-# Environment
 NODE_ENV=development # development, production
 ```
 
@@ -215,8 +211,8 @@ Add to your MCP client settings:
       "args": ["/path/to/atlas-mcp-server/dist/index.js"],
       "env": {
         "NEO4J_URI": "bolt://localhost:7687",
-        "NEO4J_USERNAME": "neo4j",
-        "NEO4J_PASSWORD": "password",
+        "NEO4J_USER": "neo4j",
+        "NEO4J_PASSWORD": "password2",
         "LOG_LEVEL": "info",
         "NODE_ENV": "production"
       }
@@ -231,11 +227,13 @@ The codebase follows a modular structure:
 
 ```
 src/
-├── config/         # Configuration management
-├── mcp/           # MCP server implementation
-│   ├── prompts/   # LLM prompt templates
-│   ├── resources/ # MCP resources
-│   └── tools/     # MCP tools
+├── config/          # Configuration management
+├── mcp/            # MCP server implementation
+│   ├── resources/  # MCP resources
+│   └── tools/      # MCP tools
+├── scripts/        # Build and maintenance scripts
+├── logs/           # Application logs
+├── output/         # Generated output files
 ├── neo4j/         # Neo4j database services
 │   └── projectService/ # Project-related operations
 ├── types/         # TypeScript type definitions

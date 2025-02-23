@@ -1,7 +1,7 @@
 {
   "name": "atlas-mcp-server",
-  "version": "2.0.1",
-  "description": "An adaptive Model Context Protocol server built in TypeScript. Leveraging Neo4j's graph database, it delivers intelligent project and task management, empowering LLM agents with seamless collaboration and guidance.",
+  "version": "2.0.2",
+  "description": "A Model Context Protocol server built in TypeScript that leverages Neo4j’s graph database, delivers intelligent project and task management while empowering LLM agents with seamless collaboration and guidance.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {

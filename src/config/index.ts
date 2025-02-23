@@ -1,12 +1,18 @@
 import dotenv from "dotenv";
+import { readFileSync } from "fs";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 dotenv.config();
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const pkg = JSON.parse(readFileSync(join(__dirname, '../../package.json'), 'utf-8'));
 
 export const config = {
   neo4jUri: process.env.NEO4J_URI || "bolt://localhost:7687",
   neo4jUser: process.env.NEO4J_USER || "neo4j",
   neo4jPassword: process.env.NEO4J_PASSWORD || "password",
-  mcpServerName: process.env.MCP_SERVER_NAME || "ATLAS MCP Server",
-  mcpServerVersion: process.env.MCP_SERVER_VERSION || "1.0.0",
+  mcpServerName: pkg.name,
+  mcpServerVersion: pkg.version,
   logLevel: process.env.LOG_LEVEL || "info",
   environment: process.env.NODE_ENV || "development",
   security: {
