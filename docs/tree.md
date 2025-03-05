@@ -1,11 +1,17 @@
-# Project Directory Structure
+# atlas-mcp-server - Directory Structure
+
+Generated on: 2025-03-05 08:27:59
+
 
 ```
+atlas-mcp-server
 ├── docs
+    └── tree.md
 ├── scripts
-    ├── clean.js
-    ├── generate-tree.js
-    └── make-executable.js
+    ├── clean.ts
+    ├── generate-tree.ts
+    ├── make-executable.ts
+    └── update-deps.ts
 ├── src
     ├── config
     │   └── index.ts
@@ -109,11 +115,13 @@
     │   ├── projectHelpers.ts
     │   └── security.ts
     └── index.ts
-├── .env.example
 ├── docker-compose.yml
 ├── LICENSE
 ├── package-lock.json
 ├── package.json
 ├── README.md
 └── tsconfig.json
+
 ```
+
+_Note: This tree excludes files and directories matched by .gitignore and common patterns like node_modules._
