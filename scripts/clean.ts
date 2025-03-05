@@ -18,8 +18,8 @@
  *   - Works on all platforms (Windows, macOS, Linux) using Node.js path normalization
  */
 
-import fs from 'fs/promises';
-import path from 'path';
+import { rm, access } from 'fs/promises';
+import { join } from 'path';
 
 /**
  * Interface for clean operation result
@@ -28,6 +28,18 @@ interface CleanResult {
   dir: string;
   status: 'success' | 'skipped';
   reason?: string;
+}
+
+/**
+ * Check if a directory exists without using fs.Stats
+ */
+async function directoryExists(dirPath: string): Promise<boolean> {
+  try {
+    await access(dirPath);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -48,19 +60,21 @@ const clean = async (): Promise<void> => {
 
     // Process each directory
     const results = await Promise.allSettled(
-      dirsToClean.map(async (dir): Promise<CleanResult> => {
-        const dirPath = path.join(process.cwd(), dir);
+      dirsToClean.map(async (dir): Promise<CleanResult> => {  
+        const dirPath = join(process.cwd(), dir);
         
         try {
-          // Check if directory exists before attempting removal
-          await fs.access(dirPath);
-          await fs.rm(dirPath, { recursive: true, force: true });
-          return { dir, status: 'success' };
-        } catch (error) {
-          const err = error as Error;
-          if ('code' in err && err.code === 'ENOENT') {
+          // Check if directory exists before attempting to remove it
+          const exists = await directoryExists(dirPath);
+          
+          if (!exists) {
             return { dir, status: 'skipped', reason: 'does not exist' };
           }
+          
+          // Remove directory if it exists
+          await rm(dirPath, { recursive: true, force: true });
+          return { dir, status: 'success' };
+        } catch (error) {
           throw error;
         }
       })

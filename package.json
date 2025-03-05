@@ -1,6 +1,6 @@
 {
   "name": "atlas-mcp-server",
-  "version": "2.0.4",
+  "version": "2.0.5",
   "description": "A Model Context Protocol server built in TypeScript that leverages Neo4j’s graph database, delivers intelligent project and task management while empowering LLM agents with seamless collaboration and guidance.",
   "type": "module",
   "main": "dist/index.js",
@@ -8,14 +8,14 @@
     "atlas-mcp": "./dist/index.js"
   },
   "scripts": {
-    "build": "tsc && npx ts-node scripts/make-executable.ts",
+    "build": "tsc && node -e \"process.platform !== 'win32' && require('fs').chmodSync('dist/index.js', '0755')\"",
     "start": "node dist/index.js",
     "dev": "tsc -w",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
-    "docker:logs": "docker-compose logs -f",
-    "rebuild": "npx ts-node scripts/clean.ts && npm run build",
-    "tree": "npx ts-node scripts/generate-tree.ts"
+    "docker:logs": "docker-compose logs -f", 
+    "rebuild": "node --import 'data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"ts-node/esm\", pathToFileURL(\"./\"));' scripts/clean.ts && npm run build",
+    "tree": "node --import 'data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"ts-node/esm\", pathToFileURL(\"./\"));' scripts/generate-tree.ts"
   },
   "keywords": [
     "mcp",
