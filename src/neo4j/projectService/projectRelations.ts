@@ -251,19 +251,24 @@ export const addDependenciesBulk = async (
 export const removeDependency = async (dependencyId: string): Promise<boolean | never> => {
   const session = getSession();
   try {
+    logger.info(`Attempting to delete dependency ${dependencyId}`, { dependencyId });
+
     const result = await session.run(
-      `MATCH (source:Project)-[d:DEPENDS_ON]->(target:Project)
+      `MATCH (source:Project)-[d:DEPENDS_ON {customId: $dependencyId}]->(target:Project)
       WHERE d.customId = $dependencyId
       DELETE d
       RETURN count(d) as deleted`,
       { dependencyId }
     );
 
-    const deleted = result.records[0].get("deleted") === 1;
-    if (!deleted) {
+    const deleted = result.records[0].get("deleted").toInt();
+    logger.info(`Deleted ${deleted} dependencies with ID ${dependencyId}`, { deleted, dependencyId });
+
+    if (deleted === 0) {
       logger.warn("Attempt to remove non-existent dependency", { dependencyId });
+      return false;
     }
-    return deleted;
+    return true;
   } catch (error) {
     throw handleNeo4jError(error, { dependencyId });
   } finally {
@@ -274,57 +279,58 @@ export const removeDependency = async (dependencyId: string): Promise<boolean | 
 export const removeDependenciesBulk = async (
   dependencyIds: string[]
 ): Promise<{ success: boolean; deletedCount: number; notFoundIds: string[] }> => {
+  // Handle empty input
+  if (!dependencyIds || !Array.isArray(dependencyIds) || dependencyIds.length === 0) {
+    logger.info("No dependency IDs provided for bulk removal");
+    return {
+      success: false,
+      deletedCount: 0,
+      notFoundIds: []
+    };
+  }
+
   const session = getSession();
   try {
+    logger.info(`Attempting to delete ${dependencyIds.length} dependencies`, { dependencyIds });
+
     // First check which dependencies exist
-    const result = await session.run(
+    const checkResult = await session.run(
       `UNWIND $dependencyIds as depId
-      OPTIONAL MATCH ()-[d:DEPENDS_ON]->()
-      WHERE d.customId = depId
-      WITH depId, d,
-           CASE WHEN d IS NOT NULL THEN true ELSE false END as exists
-      RETURN collect({
-        id: depId,
-        exists: exists
-      }) as depStatuses`,
+       MATCH (source:Project)-[d:DEPENDS_ON]->(target:Project)
+       WHERE d.customId = depId
+       RETURN depId as foundId`,
       { dependencyIds }
     );
 
-    const depStatuses = result.records[0].get("depStatuses");
-    const existingIds = depStatuses
-      .filter((status: any) => status.exists)
-      .map((status: any) => status.id);
-    const notFoundIds = depStatuses
-      .filter((status: any) => !status.exists)
-      .map((status: any) => status.id);
+    const foundIds = checkResult.records.map(record => record.get('foundId'));
+    const notFoundIds = dependencyIds.filter(id => !foundIds.includes(id));
 
-    if (existingIds.length === 0) {
-      logger.warn("No existing dependencies found for bulk deletion", { dependencyIds });
-      return {
-        success: false,
-        deletedCount: 0,
-        notFoundIds
-      };
+    logger.info(`Found ${foundIds.length} dependencies to delete`, { 
+      foundIds, 
+      notFoundIds 
+    });
+    
+    let deletedCount = 0;
+    
+    if (foundIds.length > 0) {
+      // Delete the found dependencies
+      const deleteResult = await session.run(
+        `UNWIND $foundIds as depId
+         MATCH (source:Project)-[d:DEPENDS_ON]->(target:Project)
+         WHERE d.customId = depId
+         DELETE d
+         RETURN count(d) as deletedCount`,
+        { foundIds }
+      );
+      
+      deletedCount = deleteResult.records[0].get('deletedCount').toInt();
     }
 
-    logger.info("Bulk deleting dependencies", {
-      totalRequested: dependencyIds.length,
-      existing: existingIds.length,
-      notFound: notFoundIds.length
-    });
-
-    // Perform bulk deletion for existing dependencies
-    await session.run(
-      `UNWIND $existingIds as depId
-      MATCH ()-[d:DEPENDS_ON]->()
-      WHERE d.customId = depId
-      DELETE d`,
-      { existingIds }
-    );
+    logger.info(`Deleted ${deletedCount} dependencies`, { deletedCount });
 
     return {
-      success: true,
-      deletedCount: existingIds.length,
+      success: deletedCount > 0,
+      deletedCount,
       notFoundIds
     };
   } catch (error) {

@@ -65,16 +65,25 @@ export const addDependency = async (
     } else {
       // Single dependency creation
       const { mode, ...dependencyData } = validatedInput;
+      const { sourceProjectId, targetProjectId, type, description } = dependencyData;
       
       logger.info("Adding dependency between projects", { 
-        sourceProjectId: dependencyData.sourceProjectId,
-        targetProjectId: dependencyData.targetProjectId,
-        type: dependencyData.type,
+        sourceProjectId,
+        targetProjectId,
+        type,
+        description,
         requestId: context.requestContext?.requestId 
       });
 
       try {
-        const { sourceProjectId, targetProjectId, type, description } = dependencyData;
+        if (!description) {
+          throw new McpError(
+            BaseErrorCode.VALIDATION_ERROR,
+            "Description is required for creating a dependency",
+            { sourceProjectId, targetProjectId, type }
+          );
+        }
+        
         const dependency = await addDependencyDb(
           sourceProjectId,
           targetProjectId,

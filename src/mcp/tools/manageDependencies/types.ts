@@ -28,7 +28,22 @@ const DependencySchemaShape = {
 // Single dependency schema
 const SingleDependencySchema = z.object({
   mode: z.literal("single"),
-  ...DependencySchemaShape
+  sourceProjectId: z.string().describe(
+    "Source project ID (dependent, must start with 'proj_')."
+  ),
+  targetProjectId: z.string().describe(
+    "Target project ID (dependency, must start with 'proj_')."
+  ),
+  type: z.enum(VALID_DEPENDENCY_TYPES).describe(
+    "Dependency type:\n" +
+    "- requires: Source needs target to function\n" +
+    "- extends: Source builds on target\n" +
+    "- implements: Source implements target's interface\n" +
+    "- references: Source uses target"
+  ),
+  description: z.string().min(1).describe(
+    "Explanation of the dependency relationship."
+  )
 }).describe(
   "Create a single project dependency."
 );
@@ -53,6 +68,7 @@ export const AddDependencySchemaShape = z.object({
     "Required for single mode: Target project ID (dependency, must start with 'proj_')."
   ),
   type: z.enum(VALID_DEPENDENCY_TYPES).optional().describe("Required for single mode: Dependency type"),
+  description: z.string().min(1).optional().describe("Required for single mode: Explanation of the dependency relationship."),
   dependencies: z.array(z.object(DependencySchemaShape)).min(1).max(100).optional().describe(
     "Required for bulk mode: Array of 1-100 dependencies."
   )
