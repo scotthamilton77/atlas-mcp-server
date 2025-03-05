@@ -1,6 +1,7 @@
 import { Neo4jSearchArgs } from "./types";
 import { driver } from "../../../neo4j/driver.js";
 import fuzzysort from 'fuzzysort';
+import { logger } from "../../../utils/logger.js";
 
 /**
  * Transforms a search value into a Neo4j regex pattern
@@ -84,7 +85,10 @@ export async function searchNeo4j(args: Neo4jSearchArgs): Promise<any> {
     // Set defaults for pagination
     const page = Number(args.page || 1);
     const limit = Number(args.limit || 100);
-    const skip = (page - 1) * limit;
+    let skip = (page - 1) * limit;
+
+    // For fuzzy search, we'll need to fetch more records for post-processing
+    const fuzzyQueryLimit = args.fuzzy ? Math.min(10000, limit * 100) : limit;
 
     // Build base query parameters
     const params: Record<string, any> = {
@@ -130,10 +134,10 @@ export async function searchNeo4j(args: Neo4jSearchArgs): Promise<any> {
     // Build the complete query
     const query = `
       MATCH (n${labelFilter})
-      ${args.fuzzy ? '' : `WHERE ${arrayWhereClause}`}
-      WITH n
+      ${args.fuzzy ? '' : `WHERE ${arrayWhereClause}`} 
+      WITH n 
       ${args.fuzzy ? '' : `SKIP toInteger($skip)
-      LIMIT toInteger($limit)`}
+      LIMIT toInteger($limit)`} ${args.fuzzy ? `LIMIT ${fuzzyQueryLimit}` : ''}
       RETURN n
     `;
 
@@ -146,36 +150,79 @@ export async function searchNeo4j(args: Neo4jSearchArgs): Promise<any> {
     // Apply fuzzy search if enabled
     if (args.fuzzy) {
       const searchValue = args.value;
-      const threshold = args.fuzzyThreshold || 0.3;
-      
-      // Prepare targets for fuzzy search
-      const targets: FuzzyTarget[] = records.map(record => ({
-        original: record,
-        searchStr: String(record[args.property] || '')
-      }));
+      // Use documented default threshold of 0.5
+      const threshold = args.fuzzyThreshold || 0.5;
 
-      // Perform fuzzy search
-      const fuzzyResults = fuzzysort.go(searchValue, targets, {
-        keys: ['searchStr'],
-        threshold: -10000 * (1 - threshold) // Convert our 0-1 threshold to fuzzysort's scoring system
+      logger.debug(`Performing fuzzy search for "${searchValue}" with threshold ${threshold} on ${records.length} records`);
+      
+      // Prepare targets for fuzzy search - extract searchable strings
+      const searchStrings: string[] = records.map(record => {
+        let searchStr: string;
+        
+        // Handle different property types including arrays
+        const propValue = record[args.property];
+        if (Array.isArray(propValue)) {
+          // For array properties, join values for better fuzzy matching
+          searchStr = propValue.map(item => String(item || '')).join(' ');
+        } else if (typeof propValue === 'object' && propValue !== null) {
+          // For object properties, stringify for matching
+          searchStr = JSON.stringify(propValue);
+        } else {
+          // For simple values, convert to string
+          searchStr = String(propValue || '');
+        }
+        
+        return searchStr.trim();
+      });
+      
+      // Map between search strings and original records
+      const recordMap = new Map<string, NodeProperties>();
+      searchStrings.forEach((str, i) => {
+        recordMap.set(str, records[i]);
       });
 
-      // Map back to original records and apply pagination
-      records = fuzzyResults
-        .slice(skip, skip + limit)
-        .map(result => {
-          const target = result.obj as FuzzyTarget;
-          return target.original;
+      // Calculate threshold based on our 0-1 scale (convert to fuzzysort's scale)
+      const fuzzyThreshold = -100 * (1 - threshold);
+      
+      // Perform fuzzy search directly on string array (simpler than object search)
+      const fuzzyResults = fuzzysort.go(searchValue, searchStrings, {
+        threshold: fuzzyThreshold
+      });
+
+      // If no results found with primary threshold, try a more lenient approach
+      let finalResults = fuzzyResults;
+      if (fuzzyResults.length === 0 && searchStrings.length > 0) {
+        logger.debug("No fuzzy results found, trying more lenient approach");
+        
+        // Try a more lenient threshold for fuzzy matching
+        const lenientResults = fuzzysort.go(searchValue, searchStrings, {
+          threshold: -1000 // Very lenient threshold
         });
+        
+        logger.debug(`Lenient approach found ${lenientResults.length} potential matches`);
+        finalResults = lenientResults;
+      }
+
+      // Map back to original records and apply pagination
+      records = finalResults
+        .slice(skip, skip + limit)
+        .map(result => recordMap.get(result.target) || {} as NodeProperties);
+
+      // Log debug info for fuzzy matching
+      logger.debug(`Fuzzy search for "${searchValue}" with threshold ${threshold} found ${finalResults.length} matches.`);
+      if (finalResults.length === 0 && searchStrings.length > 0) {
+        logger.debug(`First 3 target values: ${searchStrings.slice(0, 3).map(s => `"${s}"`).join(', ')}`);
+      }
+      logger.debug(`Returning ${records.length} results after pagination`);
 
       // Return results with pagination metadata
       return {
         results: records,
         pagination: {
-          total: fuzzyResults.length,
+          total: finalResults.length,
           page,
           limit,
-          totalPages: Math.ceil(fuzzyResults.length / limit)
+          totalPages: Math.ceil(finalResults.length / limit)
         }
       };
     }
