@@ -5,7 +5,7 @@ List out and test all tools & resources - start with deleting all existing data 
 # Atlas MCP Server: Production Readiness Verification Report
 
 **Test Date:** March 5, 2025
-**Version Tested:** Current from main branch
+**Version Tested:** Commit 3c30738
 
 ## Executive Summary
 
