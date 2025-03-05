@@ -8,14 +8,14 @@
     "atlas-mcp": "./dist/index.js"
   },
   "scripts": {
-    "build": "tsc && node scripts/make-executable.js",
+    "build": "tsc && npx ts-node scripts/make-executable.ts",
     "start": "node dist/index.js",
     "dev": "tsc -w",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
     "docker:logs": "docker-compose logs -f",
-    "rebuild": "node scripts/clean.js && npm run build",
-    "tree": "node scripts/generate-tree.js"
+    "rebuild": "npx ts-node scripts/clean.ts && npm run build",
+    "tree": "npx ts-node scripts/generate-tree.ts"
   },
   "keywords": [
     "mcp",
@@ -32,15 +32,15 @@
   "author": "@cyanheads",
   "license": "Apache-2.0",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.5.0",
+    "@modelcontextprotocol/sdk": "^1.6.1",
     "@types/express": "^5.0.0",
-    "@types/node": "^22.13.5",
+    "@types/node": "^22.13.9",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "fuzzysort": "^3.1.0",
     "neo4j-driver": "^5.28.1",
     "ts-node": "^10.9.2",
-    "typescript": "^5.7.3",
+    "typescript": "^5.8.2",
     "winston": "^3.17.0",
     "zod": "^3.24.2",
     "cross-env": "^7.0.3"
