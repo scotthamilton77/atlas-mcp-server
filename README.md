@@ -120,35 +120,19 @@ Core Components:
 ## Features
 
 ### Project Management
+- **Comprehensive Tracking:** Manage project metadata, statuses, and rich content (notes, links, etc.) with built-in support for bulk operations.
+- **Dependency & Relationship Handling:** Automatically validate and track inter-project dependencies.
 
-- **Project Organization**: Comprehensive project metadata and status tracking
-- **Rich Content**: Notes, links, and documentation management
-- **Status Tracking**: Project lifecycle state management
-- **Dependency Management**: Project relationship tracking and validation
-- **Bulk Operations**: Efficient batch processing for project operations
-- **Search Capabilities**: Advanced Neo4j-powered search functionality
-
-### Collaboration Features
-
-- **Member Management**: Role-based access control (owner, admin, member, viewer)
-- **Team Coordination**: Project-level collaboration tools
-- **Resource Sharing**: Link management and organization
-- **Activity Tracking**: Project updates and member contributions
+### Collaboration
+- **Member & Role Management:** Enable team collaboration with role-based permissions (owner, admin, member, viewer).
+- **Resource Sharing & Activity Tracking:** Seamlessly share links and monitor project updates in real-time.
 
 ### Whiteboard System
-
-- **Real-time Collaboration**: Shared whiteboard spaces
-- **Version Control**: History tracking and rollback capabilities
-- **Schema Validation**: Structured content validation
-- **Project Integration**: Whiteboard-project relationships
+- **Real-Time Collaboration:** Use shared whiteboard workspaces with version control and schema validation, seamlessly integrated with projects.
 
 ### Graph Database Integration
-
-- **Relationship Management**: Native graph database capabilities
-- **Efficient Queries**: Optimized graph traversal and search
-- **Data Integrity**: ACID-compliant transactions
-- **Scalability**: High-performance graph operations
-- **Advanced Search**: Property-based search with fuzzy matching and wildcards
+- **Native Relationship Management:** Leverage Neo4j’s ACID-compliant transactions and optimized queries for robust data integrity.
+- **Advanced Search & Scalability:** Perform property-based searches with fuzzy matching and wildcards while maintaining high performance.
 
 ## Installation
 
@@ -246,54 +230,47 @@ ATLAS 2.0 provides comprehensive tools for project management:
 
 ### Project Operations
 
-```typescript
-// Project Management
-project_create    // Create new projects
-project_update    // Update existing projects
-project_delete    // Remove projects
-project_note_add  // Add project notes
-project_link_add  // Add project links
-
-// Bulk Operations
-project_create (bulk mode)  // Create multiple projects
-project_update (bulk mode)  // Update multiple projects
-```
+| Tool | Description |
+|------|-------------|
+| `project_create` | Create projects with unique names and optional descriptions. Supports both single project creation and bulk operations for multiple projects. |
+| `project_update` | Update existing project properties including name, description, and status. Supports both single project updates and bulk operations. |
+| `project_delete` | Delete projects and their associated data from the system. Supports both single project deletion and bulk operations for multiple projects. |
+| `project_note_add` | Add notes to projects for documentation and tracking. Supports both single note creation and bulk operations with optional categorization tags. |
+| `project_link_add` | Add links to external resources like documentation, designs, or repositories. Supports both single link creation and bulk operations with optional categorization. |
+| `project_link_update` | Update existing project link properties including title, URL, description, and category. Supports both single and bulk update operations. |
+| `project_link_delete` | Delete links from projects permanently. Supports both single link deletion and bulk operations for multiple links. |
 
 ### Member Management
 
-```typescript
-// Member Operations
-project_member_add     // Add project members
-project_member_remove  // Remove project members
-project_member_list    // List project members
-```
+| Tool | Description |
+|------|-------------|
+| `project_member_add` | Add users to projects with role-based access control. Supports both single member addition and bulk operations with different permission levels. |
+| `project_member_remove` | Remove members from projects permanently. Supports both single member removal and bulk operations for multiple members. |
+| `project_member_list` | List all members of a project with their roles and join dates, ordered by join time with owners listed first. |
 
 ### Dependency Management
 
-```typescript
-// Dependency Operations
-project_dependency_add     // Add project dependencies
-project_dependency_remove  // Remove project dependencies
-project_dependency_list    // List project dependencies
-```
+| Tool | Description |
+|------|-------------|
+| `project_dependency_add` | Define relationships between projects with specific dependency types. Supports both single dependency creation and bulk operations with detailed descriptions. |
+| `project_dependency_remove` | Remove dependency relationships between projects. Supports both single dependency removal and bulk operations for multiple dependencies. |
+| `project_dependency_list` | List all dependencies and dependents for a project, showing both projects it depends on and projects that depend on it. |
 
 ### Whiteboard Operations
 
-```typescript
-// Whiteboard Management
-whiteboard_create   // Create new whiteboards
-whiteboard_update   // Update whiteboard content
-whiteboard_get      // Retrieve whiteboard data
-whiteboard_delete   // Remove whiteboards
-```
+| Tool | Description |
+|------|-------------|
+| `whiteboard_create` | Create a new whiteboard workspace with optional initial data and schema validation. Can be linked to projects for organization. |
+| `whiteboard_update` | Update whiteboard data by merging or replacing content. Supports partial updates to specific fields or complete data replacement. |
+| `whiteboard_get` | Retrieve whiteboard data with version control. Access either the latest version or a specific historical version by number. |
+| `whiteboard_delete` | Delete a whiteboard and its entire version history permanently. This operation cannot be undone. |
 
 ### Database Operations
 
-```typescript
-// Neo4j Search
-neo4j_search       // Search nodes with property filters
-database_clean     // Clean and reinitialize database
-```
+| Tool | Description |
+|------|-------------|
+| `neo4j_search` | Search the database for nodes with specific property values. Supports case-insensitive, wildcard, and fuzzy matching with pagination options. |
+| `database_clean` | Clean the database by removing all nodes and relationships, then reinitialize the schema. This operation cannot be undone. |
 
 ## Resources
 
@@ -301,38 +278,14 @@ ATLAS 2.0 exposes system resources through standard MCP endpoints:
 
 ### Project Resources
 
-```typescript
-// Project List 
-atlas-project://list-all     // Lists all projects with pagination support. 
-                             // Features: 
-                             // - Projects are ordered by creation date (newest first)
-                             // - Paginate results with customizable page size
-                             // Returns an array of projects along with total count, current page info, and applied filters.
-
-// Project Details
-atlas-project://{projectId}  // Fetches detailed information about a specific project.
-                             // Supports including related data like notes, links, dependencies, and members.
-
-// Project Notes
-atlas-project://{projectId}/notes  // Fetches notes associated with a specific project.
-                                   // Supports filtering by tags, time range, and sorting options.
-                                   // Returns both note data and metadata about tags and timestamps.
-
-// Project Links
-atlas-project://{projectId}/links  // Fetches links associated with a specific project.
-                                   // Supports filtering by category, search terms, and sorting options.
-                                   // Returns both link data and metadata about categories and domains.
-
-// Project Dependencies
-atlas-project://{projectId}/dependencies  // Lists all dependencies and dependents for a project.
-                                         // Dependencies are projects that this project depends on, while dependents are projects that depend on this project.
-                                         // Results are grouped by relationship type.
-
-// Project Members
-atlas-project://{projectId}/members  // Lists all members of a project along with their roles and join dates.
-                                    // Results are ordered by join date, with project owners listed first.
-                                    // Supports filtering by role and user ID.
-```
+| Resource | Description |
+|----------|-------------|
+| `atlas-project://list-all` | Lists all projects with pagination support.<br>• Projects are ordered by creation date (newest first)<br>• Paginate results with customizable page size<br>• Returns an array of projects along with total count, current page info, and applied filters |
+| `atlas-project://{projectId}` | Fetches detailed information about a specific project.<br>• Supports including related data like notes, links, dependencies, and members |
+| `atlas-project://{projectId}/notes` | Fetches notes associated with a specific project.<br>• Supports filtering by tags, time range, and sorting options<br>• Returns both note data and metadata about tags and timestamps |
+| `atlas-project://{projectId}/links` | Fetches links associated with a specific project.<br>• Supports filtering by category, search terms, and sorting options<br>• Returns both link data and metadata about categories and domains |
+| `atlas-project://{projectId}/dependencies` | Lists all dependencies and dependents for a project.<br>• Dependencies are projects that this project depends on<br>• Dependents are projects that depend on this project<br>• Results are grouped by relationship type |
+| `atlas-project://{projectId}/members` | Lists all members of a project along with their roles and join dates.<br>• Results are ordered by join date, with project owners listed first<br>• Supports filtering by role and user ID |
 
 ## Contributing
 

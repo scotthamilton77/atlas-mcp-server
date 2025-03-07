@@ -1,6 +1,6 @@
 # atlas-mcp-server - Directory Structure
 
-Generated on: 2025-03-05 09:56:18
+Generated on: 2025-03-07 20:56:18
 
 
 ```
@@ -116,7 +116,9 @@ atlas-mcp-server
     │   └── security.ts
     └── index.ts
 ├── tests
-    └── atlas-mcp-server-production-readiness-report.md
+    ├── atlas-mcp-server-production-readiness-report-03-05-25.md
+    ├── atlas-mcp-server-production-readiness-report-03-07-25.md
+    └── prompt.md
 ├── docker-compose.yml
 ├── LICENSE
 ├── package-lock.json
