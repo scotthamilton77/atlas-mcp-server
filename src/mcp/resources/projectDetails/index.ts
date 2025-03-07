@@ -5,7 +5,7 @@ import { ProjectDetailsParamsSchema, ProjectDetailsQuerySchema } from './types.j
 export const registerProjectDetailsResource = (server: McpServer) => {
   // Create resource template with parameter completion
   const template = new ResourceTemplate(
-    "project://{projectId}",
+    "atlas-project://{projectId}",
     {
       list: undefined, // No list completion for project IDs
       complete: {
@@ -28,22 +28,22 @@ export const registerProjectDetailsResource = (server: McpServer) => {
     examples: [
       {
         name: "Basic project details",
-        uri: "project://proj_123",
+        uri: "atlas-project://proj_123",
         description: "Get basic details for a project"
       },
       {
         name: "Project with notes and links",
-        uri: "project://proj_123?include=notes&include=links",
+        uri: "atlas-project://proj_123?include=notes&include=links",
         description: "Get project details including recent notes and links"
       },
       {
         name: "Project with all related data",
-        uri: "project://proj_123?include=notes&include=links&include=dependencies&include=members",
+        uri: "atlas-project://proj_123?include=notes&include=links&include=dependencies&include=members",
         description: "Get project details with all related information"
       },
       {
         name: "Specific version",
-        uri: "project://proj_123?version=2024-02",
+        uri: "atlas-project://proj_123?version=2024-02",
         description: "Get project details for a specific version"
       }
     ],

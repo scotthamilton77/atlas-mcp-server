@@ -7,7 +7,7 @@ import { extractProjectIds } from '../../../utils/projectHelpers.js';
 export const registerProjectMembersResource = (server: McpServer) => {
   // Create resource template with parameter completion
   const template = new ResourceTemplate(
-    "project://{projectId}/members",
+    "atlas-project://{projectId}/members",
     {
       list: undefined, // No list completion needed
       complete: {
@@ -36,22 +36,22 @@ export const registerProjectMembersResource = (server: McpServer) => {
     examples: [
       {
         name: "All members",
-        uri: "project://proj_123/members",
+        uri: "atlas-project://proj_123/members",
         description: "Get all members of a project"
       },
       {
         name: "Filter by role",
-        uri: "project://proj_123/members?role=admin",
+        uri: "atlas-project://proj_123/members?role=admin",
         description: "Get only admin members"
       },
       {
         name: "Filter by user",
-        uri: "project://proj_123/members?userId=user_456",
+        uri: "atlas-project://proj_123/members?userId=user_456",
         description: "Get membership details for a specific user"
       },
       {
         name: "Sorted members",
-        uri: "project://proj_123/members?sortBy=joinedAt&sortOrder=desc",
+        uri: "atlas-project://proj_123/members?sortBy=joinedAt&sortOrder=desc",
         description: "Get members sorted by join date in descending order"
       }
     ],

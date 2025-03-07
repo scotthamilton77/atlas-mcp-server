@@ -7,7 +7,7 @@ import { extractProjectIds } from '../../../utils/projectHelpers.js';
 export const registerProjectLinksResource = (server: McpServer) => {
   // Create resource template with parameter completion
   const template = new ResourceTemplate(
-    "project://{projectId}/links",
+    "atlas-project://{projectId}/links",
     {
       list: undefined, // No list completion needed
       complete: {
@@ -36,22 +36,22 @@ export const registerProjectLinksResource = (server: McpServer) => {
     examples: [
       {
         name: "All links",
-        uri: "project://proj_123/links",
+        uri: "atlas-project://proj_123/links",
         description: "Get all links for a project"
       },
       {
         name: "Filter by category",
-        uri: "project://proj_123/links?category=documentation",
+        uri: "atlas-project://proj_123/links?category=documentation",
         description: "Get only documentation links"
       },
       {
         name: "Search links",
-        uri: "project://proj_123/links?search=api",
+        uri: "atlas-project://proj_123/links?search=api",
         description: "Search for links containing 'api' in title or description"
       },
       {
         name: "Sorted links",
-        uri: "project://proj_123/links?sortBy=createdAt&sortOrder=desc",
+        uri: "atlas-project://proj_123/links?sortBy=createdAt&sortOrder=desc",
         description: "Get links sorted by creation date in descending order"
       }
     ],

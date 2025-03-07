@@ -7,7 +7,7 @@ import { extractProjectIds } from '../../../utils/projectHelpers.js';
 export const registerProjectDependenciesResource = (server: McpServer) => {
   // Create resource template with parameter completion
   const template = new ResourceTemplate(
-    "project://{projectId}/dependencies",
+    "atlas-project://{projectId}/dependencies",
     {
       list: undefined, // No list completion needed
       complete: {
@@ -36,37 +36,37 @@ export const registerProjectDependenciesResource = (server: McpServer) => {
     examples: [
       {
         name: "All dependencies",
-        uri: "project://proj_123/dependencies",
+        uri: "atlas-project://proj_123/dependencies",
         description: "Get all dependencies and dependents for a project"
       },
       {
         name: "Filter by type",
-        uri: "project://proj_123/dependencies?type=requires",
+        uri: "atlas-project://proj_123/dependencies?type=requires",
         description: "Get only 'requires' type dependencies"
       },
       {
         name: "Outbound dependencies",
-        uri: "project://proj_123/dependencies?direction=outbound",
+        uri: "atlas-project://proj_123/dependencies?direction=outbound",
         description: "Get only dependencies (projects this project depends on)"
       },
       {
         name: "Inbound dependencies",
-        uri: "project://proj_123/dependencies?direction=inbound",
+        uri: "atlas-project://proj_123/dependencies?direction=inbound",
         description: "Get only dependents (projects that depend on this project)"
       },
       {
         name: "Deep dependencies",
-        uri: "project://proj_123/dependencies?depth=3",
+        uri: "atlas-project://proj_123/dependencies?depth=3",
         description: "Get dependencies up to 3 levels deep"
       },
       {
         name: "Sorted dependencies",
-        uri: "project://proj_123/dependencies?sortBy=createdAt&sortOrder=desc",
+        uri: "atlas-project://proj_123/dependencies?sortBy=createdAt&sortOrder=desc",
         description: "Get dependencies sorted by creation date in descending order"
       },
       {
         name: "Combined filters",
-        uri: "project://proj_123/dependencies?type=implements&direction=outbound&depth=2",
+        uri: "atlas-project://proj_123/dependencies?type=implements&direction=outbound&depth=2",
         description: "Get implementation dependencies up to 2 levels deep"
       }
     ],

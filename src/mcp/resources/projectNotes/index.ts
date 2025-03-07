@@ -7,7 +7,7 @@ import { extractProjectIds } from '../../../utils/projectHelpers.js';
 export const registerProjectNotesResource = (server: McpServer) => {
   // Create resource template with parameter completion
   const template = new ResourceTemplate(
-    "project://{projectId}/notes",
+    "atlas-project://{projectId}/notes",
     {
       list: undefined, // No list completion needed
       complete: {
@@ -36,22 +36,22 @@ export const registerProjectNotesResource = (server: McpServer) => {
     examples: [
       {
         name: "All notes",
-        uri: "project://proj_123/notes",
+        uri: "atlas-project://proj_123/notes",
         description: "Get all notes for a project"
       },
       {
         name: "Filter by tag",
-        uri: "project://proj_123/notes?tag=important",
+        uri: "atlas-project://proj_123/notes?tag=important",
         description: "Get only notes tagged as important"
       },
       {
         name: "Time range",
-        uri: "project://proj_123/notes?from=2025-01-01&to=2025-12-31",
+        uri: "atlas-project://proj_123/notes?from=2025-01-01&to=2025-12-31",
         description: "Get notes within a specific date range"
       },
       {
         name: "Sorted notes",
-        uri: "project://proj_123/notes?sortBy=timestamp&sortOrder=desc",
+        uri: "atlas-project://proj_123/notes?sortBy=timestamp&sortOrder=desc",
         description: "Get notes sorted by timestamp in descending order"
       }
     ],

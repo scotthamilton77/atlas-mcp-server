@@ -5,18 +5,9 @@ import { ProjectListQuerySchema } from './types.js';
 export const registerProjectListResource = (server: McpServer) => {
   // Create resource template
   const template = new ResourceTemplate(
-    "project-list://all",
+    "atlas-project://list-all",
     {
-      list: async () => ({
-        resources: [{ 
-          uri: "project-list://all",
-          name: "Project List",
-          description: "Lists all projects with pagination support.\n" +
-                      "Query Parameters:\n" +
-                      "- page & limit: Control pagination (default: page=1, limit=10)",
-          mimeType: "application/json"
-        }]
-      }),
+      list: async () => ({resources: [] }),
       complete: {} // No completion needed for this resource
     }
   );
@@ -33,12 +24,12 @@ export const registerProjectListResource = (server: McpServer) => {
     examples: [
       {
         name: "List all projects",
-        uri: "project-list://all",
+        uri: "atlas-project://list-all",
         description: "Get a list of all projects"
       },
       {
         name: "Paginated list",
-        uri: "project-list://all?page=1&limit=10",
+        uri: "atlas-project://list-all?page=1&limit=10",
         description: "First page of results with 10 items per page (default behavior)"
       }
     ],
