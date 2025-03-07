@@ -248,51 +248,51 @@ ATLAS 2.0 provides comprehensive tools for project management:
 
 ```typescript
 // Project Management
-project.create    // Create new projects
-project.update    // Update existing projects
-project.delete    // Remove projects
-project.note.add  // Add project notes
-project.link.add  // Add project links
+project_create    // Create new projects
+project_update    // Update existing projects
+project_delete    // Remove projects
+project_note_add  // Add project notes
+project_link_add  // Add project links
 
 // Bulk Operations
-project.create (bulk mode)  // Create multiple projects
-project.update (bulk mode)  // Update multiple projects
+project_create (bulk mode)  // Create multiple projects
+project_update (bulk mode)  // Update multiple projects
 ```
 
 ### Member Management
 
 ```typescript
 // Member Operations
-project.member.add     // Add project members
-project.member.remove  // Remove project members
-project.member.list    // List project members
+project_member_add     // Add project members
+project_member_remove  // Remove project members
+project_member_list    // List project members
 ```
 
 ### Dependency Management
 
 ```typescript
 // Dependency Operations
-project.dependency.add     // Add project dependencies
-project.dependency.remove  // Remove project dependencies
-project.dependency.list    // List project dependencies
+project_dependency_add     // Add project dependencies
+project_dependency_remove  // Remove project dependencies
+project_dependency_list    // List project dependencies
 ```
 
 ### Whiteboard Operations
 
 ```typescript
 // Whiteboard Management
-whiteboard.create   // Create new whiteboards
-whiteboard.update   // Update whiteboard content
-whiteboard.get      // Retrieve whiteboard data
-whiteboard.delete   // Remove whiteboards
+whiteboard_create   // Create new whiteboards
+whiteboard_update   // Update whiteboard content
+whiteboard_get      // Retrieve whiteboard data
+whiteboard_delete   // Remove whiteboards
 ```
 
 ### Database Operations
 
 ```typescript
 // Neo4j Search
-neo4j.search       // Search nodes with property filters
-database.clean     // Clean and reinitialize database
+neo4j_search       // Search nodes with property filters
+database_clean     // Clean and reinitialize database
 ```
 
 ## Resources
@@ -302,23 +302,36 @@ ATLAS 2.0 exposes system resources through standard MCP endpoints:
 ### Project Resources
 
 ```typescript
-// Project List
-project-list://all          // Lists all projects with pagination
+// Project List 
+atlas-project://list-all     // Lists all projects with pagination support. 
+                             // Features: 
+                             // - Projects are ordered by creation date (newest first)
+                             // - Paginate results with customizable page size
+                             // Returns an array of projects along with total count, current page info, and applied filters.
 
 // Project Details
-project://{projectId}       // Fetches project details with related data
+atlas-project://{projectId}  // Fetches detailed information about a specific project.
+                             // Supports including related data like notes, links, dependencies, and members.
 
 // Project Notes
-project://{projectId}/notes // Fetches project notes with tags and metadata
+atlas-project://{projectId}/notes  // Fetches notes associated with a specific project.
+                                   // Supports filtering by tags, time range, and sorting options.
+                                   // Returns both note data and metadata about tags and timestamps.
 
 // Project Links
-project://{projectId}/links // Fetches project links with categories
+atlas-project://{projectId}/links  // Fetches links associated with a specific project.
+                                   // Supports filtering by category, search terms, and sorting options.
+                                   // Returns both link data and metadata about categories and domains.
 
 // Project Dependencies
-project://{projectId}/dependencies // Lists dependencies and dependents
+atlas-project://{projectId}/dependencies  // Lists all dependencies and dependents for a project.
+                                         // Dependencies are projects that this project depends on, while dependents are projects that depend on this project.
+                                         // Results are grouped by relationship type.
 
 // Project Members
-project://{projectId}/members     // Lists members with roles and activity
+atlas-project://{projectId}/members  // Lists all members of a project along with their roles and join dates.
+                                    // Results are ordered by join date, with project owners listed first.
+                                    // Supports filtering by role and user ID.
 ```
 
 ## Contributing
