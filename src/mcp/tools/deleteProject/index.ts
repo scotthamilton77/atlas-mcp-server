@@ -7,7 +7,7 @@ import { z } from 'zod';
 export const registerDeleteProjectTool = (server: McpServer) => {
   registerTool(
     server,
-    "project.delete",
+    "project_delete",
     "Delete projects and all associated data (notes, links, dependencies, etc). Use 'single' mode with projectId " +
     "or 'bulk' mode with projectIds array. This action cannot be undone.",
     DeleteProjectSchemaShape,

@@ -7,7 +7,7 @@ import { z } from 'zod';
 export const registerCreateProjectTool = (server: McpServer) => {
   registerTool(
     server,
-    "project.create",
+    "project_create",
     "Create projects individually or in bulk. Each project needs a unique name, with optional description and status. " +
     "Use 'single' mode for one project or 'bulk' mode with a projects array for multiple (max 100).",
     {

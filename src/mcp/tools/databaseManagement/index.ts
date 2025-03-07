@@ -7,7 +7,7 @@ import { z } from 'zod';
 export const registerDatabaseTools = (server: McpServer) => {
   registerTool(
     server,
-    "database.clean",
+    "database_clean",
     "Clean the database by removing all nodes and relationships, then reinitialize the schema. " +
     "This action cannot be undone.",
     CleanDatabaseSchemaShape,

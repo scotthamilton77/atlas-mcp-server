@@ -7,7 +7,7 @@ import { z } from 'zod';
 export const registerAddProjectNoteTool = (server: McpServer) => {
   registerTool(
     server,
-    "project.note.add",
+    "project_note_add",
     "Add notes to track project progress and decisions. Use 'single' mode for one note or 'bulk' mode for multiple. " +
     "Notes can include optional tags for categorization.",
     AddProjectNoteSchemaShape,

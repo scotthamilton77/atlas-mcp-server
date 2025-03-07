@@ -8,7 +8,7 @@ import { VALID_PROJECT_STATUSES } from '../createProject/types.js';
 export const registerUpdateProjectTool = (server: McpServer) => {
   registerTool(
     server,
-    "project.update",
+    "project_update",
     "Update projects individually or in bulk. For single updates, provide project ID and field changes. " +
     "For multiple updates, provide a projects array. Only specified fields are modified.",
     UpdateProjectSchemaShape,
