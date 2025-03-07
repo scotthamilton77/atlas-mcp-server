@@ -9,8 +9,7 @@ export const registerUpdateProjectTool = (server: McpServer) => {
   registerTool(
     server,
     "project_update",
-    "Update projects individually or in bulk. For single updates, provide project ID and field changes. " +
-    "For multiple updates, provide a projects array. Only specified fields are modified.",
+    "Update existing project properties including name, description, and status. Supports both single project updates and bulk operations.",
     UpdateProjectSchemaShape,
     updateProject,
     createToolMetadata({

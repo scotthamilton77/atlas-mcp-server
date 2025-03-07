@@ -16,7 +16,7 @@ export const registerMemberTools = (server: McpServer) => {
   registerTool(
     server,
     "project_member_add",
-    "Add project members with role-based access (owner/admin/member/viewer). Supports single or bulk addition with permission levels.",
+    "Add users to projects with role-based access control. Supports both single member addition and bulk operations with different permission levels.",
     AddMemberSchemaShape,
     addMember,
     createToolMetadata({
@@ -99,8 +99,7 @@ export const registerMemberTools = (server: McpServer) => {
   registerTool(
     server,
     "project_member_remove",
-    "Remove members from a project. Use 'single' mode with memberId or 'bulk' mode with memberIds array. " +
-    "Requires owner or admin role. This action cannot be undone.",
+    "Remove members from projects permanently. Supports both single member removal and bulk operations for multiple members.",
     RemoveMemberSchemaShape,
     removeMember,
     createToolMetadata({
@@ -133,7 +132,7 @@ export const registerMemberTools = (server: McpServer) => {
         // Single removal response
         z.object({
           success: z.boolean().describe("Operation success"),
-          message: z.string().describe("Result message")
+          message: z.string().describe("Result message. This action cannot be undone. Requires owner or admin role.")
         }),
         // Bulk removal response
         z.object({
@@ -154,7 +153,7 @@ export const registerMemberTools = (server: McpServer) => {
   registerTool(
     server,
     "project_member_list",
-    "List project members ordered by join date (owners first). Returns member roles and join dates.",
+    "List all members of a project with their roles and join dates, ordered by join time with owners listed first.",
     ListMembersSchemaShape,
     listMembers,
     createToolMetadata({

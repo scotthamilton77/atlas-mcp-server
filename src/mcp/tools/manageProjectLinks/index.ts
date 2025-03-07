@@ -15,8 +15,7 @@ export const registerProjectLinkTools = (server: McpServer) => {
   registerTool(
     server,
     "project_link_add",
-    "Add links to reference external resources like documentation or designs. Use 'single' mode for one link " +
-    "or 'bulk' mode for multiple. Links can have optional categories and descriptions.",
+    "Add links to external resources like documentation, designs, or repositories. Supports both single link creation and bulk operations with optional categorization.",
     AddProjectLinkSchemaShape,
     addProjectLink,
     createToolMetadata({
@@ -118,8 +117,7 @@ export const registerProjectLinkTools = (server: McpServer) => {
   registerTool(
     server,
     "project_link_update",
-    "Update link details like title, URL, description, or category. Use 'single' mode with linkId " +
-    "or 'bulk' mode with links array. Only specified fields are modified.",
+    "Update existing project link properties including title, URL, description, and category. Supports both single and bulk update operations.",
     UpdateProjectLinkSchemaShape,
     updateProjectLink,
     createToolMetadata({
@@ -217,8 +215,7 @@ export const registerProjectLinkTools = (server: McpServer) => {
   registerTool(
     server,
     "project_link_delete",
-    "Delete links from a project. Use 'single' mode with linkId or 'bulk' mode with linkIds array. " +
-    "This action cannot be undone.",
+    "Delete links from projects permanently. Supports both single link deletion and bulk operations for multiple links.",
     DeleteProjectLinkSchemaShape,
     deleteProjectLink,
     createToolMetadata({
@@ -251,7 +248,7 @@ export const registerProjectLinkTools = (server: McpServer) => {
         // Single deletion response
         z.object({
           success: z.boolean().describe("Operation success"),
-          message: z.string().describe("Result message")
+          message: z.string().describe("Result message. This action cannot be undone.")
         }),
         // Bulk deletion response
         z.object({

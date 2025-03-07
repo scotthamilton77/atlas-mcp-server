@@ -8,8 +8,7 @@ export const registerCreateProjectTool = (server: McpServer) => {
   registerTool(
     server,
     "project_create",
-    "Create projects individually or in bulk. Each project needs a unique name, with optional description and status. " +
-    "Use 'single' mode for one project or 'bulk' mode with a projects array for multiple (max 100).",
+    "Create projects with unique names and optional descriptions. Supports both single project creation and bulk operations for multiple projects.",
     {
       mode: z.enum(["single", "bulk"]).describe(
         "'single' for one project, 'bulk' for multiple projects."
@@ -24,7 +23,7 @@ export const registerCreateProjectTool = (server: McpServer) => {
         "Project status: 'active' (default), 'pending', 'completed', or 'archived'."
       ),
       projects: z.array(ProjectSchema).min(1).max(100).optional().describe(
-        "Required for bulk mode: Array of 1-100 projects."
+        "Required for bulk mode: Array of 1-100 projects. Each project requires a unique name and can have optional description and status."
       )
     },
     createProject,

@@ -17,7 +17,7 @@ export const registerDependencyTools = (server: McpServer) => {
   registerTool(
     server,
     "project_dependency_add",
-    "Define project relationships with dependency types (requires/extends/implements/references). Supports single or bulk creation with circular dependency prevention.",
+    "Define relationships between projects with specific dependency types. Supports both single dependency creation and bulk operations with detailed descriptions.",
     AddDependencySchemaShape,
     addDependency,
     createToolMetadata({
@@ -110,8 +110,7 @@ export const registerDependencyTools = (server: McpServer) => {
   registerTool(
     server,
     "project_dependency_remove",
-    "Remove project dependencies. Use 'single' mode with dependencyId or 'bulk' mode with dependencyIds array. " +
-    "This action cannot be undone.",
+    "Remove dependency relationships between projects. Supports both single dependency removal and bulk operations for multiple dependencies.",
     RemoveDependencySchemaShape,
     removeDependency,
     createToolMetadata({
@@ -165,7 +164,7 @@ export const registerDependencyTools = (server: McpServer) => {
         z.object({
           success: z.boolean().describe("Operation success"),
           message: z.string().describe("Result message"),
-          status: z.enum(["removed", "not_found", "error"]).describe("Removal status"),
+          status: z.enum(["removed", "not_found", "error"]).describe("Removal status. This action cannot be undone."),
           details: z.object({
             id: z.string().describe("Dependency ID"),
             type: z.enum(ValidDependencyTypes).describe("Type"),
@@ -203,8 +202,7 @@ export const registerDependencyTools = (server: McpServer) => {
   registerTool(
     server,
     "project_dependency_list",
-    "List a project's dependencies (projects it depends on) and dependents (projects that depend on it), " +
-    "grouped by relationship type.",
+    "List all dependencies and dependents for a project, showing both projects it depends on and projects that depend on it.",
     ListDependenciesSchemaShape,
     listDependencies,
     createToolMetadata({

@@ -16,7 +16,7 @@ export const registerWhiteboardTools = (server: McpServer) => {
   registerTool(
     server,
     "whiteboard_create",
-    "Create a new whiteboard instance with an optional initial JSON structure and schema validation.",
+    "Create a new whiteboard workspace with optional initial data and schema validation. Can be linked to projects for organization.",
     CreateWhiteboardSchemaShape,
     createWhiteboard,
     createToolMetadata({
@@ -65,7 +65,7 @@ export const registerWhiteboardTools = (server: McpServer) => {
   registerTool(
     server,
     "whiteboard_update",
-    "Update whiteboard contents by merging or replacing data. Use merge=true to update specific fields.",
+    "Update whiteboard data by merging or replacing content. Supports partial updates to specific fields or complete data replacement.",
     UpdateWhiteboardSchemaShape,
     updateWhiteboard,
     createToolMetadata({
@@ -98,7 +98,7 @@ export const registerWhiteboardTools = (server: McpServer) => {
   registerTool(
     server,
     "whiteboard_get",
-    "Get current state or specific version of a whiteboard. Omit version for latest.",
+    "Retrieve whiteboard data with version control. Access either the latest version or a specific historical version by number.",
     GetWhiteboardSchemaShape,
     getWhiteboard,
     createToolMetadata({
@@ -139,7 +139,7 @@ export const registerWhiteboardTools = (server: McpServer) => {
   registerTool(
     server,
     "whiteboard_delete",
-    "Delete a whiteboard and its version history. This action cannot be undone.",
+    "Delete a whiteboard and its entire version history permanently. This operation cannot be undone.",
     DeleteWhiteboardSchemaShape,
     deleteWhiteboard,
     createToolMetadata({
@@ -148,7 +148,7 @@ export const registerWhiteboardTools = (server: McpServer) => {
           { id: "notes" },
           `{
   "success": true,
-  "message": "Whiteboard 'notes' deleted successfully"
+  "message": "Whiteboard 'notes' deleted successfully. This action cannot be undone."
 }`,
           "Delete a whiteboard"
         )

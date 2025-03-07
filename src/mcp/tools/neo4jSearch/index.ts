@@ -8,7 +8,7 @@ export const registerNeo4jSearchTool = (server: McpServer) => {
   registerTool(
     server,
     "neo4j_search",
-    "Search the neo4j project & whiteboard database for nodes with specific property values. Supports case-insensitive, wildcard, fuzzy matching, and pagination.",
+    "Search the database for nodes with specific property values. Supports case-insensitive, wildcard, and fuzzy matching with pagination options.",
     Neo4jSearchSchema.shape,
     neo4jSearchTool,
     createToolMetadata({

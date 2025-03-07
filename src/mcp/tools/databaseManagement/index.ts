@@ -8,8 +8,7 @@ export const registerDatabaseTools = (server: McpServer) => {
   registerTool(
     server,
     "database_clean",
-    "Clean the database by removing all nodes and relationships, then reinitialize the schema. " +
-    "This action cannot be undone.",
+    "Clean the database by removing all nodes and relationships, then reinitialize the schema. This operation cannot be undone.",
     CleanDatabaseSchemaShape,
     cleanDatabase,
     createToolMetadata({
@@ -20,7 +19,7 @@ export const registerDatabaseTools = (server: McpServer) => {
         details: z.object({
           nodesDeleted: z.number().describe("Nodes removed"),
           relationshipsDeleted: z.number().describe("Relationships removed")
-        }).optional().describe("Cleanup details")
+        }).optional().describe("Cleanup details. WARNING: This action removes all data and cannot be undone.")
       }),
       rateLimit: {
         windowMs: 60 * 1000, // 1 minute

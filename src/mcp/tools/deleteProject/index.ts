@@ -8,8 +8,7 @@ export const registerDeleteProjectTool = (server: McpServer) => {
   registerTool(
     server,
     "project_delete",
-    "Delete projects and all associated data (notes, links, dependencies, etc). Use 'single' mode with projectId " +
-    "or 'bulk' mode with projectIds array. This action cannot be undone.",
+    "Delete projects and their associated data from the system. Supports both single project deletion and bulk operations for multiple projects.",
     DeleteProjectSchemaShape,
     deleteProject,
     createToolMetadata({
@@ -44,7 +43,7 @@ export const registerDeleteProjectTool = (server: McpServer) => {
         // Single deletion response
         z.object({
           success: z.boolean().describe("Operation success"),
-          message: z.string().describe("Result with cleanup details")
+          message: z.string().describe("Result with cleanup details. WARNING: This action removes all associated data and cannot be undone.")
         }),
         // Bulk deletion response
         z.object({
