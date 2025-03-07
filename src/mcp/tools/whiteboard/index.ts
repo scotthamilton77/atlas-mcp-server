@@ -15,7 +15,7 @@ export const registerWhiteboardTools = (server: McpServer) => {
   // Register whiteboard.create
   registerTool(
     server,
-    "whiteboard.create",
+    "whiteboard_create",
     "Create a new whiteboard instance with an optional initial JSON structure and schema validation.",
     CreateWhiteboardSchemaShape,
     createWhiteboard,
@@ -64,7 +64,7 @@ export const registerWhiteboardTools = (server: McpServer) => {
   // Register whiteboard.update
   registerTool(
     server,
-    "whiteboard.update",
+    "whiteboard_update",
     "Update whiteboard contents by merging or replacing data. Use merge=true to update specific fields.",
     UpdateWhiteboardSchemaShape,
     updateWhiteboard,
@@ -97,7 +97,7 @@ export const registerWhiteboardTools = (server: McpServer) => {
   // Register whiteboard.get
   registerTool(
     server,
-    "whiteboard.get",
+    "whiteboard_get",
     "Get current state or specific version of a whiteboard. Omit version for latest.",
     GetWhiteboardSchemaShape,
     getWhiteboard,
@@ -138,7 +138,7 @@ export const registerWhiteboardTools = (server: McpServer) => {
   // Register whiteboard.delete
   registerTool(
     server,
-    "whiteboard.delete",
+    "whiteboard_delete",
     "Delete a whiteboard and its version history. This action cannot be undone.",
     DeleteWhiteboardSchemaShape,
     deleteWhiteboard,
