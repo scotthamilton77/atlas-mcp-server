@@ -16,7 +16,7 @@ export const registerDependencyTools = (server: McpServer) => {
   // Register add dependency tool
   registerTool(
     server,
-    "project.dependency.add",
+    "project_dependency_add",
     "Define project relationships with dependency types (requires/extends/implements/references). Supports single or bulk creation with circular dependency prevention.",
     AddDependencySchemaShape,
     addDependency,
@@ -109,7 +109,7 @@ export const registerDependencyTools = (server: McpServer) => {
   // Register remove dependency tool
   registerTool(
     server,
-    "project.dependency.remove",
+    "project_dependency_remove",
     "Remove project dependencies. Use 'single' mode with dependencyId or 'bulk' mode with dependencyIds array. " +
     "This action cannot be undone.",
     RemoveDependencySchemaShape,
@@ -202,7 +202,7 @@ export const registerDependencyTools = (server: McpServer) => {
   // Register list dependencies tool
   registerTool(
     server,
-    "project.dependency.list",
+    "project_dependency_list",
     "List a project's dependencies (projects it depends on) and dependents (projects that depend on it), " +
     "grouped by relationship type.",
     ListDependenciesSchemaShape,

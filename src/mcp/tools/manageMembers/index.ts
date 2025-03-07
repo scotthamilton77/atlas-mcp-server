@@ -15,7 +15,7 @@ export const registerMemberTools = (server: McpServer) => {
   // Register add member tool
   registerTool(
     server,
-    "project.member.add",
+    "project_member_add",
     "Add project members with role-based access (owner/admin/member/viewer). Supports single or bulk addition with permission levels.",
     AddMemberSchemaShape,
     addMember,
@@ -98,7 +98,7 @@ export const registerMemberTools = (server: McpServer) => {
   // Register remove member tool
   registerTool(
     server,
-    "project.member.remove",
+    "project_member_remove",
     "Remove members from a project. Use 'single' mode with memberId or 'bulk' mode with memberIds array. " +
     "Requires owner or admin role. This action cannot be undone.",
     RemoveMemberSchemaShape,
@@ -153,7 +153,7 @@ export const registerMemberTools = (server: McpServer) => {
   // Register list members tool
   registerTool(
     server,
-    "project.member.list",
+    "project_member_list",
     "List project members ordered by join date (owners first). Returns member roles and join dates.",
     ListMembersSchemaShape,
     listMembers,
