@@ -8,8 +8,7 @@ export const registerAddProjectNoteTool = (server: McpServer) => {
   registerTool(
     server,
     "project_note_add",
-    "Add notes to track project progress and decisions. Use 'single' mode for one note or 'bulk' mode for multiple. " +
-    "Notes can include optional tags for categorization.",
+    "Add notes to projects for documentation and tracking. Supports both single note creation and bulk operations with optional categorization tags.",
     AddProjectNoteSchemaShape,
     addProjectNote,
     createToolMetadata({
