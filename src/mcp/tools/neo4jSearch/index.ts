@@ -7,7 +7,7 @@ import { Neo4jSearchSchema } from "./types.js";
 export const registerNeo4jSearchTool = (server: McpServer) => {
   registerTool(
     server,
-    "neo4j.search",
+    "neo4j_search",
     "Search the neo4j project & whiteboard database for nodes with specific property values. Supports case-insensitive, wildcard, fuzzy matching, and pagination.",
     Neo4jSearchSchema.shape,
     neo4jSearchTool,
@@ -31,7 +31,7 @@ export const registerNeo4jSearchTool = (server: McpServer) => {
         ),
         createToolExample(
           { 
-            property: "name", 
+            property: "name",
             value: "TEST",
             caseInsensitive: true,
             wildcard: true,
@@ -49,7 +49,7 @@ export const registerNeo4jSearchTool = (server: McpServer) => {
           "Advanced search: case-insensitive with wildcards and pagination"
         )
       ],
-      requiredPermission: "neo4j.search",
+      requiredPermission: "neo4j_search",
       returnSchema: z.object({
         results: z.array(z.any()),
         pagination: z.object({

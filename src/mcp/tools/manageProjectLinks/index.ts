@@ -14,7 +14,7 @@ export const registerProjectLinkTools = (server: McpServer) => {
   // Register add link tool
   registerTool(
     server,
-    "project.link.add",
+    "project_link_add",
     "Add links to reference external resources like documentation or designs. Use 'single' mode for one link " +
     "or 'bulk' mode for multiple. Links can have optional categories and descriptions.",
     AddProjectLinkSchemaShape,
@@ -117,7 +117,7 @@ export const registerProjectLinkTools = (server: McpServer) => {
   // Register update link tool
   registerTool(
     server,
-    "project.link.update",
+    "project_link_update",
     "Update link details like title, URL, description, or category. Use 'single' mode with linkId " +
     "or 'bulk' mode with links array. Only specified fields are modified.",
     UpdateProjectLinkSchemaShape,
@@ -216,7 +216,7 @@ export const registerProjectLinkTools = (server: McpServer) => {
   // Register delete link tool
   registerTool(
     server,
-    "project.link.delete",
+    "project_link_delete",
     "Delete links from a project. Use 'single' mode with linkId or 'bulk' mode with linkIds array. " +
     "This action cannot be undone.",
     DeleteProjectLinkSchemaShape,
