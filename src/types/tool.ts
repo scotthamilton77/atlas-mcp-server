@@ -81,16 +81,11 @@ export const registerTool = (
     }
   };
 
-  // Build enhanced description with examples
-  const fullDescription = metadata?.examples 
-    ? `${description}\n\nExamples:\n${
-        metadata.examples.map(ex => 
-          `${ex.description ? `${ex.description}:\n` : ''}Input: ${JSON.stringify(ex.input, null, 2)}\nOutput: ${ex.output}`
-        ).join('\n\n')
-      }`
-    : description;
-
+  // Keep description concise and focused on tool purpose only
+  const fullDescription = description;
+  
   // Register tool with server
+  // Examples are handled separately through the metadata but not passed directly to server.tool
   server.tool(name, fullDescription, schema, wrappedHandler);
 };
 
