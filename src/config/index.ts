@@ -28,6 +28,28 @@ export const config = {
       ? (path.isAbsolute(process.env.ATLAS_CODING_STANDARDS_PATH)
           ? process.env.ATLAS_CODING_STANDARDS_PATH
           : path.resolve(process.cwd(), process.env.ATLAS_CODING_STANDARDS_PATH))
-      : null
+      : null,
+    
+    // Git configuration
+    git: {
+      username: process.env.GIT_USERNAME || undefined,
+      email: process.env.GIT_EMAIL || undefined,
+      defaultBranchPrefix: process.env.GIT_BRANCH_PREFIX || 'feature'
+    },
+    
+    // Code style preferences
+    codeStyle: {
+      indentStyle: process.env.CODING_INDENT_STYLE || 'spaces',
+      indentSize: parseInt(process.env.CODING_INDENT_SIZE || '2', 10),
+      lineLength: parseInt(process.env.CODING_MAX_LINE_LENGTH || '100', 10),
+      defaultLicense: process.env.CODING_DEFAULT_LICENSE || 'MIT'
+    },
+    
+    // Project-specific configuration
+    project: {
+      defaultFramework: process.env.PROJECT_DEFAULT_FRAMEWORK || 'typescript',
+      useDocker: process.env.PROJECT_USE_DOCKER === 'true',
+      cicdProvider: process.env.PROJECT_CICD_PROVIDER || 'github-actions'
+    }
   }
 };
