@@ -1,6 +1,6 @@
 # atlas-mcp-server - Directory Structure
 
-Generated on: 2025-03-07 20:56:18
+Generated on: 2025-03-08 17:04:16
 
 
 ```
@@ -12,6 +12,8 @@ atlas-mcp-server
     ├── generate-tree.ts
     ├── make-executable.ts
     └── update-deps.ts
+├── skills
+    └── coding-standards.md
 ├── src
     ├── config
     │   └── index.ts
@@ -45,6 +47,14 @@ atlas-mcp-server
     │   │   ├── addProjectNote
     │   │   │   ├── addProjectNote.ts
     │   │   │   ├── index.ts
+    │   │   │   └── types.ts
+    │   │   ├── atlas-skill
+    │   │   │   ├── index.ts
+    │   │   │   ├── invoke-skills.ts
+    │   │   │   ├── list-skills.ts
+    │   │   │   ├── README.md
+    │   │   │   ├── skill-manager.ts
+    │   │   │   ├── skill-resolver.ts
     │   │   │   └── types.ts
     │   │   ├── createProject
     │   │   │   ├── createProject.ts
@@ -81,6 +91,17 @@ atlas-mcp-server
     │   │   │   ├── neo4jSearch.ts
     │   │   │   ├── neo4jSearchTool.ts
     │   │   │   └── types.ts
+    │   │   ├── skills
+    │   │   │   ├── base
+    │   │   │   │   ├── coding-standards.ts
+    │   │   │   │   └── software-engineer.ts
+    │   │   │   ├── languages
+    │   │   │   │   ├── react.ts
+    │   │   │   │   └── typescript.ts
+    │   │   │   └── tools
+    │   │   │   │   ├── ci-cd.ts
+    │   │   │   │   ├── docker.ts
+    │   │   │   │   └── git.ts
     │   │   ├── updateProject
     │   │   │   ├── index.ts
     │   │   │   ├── types.ts
