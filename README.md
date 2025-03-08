@@ -7,8 +7,7 @@
 [![Status](https://img.shields.io/badge/Status-Stable-blue.svg)]()
 [![GitHub](https://img.shields.io/github/stars/cyanheads/atlas-mcp-server?style=social)](https://github.com/cyanheads/atlas-mcp-server)
 
-ATLAS (Adaptive Task & Logic Automation System) is a Model Context Protocol server designed for LLMs to manage complex projects. Built with TypeScript and featuring
-Neo4j graph database integration, efficient project management, and collaborative features, ATLAS provides LLM Agents project management capabilities through a clean, flexible tool interface.
+ATLAS (Adaptive Task & Logic Automation System) is a Model Context Protocol server designed for LLMs to manage complex projects. Built with TypeScript and featuring Neo4j graph database integration, efficient project management, and collaborative features, ATLAS provides LLM Agents project management capabilities through a clean, flexible tool interface.
 
 > **Important Version Note**: [Version 1.5.4](https://github.com/cyanheads/atlas-mcp-server/releases/tag/v1.5.4) is the last version that uses SQLite as the database. Version 2.0 and onwards has been completely rewritten to use Neo4j, which requires either:
 > - Self-hosting using Docker (docker-compose included in repository)
@@ -23,6 +22,7 @@ Neo4j graph database integration, efficient project management, and collaborativ
   - [Collaboration Features](#collaboration-features)
   - [Whiteboard System](#whiteboard-system)
   - [Graph Database Integration](#graph-database-integration)
+  - [ATLAS Skills](#atlas-skills)
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [Project Structure](#project-structure)
@@ -32,6 +32,7 @@ Neo4j graph database integration, efficient project management, and collaborativ
   - [Dependency Management](#dependency-management)
   - [Whiteboard Operations](#whiteboard-operations)
   - [Database Operations](#database-operations)
+  - [ATLAS Skills](#atlas-skills)
 - [Resources](#resources)
   - [Project Resources](#project-resources)
 - [Best Practices](#best-practices)
@@ -62,6 +63,9 @@ Key capabilities:
 ### Architecture & Components
 
 Core system architecture:
+
+<details>
+<summary>Click to expand Mermaid diagram</summary>
 
 ```mermaid
 flowchart TB
@@ -112,6 +116,7 @@ flowchart TB
     class Project,Whiteboard,Member,Skills core
     class Neo4j,Cache storage
 ```
+</details>
 
 Core Components:
 
@@ -242,7 +247,7 @@ src/
 
 ## Tools
 
-ATLAS provides comprehensive tools for project management:
+ATLAS provides a comprehensive suite of tools for project management:
 
 ### Project Operations
 
