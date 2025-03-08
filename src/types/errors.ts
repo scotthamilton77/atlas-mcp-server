@@ -39,10 +39,19 @@ export enum MemberErrorCode {
   DUPLICATE_MEMBER = 'DUPLICATE_MEMBER'
 }
 
+// Skill-specific error codes
+export enum SkillErrorCode {
+  SKILL_NOT_FOUND = 'SKILL_NOT_FOUND',
+  DEPENDENCY_NOT_FOUND = 'DEPENDENCY_NOT_FOUND',
+  MISSING_PARAMETER = 'MISSING_PARAMETER',
+  CIRCULAR_DEPENDENCY = 'CIRCULAR_DEPENDENCY',
+  SKILL_EXECUTION_ERROR = 'SKILL_EXECUTION_ERROR'
+}
+
 // Base MCP error class
 export class McpError extends Error {
   constructor(
-    public code: BaseErrorCode | ProjectErrorCode | NoteErrorCode | LinkErrorCode | MemberErrorCode,
+    public code: BaseErrorCode | ProjectErrorCode | NoteErrorCode | LinkErrorCode | MemberErrorCode | SkillErrorCode,
     message: string,
     public details?: Record<string, unknown>
   ) {
