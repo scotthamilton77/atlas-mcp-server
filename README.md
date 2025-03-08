@@ -1,8 +1,8 @@
-# ATLAS MCP Server 2.0
+# ATLAS MCP Server
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
 [![Model Context Protocol](https://img.shields.io/badge/MCP-1.6.1-green.svg)](https://modelcontextprotocol.io/)
-[![Version](https://img.shields.io/badge/Version-2.0.7-blue.svg)]()
+[![Version](https://img.shields.io/badge/Version-2.1.0-blue.svg)]()
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Status](https://img.shields.io/badge/Status-Stable-blue.svg)]()
 [![GitHub](https://img.shields.io/github/stars/cyanheads/atlas-mcp-server?style=social)](https://github.com/cyanheads/atlas-mcp-server)
@@ -242,7 +242,7 @@ src/
 
 ## Tools
 
-ATLAS 2.0 provides comprehensive tools for project management:
+ATLAS provides comprehensive tools for project management:
 
 ### Project Operations
 
@@ -288,16 +288,16 @@ ATLAS 2.0 provides comprehensive tools for project management:
 | `neo4j_search` | Search the database for nodes with specific property values. Supports case-insensitive, wildcard, and fuzzy matching with pagination options. |
 | `database_clean` | Clean the database by removing all nodes and relationships, then reinitialize the schema. This operation cannot be undone. |
 
-| ### ATLAS Skills
-| 
-| | Tool | Description |
-| |------|-------------|
-| | `atlas_skill_list` | Lists available skills with optional fuzzy name matching. Can be used to discover all available skills or find specific skills by keyword. |
-| | `atlas_skill_invoke` | Executes specific skills (individually or combined). Supports dot notation for combining multiple skills (e.g., 'software-engineer.typescript.git') and accepts custom parameters. |
-| 
+### ATLAS Skills
+
+| Tool | Description |
+|------|-------------|
+| `atlas_skill_list` | Lists available skills with optional fuzzy name matching. Can be used to discover all available skills or find specific skills by keyword. |
+| `atlas_skill_invoke` | Executes specific skills (individually or combined). Supports dot notation for combining multiple skills (e.g., 'software-engineer.typescript.git') and accepts custom parameters. |
+
 ## Resources
 
-ATLAS 2.0 exposes system resources through standard MCP endpoints:
+ATLAS exposes system resources through standard MCP endpoints:
 
 ### Project Resources
 
