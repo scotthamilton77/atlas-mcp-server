@@ -1,4 +1,5 @@
 import { Skill } from "../../atlas-skill/types.js";
+import { logger } from "../../../../utils/logger.js";
 
 /**
  * TypeScript coding standards and practices skill
@@ -8,7 +9,17 @@ export const typescriptSkill: Skill = {
   description: 'TypeScript coding standards and practices',
   dependencies: ['software-engineer'],  // Depends on base skill
   parameters: [],
-  content: () => `# TypeScript Best Practices
+  content: (context) => {
+    try {
+      // Log skill execution with context
+      logger.info("Executing typescript skill", {
+        parameters: context.parameters,
+        dependentSkills: context.resolvedSkills
+          .filter(s => s.name !== 'typescript')
+          .map(s => s.name)
+      });
+      
+      return `# TypeScript Best Practices
 
 ## Type Safety
 - Use explicit typing whenever possible
@@ -51,4 +62,15 @@ export const typescriptSkill: Skill = {
 - Use barrel exports (index.ts files)
 - Organize imports with meaningful grouping
 - Use declaration merging appropriately`
+    } catch (error) {
+      // Log the error
+      logger.error("Error executing typescript skill", {
+        error,
+        parameters: context.parameters
+      });
+      
+      // Return a user-friendly error message
+      return `# Error in TypeScript Skill\n\nAn error occurred while processing the TypeScript skill. Please check the logs for more details.`;
+    }
+  }
 };
