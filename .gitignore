@@ -70,7 +70,10 @@ data/*
 *.pdfsync
 latex.out/
 node_modules/
+
+# Misc
 repomix/
 repomix-output.*
 logs/
 ideas/
+.clinerules
