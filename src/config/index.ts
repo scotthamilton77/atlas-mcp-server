@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import path from "path";
 dotenv.config();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -20,5 +21,13 @@ export const config = {
     authRequired: process.env.NODE_ENV === 'production' 
       ? process.env.AUTH_REQUIRED !== 'false'  // Default to true in prod unless explicitly disabled
       : process.env.AUTH_REQUIRED === 'true'   // Default to false in dev unless explicitly enabled
+  },
+  skills: {
+    // Path to coding standards file - use absolute path if provided, otherwise resolve relative to CWD
+    codingStandardsPath: process.env.ATLAS_CODING_STANDARDS_PATH 
+      ? (path.isAbsolute(process.env.ATLAS_CODING_STANDARDS_PATH)
+          ? process.env.ATLAS_CODING_STANDARDS_PATH
+          : path.resolve(process.cwd(), process.env.ATLAS_CODING_STANDARDS_PATH))
+      : null
   }
 };
