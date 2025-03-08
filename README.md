@@ -55,6 +55,7 @@ Key capabilities:
 - **Collaboration Tools**: Member management, dependencies, and resource linking
 - **Whiteboard System**: Real-time collaborative whiteboards with version history
 - **Graph Database**: Neo4j-powered relationship management and querying
+- **ATLAS Skills**: Modular skill system for knowledge and best practices
 - **Performance Focus**: Optimized caching, batch operations, and health monitoring
 - **Graceful Shutdown**: Robust error handling and graceful shutdown mechanisms
 
@@ -76,12 +77,14 @@ flowchart TB
     subgraph Core["Core Services"]
         direction LR
         Project["Project Store"]
+        Skills["Skills System"]
         Whiteboard["Whiteboard System"]
         Member["Member Management"]
 
         Project <--> Member
         Member <--> Whiteboard
         Project <-.-> Whiteboard
+        Skills <-.-> Project
     end
 
     subgraph Storage["Storage Layer"]
@@ -94,6 +97,7 @@ flowchart TB
 
     Rate --> Project
     Rate --> Whiteboard
+    Rate --> Skills
     Project --> Neo4j
     Whiteboard --> Neo4j
 
@@ -105,7 +109,7 @@ flowchart TB
 
     class API,Core,Storage layer
     class MCP,Val,Rate api
-    class Project,Whiteboard,Member core
+    class Project,Whiteboard,Member,Skills core
     class Neo4j,Cache storage
 ```
 
@@ -114,6 +118,7 @@ Core Components:
 - **Storage Layer**: Neo4j graph database with caching layer
 - **Project Layer**: Project management, relationships, and dependency tracking
 - **Member System**: Role-based access control and collaboration
+- **Skills System**: Modular knowledge and best practices implementation
 - **Whiteboard Engine**: Real-time collaboration and version control
 - **Error Handling**: Comprehensive error handling and logging system
 
@@ -133,6 +138,11 @@ Core Components:
 ### Graph Database Integration
 - **Native Relationship Management:** Leverage Neo4j’s ACID-compliant transactions and optimized queries for robust data integrity.
 - **Advanced Search & Scalability:** Perform property-based searches with fuzzy matching and wildcards while maintaining high performance.
+
+### ATLAS Skills
+- **Modular Knowledge System:** Access and combine modular pieces of knowledge, best practices, and coding standards based on need.
+- **Hierarchical Organization:** Skills are organized into base, language/framework, and tool-specific categories with automatic dependency resolution.
+- **Customization:** Skills can be parameterized and customized based on project or user-specific requirements.
 
 ## Installation
 
@@ -181,6 +191,12 @@ NEO4J_PASSWORD=password2
 # Application Configuration
 LOG_LEVEL=info # debug, info, warn, error
 NODE_ENV=development # development, production
+
+# ATLAS Skills Configuration
+GIT_USERNAME=your-github-username
+GIT_EMAIL=your-github-email
+SKILL_ENABLE_ADVANCED_FEATURES=true
+ATLAS_CODING_STANDARDS_PATH=/path/to/coding-standards.md
 ```
 
 ### MCP Client Settings
@@ -272,6 +288,13 @@ ATLAS 2.0 provides comprehensive tools for project management:
 | `neo4j_search` | Search the database for nodes with specific property values. Supports case-insensitive, wildcard, and fuzzy matching with pagination options. |
 | `database_clean` | Clean the database by removing all nodes and relationships, then reinitialize the schema. This operation cannot be undone. |
 
+| ### ATLAS Skills
+| 
+| | Tool | Description |
+| |------|-------------|
+| | `atlas_skill_list` | Lists available skills with optional fuzzy name matching. Can be used to discover all available skills or find specific skills by keyword. |
+| | `atlas_skill_invoke` | Executes specific skills (individually or combined). Supports dot notation for combining multiple skills (e.g., 'software-engineer.typescript.git') and accepts custom parameters. |
+| 
 ## Resources
 
 ATLAS 2.0 exposes system resources through standard MCP endpoints:
