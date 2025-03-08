@@ -17,6 +17,7 @@ import { registerMemberTools } from "./tools/manageMembers/index.js";
 import { registerDatabaseTools } from "./tools/databaseManagement/index.js";
 import { registerWhiteboardTools } from "./tools/whiteboard/index.js";
 import { registerNeo4jSearchTool } from "./tools/neo4jSearch/index.js";
+import { registerAtlasSkillTools } from "./tools/atlas-skill/index.js";
 
 // Import resource registrations
 import { registerProjectListResource } from "./resources/projectList/index.js";
@@ -63,6 +64,7 @@ export const createMcpServer = async () => {
     registerDatabaseTools(server);
     registerWhiteboardTools(server); // Register whiteboard tools
     registerNeo4jSearchTool(server);
+    registerAtlasSkillTools(server); // Register ATLAS skill tools
 
     // Register resources
     registerProjectListResource(server);
