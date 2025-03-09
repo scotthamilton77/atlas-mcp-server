@@ -48,10 +48,18 @@ export enum SkillErrorCode {
   SKILL_EXECUTION_ERROR = 'SKILL_EXECUTION_ERROR'
 }
 
+// Database export/import error codes
+export enum DatabaseExportImportErrorCode {
+  EXPORT_ERROR = 'EXPORT_ERROR',
+  IMPORT_ERROR = 'IMPORT_ERROR',
+  FILE_ACCESS_ERROR = 'FILE_ACCESS_ERROR',
+  INVALID_EXPORT_FORMAT = 'INVALID_EXPORT_FORMAT',
+}
+
 // Base MCP error class
 export class McpError extends Error {
   constructor(
-    public code: BaseErrorCode | ProjectErrorCode | NoteErrorCode | LinkErrorCode | MemberErrorCode | SkillErrorCode,
+    public code: BaseErrorCode | ProjectErrorCode | NoteErrorCode | LinkErrorCode | MemberErrorCode | SkillErrorCode | DatabaseExportImportErrorCode,
     message: string,
     public details?: Record<string, unknown>
   ) {
