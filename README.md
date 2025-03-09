@@ -2,7 +2,7 @@
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
 [![Model Context Protocol](https://img.shields.io/badge/MCP-1.6.1-green.svg)](https://modelcontextprotocol.io/)
-[![Version](https://img.shields.io/badge/Version-2.1.2-blue.svg)]()
+[![Version](https://img.shields.io/badge/Version-2.1.3-blue.svg)]()
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Status](https://img.shields.io/badge/Status-Stable-blue.svg)]()
 [![GitHub](https://img.shields.io/github/stars/cyanheads/atlas-mcp-server?style=social)](https://github.com/cyanheads/atlas-mcp-server)
@@ -19,7 +19,7 @@ ATLAS (Adaptive Task & Logic Automation System) is a Model Context Protocol serv
   - [Architecture & Components](#architecture--components)
 - [Features](#features)
   - [Project Management](#project-management)
-  - [Collaboration Features](#collaboration-features)
+  - [Collaboration](#collaboration)
   - [Whiteboard System](#whiteboard-system)
   - [Graph Database Integration](#graph-database-integration)
   - [ATLAS Skills](#atlas-skills)
@@ -32,13 +32,11 @@ ATLAS (Adaptive Task & Logic Automation System) is a Model Context Protocol serv
   - [Dependency Management](#dependency-management)
   - [Whiteboard Operations](#whiteboard-operations)
   - [Database Operations](#database-operations)
+  - [Database Backup and Restore](#database-backup-and-restore)
   - [ATLAS Skills](#atlas-skills)
 - [Resources](#resources)
   - [Project Resources](#project-resources)
-- [Best Practices](#best-practices)
-  - [Project Organization](#project-organization)
-  - [Performance Optimization](#performance-optimization)
-  - [Error Prevention](#error-prevention)
+- [Database Backup and Restore](#database-backup-and-restore)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -294,6 +292,13 @@ ATLAS provides a comprehensive suite of tools for project management:
 | `neo4j_search` | Search the database for nodes with specific property values. Supports case-insensitive, wildcard, and fuzzy matching with pagination options. |
 | `database_clean` | Clean the database by removing all nodes and relationships, then reinitialize the schema. This operation cannot be undone. |
 
+### Database Backup and Restore
+
+| Tool                               | Description                                                                                                                                                                                             |
+|------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Automated Backups** (No direct tool) | The system automatically creates backups of the Neo4j database on a configurable schedule (default: every 6 hours).  Backups are stored in the `backups/` directory.  See [Configuration](#configuration) for details. |
+| **Manual Operations** (CLI)        | Use the provided CLI scripts for manual export, import, and listing of backups. See [Database Backup and Restore](#database-backup-and-restore) below for details.                                         |
+
 ### ATLAS Skills
 
 | Tool | Description |
@@ -304,6 +309,7 @@ ATLAS provides a comprehensive suite of tools for project management:
 ## Resources
 
 ATLAS exposes system resources through standard MCP endpoints:
+
 
 ### Project Resources
 
@@ -316,11 +322,63 @@ ATLAS exposes system resources through standard MCP endpoints:
 | `atlas-project://{projectId}/dependencies` | Lists all dependencies and dependents for a project.<br>• Dependencies are projects that this project depends on<br>• Dependents are projects that depend on this project<br>• Results are grouped by relationship type |
 | `atlas-project://{projectId}/members` | Lists all members of a project along with their roles and join dates.<br>• Results are ordered by join date, with project owners listed first<br>• Supports filtering by role and user ID |
 
+## Database Backup and Restore
+
+ATLAS provides both automated and manual database backup and restore capabilities.
+
+### Automated Backups
+
+The system is configured to automatically back up the Neo4j database on a schedule.  The default schedule is every 6 hours, but this can be customized via the `BACKUP_SCHEDULE` environment variable (see [Configuration](#configuration)).  The number of retained backups is also configurable.
+
+### Manual Backup and Restore (CLI)
+
+You can manually manage backups using the provided command-line interface.  These commands are available as npm scripts:
+
+#### Export (Backup)
+
+To create a backup, use the `db:export` script:
+
+```bash
+npm run db:export
+```
+
+This will create a JSON file in the `backups/` directory with a timestamp in the filename (e.g., `backups/neo4j_export_YYYYMMDDHHMMSS.json`).
+
+You can also specify a custom file path:
+
+```bash
+npm run db:export -- --file=path/to/my_backup.json
+```
+
+#### Import (Restore)
+
+To restore the database from a backup file, use the `db:import` script:
+
+```bash
+npm run db:import -- --file=path/to/backup.json
+```
+
+**Important:** By default, the import process *clears the existing database* before restoring from the backup.  To prevent this, use the `--no-clear` option:
+
+```bash
+npm run db:import -- --file=path/to/backup.json --no-clear
+```
+
+#### List Backups
+
+To list available backup files, use the `db:list` script:
+
+```bash
+npm run db:list
+```
+
+This will display a list of backup files with their filenames, paths, sizes, and creation dates.
+
 ## Contributing
 
 1. Fork the repository
 2. Create a feature branch
-3. Commit your changes
+3. Commit your changes with a descriptive message
 4. Push to the branch
 5. Create a Pull Request
 
