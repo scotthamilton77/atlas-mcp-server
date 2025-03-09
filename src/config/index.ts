@@ -16,6 +16,12 @@ export const config = {
   mcpServerVersion: pkg.version,
   logLevel: process.env.LOG_LEVEL || "info",
   environment: process.env.NODE_ENV || "development",
+  backup: {
+    enabled: process.env.BACKUP_ENABLED !== 'false', // Enabled by default
+    schedule: process.env.BACKUP_SCHEDULE || '0 */6 * * *', // Every 6 hours by default
+    maxBackups: parseInt(process.env.BACKUP_MAX_COUNT || '10', 10), // Keep 10 backups by default
+    backupOnStart: process.env.BACKUP_ON_START === 'true'  // Disabled by default
+  },
   security: {
     // Default to false in development, true in production
     authRequired: process.env.NODE_ENV === 'production' 

@@ -1,11 +1,13 @@
 # atlas-mcp-server - Directory Structure
 
-Generated on: 2025-03-08 17:04:16
+Generated on: 2025-03-09 02:47:08
 
 
 ```
 atlas-mcp-server
+├── backups
 ├── docs
+    ├── creating-new-mcp-tools-in-atlas.md
     └── tree.md
 ├── scripts
     ├── clean.ts
@@ -90,6 +92,10 @@ atlas-mcp-server
     │   │   │   ├── index.ts
     │   │   │   ├── neo4jSearch.ts
     │   │   │   ├── neo4jSearchTool.ts
+    │   │   │   └── types.ts
+    │   │   ├── projectList
+    │   │   │   ├── index.ts
+    │   │   │   ├── projectList.ts
     │   │   │   └── types.ts
     │   │   ├── skills
     │   │   │   ├── base
