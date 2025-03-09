@@ -1,6 +1,6 @@
 {
   "name": "atlas-mcp-server",
-  "version": "2.1.2",
+  "version": "2.1.3",
   "description": "A Model Context Protocol server built in TypeScript that leverages Neo4j’s graph database, delivers intelligent project and task management while empowering LLM agents with seamless collaboration and guidance.",
   "type": "module",
   "main": "dist/index.js",
@@ -15,7 +15,10 @@
     "docker:down": "docker-compose down",
     "docker:logs": "docker-compose logs -f",
     "rebuild": "node --import 'data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"ts-node/esm\", pathToFileURL(\"./\"));' scripts/clean.ts && npm run build",
-    "tree": "node --import 'data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"ts-node/esm\", pathToFileURL(\"./\"));' scripts/generate-tree.ts"
+    "tree": "node --import 'data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"ts-node/esm\", pathToFileURL(\"./\"));' scripts/generate-tree.ts",
+    "db:export": "node --import 'data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"ts-node/esm\", pathToFileURL(\"./\"));' scripts/db-export-import.ts export",
+    "db:import": "node --import 'data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"ts-node/esm\", pathToFileURL(\"./\"));' scripts/db-export-import.ts import",
+    "db:list": "node --import 'data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"ts-node/esm\", pathToFileURL(\"./\"));' scripts/db-export-import.ts list"
   },
   "keywords": [
     "mcp",
@@ -37,15 +40,18 @@
     "@modelcontextprotocol/sdk": "^1.6.1",
     "@types/express": "^5.0.0",
     "@types/node": "^22.13.10",
+    "commander": "^13.1.0",
     "cross-env": "^7.0.3",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "fuzzysort": "^3.1.0",
     "neo4j-driver": "^5.28.1",
+    "node-schedule": "^2.1.1",
     "winston": "^3.17.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@types/node-schedule": "^2.1.7",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.2"
   }
