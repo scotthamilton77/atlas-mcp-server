@@ -260,6 +260,7 @@ ATLAS provides a comprehensive suite of tools for project management:
 | `project_link_add` | Add links to external resources like documentation, designs, or repositories. Supports both single link creation and bulk operations with optional categorization. |
 | `project_link_update` | Update existing project link properties including title, URL, description, and category. Supports both single and bulk update operations. |
 | `project_link_delete` | Delete links from projects permanently. Supports both single link deletion and bulk operations for multiple links. |
+| | `project_list` | Unified tool for retrieving project information in various formats. Consolidates project retrieval endpoints (all, details, notes, links, dependencies, members) into a single tool with filtering capabilities. |
 
 ### Member Management
 

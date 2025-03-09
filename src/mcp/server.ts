@@ -7,17 +7,18 @@ import { McpError, BaseErrorCode } from "../types/errors.js";
 import { configureSecurity } from "../utils/security.js";
 
 // Import tool registrations
-import { registerCreateProjectTool } from "./tools/createProject/index.js";
-import { registerUpdateProjectTool } from "./tools/updateProject/index.js";
-import { registerDeleteProjectTool } from "./tools/deleteProject/index.js";
-import { registerAddProjectNoteTool } from "./tools/addProjectNote/index.js";
-import { registerProjectLinkTools } from "./tools/manageProjectLinks/index.js";
-import { registerDependencyTools } from "./tools/manageDependencies/index.js";
-import { registerMemberTools } from "./tools/manageMembers/index.js";
-import { registerDatabaseTools } from "./tools/databaseManagement/index.js";
-import { registerWhiteboardTools } from "./tools/whiteboard/index.js";
-import { registerNeo4jSearchTool } from "./tools/neo4jSearch/index.js";
 import { registerAtlasSkillTools } from "./tools/atlas-skill/index.js";
+import { registerDatabaseTools } from "./tools/databaseManagement/index.js";
+import { registerNeo4jSearchTool } from "./tools/neo4jSearch/index.js";
+import { registerCreateProjectTool } from "./tools/createProject/index.js"; 
+import { registerDeleteProjectTool } from "./tools/deleteProject/index.js";
+import { registerDependencyTools } from "./tools/manageDependencies/index.js";
+import { registerProjectLinkTools } from "./tools/manageProjectLinks/index.js";
+import { registerProjectListTool } from "./tools/projectList/index.js";
+import { registerMemberTools } from "./tools/manageMembers/index.js";
+import { registerAddProjectNoteTool } from "./tools/addProjectNote/index.js";
+import { registerUpdateProjectTool } from "./tools/updateProject/index.js";
+import { registerWhiteboardTools } from "./tools/whiteboard/index.js";
 
 // Import resource registrations
 import { registerProjectListResource } from "./resources/projectList/index.js";
@@ -54,17 +55,18 @@ export const createMcpServer = async () => {
     });
 
     // Register tools
-    registerCreateProjectTool(server);
-    registerUpdateProjectTool(server);
-    registerDeleteProjectTool(server);
-    registerAddProjectNoteTool(server);
-    registerProjectLinkTools(server);
+    registerAtlasSkillTools(server); // atlas_skill_*
+    registerDatabaseTools(server); // database_clean
+    registerNeo4jSearchTool(server); // neo4j_search
+    registerCreateProjectTool(server); // project_create
+    registerDeleteProjectTool(server); // project_delete
     registerDependencyTools(server);
+    registerProjectLinkTools(server);
+    registerProjectListTool(server); // project_list
     registerMemberTools(server);
-    registerDatabaseTools(server);
+    registerAddProjectNoteTool(server); // project_note_add
+    registerUpdateProjectTool(server); // project_update
     registerWhiteboardTools(server); // Register whiteboard tools
-    registerNeo4jSearchTool(server);
-    registerAtlasSkillTools(server); // Register ATLAS skill tools
 
     // Register resources
     registerProjectListResource(server);
