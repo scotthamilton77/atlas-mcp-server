@@ -8,6 +8,7 @@ import { configureSecurity } from "../utils/security.js";
 
 // Import tool registrations
 import { registerAtlasProjectCreateTool } from "./tools/atlas_project_create/index.js";
+import { registerAtlasProjectListTool } from "./tools/atlas_project_list/index.js";
 
 export const createMcpServer = async () => {
   try {
@@ -37,6 +38,7 @@ export const createMcpServer = async () => {
 
     // Register tools
     registerAtlasProjectCreateTool(server); // atlas_project_create
+    registerAtlasProjectListTool(server); // atlas_project_list
 
     // Register resources
 

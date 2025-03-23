@@ -1,11 +1,9 @@
 import { z } from "zod";
-import { 
-  McpToolResponse, 
-  ProjectStatus, 
-  TaskType,
-  ProjectResponse 
+import {
+  McpToolResponse,
+  ProjectStatus,
+  TaskType
 } from '../../../types/mcp.js';
-import { Project, ProjectCreateRequest } from '../../../types/tool.js';
 
 export const ProjectSchema = z.object({
   id: z.string().optional().describe(
@@ -26,7 +24,7 @@ export const ProjectSchema = z.object({
       url: z.string()
     })
   ).optional().describe(
-    "Array of relevant URLs with descriptive titles for reference materials"
+    "Array of relevant URLs with descriptive titles for reference materials. (Ex. 'https://example.com' or 'file://path/to/file.ts')"
   ),
   completionRequirements: z.string().describe(
     "Specific, measurable criteria that indicate project completion"
@@ -92,7 +90,7 @@ export const AtlasProjectCreateSchemaShape = {
       url: z.string()
     })
   ).optional().describe(
-    "Array of relevant URLs with descriptive titles for reference materials"
+    "Array of relevant URLs with descriptive titles for reference materials. (Ex. 'https://example.com' or 'file://path/to/file.ts')"
   ),
   completionRequirements: z.string().optional().describe(
     "Specific, measurable criteria that indicate project completion (required for mode='single')"

@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from 'zod';
-import { createToolExample, createToolMetadata, registerTool } from '../../../types/tool.js';
 import { ProjectStatus } from '../../../types/mcp.js';
+import { createToolExample, createToolMetadata, registerTool } from '../../../types/tool.js';
 import { atlasCreateProject } from './createProject.js';
 import { AtlasProjectCreateSchemaShape } from './types.js';
 
@@ -26,17 +26,17 @@ export const registerAtlasProjectCreateTool = (server: McpServer) => {
             taskType: "integration"
           },
           `{
-  "id": "proj_123abc",
-  "name": "Atlas Platform Migration",
-  "description": "Migrate existing system to Atlas Platform",
-  "status": "active",
-  "urls": [{"title": "Requirements", "url": "https://example.com/requirements or file://path/to/file"}],
-  "completionRequirements": "All migration tasks completed with validation",
-  "outputFormat": "Functional system with documentation",
-  "taskType": "integration",
-  "createdAt": "2025-03-23T10:11:24.123Z",
-  "updatedAt": "2025-03-23T10:11:24.123Z"
-}`,
+            "id": "proj_123abc",
+            "name": "Atlas Platform Migration",
+            "description": "Migrate existing system to Atlas Platform",
+            "status": "active",
+            "urls": [{"title": "Requirements", "url": "https://example.com/requirements or file://path/to/file"}],
+            "completionRequirements": "All migration tasks completed with validation",
+            "outputFormat": "Functional system with documentation",
+            "taskType": "integration",
+            "createdAt": "2025-03-23T10:11:24.123Z",
+            "updatedAt": "2025-03-23T10:11:24.123Z"
+          }`,
           "Create a single project with detailed specifications"
         ),
         createToolExample(
@@ -61,36 +61,36 @@ export const registerAtlasProjectCreateTool = (server: McpServer) => {
             ]
           },
           `{
-  "success": true,
-  "message": "Successfully created 2 projects",
-  "created": [
-    {
-      "id": "proj_123abc",
-      "name": "Data Migration",
-      "description": "Migrate database to new structure",
-      "status": "active",
-      "urls": [],
-      "completionRequirements": "All data migrated with validation",
-      "outputFormat": "Verified database",
-      "taskType": "data",
-      "createdAt": "2025-03-23T10:11:24.123Z",
-      "updatedAt": "2025-03-23T10:11:24.123Z"
-    },
-    {
-      "id": "proj_456def",
-      "name": "User Interface Redesign",
-      "description": "Redesign the application UI",
-      "status": "pending",
-      "urls": [],
-      "completionRequirements": "All screens redesigned and approved",
-      "outputFormat": "Design specifications and prototypes",
-      "taskType": "design",
-      "createdAt": "2025-03-23T10:11:24.456Z",
-      "updatedAt": "2025-03-23T10:11:24.456Z"
-    }
-  ],
-  "errors": []
-}`,
+            "success": true,
+            "message": "Successfully created 2 projects",
+            "created": [
+              {
+                "id": "proj_123abc",
+                "name": "Data Migration",
+                "description": "Migrate database to new structure",
+                "status": "active",
+                "urls": [],
+                "completionRequirements": "All data migrated with validation",
+                "outputFormat": "Verified database",
+                "taskType": "data",
+                "createdAt": "2025-03-23T10:11:24.123Z",
+                "updatedAt": "2025-03-23T10:11:24.123Z"
+              },
+              {
+                "id": "proj_456def",
+                "name": "User Interface Redesign",
+                "description": "Redesign the application UI",
+                "status": "pending",
+                "urls": [],
+                "completionRequirements": "All screens redesigned and approved",
+                "outputFormat": "Design specifications and prototypes",
+                "taskType": "design",
+                "createdAt": "2025-03-23T10:11:24.456Z",
+                "updatedAt": "2025-03-23T10:11:24.456Z"
+              }
+            ],
+            "errors": []
+          }`,
           "Create multiple projects in a single operation"
         )
       ],
