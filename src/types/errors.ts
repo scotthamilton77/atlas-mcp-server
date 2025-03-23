@@ -19,6 +19,15 @@ export enum ProjectErrorCode {
   INVALID_DEPENDENCY = 'INVALID_DEPENDENCY'
 }
 
+// Task-specific error codes
+export enum TaskErrorCode {
+  TASK_NOT_FOUND = 'TASK_NOT_FOUND',
+  INVALID_STATUS = 'INVALID_STATUS',
+  INVALID_PRIORITY = 'INVALID_PRIORITY',
+  INVALID_DEPENDENCY = 'INVALID_DEPENDENCY',
+  DEPENDENCY_CYCLE = 'DEPENDENCY_CYCLE'
+}
+
 // Note-specific error codes
 export enum NoteErrorCode {
   INVALID_TAGS = 'INVALID_TAGS',
@@ -59,7 +68,7 @@ export enum DatabaseExportImportErrorCode {
 // Base MCP error class
 export class McpError extends Error {
   constructor(
-    public code: BaseErrorCode | ProjectErrorCode | NoteErrorCode | LinkErrorCode | MemberErrorCode | SkillErrorCode | DatabaseExportImportErrorCode,
+    public code: BaseErrorCode | ProjectErrorCode | TaskErrorCode | NoteErrorCode | LinkErrorCode | MemberErrorCode | SkillErrorCode | DatabaseExportImportErrorCode,
     message: string,
     public details?: Record<string, unknown>
   ) {

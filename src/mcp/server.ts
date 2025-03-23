@@ -21,6 +21,9 @@ import { registerAtlasKnowledgeDeleteTool } from "./tools/atlas_knowledge_delete
 import { registerAtlasKnowledgeListTool } from "./tools/atlas_knowledge_list/index.js";
 import { registerAtlasUnifiedSearchTool } from "./tools/atlas_unified_search/index.js";
 
+// Import resource registrations
+import { registerMcpResources } from "./resources/index.js";
+
 export const createMcpServer = async () => {
   try {
     // Configure security settings
@@ -63,6 +66,7 @@ export const createMcpServer = async () => {
     registerAtlasUnifiedSearchTool(server); // atlas_unified_search
 
     // Register resources
+    registerMcpResources(server);
 
 
     // Connect using stdio transport
