@@ -14,7 +14,7 @@ ATLAS (Adaptive Task & Logic Automation System) is a Model Context Protocol serv
 > - Self-hosting using Docker (docker-compose included in repository)
 > - Using Neo4j AuraDB cloud service: https://neo4j.com/product/auradb/
 >
-> Version 2.5.0 introduces a new 3-node system architecture (Projects, Tasks, Knowledge) that replaces the previous structure.
+> Version 2.5.0 introduces a new 3-node system (Projects, Tasks, Knowledge) that replaces the previous structure.
 
 ## Table of Contents
 
@@ -47,12 +47,12 @@ graph TD
     Project --> Container["Container for Tasks & Knowledge"]
     Project --> Completion["Completion Requirements"]
     Project --> Dependencies["Project Dependencies"]
-    
+
     Container --> Tasks["Tasks"]
     Container --> Knowledge["Knowledge Items"]
     Dependencies --> ProjectDep["Project ↔ Project Dependencies"]
     Dependencies --> Workflow["Complex Workflow Hierarchies"]
-    
+
     style Project fill:#2196F3,stroke:#1976D2,color:white
     style Container fill:#4CAF50,stroke:#388E3C,color:white
     style Dependencies fill:#9C27B0,stroke:#7B1FA2,color:white
@@ -89,12 +89,12 @@ graph TD
     Knowledge --> Domain["Domain Categorization"]
     Knowledge --> Citations["Citations & References"]
     Knowledge --> Repository["Searchable Repository"]
-    
+
     Domain --> Categories["Technical, Business, Scientific, etc."]
     Domain --> Tags["Custom Tags & Labels"]
     Citations --> Sources["External Sources"]
     Repository --> Search["Content-based Search"]
-    
+
     style Knowledge fill:#FF5722,stroke:#E64A19,color:white
     style Project fill:#2196F3,stroke:#1976D2,color:white
     style Domain fill:#4CAF50,stroke:#388E3C,color:white
@@ -284,10 +284,7 @@ ATLAS exposes system resources through standard MCP endpoints:
 | ------------------- | ---------------------------------------------------------------------------------------- |
 | `atlas://projects`  | List of all projects in the Atlas platform with pagination support.                      |
 | `atlas://tasks`     | List of all tasks in the Atlas platform with pagination and filtering support.           |
-| `atlas://knowledge` | List of all knowledge items in the Atlas platform with pagination and filtering support. |
-| `atlas://projects`  | Retrieves a single project by its unique identifier.                                     |
-| `atlas://tasks`     | Retrieves a single task by its unique identifier.                                        |
-| `atlas://knowledge` | Retrieves a single knowledge item by its unique identifier.                              |
+| `atlas://knowledge` | List of all knowledge in the Atlas platform with pagination and filtering support.       |
 
 ### Resource Templates
 

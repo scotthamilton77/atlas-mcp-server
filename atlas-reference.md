@@ -18,7 +18,7 @@
 - Can be assigned, prioritized, and categorized
 - Can be linked to dependencies to create structured workflows
 
-**Knowledge** represents information assets associated with projects, including research findings, documentation, references, or any valuable information. Knowledge items:
+**Knowledge** represents information assets associated with projects, including research findings, documentation, references, or any valuable information. Knowledge:
 
 - Are tagged and categorized by domain
 - Can include citations to external sources
@@ -29,7 +29,7 @@
 The Atlas Platform integrates these components into a cohesive system:
 
 - **Project-Task Relationship**: Projects contain tasks that represent actionable steps needed to achieve project goals. Tasks inherit context from their parent project while providing granular tracking of individual work items.
-- **Knowledge Integration**: Both projects and tasks can be enriched with knowledge items, providing team members with necessary information and context.
+- **Knowledge Integration**: Both projects and tasks can be enriched with knowledge, providing team members with necessary information and context.
 - **Dependency Management**: Both projects and tasks support dependency relationships, allowing for complex workflows with prerequisites and sequential execution requirements.
 - **Unified Search**: The platform provides cross-entity search capabilities, allowing users to find relevant projects, tasks, or knowledge based on various criteria.
 
@@ -144,7 +144,7 @@ interface Knowledge {
   /** ID of the parent project this knowledge belongs to */
   projectId: string;
 
-  /** Main content of the knowledge item (can be structured or unstructured) */
+  /** Main content of the knowledge (can be structured or unstructured) */
   text: string;
 
   /** Categorical labels for organization and filtering */
@@ -156,10 +156,10 @@ interface Knowledge {
   /** Array of reference sources supporting this knowledge (URLs, DOIs, etc.) */
   citations?: string[];
 
-  /** Timestamp when the knowledge item was created */
+  /** Timestamp when the knowledge was created */
   createdAt: string;
 
-  /** Timestamp when the knowledge item was last updated */
+  /** Timestamp when the knowledge was last updated */
   updatedAt: string;
 }
 ```
@@ -283,7 +283,7 @@ interface ProjectListRequest {
   /** Number of results per page, maximum 100 (Default: 20) */
   limit?: number;
 
-  /** Boolean flag to include associated knowledge items (Default: false) */
+  /** Boolean flag to include associated knowledge (Default: false) */
   includeKnowledge?: boolean;
 
   /** Boolean flag to include associated tasks (Default: false) */
