@@ -31,10 +31,10 @@ interface BulkProjectDeleteResponse {
  */
 export class SingleProjectDeleteFormatter implements ResponseFormatter<SingleProjectDeleteResponse> {
   format(data: SingleProjectDeleteResponse): string {
-    return `## Project Deletion\n\n` +
-      `**Result:** ${data.success ? '✅ Success' : '❌ Failed'}\n` +
-      `**Project ID:** ${data.id}\n` +
-      `**Message:** ${data.message}\n`;
+    return `Project Deletion\n\n` +
+      `Result: ${data.success ? '✅ Success' : '❌ Failed'}\n` +
+      `Project ID: ${data.id}\n` +
+      `Message: ${data.message}\n`;
   }
 }
 
@@ -46,30 +46,30 @@ export class BulkProjectDeleteFormatter implements ResponseFormatter<BulkProject
     const { success, message, deleted, errors } = data;
     
     // Create a summary section
-    const summary = `## Project Deletion\n\n` +
-      `**Status:** ${success ? '✅ Success' : '⚠️ Partial Success'}\n` +
-      `**Summary:** ${message}\n` +
-      `**Deleted:** ${deleted.length} project(s)\n` +
-      `**Errors:** ${errors.length} error(s)\n`;
+    const summary = `Project Deletion\n\n` +
+      `Status: ${success ? '✅ Success' : '⚠️ Partial Success'}\n` +
+      `Summary: ${message}\n` +
+      `Deleted: ${deleted.length} project(s)\n` +
+      `Errors: ${errors.length} error(s)\n`;
     
     // List the successfully deleted projects
     let deletedSection = "";
     if (deleted.length > 0) {
-      deletedSection = `## Deleted Projects\n\n`;
+      deletedSection = `Deleted Projects\n\n`;
       deletedSection += `The following project IDs were successfully deleted:\n\n`;
-      deletedSection += deleted.map(id => `- ${id}`).join('\n');
+      deletedSection += deleted.map(id => `${id}`).join('\n');
     }
     
     // List any errors that occurred
     let errorsSection = "";
     if (errors.length > 0) {
-      errorsSection = `## Errors\n\n`;
+      errorsSection = `Errors\n\n`;
       
       errorsSection += errors.map((error, index) => {
-        return `### ${index + 1}. Error deleting project ${error.projectId}\n\n` +
-          `**Error Code:** ${error.error.code}\n` +
-          `**Message:** ${error.error.message}\n` +
-          (error.error.details ? `**Details:** ${JSON.stringify(error.error.details)}\n` : "");
+        return `${index + 1}. Error deleting project ${error.projectId}\n\n` +
+          `Error Code: ${error.error.code}\n` +
+          `Message: ${error.error.message}\n` +
+          (error.error.details ? `Details: ${JSON.stringify(error.error.details)}\n` : "");
       }).join("\n\n");
     }
     
