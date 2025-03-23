@@ -17,10 +17,17 @@ export const config = {
   logLevel: process.env.LOG_LEVEL || "info",
   environment: process.env.NODE_ENV || "development",
   backup: {
-    enabled: process.env.BACKUP_ENABLED !== 'false', // Enabled by default
-    schedule: process.env.BACKUP_SCHEDULE || '0 */6 * * *', // Every 6 hours by default
-    maxBackups: parseInt(process.env.BACKUP_MAX_COUNT || '10', 10), // Keep 10 backups by default
-    backupOnStart: process.env.BACKUP_ON_START === 'true'  // Disabled by default
+    enabled: process.env.BACKUP_ENABLED !== 'false', 
+    schedule: process.env.BACKUP_SCHEDULE ? process.env.BACKUP_SCHEDULE.split('#')[0].trim() : '0 */6 * * *', // Handle possible inline comments
+    maxBackups: parseInt(process.env.BACKUP_MAX_COUNT || '10', 10),
+    backupOnStart: process.env.BACKUP_ON_START === 'true', 
+    backupPath: process.env.BACKUP_FILE_PATH 
+      ? (path.isAbsolute(process.env.BACKUP_FILE_PATH) 
+          ? process.env.BACKUP_FILE_PATH 
+          : path.resolve(process.cwd(), process.env.BACKUP_FILE_PATH))
+      : path.resolve(process.cwd(), 'backups'),
+    compressionLevel: parseInt(process.env.BACKUP_COMPRESSION_LEVEL || '6', 10),
+    retentionDays: parseInt(process.env.BACKUP_RETENTION_DAYS || '30', 10)
   },
   security: {
     // Default to false in development, true in production

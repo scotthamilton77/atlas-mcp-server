@@ -4,13 +4,9 @@ import { logger } from "./utils/logger.js";
 import { neo4jDriver } from "./services/neo4j/driver.js";
 import { closeNeo4jConnection } from "./services/neo4j/index.js";
 import { config } from "./config/index.js";
+import { BackupService } from "./services/neo4j/backup_service/index.js";
 
 let server: Awaited<ReturnType<typeof createMcpServer>> | undefined;
-// Since backupService.ts doesn't exist, we'll create a simple mock for now
-const backupService = {
-  start: async () => logger.info('Backup service start (mock)'),
-  stop: () => logger.info('Backup service stop (mock)')
-};
 
 const shutdown = async (signal: string) => {
   logger.info(`Received ${signal}. Starting graceful shutdown...`);
@@ -18,7 +14,7 @@ const shutdown = async (signal: string) => {
   try {
     // Stop the backup service
     logger.info("Stopping database backup service...");
-    backupService.stop();
+    BackupService.stop();
     logger.info("Database backup service stopped.");
 
     if (server) {
@@ -46,9 +42,9 @@ const start = async () => {
     // Create and store server instance
     server = await createMcpServer();
     
-    // Start the backup service
-    logger.info("Starting database backup service...");
-    await backupService.start();
+    // Initialize the backup service
+    logger.info("Initializing database backup service...");
+    await BackupService.init();
     
     logger.info("ATLAS MCP Server is running and awaiting messages.");
 
