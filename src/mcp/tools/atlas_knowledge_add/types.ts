@@ -44,28 +44,28 @@ const BulkKnowledgeSchema = z.object({
 // Schema shapes for tool registration
 export const AtlasKnowledgeAddSchemaShape = {
   mode: z.enum(["single", "bulk"]).describe(
-    "Operation mode - 'single' for one knowledge item, 'bulk' for multiple items"
+    "Operation mode - 'single' for creating one detailed knowledge item, 'bulk' for efficiently adding multiple related knowledge items in a single transaction"
   ),
   id: z.string().optional().describe(
-    "Optional client-generated knowledge ID"
+    "Optional client-generated knowledge ID for consistent cross-referencing and retrieval"
   ),
   projectId: z.string().optional().describe(
-    "ID of the parent project this knowledge belongs to (required for mode='single')"
+    "ID of the parent project this knowledge belongs to, establishing project-knowledge association (required for mode='single')"
   ),
   text: z.string().optional().describe(
-    "Main content of the knowledge item (can be structured or unstructured) (required for mode='single')"
+    "Main content of the knowledge item containing insights, findings, or reference information (required for mode='single')"
   ),
   tags: z.array(z.string()).optional().describe(
-    "Array of categorical labels for organization and filtering"
+    "Array of categorical labels for knowledge organization, thematic grouping, and advanced filtering capabilities"
   ),
   domain: z.enum(["technical", "business", "scientific"]).or(z.string()).optional().describe(
-    "Primary knowledge area or discipline (required for mode='single')"
+    "Primary knowledge area or discipline for high-level categorization and domain-specific searching (required for mode='single')"
   ),
   citations: z.array(z.string()).optional().describe(
-    "Array of reference sources supporting this knowledge (URLs, DOIs, etc.)"
+    "Array of reference sources supporting this knowledge for validation and additional context (URLs, DOIs, papers, etc.)"
   ),
   knowledge: z.array(KnowledgeSchema).min(1).max(100).optional().describe(
-    "Array of knowledge objects with the above fields (required for mode='bulk')"
+    "Array of complete knowledge definition objects to create in a single transaction (supports 1-100 items, required for mode='bulk')"
   )
 } as const;
 

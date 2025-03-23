@@ -8,7 +8,7 @@ export const registerAtlasProjectDeleteTool = (server: McpServer) => {
   registerTool(
     server,
     "atlas_project_delete",
-    "Removes project entities and associated resources from the system",
+    "Removes project entities and associated resources from the system with cascading deletion of linked tasks and knowledge items",
     AtlasProjectDeleteSchemaShape,
     atlasDeleteProject,
     createToolMetadata({

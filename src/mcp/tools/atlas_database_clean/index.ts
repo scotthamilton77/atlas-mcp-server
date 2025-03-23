@@ -9,7 +9,7 @@ export const registerAtlasDatabaseCleanTool = (server: McpServer) => {
   registerTool(
     server,
     "atlas_database_clean",
-    "Completely resets the database - permanently removes all data",
+    "Completely resets the database - permanently removes all data from all entity types (projects, tasks, and knowledge)",
     AtlasDatabaseCleanSchemaShape,
     atlasDatabaseClean,
     createToolMetadata({

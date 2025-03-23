@@ -9,7 +9,7 @@ export const registerAtlasTaskCreateTool = (server: McpServer) => {
   registerTool(
     server,
     "atlas_task_create",
-    "Creates a new task or multiple tasks in the system",
+    "Creates a new task or multiple tasks in the system with detailed specifications, categorization, and dependency tracking",
     AtlasTaskCreateSchemaShape,
     atlasCreateTask,
     createToolMetadata({

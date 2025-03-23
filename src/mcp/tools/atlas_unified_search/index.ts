@@ -8,13 +8,13 @@ export const registerAtlasUnifiedSearchTool = (server: McpServer) => {
   registerTool(
     server,
     "atlas_unified_search",
-    "Performs a unified search across all entity types",
+    "Performs a unified search across all entity types (projects, tasks, and knowledge) with relevance scoring and flexible filtering options",
     {
       property: z.string().optional().describe(
-        "Specific property to search within"
+        "Specific property to search within (e.g., name, description, text)"
       ),
       value: z.string().describe(
-        "Search term or phrase to find within the specified property (required)"
+        "Search term or phrase to find across the knowledge base (required)"
       ),
       entityTypes: z.array(
         z.enum(['project', 'task', 'knowledge'])
@@ -22,13 +22,13 @@ export const registerAtlasUnifiedSearchTool = (server: McpServer) => {
         "Array of entity types to include in search (Default: all types)"
       ),
       caseInsensitive: z.boolean().optional().default(true).describe(
-        "Boolean flag to ignore case when searching (Default: true)"
+        "Boolean flag to ignore case sensitivity when searching for better recall (Default: true)"
       ),
       fuzzy: z.boolean().optional().default(false).describe(
-        "Boolean flag to enable approximate matching for typos and variations (Default: false)"
+        "Boolean flag to enable approximate matching for typos, spelling variations, and similar terms (Default: false)"
       ),
       taskType: z.string().optional().describe(
-        "Optional filter by project/task classification"
+        "Optional filter by project/task classification type for more targeted results"
       ),
       page: z.number().optional().describe(
         "Page number for paginated results (Default: 1)"

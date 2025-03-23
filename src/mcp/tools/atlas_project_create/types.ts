@@ -70,19 +70,19 @@ const BulkProjectSchema = z.object({
 // Schema shapes for tool registration
 export const AtlasProjectCreateSchemaShape = {
   mode: z.enum(["single", "bulk"]).describe(
-    "Operation mode - 'single' for one project, 'bulk' for multiple projects"
+    "Operation mode - 'single' for creating one detailed project with full metadata, 'bulk' for efficiently initializing multiple related projects in a single transaction"
   ),
   id: z.string().optional().describe(
-    "Client-generated project identifier (required for mode='single')"
+    "Client-generated unique project identifier for consistent cross-referencing (recommended for mode='single', system will generate if not provided)"
   ),
   name: z.string().min(1).max(100).optional().describe(
-    "Clear, descriptive project name (1-100 characters) (required for mode='single')"
+    "Clear, descriptive project name for display and identification (1-100 characters) (required for mode='single')"
   ),
   description: z.string().optional().describe(
-    "Comprehensive project overview with goals and implementation details (required for mode='single')"
+    "Comprehensive project overview detailing scope, objectives, approach, and implementation details (required for mode='single')"
   ),
   status: z.enum([ProjectStatus.ACTIVE, ProjectStatus.PENDING, ProjectStatus.COMPLETED, ProjectStatus.ARCHIVED]).optional().describe(
-    "Project status for tracking progress (Default: active)"
+    "Project lifecycle state for tracking progress and filtering (Default: active)"
   ),
   urls: z.array(
     z.object({
@@ -90,22 +90,22 @@ export const AtlasProjectCreateSchemaShape = {
       url: z.string()
     })
   ).optional().describe(
-    "Links to relevant documentation and resources (e.g., 'https://example.com' or 'file://path/to/file.ts')"
+    "Array of titled links to relevant documentation, specifications, code repositories, and external resources (supports web URLs and file paths)"
   ),
   completionRequirements: z.string().optional().describe(
-    "Measurable success criteria that define project completion (required for mode='single')"
+    "Quantifiable success criteria and acceptance requirements that define when the project is considered complete (required for mode='single')"
   ),
   dependencies: z.array(z.string()).optional().describe(
-    "Project IDs that must be completed before this project can begin"
+    "Array of project IDs that must be completed before this project can begin, establishing workflow prerequisites and sequencing"
   ),
   outputFormat: z.string().optional().describe(
-    "Format specification for project deliverables (required for mode='single')"
+    "Expected format and structure specification for the project's final deliverables and artifacts (required for mode='single')"
   ),
   taskType: z.enum([TaskType.RESEARCH, TaskType.GENERATION, TaskType.ANALYSIS, TaskType.INTEGRATION]).or(z.string()).optional().describe(
-    "Project type classification for workflow organization (required for mode='single')"
+    "Project type classification for workflow organization, filtering, and reporting (options: research, generation, analysis, integration, or custom type) (required for mode='single')"
   ),
   projects: z.array(ProjectSchema).min(1).max(100).optional().describe(
-    "Collection of project definitions to create in a single operation (required for mode='bulk')"
+    "Array of complete project definition objects to create in a single transaction (supports 1-100 projects, required for mode='bulk')"
   )
 } as const;
 

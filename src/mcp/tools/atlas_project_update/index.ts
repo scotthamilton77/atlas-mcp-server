@@ -9,7 +9,7 @@ export const registerAtlasProjectUpdateTool = (server: McpServer) => {
   registerTool(
     server,
     "atlas_project_update",
-    "Modifies attributes of existing project entities within the system",
+    "Modifies attributes of existing project entities within the system with support for both targeted single updates and efficient bulk modifications",
     AtlasProjectUpdateSchemaShape,
     atlasUpdateProject,
     createToolMetadata({

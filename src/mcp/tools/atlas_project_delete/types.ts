@@ -24,13 +24,13 @@ const BulkProjectSchema = z.object({
 // Schema shapes for tool registration
 export const AtlasProjectDeleteSchemaShape = {
   mode: z.enum(["single", "bulk"]).describe(
-    "Operation strategy - 'single' for individual removal, 'bulk' for batch operations"
+    "Operation strategy - 'single' for individual removal with detailed feedback, 'bulk' for efficient batch operations with aggregated results"
   ),
   id: z.string().optional().describe(
-    "Target project identifier for removal (required for mode='single')"
+    "Target project identifier for permanent removal including all associated tasks and knowledge (required for mode='single')"
   ),
   projectIds: z.array(z.string()).optional().describe(
-    "Collection of project identifiers to process (required for mode='bulk')"
+    "Collection of project identifiers to permanently remove in a single atomic transaction (required for mode='bulk')"
   )
 } as const;
 

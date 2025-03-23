@@ -8,7 +8,7 @@ export const registerAtlasKnowledgeAddTool = (server: McpServer) => {
   registerTool(
     server,
     "atlas_knowledge_add",
-    "Adds a new knowledge item or multiple items to the system",
+    "Adds a new knowledge item or multiple items to the system with domain categorization, tagging, and citation support",
     AtlasKnowledgeAddSchemaShape,
     atlasAddKnowledge,
     createToolMetadata({

@@ -87,28 +87,28 @@ const BulkTaskSchema = z.object({
 // Schema shapes for tool registration
 export const AtlasTaskCreateSchemaShape = {
   mode: z.enum(["single", "bulk"]).describe(
-    "Operation mode - 'single' for one task, 'bulk' for multiple tasks"
+    "Operation mode - 'single' for creating one detailed task with full specifications, 'bulk' for efficiently creating multiple related tasks in a single transaction"
   ),
   id: z.string().optional().describe(
-    "Optional client-generated task ID"
+    "Optional client-generated task ID for consistent cross-referencing"
   ),
   projectId: z.string().optional().describe(
-    "ID of the parent project this task belongs to (required for mode='single')"
+    "ID of the parent project this task belongs to, establishing the project-task relationship hierarchy (required for mode='single')"
   ),
   title: z.string().min(5).max(150).optional().describe(
-    "Concise task title clearly describing the objective (5-150 characters) (required for mode='single')"
+    "Concise task title clearly describing the objective (5-150 characters) for display and identification (required for mode='single')"
   ),
   description: z.string().optional().describe(
-    "Detailed explanation of the task requirements and context (required for mode='single')"
+    "Detailed explanation of the task requirements, context, approach, and implementation details (required for mode='single')"
   ),
   priority: z.enum([PriorityLevel.LOW, PriorityLevel.MEDIUM, PriorityLevel.HIGH, PriorityLevel.CRITICAL]).optional().describe(
-    "Importance level (Default: medium)"
+    "Importance level for task prioritization and resource allocation (Default: medium)"
   ),
   status: z.enum([TaskStatus.BACKLOG, TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.COMPLETED]).optional().describe(
-    "Current task state (Default: todo)"
+    "Current task workflow state for tracking task lifecycle and progress (Default: todo)"
   ),
   assignedTo: z.string().optional().describe(
-    "ID of entity responsible for task completion"
+    "ID of entity responsible for task completion and accountability tracking"
   ),
   urls: z.array(
     z.object({
@@ -119,22 +119,22 @@ export const AtlasTaskCreateSchemaShape = {
     "Array of relevant URLs with descriptive titles for reference materials"
   ),
   tags: z.array(z.string()).optional().describe(
-    "Array of categorical labels for organization and filtering"
+    "Array of categorical labels for task organization, filtering, and thematic grouping"
   ),
   completionRequirements: z.string().optional().describe(
-    "Specific, measurable criteria that indicate task completion (required for mode='single')"
+    "Specific, measurable criteria that define when the task is considered complete and ready for verification (required for mode='single')"
   ),
   dependencies: z.array(z.string()).optional().describe(
-    "Array of existing task IDs that must be completed before this task can begin"
+    "Array of existing task IDs that must be completed before this task can begin, creating sequential workflow paths and prerequisites"
   ),
   outputFormat: z.string().optional().describe(
-    "Required format specification for task deliverables (required for mode='single')"
+    "Required format and structure specification for the task's deliverables, artifacts, and documentation (required for mode='single')"
   ),
   taskType: z.enum([TaskType.RESEARCH, TaskType.GENERATION, TaskType.ANALYSIS, TaskType.INTEGRATION]).optional().describe(
-    "Classification of task purpose (required for mode='single')"
+    "Classification of task purpose for workflow organization, filtering, and reporting (required for mode='single')"
   ),
   tasks: z.array(TaskSchema).min(1).max(100).optional().describe(
-    "Array of task objects with the above fields (required for mode='bulk')"
+    "Array of complete task definition objects to create in a single transaction (supports 1-100 tasks, required for mode='bulk')"
   )
 } as const;
 

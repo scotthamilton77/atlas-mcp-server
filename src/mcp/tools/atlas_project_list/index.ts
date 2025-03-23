@@ -15,27 +15,27 @@ export function registerAtlasProjectListTool(server: McpServer): void {
   registerTool(
     server,
     "atlas_project_list",
-    "Retrieves and filters project entities based on specified criteria",
+    "Retrieves and filters project entities based on specified criteria with pagination support and relationship expansion capabilities",
     {
       mode: z.enum(['all', 'details']).optional().default('all')
-        .describe('Listing mode - "all" for paginated list, "details" for single project'),
+        .describe('Listing mode - "all" for paginated list of projects, "details" for comprehensive single project information'),
       id: z.string().optional()
-        .describe('Project ID to retrieve details for (required for mode="details")'),
+        .describe('Project ID to retrieve complete details for, including relationships (required for mode="details")'),
       page: z.number().min(1).optional().default(1)
-        .describe('Page number for paginated results (Default: 1)'),
+        .describe('Page number for paginated results when using mode="all" (Default: 1)'),
       limit: z.number().min(1).max(100).optional().default(20)
-        .describe('Number of results per page, maximum 100 (Default: 20)'),
+        .describe('Number of results per page, minimum 1, maximum 100 (Default: 20)'),
       includeKnowledge: z.boolean().optional().default(false)
-        .describe('Boolean flag to include associated knowledge items (Default: false)'),
+        .describe('Boolean flag to include associated knowledge items with the project results (Default: false)'),
       includeTasks: z.boolean().optional().default(false)
-        .describe('Boolean flag to include associated tasks (Default: false)'),
+        .describe('Boolean flag to include associated tasks in the response (Default: false)'),
       taskType: z.string().optional()
-        .describe('Filter results by project classification'),
+        .describe('Filter results by project classification or category type'),
       status: z.union([
         z.enum(['active', 'pending', 'completed', 'archived']),
         z.array(z.enum(['active', 'pending', 'completed', 'archived']))
       ]).optional()
-        .describe('Filter results by project status')
+        .describe('Filter results by project status or multiple statuses')
     },
     async (input, context) => {
       // Parse and process input

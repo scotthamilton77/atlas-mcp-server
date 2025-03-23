@@ -9,7 +9,7 @@ export const registerAtlasProjectCreateTool = (server: McpServer) => {
   registerTool(
     server,
     "atlas_project_create",
-    "Creates and initializes new projects within the platform ecosystem",
+    "Creates and initializes new projects within Atlas task management with comprehensive metadata, dependencies, and integration with the knowledge management system",
     AtlasProjectCreateSchemaShape,
     atlasCreateProject,
     createToolMetadata({
