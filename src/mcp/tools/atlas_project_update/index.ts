@@ -30,9 +30,9 @@ export const registerAtlasProjectUpdateTool = (server: McpServer) => {
             "description": "Extended refactoring to include data migration layer and enhanced service discovery through etcd integration",
             "status": "in-progress",
             "urls": [
-              {"title": "Architecture RFC", "url": "https://github.com/company/arch-specs/rfc-2023.md"},
-              {"title": "Technical Spec", "url": "file:///specs/microservice-migration.ts"},
-              {"title": "Service Mesh Docs", "url": "https://istio.io/latest/docs/"}
+              {"title": "MCP Server Repository", "url": "https://github.com/cyanheads/atlas-mcp-server.git"},
+              {"title": "Technical Spec", "url": "file:///Users/username/project_name/docs/atlas-reference.md"},
+              {"title": "MCP Docs", "url": "https://modelcontextprotocol.io/"}
             ],
             "completionRequirements": "All critical services migrated with 100% test coverage, performance metrics meeting SLAs, and zero regressions in core functionality",
             "outputFormat": "Containerized services with CI/CD pipelines, comprehensive API documentation, and migration runbook",

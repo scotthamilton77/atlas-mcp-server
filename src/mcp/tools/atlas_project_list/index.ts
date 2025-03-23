@@ -59,8 +59,8 @@ export function registerAtlasProjectListTool(server: McpServer): void {
                 "description": "Refactor monolithic application into scalable microservices architecture with distributed data stores and API gateway",
                 "status": "active",
                 "urls": [
-                  {"title": "Architecture RFC", "url": "https://github.com/company/arch-specs/rfc-2023.md"}, 
-                  {"title": "Technical Spec", "url": "file:///specs/microservice-migration.ts"}
+                  {"title": "MCP Server Repository", "url": "https://github.com/cyanheads/atlas-mcp-server.git"}, 
+                  {"title": "Technical Spec", "url": "file:///Users/username/project_name/docs/atlas-reference.md"}
                 ],
                 "completionRequirements": "All critical services migrated with 100% test coverage, performance metrics meeting SLAs, and zero regressions in core functionality",
                 "outputFormat": "Containerized services with CI/CD pipelines, comprehensive API documentation, and migration runbook",
@@ -74,8 +74,8 @@ export function registerAtlasProjectListTool(server: McpServer): void {
                 "description": "Design and implement GraphQL API layer to replace existing REST endpoints with optimized query capabilities",
                 "status": "in-progress",
                 "urls": [
-                  {"title": "GraphQL Schema Design", "url": "https://github.com/company/api-specs/graphql-schema.graphql"},
-                  {"title": "Apollo Server Config", "url": "file:///specs/apollo-config.ts"}
+                  {"title": "MCP Types Definition", "url": "https://github.com/cyanheads/atlas-mcp-server.git/blob/main/src/types/mcp.ts"},
+                  {"title": "Neo4j Schema", "url": "file:///Users/username/project_name/docs/neo4j-schema.md"}
                 ],
                 "completionRequirements": "API supports all current use cases with n+1 query optimization, proper error handling, and 95% test coverage",
                 "outputFormat": "TypeScript-based GraphQL schema with resolvers, documentation, and integration tests",
@@ -106,9 +106,9 @@ export function registerAtlasProjectListTool(server: McpServer): void {
                 "description": "Refactor monolithic application into scalable microservices architecture with distributed data stores and API gateway",
                 "status": "active",
                 "urls": [
-                  {"title": "Architecture RFC", "url": "https://github.com/company/arch-specs/rfc-2023.md"}, 
-                  {"title": "Technical Spec", "url": "file:///specs/microservice-migration.ts"},
-                  {"title": "Service Mesh Docs", "url": "https://istio.io/latest/docs/"}
+                  {"title": "MCP Server Repository", "url": "https://github.com/cyanheads/atlas-mcp-server.git"}, 
+                  {"title": "Technical Spec", "url": "file:///Users/username/project_name/docs/atlas-reference.md"},
+                  {"title": "MCP Docs", "url": "https://modelcontextprotocol.io/"}
                 ],
                 "completionRequirements": "All critical services migrated with 100% test coverage, performance metrics meeting SLAs, and zero regressions in core functionality",
                 "outputFormat": "Containerized services with CI/CD pipelines, comprehensive API documentation, and migration runbook",
@@ -186,7 +186,7 @@ export function registerAtlasProjectListTool(server: McpServer): void {
                 "status": "in-progress",
                 "urls": [
                   {"title": "OWASP Top 10", "url": "https://owasp.org/Top10/"},
-                  {"title": "Security Checklist", "url": "file:///security/assessment-checklist.md"}
+                  {"title": "Security Checklist", "url": "file:///Users/username/project_name/security/assessment-checklist.md"}
                 ],
                 "completionRequirements": "All high and critical vulnerabilities resolved, compliance with OWASP Top 10, and security test coverage exceeding 90%",
                 "outputFormat": "Security report with remediation steps, updated authentication flow, and automated security test suite",

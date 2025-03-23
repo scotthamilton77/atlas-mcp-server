@@ -20,7 +20,7 @@ export const registerAtlasProjectCreateTool = (server: McpServer) => {
             name: "Microservice Architecture Migration",
             description: "Refactor monolithic application into scalable microservices architecture with distributed data stores and API gateway",
             status: "active",
-            urls: [{title: "Architecture RFC", url: "https://github.com/company/arch-specs/rfc-2023.md"}, {title: "Technical Spec", url: "file:///specs/microservice-migration.ts"}],
+            urls: [{title: "MCP Server Repository", url: "https://github.com/cyanheads/atlas-mcp-server.git"}, {title: "Technical Spec", url: "file:///Users/username/project_name/docs/atlas-reference.md"}],
             completionRequirements: "All critical services migrated with 100% test coverage, performance metrics meeting SLAs, and zero regressions in core functionality",
             outputFormat: "Containerized services with CI/CD pipelines, comprehensive API documentation, and migration runbook",
             taskType: "integration"
@@ -30,7 +30,7 @@ export const registerAtlasProjectCreateTool = (server: McpServer) => {
             "name": "Microservice Architecture Migration",
             "description": "Refactor monolithic application into scalable microservices architecture with distributed data stores and API gateway",
             "status": "active",
-            "urls": [{"title": "Architecture RFC", "url": "https://github.com/company/arch-specs/rfc-2023.md"}, {"title": "Technical Spec", "url": "file:///specs/microservice-migration.ts"}],
+            "urls": [{"title": "MCP Server Repository", "url": "https://github.com/cyanheads/atlas-mcp-server.git"}, {"title": "Technical Spec", "url": "file:///Users/username/project_name/docs/atlas-reference.md"}],
             "completionRequirements": "All critical services migrated with 100% test coverage, performance metrics meeting SLAs, and zero regressions in core functionality",
             "outputFormat": "Containerized services with CI/CD pipelines, comprehensive API documentation, and migration runbook",
             "taskType": "integration",
