@@ -10,6 +10,7 @@ import { configureSecurity } from "../utils/security.js";
 import { registerAtlasProjectCreateTool } from "./tools/atlas_project_create/index.js";
 import { registerAtlasProjectListTool } from "./tools/atlas_project_list/index.js";
 import { registerAtlasProjectUpdateTool } from "./tools/atlas_project_update/index.js";
+import { registerAtlasProjectDeleteTool } from "./tools/atlas_project_delete/index.js";
 
 export const createMcpServer = async () => {
   try {
@@ -41,6 +42,7 @@ export const createMcpServer = async () => {
     registerAtlasProjectCreateTool(server); // atlas_project_create
     registerAtlasProjectListTool(server); // atlas_project_list
     registerAtlasProjectUpdateTool(server); // atlas_project_update
+    registerAtlasProjectDeleteTool(server); // atlas_project_delete
 
     // Register resources
 
