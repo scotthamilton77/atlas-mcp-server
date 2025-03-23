@@ -8,7 +8,7 @@ export const registerAtlasTaskDeleteTool = (server: McpServer) => {
   registerTool(
     server,
     "atlas_task_delete",
-    "Deletes existing task(s) from the system",
+    "Deletes existing task(s) from the system with support for both single task removal and bulk deletion operations",
     AtlasTaskDeleteSchemaShape,
     atlasDeleteTask,
     createToolMetadata({

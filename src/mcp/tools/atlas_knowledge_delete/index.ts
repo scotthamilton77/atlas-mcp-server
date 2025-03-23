@@ -8,7 +8,7 @@ export const registerAtlasKnowledgeDeleteTool = (server: McpServer) => {
   registerTool(
     server,
     "atlas_knowledge_delete",
-    "Deletes existing knowledge item(s) from the system",
+    "Deletes existing knowledge item(s) from the system with support for individual removal and batch operations",
     AtlasKnowledgeDeleteSchemaShape,
     atlasDeleteKnowledge,
     createToolMetadata({

@@ -9,7 +9,7 @@ export const registerAtlasTaskUpdateTool = (server: McpServer) => {
   registerTool(
     server,
     "atlas_task_update",
-    "Updates existing task(s) in the system",
+    "Updates existing task(s) in the system with support for both individual task modifications and efficient batch updates across multiple tasks",
     AtlasTaskUpdateSchemaShape,
     atlasUpdateTask,
     createToolMetadata({

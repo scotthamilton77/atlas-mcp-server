@@ -49,7 +49,7 @@ export const registerAtlasTaskListTool = (server: McpServer) => {
   registerTool(
     server,
     "atlas_task_list",
-    "Lists tasks according to specified filters",
+    "Lists tasks according to specified filters with advanced filtering, sorting, and pagination capabilities",
     TaskListRequestSchemaShape,
     atlasListTasks,
     createToolMetadata({

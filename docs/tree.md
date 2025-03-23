@@ -1,6 +1,6 @@
 # atlas-mcp-server - Directory Structure
 
-Generated on: 2025-03-23 16:13:32
+Generated on: 2025-03-23 16:45:51
 
 
 ```
@@ -14,6 +14,7 @@ atlas-mcp-server
     ├── make-executable.ts
     └── update-deps.ts
 ├── src
+    ├── atlas
     ├── config
     │   └── index.ts
     ├── mcp

@@ -13,7 +13,7 @@ export function registerAtlasKnowledgeListTool(server: McpServer): void {
   registerTool(
     server,
     "atlas_knowledge_list",
-    "Lists knowledge items according to specified filters",
+    "Lists knowledge items according to specified filters with tag-based categorization, domain filtering, and full-text search capabilities",
     {
       projectId: z.string()
         .describe('ID of the project to list knowledge items for (required)'),
