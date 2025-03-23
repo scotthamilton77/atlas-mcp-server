@@ -214,18 +214,24 @@ export class SearchService {
       });
       
       // Map result records to search result items
-      return result.map(record => ({
-        id: record.get('id'),
-        type: record.get('type'),
-        entityType: record.get('entityType'),
-        title: record.get('title'),
-        description: record.get('description'),
-        matchedProperty: record.get('matchedProperty'),
-        matchedValue: record.get('matchedValue'),
-        createdAt: record.get('createdAt'),
-        updatedAt: record.get('updatedAt'),
-        score: record.get('score').toNumber()
-      }));
+      return result.map(record => {
+        const scoreValue = record.get('score');
+        const score = typeof scoreValue === 'number' ? scoreValue : 
+                      scoreValue && typeof scoreValue.toNumber === 'function' ? scoreValue.toNumber() : 5;
+        
+        return {
+          id: record.get('id'),
+          type: record.get('type'),
+          entityType: record.get('entityType'),
+          title: record.get('title'),
+          description: record.get('description'),
+          matchedProperty: record.get('matchedProperty'),
+          matchedValue: record.get('matchedValue'),
+          createdAt: record.get('createdAt'),
+          updatedAt: record.get('updatedAt'),
+          score: score
+        };
+      });
     } catch (error) {
       logger.error('Error searching projects', { error, searchValue, property });
       throw error;
@@ -329,20 +335,26 @@ export class SearchService {
       });
       
       // Map result records to search result items
-      return result.map(record => ({
-        id: record.get('id'),
-        type: record.get('type'),
-        entityType: record.get('entityType'),
-        title: record.get('title'),
-        description: record.get('description'),
-        matchedProperty: record.get('matchedProperty'),
-        matchedValue: record.get('matchedValue'),
-        createdAt: record.get('createdAt'),
-        updatedAt: record.get('updatedAt'),
-        projectId: record.get('projectId'),
-        projectName: record.get('projectName'),
-        score: record.get('score').toNumber()
-      }));
+      return result.map(record => {
+        const scoreValue = record.get('score');
+        const score = typeof scoreValue === 'number' ? scoreValue : 
+                      scoreValue && typeof scoreValue.toNumber === 'function' ? scoreValue.toNumber() : 5;
+        
+        return {
+          id: record.get('id'),
+          type: record.get('type'),
+          entityType: record.get('entityType'),
+          title: record.get('title'),
+          description: record.get('description'),
+          matchedProperty: record.get('matchedProperty'),
+          matchedValue: record.get('matchedValue'),
+          createdAt: record.get('createdAt'),
+          updatedAt: record.get('updatedAt'),
+          projectId: record.get('projectId'),
+          projectName: record.get('projectName'),
+          score: score
+        };
+      });
     } catch (error) {
       logger.error('Error searching tasks', { error, searchValue, property });
       throw error;
@@ -411,8 +423,9 @@ export class SearchService {
           k.domain AS entityType,
           CASE 
             // Generate a title from the text if not too long
-            WHEN length(k.text) <= 50 THEN k.text
-            ELSE substring(k.text, 0, 50) + '...'
+            WHEN k.text IS NULL THEN 'Untitled Knowledge'
+            WHEN size(toString(k.text)) <= 50 THEN toString(k.text)
+            ELSE substring(toString(k.text), 0, 50) + '...'
           END AS title,
           k.text AS description,
           'text' AS matchedProperty,
@@ -431,20 +444,26 @@ export class SearchService {
       });
       
       // Map result records to search result items
-      return result.map(record => ({
-        id: record.get('id'),
-        type: record.get('type'),
-        entityType: record.get('entityType'),
-        title: record.get('title'),
-        description: record.get('description'),
-        matchedProperty: record.get('matchedProperty'),
-        matchedValue: record.get('matchedValue'),
-        createdAt: record.get('createdAt'),
-        updatedAt: record.get('updatedAt'),
-        projectId: record.get('projectId'),
-        projectName: record.get('projectName'),
-        score: record.get('score').toNumber()
-      }));
+      return result.map(record => {
+        const scoreValue = record.get('score');
+        const score = typeof scoreValue === 'number' ? scoreValue : 
+                      scoreValue && typeof scoreValue.toNumber === 'function' ? scoreValue.toNumber() : 5;
+        
+        return {
+          id: record.get('id'),
+          type: record.get('type'),
+          entityType: record.get('entityType'),
+          title: record.get('title'),
+          description: record.get('description'),
+          matchedProperty: record.get('matchedProperty'),
+          matchedValue: record.get('matchedValue'),
+          createdAt: record.get('createdAt'),
+          updatedAt: record.get('updatedAt'),
+          projectId: record.get('projectId'),
+          projectName: record.get('projectName'),
+          score: score
+        };
+      });
     } catch (error) {
       logger.error('Error searching knowledge items', { error, searchValue, property });
       throw error;
@@ -514,18 +533,24 @@ export class SearchService {
               ...(taskType ? { taskType } : {}) 
             });
             
-            const items = result.records.map(record => ({
-              id: record.get('id'),
-              type: record.get('type'),
-              entityType: record.get('entityType'),
-              title: record.get('title'),
-              description: record.get('description'),
-              matchedProperty: record.get('matchedProperty'),
-              matchedValue: record.get('matchedValue'),
-              createdAt: record.get('createdAt'),
-              updatedAt: record.get('updatedAt'),
-              score: record.get('adjustedScore')
-            }));
+            const items = result.records.map(record => {
+              const scoreValue = record.get('adjustedScore');
+              const score = typeof scoreValue === 'number' ? scoreValue : 
+                          scoreValue && typeof scoreValue.toNumber === 'function' ? scoreValue.toNumber() : 5;
+              
+              return {
+                id: record.get('id'),
+                type: record.get('type'),
+                entityType: record.get('entityType'),
+                title: record.get('title'),
+                description: record.get('description'),
+                matchedProperty: record.get('matchedProperty'),
+                matchedValue: record.get('matchedValue'),
+                createdAt: record.get('createdAt'),
+                updatedAt: record.get('updatedAt'),
+                score: score
+              };
+            });
             
             searchResults.push(...items);
           })
@@ -564,20 +589,26 @@ export class SearchService {
               ...(taskType ? { taskType } : {}) 
             });
             
-            const items = result.records.map(record => ({
-              id: record.get('id'),
-              type: record.get('type'),
-              entityType: record.get('entityType'),
-              title: record.get('title'),
-              description: record.get('description'),
-              matchedProperty: record.get('matchedProperty'),
-              matchedValue: record.get('matchedValue'),
-              createdAt: record.get('createdAt'),
-              updatedAt: record.get('updatedAt'),
-              projectId: record.get('projectId'),
-              projectName: record.get('projectName'),
-              score: record.get('adjustedScore')
-            }));
+            const items = result.records.map(record => {
+              const scoreValue = record.get('adjustedScore');
+              const score = typeof scoreValue === 'number' ? scoreValue : 
+                          scoreValue && typeof scoreValue.toNumber === 'function' ? scoreValue.toNumber() : 5;
+              
+              return {
+                id: record.get('id'),
+                type: record.get('type'),
+                entityType: record.get('entityType'),
+                title: record.get('title'),
+                description: record.get('description'),
+                matchedProperty: record.get('matchedProperty'),
+                matchedValue: record.get('matchedValue'),
+                createdAt: record.get('createdAt'),
+                updatedAt: record.get('updatedAt'),
+                projectId: record.get('projectId'),
+                projectName: record.get('projectName'),
+                score: score
+              };
+            });
             
             searchResults.push(...items);
           })
@@ -595,8 +626,9 @@ export class SearchService {
             'knowledge' AS type,
             k.domain AS entityType,
             CASE 
-              WHEN length(k.text) <= 50 THEN k.text
-              ELSE substring(k.text, 0, 50) + '...'
+              WHEN k.text IS NULL THEN 'Untitled Knowledge'
+              WHEN size(toString(k.text)) <= 50 THEN toString(k.text)
+              ELSE substring(toString(k.text), 0, 50) + '...'
             END AS title,
             k.text AS description,
             'text' AS matchedProperty,
@@ -612,20 +644,26 @@ export class SearchService {
           session.executeRead(async (tx) => {
             const result = await tx.run(query, { searchValue });
             
-            const items = result.records.map(record => ({
-              id: record.get('id'),
-              type: record.get('type'),
-              entityType: record.get('entityType'),
-              title: record.get('title'),
-              description: record.get('description'),
-              matchedProperty: record.get('matchedProperty'),
-              matchedValue: record.get('matchedValue'),
-              createdAt: record.get('createdAt'),
-              updatedAt: record.get('updatedAt'),
-              projectId: record.get('projectId'),
-              projectName: record.get('projectName'),
-              score: record.get('adjustedScore')
-            }));
+            const items = result.records.map(record => {
+              const scoreValue = record.get('adjustedScore');
+              const score = typeof scoreValue === 'number' ? scoreValue : 
+                          scoreValue && typeof scoreValue.toNumber === 'function' ? scoreValue.toNumber() : 5;
+              
+              return {
+                id: record.get('id'),
+                type: record.get('type'),
+                entityType: record.get('entityType'),
+                title: record.get('title'),
+                description: record.get('description'),
+                matchedProperty: record.get('matchedProperty'),
+                matchedValue: record.get('matchedValue'),
+                createdAt: record.get('createdAt'),
+                updatedAt: record.get('updatedAt'),
+                projectId: record.get('projectId'),
+                projectName: record.get('projectName'),
+                score: score
+              };
+            });
             
             searchResults.push(...items);
           })
