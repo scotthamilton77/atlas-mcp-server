@@ -295,11 +295,8 @@ export class KnowledgeService {
       
       // Handle tags filtering
       if (options.tags && options.tags.length > 0) {
-        const { cypher, params: tagParams } = Neo4jUtils.generateArrayParamQuery('tags', options.tags);
-        if (cypher) {
-          conditions.push(cypher);
-          Object.assign(params, tagParams);
-        }
+        params.tagsList = options.tags;
+        conditions.push('ANY(tag IN $tagsList WHERE tag IN k.tags)');
       }
       
       // Handle text search
