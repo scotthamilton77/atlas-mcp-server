@@ -19,26 +19,12 @@ ATLAS (Adaptive Task & Logic Automation System) is a Model Context Protocol serv
 ## Table of Contents
 
 - [Overview](#overview)
-  - [Core Components](#core-components)
-  - [System Integration](#system-integration)
 - [Features](#features)
-  - [Project Management](#project-management)
-  - [Task Management](#task-management)
-  - [Knowledge Management](#knowledge-management)
-  - [Graph Database Integration](#graph-database-integration)
-  - [Unified Search](#unified-search)
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [Project Structure](#project-structure)
 - [Tools](#tools)
-  - [Project Operations](#project-operations)
-  - [Task Operations](#task-operations)
-  - [Knowledge Operations](#knowledge-operations)
-  - [Search Operations](#search-operations)
-  - [Database Operations](#database-operations)
 - [Resources](#resources)
-  - [Direct Resources](#direct-resources)
-  - [Resource Templates](#resource-templates)
 - [Database Backup and Restore](#database-backup-and-restore)
 - [Contributing](#contributing)
 - [License](#license)
@@ -53,39 +39,67 @@ ATLAS implements the Model Context Protocol (MCP), enabling standardized communi
 
 ### Core Components
 
-**Projects** are the highest-level organizational units in the Atlas Platform that represent complete initiatives with defined goals, timelines, and deliverables. Each project:
+**Projects** are the highest-level organizational units in the Atlas Platform that represent complete initiatives with defined goals, timelines, and deliverables.
 
-- Provides context and structure for all related work
-- Serves as a container for tasks and knowledge
-- Has specific completion requirements
-- Can depend on other projects, enabling complex workflow hierarchies
+```mermaid
+graph TD
+    Project[Project] --> Context["Context & Structure"]
+    Project --> Container["Container for Tasks & Knowledge"]
+    Project --> Completion["Completion Requirements"]
+    Project --> Dependencies["Project Dependencies"]
+    
+    Container --> Tasks["Tasks"]
+    Container --> Knowledge["Knowledge Items"]
+    Dependencies --> ProjectDep["Project ↔ Project Dependencies"]
+    Dependencies --> Workflow["Complex Workflow Hierarchies"]
+    
+    style Project fill:#2196F3,stroke:#1976D2,color:white
+    style Container fill:#4CAF50,stroke:#388E3C,color:white
+    style Dependencies fill:#9C27B0,stroke:#7B1FA2,color:white
+    style Completion fill:#FF9800,stroke:#F57C00,color:white
+```
 
-**Tasks** are discrete units of work that contribute to project completion, representing specific actions, assignments, or deliverables. Tasks:
+**Tasks** are discrete units of work that contribute to project completion, representing specific actions, assignments, or deliverables.
 
 ```mermaid
 graph TD
     Project[Project] --> Task[Task]
-    
+
     Task --> Lifecycle["Lifecycle: backlog → todo → in_progress → completed"]
     Task --> Assignment["Assignment & Prioritization"]
     Task --> Categories["Categorization & Tags"]
     Task --> Dependencies["Dependency Relationships"]
-    
+
     Assignment --> Priority["Priority Levels: low, medium, high, critical"]
     Assignment --> Assignee["Assigned to User/Agent"]
     Dependencies --> TaskDep["Task ↔ Task Dependencies"]
-    
+
     style Task fill:#4CAF50,stroke:#388E3C,color:white
     style Project fill:#2196F3,stroke:#1976D2,color:white
     style Lifecycle fill:#FF9800,stroke:#F57C00,color:white
     style Dependencies fill:#9C27B0,stroke:#7B1FA2,color:white
 ```
 
-**Knowledge** represents information assets associated with projects, including research findings, documentation, references, or any valuable information. Knowledge items:
+**Knowledge** represents information assets associated with projects, including research findings, documentation, references, or any valuable information.
 
-- Are tagged and categorized by domain
-- Can include citations to external sources
-- Create a searchable repository of project-related information
+```mermaid
+graph TD
+    Project[Project] --> Knowledge[Knowledge]
+
+    Knowledge --> Domain["Domain Categorization"]
+    Knowledge --> Citations["Citations & References"]
+    Knowledge --> Repository["Searchable Repository"]
+    
+    Domain --> Categories["Technical, Business, Scientific, etc."]
+    Domain --> Tags["Custom Tags & Labels"]
+    Citations --> Sources["External Sources"]
+    Repository --> Search["Content-based Search"]
+    
+    style Knowledge fill:#FF5722,stroke:#E64A19,color:white
+    style Project fill:#2196F3,stroke:#1976D2,color:white
+    style Domain fill:#4CAF50,stroke:#388E3C,color:white
+    style Citations fill:#9C27B0,stroke:#7B1FA2,color:white
+```
 
 ### System Integration
 
