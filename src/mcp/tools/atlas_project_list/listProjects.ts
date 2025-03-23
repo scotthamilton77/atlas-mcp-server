@@ -83,13 +83,35 @@ export async function listProjects(request: ProjectListRequest): Promise<Project
             limit: 100 // Reasonable threshold for associated resources
           });
 
-          project.knowledge = knowledgeResult.data.map(item => ({
-            id: item.id,
-            text: item.text,
-            tags: item.tags,
-            domain: item.domain,
-            createdAt: item.createdAt
-          }));
+          // Add debug logging
+          logger.info('Knowledge items retrieved', { 
+            projectId: project.properties.id,
+            count: knowledgeResult.data.length,
+            firstItem: knowledgeResult.data[0] ? JSON.stringify(knowledgeResult.data[0]) : 'none'
+          });
+
+          // Handle raw Neo4j record structure which includes properties field
+          project.knowledge = knowledgeResult.data.map(item => {
+            // Neo4j records have a properties field containing the actual data
+            // TypeScript doesn't know about this structure since Neo4jKnowledge doesn't include it
+            const rawItem = item as any;
+            const knowledgeProps = rawItem.properties || rawItem;
+            
+            // More explicit mapping with debug info
+            logger.debug('Processing knowledge item', { 
+              id: knowledgeProps.id,
+              domain: knowledgeProps.domain,
+              textLength: knowledgeProps.text ? knowledgeProps.text.length : 0
+            });
+            
+            return {
+              id: knowledgeProps.id,
+              text: knowledgeProps.text,
+              tags: knowledgeProps.tags,
+              domain: knowledgeProps.domain,
+              createdAt: knowledgeProps.createdAt
+            };
+          });
         } else {
           // For list mode, get abbreviated knowledge items
           const knowledgeResult = await KnowledgeService.getKnowledge({
@@ -98,13 +120,21 @@ export async function listProjects(request: ProjectListRequest): Promise<Project
             limit: 5 // Just a few for summary view
           });
 
-          project.knowledge = knowledgeResult.data.map(item => ({
-            id: item.id,
-            text: item.text.length > 100 ? item.text.substring(0, 100) + '...' : item.text,
-            tags: item.tags,
-            domain: item.domain,
-            createdAt: item.createdAt
-          }));
+          project.knowledge = knowledgeResult.data.map(item => {
+            // Neo4j records have a properties field containing the actual data
+            const rawItem = item as any;
+            const knowledgeProps = rawItem.properties || rawItem;
+            
+            return {
+              id: knowledgeProps.id,
+              text: knowledgeProps.text && knowledgeProps.text.length > 100 ? 
+                    knowledgeProps.text.substring(0, 100) + '...' : 
+                    knowledgeProps.text,
+              tags: knowledgeProps.tags,
+              domain: knowledgeProps.domain,
+              createdAt: knowledgeProps.createdAt
+            };
+          });
         }
       }
     }

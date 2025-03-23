@@ -86,12 +86,13 @@ export class ProjectListFormatter implements ResponseFormatter<ProjectListRespon
         projectSection += `\nKnowledge Items (${project.knowledge.length})\n\n`;
         
         projectSection += project.knowledge.map((item, itemIndex) => {
-          return `Knowledge ${itemIndex + 1}. ${item.domain} Knowledge\n\n` +
-            `ID: ${item.id}\n` +
-            `Domain: ${item.domain}\n` +
-            `${item.tags ? `Tags: ${item.tags.join(", ")}\n` : ""}` +
+          // Access item fields directly since they're already extracted in listProjects.ts
+          return `Knowledge ${itemIndex + 1}. ${item.domain || 'Uncategorized'} Knowledge\n\n` +
+            `ID: ${item.id || 'Unknown ID'}\n` +
+            `Domain: ${item.domain || 'Uncategorized'}\n` +
+            `${item.tags && item.tags.length > 0 ? `Tags: ${item.tags.join(", ")}\n` : ""}` +
             `Created: ${item.createdAt ? new Date(item.createdAt).toLocaleString() : 'Unknown Date'}\n\n` +
-            "Content:\n" + item.text;
+            "Content:\n" + (item.text || 'No content available');
         }).join("\n\n");
       }
       
