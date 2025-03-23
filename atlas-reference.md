@@ -494,6 +494,27 @@ interface KnowledgeAddRequest {
 }
 ```
 
+#### `atlas_knowledge_delete`
+
+```typescript
+/**
+ * Deletes existing knowledge item(s) from the system
+ *
+ * @param {KnowledgeDeleteRequest} request - The delete knowledge request parameters
+ * @returns {Promise<KnowledgeDeleteResponse>} Result confirming deletion
+ */
+interface KnowledgeDeleteRequest {
+  /** Operation mode - 'single' for individual removal, 'bulk' for batch operations */
+  mode?: "single" | "bulk";
+
+  /** Knowledge ID to delete (required for mode='single') */
+  id?: string;
+
+  /** Array of knowledge IDs to delete (required for mode='bulk') */
+  knowledgeIds?: string[];
+}
+```
+
 #### `atlas_knowledge_list`
 
 ```typescript
@@ -573,88 +594,92 @@ interface UnifiedSearchRequest {
  * @returns {Promise<DatabaseCleanResponse>} Result confirming database reset
  * @warning This operation permanently removes all data and cannot be undone
  */
-// No parameters (administrative function for complete database reset)
+interface DatabaseCleanRequest {
+  /** Explicit acknowledgement to reset the entire database (must be set to TRUE) */
+  acknowledgement: boolean;
+}
 ```
 
 ### Database Services
 
-#### `backupService`
+#### `BackupService`
+
+The Atlas Platform includes a robust database backup service for Neo4j, implemented in `src/services/neo4j/backupService.ts`. This service provides the following functionality:
 
 ```typescript
 /**
- * Creates a backup of the database
- *
- * @param {BackupServiceRequest} request - The backup request parameters
- * @returns {Promise<BackupServiceResponse>} Result containing backup status
+ * Configuration options for database backup
  */
-interface BackupServiceRequest {
+interface BackupOptions {
   /** Path where the backup file should be stored (required) */
   destinationPath: string;
-
+  
   /** Boolean flag to include project data in backup (Default: true) */
   includeProjects?: boolean;
-
+  
   /** Boolean flag to include task data in backup (Default: true) */
   includeTasks?: boolean;
-
+  
   /** Boolean flag to include knowledge data in backup (Default: true) */
   includeKnowledge?: boolean;
-
+  
   /** Level of compression for the backup file (0-9) */
   compressionLevel?: number;
-
+  
   /** Boolean flag to enable encryption of the backup file (Default: false) */
   encryptBackup?: boolean;
-
+  
   /** Optional parameters for scheduled backups */
   scheduleBackup?: {
     /** How often to run backups */
-    frequency: "daily" | "weekly" | "monthly";
-
+    frequency: 'daily' | 'weekly' | 'monthly';
+    
     /** Number of days to retain backup files */
     retentionPeriod: number;
-
+    
     /** Maximum number of backup files to keep */
     maxBackups: number;
   };
 }
-```
 
-#### `importService`
-
-```typescript
 /**
- * Imports data from a source file
- *
- * @param {ImportServiceRequest} request - The import request parameters
- * @returns {Promise<ImportServiceResponse>} Result containing import status
+ * Result of a backup operation
  */
-interface ImportServiceRequest {
-  /** Path to the source file to import (required) */
-  sourcePath: string;
-
-  /** Format of the import file (required) */
-  sourceFormat: "json" | "csv" | "xml" | "sql";
-
-  /** Type of data being imported (required) */
-  entityType: "project" | "task" | "knowledge" | "all";
-
-  /** Strategy for handling duplicate IDs (required) */
-  conflictResolution: "skip" | "replace" | "merge";
-
-  /** Boolean flag to validate data integrity before importing (Default: true) */
-  validateBeforeImport?: boolean;
-
-  /** Import operation mode (required) */
-  importMode: "append" | "replace";
-
-  /** Boolean flag to simulate import without making changes (Default: false) */
-  dryRun?: boolean;
-
-  /** Optional object mapping source fields to destination fields */
-  mapFields?: Record<string, string>;
+interface BackupResult {
+  /** Operation success status */
+  success: boolean;
+  
+  /** Timestamp of the backup */
+  timestamp: string;
+  
+  /** Backup filename */
+  filename: string;
+  
+  /** Size of the backup file in bytes */
+  size: number;
+  
+  /** Count of entities in the backup */
+  entities: {
+    projects: number;
+    tasks: number;
+    knowledge: number;
+  };
+  
+  /** Error message if operation failed */
+  error?: string;
 }
 ```
+
+Key backup service methods:
+
+- `createBackup(options: BackupOptions)`: Creates a compressed backup of the Neo4j database
+- `verifyBackup(backupPath: string)`: Verifies the integrity of a backup file
+- `listBackups(backupDir: string)`: Lists all available backups in a directory
+
+The backup service automatically handles:
+- Compression of backup data using gzip
+- Scheduled backup rotation based on retention policies
+- Backup verification for integrity checks
 
 ## Neo4j Integration
 
@@ -909,4 +934,3 @@ RETURN p.name AS Project, k.id AS KnowledgeID, k.text AS Content;
 MATCH (p1:Project)-[:DEPENDS_ON]->(p2:Project)
 RETURN p1.name AS Project, p1.status AS Status,
        p2.name AS Dependency, p2.status AS DependencyStatus;
-```
