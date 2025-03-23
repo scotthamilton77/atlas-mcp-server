@@ -9,7 +9,7 @@ export const registerAtlasProjectUpdateTool = (server: McpServer) => {
   registerTool(
     server,
     "atlas_project_update",
-    "Updates existing project(s) in the system",
+    "Modifies attributes of existing project entities within the system",
     AtlasProjectUpdateSchemaShape,
     atlasUpdateProject,
     createToolMetadata({
@@ -17,43 +17,51 @@ export const registerAtlasProjectUpdateTool = (server: McpServer) => {
         createToolExample(
           {
             mode: "single",
-            id: "proj_123abc",
+            id: "proj_ms_migration",
             updates: {
-              name: "Atlas Platform Migration Updated",
-              description: "Updated description for Atlas Platform Migration",
+              name: "Microservice Architecture Migration - Phase 2",
+              description: "Extended refactoring to include data migration layer and enhanced service discovery through etcd integration",
               status: "in-progress"
             }
           },
           `{
-            "id": "proj_123abc",
-            "name": "Atlas Platform Migration Updated",
-            "description": "Updated description for Atlas Platform Migration",
+            "id": "proj_ms_migration",
+            "name": "Microservice Architecture Migration - Phase 2",
+            "description": "Extended refactoring to include data migration layer and enhanced service discovery through etcd integration",
             "status": "in-progress",
-            "urls": [{"title": "Requirements", "url": "https://example.com/requirements"}],
-            "completionRequirements": "All migration tasks completed with validation",
-            "outputFormat": "Functional system with documentation",
+            "urls": [
+              {"title": "Architecture RFC", "url": "https://github.com/company/arch-specs/rfc-2023.md"},
+              {"title": "Technical Spec", "url": "file:///specs/microservice-migration.ts"},
+              {"title": "Service Mesh Docs", "url": "https://istio.io/latest/docs/"}
+            ],
+            "completionRequirements": "All critical services migrated with 100% test coverage, performance metrics meeting SLAs, and zero regressions in core functionality",
+            "outputFormat": "Containerized services with CI/CD pipelines, comprehensive API documentation, and migration runbook",
             "taskType": "integration",
             "createdAt": "2025-03-23T10:11:24.123Z",
             "updatedAt": "2025-03-23T10:12:34.456Z"
           }`,
-          "Update a single project with new name, description, and status"
+          "Update project scope and phase for an ongoing engineering initiative"
         ),
         createToolExample(
           {
             mode: "bulk",
             projects: [
               {
-                id: "proj_123abc",
+                id: "proj_graphql",
                 updates: {
                   status: "completed",
-                  completionRequirements: "Updated completion requirements"
+                  completionRequirements: "API supports all current use cases with n+1 query optimization, proper error handling, and 95% test coverage with performance benchmarks showing 30% reduction in API request times"
                 }
               },
               {
-                id: "proj_456def",
+                id: "proj_perf",
                 updates: {
                   status: "in-progress",
-                  description: "Updated description for the UI redesign"
+                  description: "Extended performance analysis to include bundle size optimization, lazy-loading routes, and server-side rendering for critical pages",
+                  urls: [
+                    {"title": "Lighthouse CI Results", "url": "https://lighthouse-ci.app/dashboard?project=frontend-perf"},
+                    {"title": "Web Vitals Tracking", "url": "https://analytics.google.com/web-vitals"}
+                  ]
                 }
               }
             ]
@@ -63,33 +71,36 @@ export const registerAtlasProjectUpdateTool = (server: McpServer) => {
             "message": "Successfully updated 2 projects",
             "updated": [
               {
-                "id": "proj_123abc",
-                "name": "Data Migration",
-                "description": "Migrate database to new structure",
+                "id": "proj_graphql",
+                "name": "GraphQL API Implementation",
+                "description": "Design and implement GraphQL API layer to replace existing REST endpoints with optimized query capabilities",
                 "status": "completed",
                 "urls": [],
-                "completionRequirements": "Updated completion requirements",
-                "outputFormat": "Verified database",
-                "taskType": "data",
+                "completionRequirements": "API supports all current use cases with n+1 query optimization, proper error handling, and 95% test coverage with performance benchmarks showing 30% reduction in API request times",
+                "outputFormat": "TypeScript-based GraphQL schema with resolvers, documentation, and integration tests",
+                "taskType": "generation",
                 "createdAt": "2025-03-23T10:11:24.123Z",
                 "updatedAt": "2025-03-23T10:12:34.456Z"
               },
               {
-                "id": "proj_456def",
-                "name": "User Interface Redesign",
-                "description": "Updated description for the UI redesign",
+                "id": "proj_perf",
+                "name": "Performance Optimization Suite",
+                "description": "Extended performance analysis to include bundle size optimization, lazy-loading routes, and server-side rendering for critical pages",
                 "status": "in-progress",
-                "urls": [],
-                "completionRequirements": "All screens redesigned and approved",
-                "outputFormat": "Design specifications and prototypes",
-                "taskType": "design",
+                "urls": [
+                  {"title": "Lighthouse CI Results", "url": "https://lighthouse-ci.app/dashboard?project=frontend-perf"},
+                  {"title": "Web Vitals Tracking", "url": "https://analytics.google.com/web-vitals"}
+                ],
+                "completionRequirements": "Core React components meet Web Vitals thresholds with 50% reduction in LCP and TTI metrics",
+                "outputFormat": "Optimized component library, performance test suite, and technical recommendation document",
+                "taskType": "analysis",
                 "createdAt": "2025-03-23T10:11:24.456Z",
                 "updatedAt": "2025-03-23T10:12:34.789Z"
               }
             ],
             "errors": []
           }`,
-          "Update multiple projects in a single operation"
+          "Synchronize project statuses across dependent engineering initiatives"
         )
       ],
       requiredPermission: "project:update",

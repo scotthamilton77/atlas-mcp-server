@@ -12,13 +12,13 @@ export const atlasUpdateProject = async (
   let validatedInput: AtlasProjectUpdateInput | undefined;
   
   try {
-    // Validate and store input
+    // Parse and validate the input against schema
     validatedInput = AtlasProjectUpdateSchema.parse(input);
     
-    // Handle single vs bulk project updates based on mode
+    // Process according to operation mode (single or bulk)
     if (validatedInput.mode === 'bulk') {
-      // Bulk updates
-      logger.info("Updating multiple projects", { 
+      // Execute bulk update operation
+      logger.info("Applying updates to multiple projects", { 
         count: validatedInput.projects.length,
         requestId: context.requestContext?.requestId 
       });
@@ -30,7 +30,7 @@ export const atlasUpdateProject = async (
         errors: [] as any[]
       };
 
-      // Process each project update sequentially
+      // Process each project update sequentially to maintain data consistency
       for (let i = 0; i < validatedInput.projects.length; i++) {
         const projectUpdate = validatedInput.projects[i];
         try {
@@ -69,7 +69,7 @@ export const atlasUpdateProject = async (
         results.message = `Updated ${results.updated.length} of ${validatedInput.projects.length} projects with ${results.errors.length} errors`;
       }
       
-      logger.info("Bulk project update completed", { 
+      logger.info("Bulk project modification completed", { 
         successCount: results.updated.length,
         errorCount: results.errors.length,
         projectIds: results.updated.map(p => p.id),
@@ -80,10 +80,10 @@ export const atlasUpdateProject = async (
       return formatProjectUpdateResponse(results);
 
     } else {
-      // Single project update
+      // Process single project modification
       const { mode, id, updates } = validatedInput;
       
-      logger.info("Updating project", { 
+      logger.info("Modifying project attributes", { 
         id, 
         fields: Object.keys(updates),
         requestId: context.requestContext?.requestId 
@@ -102,7 +102,7 @@ export const atlasUpdateProject = async (
       // Update the project
       const updatedProject = await ProjectService.updateProject(id, updates);
       
-      logger.info("Project updated successfully", { 
+      logger.info("Project modifications applied successfully", { 
         projectId: id,
         requestId: context.requestContext?.requestId 
       });
@@ -116,7 +116,7 @@ export const atlasUpdateProject = async (
       throw error;
     }
 
-    logger.error("Error updating project(s)", { 
+    logger.error("Failed to modify project(s)", { 
       error,
       requestId: context.requestContext?.requestId 
     });
@@ -129,10 +129,10 @@ export const atlasUpdateProject = async (
       );
     }
 
-    // Convert other errors to McpError
+    // Convert generic errors to properly formatted McpError
     throw new McpError(
       BaseErrorCode.INTERNAL_ERROR,
-      `Error updating project(s): ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Failed to modify project(s): ${error instanceof Error ? error.message : 'Unknown error'}`
     );
   }
 };

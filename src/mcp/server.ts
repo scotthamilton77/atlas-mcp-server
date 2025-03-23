@@ -8,9 +8,9 @@ import { configureSecurity } from "../utils/security.js";
 
 // Import tool registrations
 import { registerAtlasProjectCreateTool } from "./tools/atlas_project_create/index.js";
+import { registerAtlasProjectDeleteTool } from "./tools/atlas_project_delete/index.js";
 import { registerAtlasProjectListTool } from "./tools/atlas_project_list/index.js";
 import { registerAtlasProjectUpdateTool } from "./tools/atlas_project_update/index.js";
-import { registerAtlasProjectDeleteTool } from "./tools/atlas_project_delete/index.js";
 
 export const createMcpServer = async () => {
   try {

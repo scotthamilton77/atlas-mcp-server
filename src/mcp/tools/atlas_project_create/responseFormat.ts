@@ -46,7 +46,7 @@ export class SingleProjectFormatter implements ResponseFormatter<SingleProjectRe
       `Type: ${taskType || 'Unknown Type'}\n` +
       `Created: ${createdAt ? new Date(createdAt).toLocaleString() : 'Unknown Date'}\n`;
     
-    // Create a details section with all project properties in plain text format
+    // Create a comprehensive details section with all project properties
     const fieldLabels = {
       id: "ID",
       name: "Name",
@@ -100,7 +100,7 @@ export class BulkProjectFormatter implements ResponseFormatter<BulkProjectRespon
   format(data: BulkProjectResponse): string {
     const { success, message, created, errors } = data;
     
-    // Create a summary section
+    // Create a summary section with operation results
     const summary = `${success ? "Projects Created Successfully" : "Project Creation Completed with Errors"}\n\n` +
       `Status: ${success ? "✅ Success" : "⚠️ Partial Success"}\n` +
       `Summary: ${message}\n` +
@@ -142,11 +142,11 @@ export class BulkProjectFormatter implements ResponseFormatter<BulkProjectRespon
 }
 
 /**
- * Create a formatted response for the atlas_project_create tool
+ * Create a formatted, human-readable response for the atlas_project_create tool
  * 
- * @param data The raw project creation response
- * @param isError Whether this response represents an error
- * @returns Formatted MCP tool response
+ * @param data The raw project creation response data
+ * @param isError Whether this response represents an error condition
+ * @returns Formatted MCP tool response with appropriate structure
  */
 export function formatProjectCreateResponse(data: any, isError = false): any {
   // Determine if this is a single or bulk project response

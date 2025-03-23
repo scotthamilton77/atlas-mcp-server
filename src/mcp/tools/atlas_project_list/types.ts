@@ -2,146 +2,146 @@ import { ProjectStatus } from '../../../types/mcp.js';
 import { Neo4jProject } from '../../../services/neo4j/types.js';
 
 /**
- * Request parameters for listing projects
+ * Query parameters for retrieving and filtering projects
  */
 export interface ProjectListRequest {
-  /** Listing mode - 'all' for paginated list, 'details' for single project */
+  /** Query mode - 'all' for collection retrieval, 'details' for specific entity */
   mode?: 'all' | 'details';
   
-  /** Project ID to retrieve details for (required for mode='details') */
+  /** Target project identifier for detailed retrieval (required for mode='details') */
   id?: string;
   
-  /** Page number for paginated results (Default: 1) */
+  /** Pagination control - page number (Default: 1) */
   page?: number;
   
-  /** Number of results per page, maximum 100 (Default: 20) */
+  /** Pagination control - results per page, max 100 (Default: 20) */
   limit?: number;
   
-  /** Boolean flag to include associated knowledge items (Default: false) */
+  /** Flag to include associated knowledge resources (Default: false) */
   includeKnowledge?: boolean;
   
-  /** Boolean flag to include associated tasks (Default: false) */
+  /** Flag to include associated task entities (Default: false) */
   includeTasks?: boolean;
   
-  /** Filter results by project classification */
+  /** Filter selector for project classification/category */
   taskType?: string;
   
-  /** Filter results by project status */
+  /** Filter selector for project lifecycle state */
   status?: 'active' | 'pending' | 'completed' | 'archived' | ('active' | 'pending' | 'completed' | 'archived')[];
 }
 
 /**
- * Response object for project listing
+ * Response structure for project queries
  */
 export interface ProjectListResponse {
-  /** Array of projects matching the query criteria */
+  /** Collection of projects matching search criteria */
   projects: Project[];
   
-  /** Total number of projects matching the criteria (before pagination) */
+  /** Total record count matching criteria (pre-pagination) */
   total: number;
   
-  /** Current page number */
+  /** Current pagination position */
   page: number;
   
-  /** Number of items per page */
+  /** Pagination size setting */
   limit: number;
   
-  /** Total number of pages */
+  /** Total available pages for the current query */
   totalPages: number;
 }
 
 /**
- * Project object returned in responses
+ * Project entity structure for API responses
  */
 export interface Project {
-  /** Node identity */
+  /** Neo4j internal node identifier */
   identity: number;
   
-  /** Node labels */
+  /** Neo4j node type designations */
   labels: string[];
   
-  /** Project properties */
+  /** Core project attributes */
   properties: {
-    /** Unique project ID */
+    /** Unique project identifier */
     id: string;
     
-    /** Project name */
+    /** Project title */
     name: string;
     
-    /** Project description */
+    /** Project scope and objectives */
     description: string;
     
-    /** Current project state */
+    /** Current lifecycle state */
     status: string;
     
-    /** Project classification */
+    /** Project classification category */
     taskType: string;
     
-    /** Completion criteria */
+    /** Success criteria and definition of done */
     completionRequirements: string;
     
-    /** Output format */
+    /** Expected deliverable specification */
     outputFormat: string;
     
-    /** ISO timestamp when the project was created */
+    /** Creation timestamp (ISO format) */
     createdAt: string;
     
-    /** ISO timestamp when the project was last updated */
+    /** Last modification timestamp (ISO format) */
     updatedAt: string;
     
-    /** URLs as JSON string */
+    /** Reference materials (serialized or array) */
     urls: string | any[];
   };
   
-  /** Element ID in Neo4j */
+  /** Neo4j element identifier */
   elementId: string;
   
-  /** Parsed URLs */
+  /** Parsed reference materials with titles */
   urls: Array<{ title: string, url: string }>;
   
-  /** Knowledge items associated with this project (if requested) */
+  /** Associated knowledge resources (conditional inclusion) */
   knowledge?: Knowledge[];
   
-  /** Tasks associated with this project (if requested) */
+  /** Associated task entities (conditional inclusion) */
   tasks?: Task[];
 }
 
 /**
- * Knowledge object for abbreviated results
+ * Knowledge resource model for abbreviated references
  */
 export interface Knowledge {
-  /** Unique identifier for the knowledge item */
+  /** Unique knowledge resource identifier */
   id: string;
   
-  /** Main content of the knowledge item */
+  /** Knowledge content */
   text: string;
   
-  /** Categorical labels for organization and filtering */
+  /** Taxonomic classification labels */
   tags?: string[];
   
-  /** Primary knowledge domain */
+  /** Primary knowledge domain/category */
   domain: string;
   
-  /** ISO timestamp when the knowledge item was created */
+  /** Resource creation timestamp (ISO format) */
   createdAt: string;
 }
 
 /**
- * Task object for abbreviated results
+ * Task entity model for abbreviated references
  */
 export interface Task {
-  /** Unique identifier for the task */
+  /** Unique task identifier */
   id: string;
   
-  /** Concise task title */
+  /** Task description */
   title: string;
   
-  /** Current task state */
+  /** Current workflow state */
   status: string;
   
-  /** Importance level */
+  /** Task importance classification */
   priority: string;
   
-  /** ISO timestamp when the task was created */
+  /** Task creation timestamp (ISO format) */
   createdAt: string;
 }

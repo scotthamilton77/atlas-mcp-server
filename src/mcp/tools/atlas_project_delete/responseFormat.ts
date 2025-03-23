@@ -27,11 +27,11 @@ interface BulkProjectDeleteResponse {
 }
 
 /**
- * Formatter for single project deletion responses
+ * Formatter for individual project removal responses
  */
 export class SingleProjectDeleteFormatter implements ResponseFormatter<SingleProjectDeleteResponse> {
   format(data: SingleProjectDeleteResponse): string {
-    return `Project Deletion\n\n` +
+    return `Project Removal\n\n` +
       `Result: ${data.success ? '✅ Success' : '❌ Failed'}\n` +
       `Project ID: ${data.id}\n` +
       `Message: ${data.message}\n`;
@@ -39,34 +39,34 @@ export class SingleProjectDeleteFormatter implements ResponseFormatter<SinglePro
 }
 
 /**
- * Formatter for bulk project deletion responses
+ * Formatter for batch project removal responses
  */
 export class BulkProjectDeleteFormatter implements ResponseFormatter<BulkProjectDeleteResponse> {
   format(data: BulkProjectDeleteResponse): string {
     const { success, message, deleted, errors } = data;
     
-    // Create a summary section
-    const summary = `Project Deletion\n\n` +
-      `Status: ${success ? '✅ Success' : '⚠️ Partial Success'}\n` +
+    // Create a structured operation summary
+    const summary = `Project Cleanup Operation\n\n` +
+      `Status: ${success ? '✅ Complete Success' : '⚠️ Partial Success'}\n` +
       `Summary: ${message}\n` +
-      `Deleted: ${deleted.length} project(s)\n` +
+      `Removed: ${deleted.length} project(s)\n` +
       `Errors: ${errors.length} error(s)\n`;
     
-    // List the successfully deleted projects
+    // List successfully processed entities
     let deletedSection = "";
     if (deleted.length > 0) {
-      deletedSection = `Deleted Projects\n\n`;
-      deletedSection += `The following project IDs were successfully deleted:\n\n`;
+      deletedSection = `Removed Projects\n\n`;
+      deletedSection += `The following project identifiers were successfully removed:\n\n`;
       deletedSection += deleted.map(id => `${id}`).join('\n');
     }
     
-    // List any errors that occurred
+    // List operations that encountered errors
     let errorsSection = "";
     if (errors.length > 0) {
-      errorsSection = `Errors\n\n`;
+      errorsSection = `Operation Errors\n\n`;
       
       errorsSection += errors.map((error, index) => {
-        return `${index + 1}. Error deleting project ${error.projectId}\n\n` +
+        return `${index + 1}. Failed to remove project ${error.projectId}\n\n` +
           `Error Code: ${error.error.code}\n` +
           `Message: ${error.error.message}\n` +
           (error.error.details ? `Details: ${JSON.stringify(error.error.details)}\n` : "");
@@ -78,11 +78,11 @@ export class BulkProjectDeleteFormatter implements ResponseFormatter<BulkProject
 }
 
 /**
- * Create a formatted response for the atlas_project_delete tool
+ * Create a human-readable formatted response for the atlas_project_delete tool
  * 
- * @param data The raw project deletion response
- * @param isError Whether this response represents an error
- * @returns Formatted MCP tool response
+ * @param data The structured project removal operation results
+ * @param isError Whether this response represents an error condition
+ * @returns Formatted MCP tool response with appropriate structure
  */
 export function formatProjectDeleteResponse(data: any, isError = false): any {
   // Determine if this is a single or bulk project response

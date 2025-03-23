@@ -15,7 +15,7 @@ export function registerAtlasProjectListTool(server: McpServer): void {
   registerTool(
     server,
     "atlas_project_list",
-    "Lists projects according to specified filters",
+    "Retrieves and filters project entities based on specified criteria",
     {
       mode: z.enum(['all', 'details']).optional().default('all')
         .describe('Listing mode - "all" for paginated list, "details" for single project'),
@@ -54,26 +54,32 @@ export function registerAtlasProjectListTool(server: McpServer): void {
           `{
             "projects": [
               {
-                "id": "proj_123abc",
-                "name": "Atlas Platform Migration",
-                "description": "Migrate existing system to Atlas Platform",
+                "id": "proj_ms_migration",
+                "name": "Microservice Architecture Migration",
+                "description": "Refactor monolithic application into scalable microservices architecture with distributed data stores and API gateway",
                 "status": "active",
-                "urls": [{"title": "Requirements", "url": "https://example.com/requirements"}],
-                "completionRequirements": "All migration tasks completed with validation",
-                "outputFormat": "Functional system with documentation",
+                "urls": [
+                  {"title": "Architecture RFC", "url": "https://github.com/company/arch-specs/rfc-2023.md"}, 
+                  {"title": "Technical Spec", "url": "file:///specs/microservice-migration.ts"}
+                ],
+                "completionRequirements": "All critical services migrated with 100% test coverage, performance metrics meeting SLAs, and zero regressions in core functionality",
+                "outputFormat": "Containerized services with CI/CD pipelines, comprehensive API documentation, and migration runbook",
                 "taskType": "integration",
                 "createdAt": "2025-03-23T10:11:24.123Z",
                 "updatedAt": "2025-03-23T10:11:24.123Z"
               },
               {
-                "id": "proj_456def",
-                "name": "User Interface Redesign",
-                "description": "Redesign the application UI",
-                "status": "pending",
-                "urls": [],
-                "completionRequirements": "All screens redesigned and approved",
-                "outputFormat": "Design specifications and prototypes",
-                "taskType": "design",
+                "id": "proj_graphql",
+                "name": "GraphQL API Implementation",
+                "description": "Design and implement GraphQL API layer to replace existing REST endpoints with optimized query capabilities",
+                "status": "in-progress",
+                "urls": [
+                  {"title": "GraphQL Schema Design", "url": "https://github.com/company/api-specs/graphql-schema.graphql"},
+                  {"title": "Apollo Server Config", "url": "file:///specs/apollo-config.ts"}
+                ],
+                "completionRequirements": "API supports all current use cases with n+1 query optimization, proper error handling, and 95% test coverage",
+                "outputFormat": "TypeScript-based GraphQL schema with resolvers, documentation, and integration tests",
+                "taskType": "generation",
                 "createdAt": "2025-03-23T10:11:24.456Z",
                 "updatedAt": "2025-03-23T10:11:24.456Z"
               }
@@ -83,44 +89,62 @@ export function registerAtlasProjectListTool(server: McpServer): void {
             "limit": 5,
             "totalPages": 1
           }`,
-          "List all projects with pagination"
+          "Retrieve project portfolio with pagination controls"
         ),
         createToolExample(
           {
             mode: "details",
-            id: "proj_123abc",
+            id: "proj_ms_migration",
             includeTasks: true,
             includeKnowledge: true
           },
           `{
             "projects": [
               {
-                "id": "proj_123abc",
-                "name": "Atlas Platform Migration",
-                "description": "Migrate existing system to Atlas Platform",
+                "id": "proj_ms_migration",
+                "name": "Microservice Architecture Migration",
+                "description": "Refactor monolithic application into scalable microservices architecture with distributed data stores and API gateway",
                 "status": "active",
-                "urls": [{"title": "Requirements", "url": "https://example.com/requirements"}],
-                "completionRequirements": "All migration tasks completed with validation",
-                "outputFormat": "Functional system with documentation",
+                "urls": [
+                  {"title": "Architecture RFC", "url": "https://github.com/company/arch-specs/rfc-2023.md"}, 
+                  {"title": "Technical Spec", "url": "file:///specs/microservice-migration.ts"},
+                  {"title": "Service Mesh Docs", "url": "https://istio.io/latest/docs/"}
+                ],
+                "completionRequirements": "All critical services migrated with 100% test coverage, performance metrics meeting SLAs, and zero regressions in core functionality",
+                "outputFormat": "Containerized services with CI/CD pipelines, comprehensive API documentation, and migration runbook",
                 "taskType": "integration",
                 "createdAt": "2025-03-23T10:11:24.123Z",
                 "updatedAt": "2025-03-23T10:11:24.123Z",
                 "tasks": [
                   {
-                    "id": "task_123",
-                    "title": "Database Schema Migration",
+                    "id": "task_auth_svc",
+                    "title": "Authentication Service Extraction",
                     "status": "in_progress",
-                    "priority": "high",
+                    "priority": "critical",
                     "createdAt": "2025-03-23T10:15:32.123Z"
+                  },
+                  {
+                    "id": "task_api_gateway",
+                    "title": "API Gateway Implementation with Kong",
+                    "status": "todo",
+                    "priority": "high",
+                    "createdAt": "2025-03-23T10:17:45.123Z"
                   }
                 ],
                 "knowledge": [
                   {
-                    "id": "know_456",
-                    "text": "Migration requires special handling for legacy data formats",
-                    "tags": ["migration", "legacy"],
+                    "id": "know_saga_pattern",
+                    "text": "Distributed transactions must use Saga pattern with compensating actions to maintain data integrity across services",
+                    "tags": ["architecture", "data-integrity", "patterns"],
                     "domain": "technical",
                     "createdAt": "2025-03-23T11:22:14.789Z"
+                  },
+                  {
+                    "id": "know_rate_limiting",
+                    "text": "Rate limiting should be implemented at the API Gateway level using Redis-based token bucket algorithm",
+                    "tags": ["api-gateway", "performance", "security"],
+                    "domain": "technical",
+                    "createdAt": "2025-03-23T12:34:27.456Z"
                   }
                 ]
               }
@@ -130,35 +154,53 @@ export function registerAtlasProjectListTool(server: McpServer): void {
             "limit": 20,
             "totalPages": 1
           }`,
-          "Get detailed project information with associated tasks and knowledge"
+          "Retrieve comprehensive project details with associated tasks and technical knowledge"
         ),
         createToolExample(
           {
             mode: "all",
-            status: "active",
-            taskType: "integration"
+            status: ["active", "in-progress"],
+            taskType: "analysis"
           },
           `{
             "projects": [
               {
-                "id": "proj_123abc",
-                "name": "Atlas Platform Migration",
-                "description": "Migrate existing system to Atlas Platform",
+                "id": "proj_perf",
+                "name": "Performance Optimization Suite",
+                "description": "Identify and resolve frontend rendering bottlenecks in React application through profiling and optimization techniques",
                 "status": "active",
-                "urls": [{"title": "Requirements", "url": "https://example.com/requirements"}],
-                "completionRequirements": "All migration tasks completed with validation",
-                "outputFormat": "Functional system with documentation",
-                "taskType": "integration",
+                "urls": [
+                  {"title": "Lighthouse CI Results", "url": "https://lighthouse-ci.app/dashboard?project=frontend-perf"},
+                  {"title": "Web Vitals Tracking", "url": "https://analytics.google.com/web-vitals"}
+                ],
+                "completionRequirements": "Core React components meet Web Vitals thresholds with 50% reduction in LCP and TTI metrics",
+                "outputFormat": "Optimized component library, performance test suite, and technical recommendation document",
+                "taskType": "analysis",
                 "createdAt": "2025-03-23T10:11:24.123Z",
                 "updatedAt": "2025-03-23T10:11:24.123Z"
+              },
+              {
+                "id": "proj_security",
+                "name": "Security Vulnerability Assessment",
+                "description": "Comprehensive security analysis of authentication flow and data storage with OWASP compliance verification",
+                "status": "in-progress",
+                "urls": [
+                  {"title": "OWASP Top 10", "url": "https://owasp.org/Top10/"},
+                  {"title": "Security Checklist", "url": "file:///security/assessment-checklist.md"}
+                ],
+                "completionRequirements": "All high and critical vulnerabilities resolved, compliance with OWASP Top 10, and security test coverage exceeding 90%",
+                "outputFormat": "Security report with remediation steps, updated authentication flow, and automated security test suite",
+                "taskType": "analysis",
+                "createdAt": "2025-03-24T09:34:12.789Z",
+                "updatedAt": "2025-03-24T09:34:12.789Z"
               }
             ],
-            "total": 1,
+            "total": 2,
             "page": 1,
             "limit": 20,
             "totalPages": 1
           }`,
-          "Filter projects by status and type"
+          "Query projects by lifecycle state and classification type"
         )
       ],
       requiredPermission: "project:read",

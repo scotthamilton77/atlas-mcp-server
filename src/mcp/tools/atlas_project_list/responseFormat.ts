@@ -2,25 +2,25 @@ import { ResponseFormatter, createFormattedResponse } from "../../../utils/respo
 import { Project, ProjectListResponse } from "./types.js";
 
 /**
- * Formatter for project list responses
+ * Formatter for structured project query responses
  */
 export class ProjectListFormatter implements ResponseFormatter<ProjectListResponse> {
   format(data: ProjectListResponse): string {
     const { projects, total, page, limit, totalPages } = data;
     
-    // Create a summary section
-    const summary = `Project List\n\n` +
-      `Total Projects: ${total}\n` +
+    // Generate result summary section
+    const summary = `Project Portfolio\n\n` +
+      `Total Entities: ${total}\n` +
       `Page: ${page} of ${totalPages}\n` +
-      `Showing: ${Math.min(limit, projects.length)} project(s) per page\n`;
+      `Displaying: ${Math.min(limit, projects.length)} project(s) per page\n`;
     
     if (projects.length === 0) {
-      return `${summary}\n\nNo projects found matching the criteria`;
+      return `${summary}\n\nNo project entities matched the specified criteria`;
     }
     
     // Format each project
     const projectsSections = projects.map((project, index) => {
-      // Extract project properties from Neo4j structure
+      // Extract project properties from Neo4j entity structure
       const projectData = project.properties || project;
       const { name, id, status, taskType, createdAt } = projectData;
       
@@ -98,12 +98,12 @@ export class ProjectListFormatter implements ResponseFormatter<ProjectListRespon
       return projectSection;
     }).join("\n\n----------\n\n");
     
-    // Add pagination info if more than one page
+    // Append pagination metadata for multi-page results
     let paginationInfo = "";
     if (totalPages > 1) {
-      paginationInfo = `\n\nPagination\n\n` +
-        `Showing page ${page} of ${totalPages}.\n` +
-        `${page < totalPages ? "Use 'page' parameter to view more results." : ""}`;
+      paginationInfo = `\n\nPagination Controls\n\n` +
+        `Viewing page ${page} of ${totalPages}.\n` +
+        `${page < totalPages ? "Use 'page' parameter to navigate to additional results." : ""}`;
     }
     
     return `${summary}\n\n${projectsSections}${paginationInfo}`;
@@ -111,11 +111,11 @@ export class ProjectListFormatter implements ResponseFormatter<ProjectListRespon
 }
 
 /**
- * Create a formatted response for the atlas_project_list tool
+ * Create a human-readable formatted response for the atlas_project_list tool
  * 
- * @param data The raw project list response
- * @param isError Whether this response represents an error
- * @returns Formatted MCP tool response
+ * @param data The structured project query response data
+ * @param isError Whether this response represents an error condition
+ * @returns Formatted MCP tool response with appropriate structure
  */
 export function formatProjectListResponse(data: any, isError = false): any {
   return createFormattedResponse(data, new ProjectListFormatter(), isError);

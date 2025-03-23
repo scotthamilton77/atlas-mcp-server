@@ -12,13 +12,13 @@ export const atlasCreateProject = async (
   let validatedInput: AtlasProjectCreateInput | undefined;
   
   try {
-    // Validate and store input
+    // Parse and validate input against schema
     validatedInput = AtlasProjectCreateSchema.parse(input);
     
     // Handle single vs bulk project creation based on mode
     if (validatedInput.mode === 'bulk') {
-      // Bulk creation
-      logger.info("Creating multiple projects", { 
+      // Execute bulk creation operation
+      logger.info("Initializing multiple projects", { 
         count: validatedInput.projects.length,
         requestId: context.requestContext?.requestId 
       });
@@ -30,7 +30,7 @@ export const atlasCreateProject = async (
         errors: [] as any[]
       };
 
-      // Process each project sequentially
+      // Process each project sequentially to maintain consistency
       for (let i = 0; i < validatedInput.projects.length; i++) {
         const projectData = validatedInput.projects[i];
         try {
@@ -84,7 +84,7 @@ export const atlasCreateProject = async (
         results.message = `Created ${results.created.length} of ${validatedInput.projects.length} projects with ${results.errors.length} errors`;
       }
       
-      logger.info("Bulk project creation completed", { 
+      logger.info("Bulk project initialization completed", { 
         successCount: results.created.length,
         errorCount: results.errors.length,
         projectIds: results.created.map(p => p.id),
@@ -95,10 +95,10 @@ export const atlasCreateProject = async (
       return formatProjectCreateResponse(results);
 
     } else {
-      // Single project creation
+      // Process single project creation
       const { mode, id, name, description, status, urls, completionRequirements, dependencies, outputFormat, taskType } = validatedInput;
       
-      logger.info("Creating new project", { 
+      logger.info("Initializing new project", { 
         name, 
         status,
         requestId: context.requestContext?.requestId 
@@ -135,7 +135,7 @@ export const atlasCreateProject = async (
         }
       }
       
-      logger.info("Project created successfully", { 
+      logger.info("Project initialized successfully", { 
         projectId: project.id,
         requestId: context.requestContext?.requestId 
       });
@@ -149,7 +149,7 @@ export const atlasCreateProject = async (
       throw error;
     }
 
-    logger.error("Error creating project(s)", { 
+    logger.error("Failed to initialize project(s)", { 
       error,
       requestId: context.requestContext?.requestId 
     });

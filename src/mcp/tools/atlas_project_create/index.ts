@@ -9,7 +9,7 @@ export const registerAtlasProjectCreateTool = (server: McpServer) => {
   registerTool(
     server,
     "atlas_project_create",
-    "Creates a new project or multiple projects in the system",
+    "Creates and initializes new projects within the platform ecosystem",
     AtlasProjectCreateSchemaShape,
     atlasCreateProject,
     createToolMetadata({
@@ -17,46 +17,46 @@ export const registerAtlasProjectCreateTool = (server: McpServer) => {
         createToolExample(
           {
             mode: "single",
-            name: "Atlas Platform Migration",
-            description: "Migrate existing system to Atlas Platform",
+            name: "Microservice Architecture Migration",
+            description: "Refactor monolithic application into scalable microservices architecture with distributed data stores and API gateway",
             status: "active",
-            urls: [{title: "Requirements", url: "https://example.com/requirements"}],
-            completionRequirements: "All migration tasks completed with validation",
-            outputFormat: "Functional system with documentation",
+            urls: [{title: "Architecture RFC", url: "https://github.com/company/arch-specs/rfc-2023.md"}, {title: "Technical Spec", url: "file:///specs/microservice-migration.ts"}],
+            completionRequirements: "All critical services migrated with 100% test coverage, performance metrics meeting SLAs, and zero regressions in core functionality",
+            outputFormat: "Containerized services with CI/CD pipelines, comprehensive API documentation, and migration runbook",
             taskType: "integration"
           },
           `{
-            "id": "proj_123abc",
-            "name": "Atlas Platform Migration",
-            "description": "Migrate existing system to Atlas Platform",
+            "id": "proj_ms_migration",
+            "name": "Microservice Architecture Migration",
+            "description": "Refactor monolithic application into scalable microservices architecture with distributed data stores and API gateway",
             "status": "active",
-            "urls": [{"title": "Requirements", "url": "https://example.com/requirements or file://path/to/file"}],
-            "completionRequirements": "All migration tasks completed with validation",
-            "outputFormat": "Functional system with documentation",
+            "urls": [{"title": "Architecture RFC", "url": "https://github.com/company/arch-specs/rfc-2023.md"}, {"title": "Technical Spec", "url": "file:///specs/microservice-migration.ts"}],
+            "completionRequirements": "All critical services migrated with 100% test coverage, performance metrics meeting SLAs, and zero regressions in core functionality",
+            "outputFormat": "Containerized services with CI/CD pipelines, comprehensive API documentation, and migration runbook",
             "taskType": "integration",
             "createdAt": "2025-03-23T10:11:24.123Z",
             "updatedAt": "2025-03-23T10:11:24.123Z"
           }`,
-          "Create a single project with detailed specifications"
+          "Initialize a high-complexity engineering project with detailed technical specifications and success criteria"
         ),
         createToolExample(
           {
             mode: "bulk",
             projects: [
               {
-                name: "Data Migration",
-                description: "Migrate database to new structure",
-                completionRequirements: "All data migrated with validation",
-                outputFormat: "Verified database",
-                taskType: "data"
+                name: "GraphQL API Implementation",
+                description: "Design and implement GraphQL API layer to replace existing REST endpoints with optimized query capabilities",
+                completionRequirements: "API supports all current use cases with n+1 query optimization, proper error handling, and 95% test coverage",
+                outputFormat: "TypeScript-based GraphQL schema with resolvers, documentation, and integration tests",
+                taskType: "generation"
               },
               {
-                name: "User Interface Redesign",
-                description: "Redesign the application UI",
+                name: "Performance Optimization Suite",
+                description: "Identify and resolve frontend rendering bottlenecks in React application through profiling and optimization techniques",
                 status: "pending",
-                completionRequirements: "All screens redesigned and approved",
-                outputFormat: "Design specifications and prototypes",
-                taskType: "design"
+                completionRequirements: "Core React components meet Web Vitals thresholds with 50% reduction in LCP and TTI metrics",
+                outputFormat: "Optimized component library, performance test suite, and technical recommendation document",
+                taskType: "analysis"
               }
             ]
           },
@@ -65,33 +65,33 @@ export const registerAtlasProjectCreateTool = (server: McpServer) => {
             "message": "Successfully created 2 projects",
             "created": [
               {
-                "id": "proj_123abc",
-                "name": "Data Migration",
-                "description": "Migrate database to new structure",
+                "id": "proj_graphql",
+                "name": "GraphQL API Implementation",
+                "description": "Design and implement GraphQL API layer to replace existing REST endpoints with optimized query capabilities",
                 "status": "active",
                 "urls": [],
-                "completionRequirements": "All data migrated with validation",
-                "outputFormat": "Verified database",
-                "taskType": "data",
+                "completionRequirements": "API supports all current use cases with n+1 query optimization, proper error handling, and 95% test coverage",
+                "outputFormat": "TypeScript-based GraphQL schema with resolvers, documentation, and integration tests",
+                "taskType": "generation",
                 "createdAt": "2025-03-23T10:11:24.123Z",
                 "updatedAt": "2025-03-23T10:11:24.123Z"
               },
               {
-                "id": "proj_456def",
-                "name": "User Interface Redesign",
-                "description": "Redesign the application UI",
+                "id": "proj_perf",
+                "name": "Performance Optimization Suite",
+                "description": "Identify and resolve frontend rendering bottlenecks in React application through profiling and optimization techniques",
                 "status": "pending",
                 "urls": [],
-                "completionRequirements": "All screens redesigned and approved",
-                "outputFormat": "Design specifications and prototypes",
-                "taskType": "design",
+                "completionRequirements": "Core React components meet Web Vitals thresholds with 50% reduction in LCP and TTI metrics",
+                "outputFormat": "Optimized component library, performance test suite, and technical recommendation document",
+                "taskType": "analysis",
                 "createdAt": "2025-03-23T10:11:24.456Z",
                 "updatedAt": "2025-03-23T10:11:24.456Z"
               }
             ],
             "errors": []
           }`,
-          "Create multiple projects in a single operation"
+          "Batch-initialize multiple specialized engineering projects with distinct technical requirements"
         )
       ],
       requiredPermission: "project:create",

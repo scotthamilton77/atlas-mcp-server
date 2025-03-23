@@ -12,15 +12,15 @@ export const atlasDeleteProject = async (
   let validatedInput: AtlasProjectDeleteInput | undefined;
   
   try {
-    // Validate and store input
+    // Parse and validate input against schema definition
     validatedInput = AtlasProjectDeleteSchema.parse(input);
     
-    // Handle single vs bulk project deletion based on mode
+    // Select operation strategy based on request mode
     if (validatedInput.mode === 'bulk') {
-      // Bulk deletion
+      // Process bulk removal operation
       const { projectIds } = validatedInput;
       
-      logger.info("Deleting multiple projects", { 
+      logger.info("Initiating batch project removal", { 
         count: projectIds.length,
         projectIds,
         requestId: context.requestContext?.requestId 
@@ -28,7 +28,7 @@ export const atlasDeleteProject = async (
 
       const results = {
         success: true,
-        message: `Successfully deleted ${projectIds.length} projects`,
+        message: `Successfully removed ${projectIds.length} projects`,
         deleted: [] as string[],
         errors: [] as { 
           projectId: string;
@@ -40,7 +40,7 @@ export const atlasDeleteProject = async (
         }[]
       };
 
-      // Process each project deletion sequentially
+      // Process removal operations sequentially to maintain data integrity
       for (const projectId of projectIds) {
         try {
           const deleted = await ProjectService.deleteProject(projectId);
@@ -72,10 +72,10 @@ export const atlasDeleteProject = async (
       }
       
       if (results.errors.length > 0) {
-        results.message = `Deleted ${results.deleted.length} of ${projectIds.length} projects with ${results.errors.length} errors`;
+        results.message = `Removed ${results.deleted.length} of ${projectIds.length} projects with ${results.errors.length} errors`;
       }
       
-      logger.info("Bulk project deletion completed", { 
+      logger.info("Batch removal operation completed", { 
         successCount: results.deleted.length,
         errorCount: results.errors.length,
         requestId: context.requestContext?.requestId 
@@ -85,10 +85,10 @@ export const atlasDeleteProject = async (
       return formatProjectDeleteResponse(results);
 
     } else {
-      // Single project deletion
+      // Process single entity removal
       const { id } = validatedInput;
       
-      logger.info("Deleting project", { 
+      logger.info("Removing project entity", { 
         projectId: id,
         requestId: context.requestContext?.requestId 
       });
@@ -96,28 +96,28 @@ export const atlasDeleteProject = async (
       const deleted = await ProjectService.deleteProject(id);
       
       if (!deleted) {
-        logger.warn("Project not found for deletion", { 
+        logger.warn("Target project not found for removal operation", { 
           projectId: id,
           requestId: context.requestContext?.requestId 
         });
         
         throw new McpError(
           ProjectErrorCode.PROJECT_NOT_FOUND,
-          `Project with ID ${id} not found`,
+          `Project with identifier ${id} not found`,
           { projectId: id }
         );
       }
       
-      logger.info("Project deleted successfully", { 
+      logger.info("Project successfully removed", { 
         projectId: id,
         requestId: context.requestContext?.requestId 
       });
 
-      // Use the formatter to format the response
+      // Return formatted success response
       return formatProjectDeleteResponse({
         id,
         success: true,
-        message: `Project with ID ${id} deleted successfully`
+        message: `Project with ID ${id} removed successfully`
       });
     }
   } catch (error) {
@@ -126,15 +126,15 @@ export const atlasDeleteProject = async (
       throw error;
     }
 
-    logger.error("Error deleting project(s)", { 
+    logger.error("Project removal operation failed", { 
       error,
       requestId: context.requestContext?.requestId 
     });
 
-    // Convert other errors to McpError
+    // Translate unknown errors to structured McpError format
     throw new McpError(
       BaseErrorCode.INTERNAL_ERROR,
-      `Error deleting project(s): ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Failed to remove project(s): ${error instanceof Error ? error.message : 'Unknown error'}`
     );
   }
 };

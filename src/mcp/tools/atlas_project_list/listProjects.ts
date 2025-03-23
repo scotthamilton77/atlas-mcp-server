@@ -9,11 +9,11 @@ import {
 import { Project, ProjectListRequest, ProjectListResponse } from './types.js';
 
 /**
- * List projects according to specified filters
- * Supports both detailed view of a single project and paginated listing of projects
+ * Retrieve and filter project entities based on specified criteria
+ * Provides two query modes: detailed entity retrieval or paginated collection listing
  * 
- * @param request The project list request parameters
- * @returns Promise resolving to the project list response
+ * @param request The project query parameters including filters and pagination controls
+ * @returns Promise resolving to structured project entities with optional related resources
  */
 export async function listProjects(request: ProjectListRequest): Promise<ProjectListResponse> {
   try {
@@ -28,15 +28,15 @@ export async function listProjects(request: ProjectListRequest): Promise<Project
       status
     } = request;
 
-    // Validation
+    // Parameter validation
     if (mode === 'details' && !id) {
       throw new McpError(
         BaseErrorCode.VALIDATION_ERROR,
-        'Project ID is required when using mode="details"'
+        'Project identifier is required when using mode="details"'
       );
     }
 
-    // Enforce pagination limits
+    // Sanitize pagination parameters
     const validatedPage = Math.max(1, page);
     const validatedLimit = Math.min(Math.max(1, limit), 100);
     
@@ -45,13 +45,13 @@ export async function listProjects(request: ProjectListRequest): Promise<Project
     let totalPages = 0;
 
     if (mode === 'details') {
-      // Get single project by ID
+      // Retrieve specific project entity by identifier
       const project = await ProjectService.getProjectById(id!);
       
       if (!project) {
         throw new McpError(
           BaseErrorCode.NOT_FOUND,
-          `Project with ID ${id} not found`
+          `Project with identifier ${id} not found`
         );
       }
 
@@ -72,15 +72,15 @@ export async function listProjects(request: ProjectListRequest): Promise<Project
       totalPages = projectsResult.totalPages;
     }
 
-    // Include associated knowledge items if requested
+    // Process knowledge resource associations if requested
     if (includeKnowledge && projects.length > 0) {
       for (const project of projects) {
         if (mode === 'details') {
-          // For details mode, get complete knowledge items
+          // For detailed view, retrieve comprehensive knowledge resources
           const knowledgeResult = await KnowledgeService.getKnowledge({
             projectId: project.properties.id,
             page: 1,
-            limit: 100 // Reasonable limit for associated items
+            limit: 100 // Reasonable threshold for associated resources
           });
 
           project.knowledge = knowledgeResult.data.map(item => ({
@@ -109,15 +109,15 @@ export async function listProjects(request: ProjectListRequest): Promise<Project
       }
     }
 
-    // Include associated tasks if requested
+    // Process task entity associations if requested
     if (includeTasks && projects.length > 0) {
       for (const project of projects) {
         if (mode === 'details') {
-          // For details mode, get complete task items
+          // For detailed view, retrieve prioritized task entities
           const tasksResult = await TaskService.getTasks({
             projectId: project.properties.id,
             page: 1,
-            limit: 100, // Reasonable limit for associated items
+            limit: 100, // Reasonable threshold for associated entities
             sortBy: 'priority',
             sortDirection: 'desc'
           });
@@ -159,7 +159,7 @@ export async function listProjects(request: ProjectListRequest): Promise<Project
       totalPages
     };
 
-    logger.info('Projects listed successfully', {
+    logger.info('Project query executed successfully', {
       mode,
       count: projects.length,
       total,
@@ -169,7 +169,7 @@ export async function listProjects(request: ProjectListRequest): Promise<Project
 
     return response;
   } catch (error) {
-    logger.error('Error listing projects', { error });
+    logger.error('Project query execution failed', { error });
     
     if (error instanceof McpError) {
       throw error;
@@ -177,7 +177,7 @@ export async function listProjects(request: ProjectListRequest): Promise<Project
     
     throw new McpError(
       BaseErrorCode.INTERNAL_ERROR,
-      `Failed to list projects: ${error instanceof Error ? error.message : String(error)}`
+      `Failed to retrieve project entities: ${error instanceof Error ? error.message : String(error)}`
     );
   }
 }

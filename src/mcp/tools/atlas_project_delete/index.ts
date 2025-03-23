@@ -8,7 +8,7 @@ export const registerAtlasProjectDeleteTool = (server: McpServer) => {
   registerTool(
     server,
     "atlas_project_delete",
-    "Deletes existing project(s) from the system",
+    "Removes project entities and associated resources from the system",
     AtlasProjectDeleteSchemaShape,
     atlasDeleteProject,
     createToolMetadata({
@@ -16,27 +16,27 @@ export const registerAtlasProjectDeleteTool = (server: McpServer) => {
         createToolExample(
           {
             mode: "single",
-            id: "proj_123abc"
+            id: "proj_ms_migration"
           },
           `{
             "success": true,
-            "message": "Project with ID proj_123abc deleted successfully",
-            "id": "proj_123abc"
+            "message": "Project with ID proj_ms_migration deleted successfully",
+            "id": "proj_ms_migration"
           }`,
-          "Delete a single project by ID"
+          "Remove a completed engineering project from the system"
         ),
         createToolExample(
           {
             mode: "bulk",
-            projectIds: ["proj_123abc", "proj_456def"]
+            projectIds: ["proj_graphql", "proj_perf", "proj_deprecated_api"]
           },
           `{
             "success": true,
-            "message": "Successfully deleted 2 projects",
-            "deleted": ["proj_123abc", "proj_456def"],
+            "message": "Successfully deleted 3 projects",
+            "deleted": ["proj_graphql", "proj_perf", "proj_deprecated_api"],
             "errors": []
           }`,
-          "Delete multiple projects in a single operation"
+          "Clean up multiple completed or deprecated projects in a single atomic operation"
         )
       ],
       requiredPermission: "project:delete",

@@ -1,36 +1,36 @@
 import { z } from "zod";
 import { McpToolResponse } from '../../../types/mcp.js';
 
-// Schema for single project deletion
+// Schema for individual project removal
 const SingleProjectSchema = z.object({
   mode: z.literal("single"),
   id: z.string().describe(
-    "Project ID to delete"
+    "Project identifier to permanently remove from the system"
   )
 }).describe(
-  "Delete a single project by ID"
+  "Remove a specific project entity by its unique identifier"
 );
 
-// Schema for bulk project deletion
+// Schema for multi-project cleanup operation
 const BulkProjectSchema = z.object({
   mode: z.literal("bulk"),
   projectIds: z.array(z.string()).min(1).describe(
-    "Array of project IDs to delete"
+    "Collection of project identifiers to remove in a single operation"
   )
 }).describe(
-  "Delete multiple projects by their IDs"
+  "Batch removal of multiple project entities in a single transaction"
 );
 
 // Schema shapes for tool registration
 export const AtlasProjectDeleteSchemaShape = {
   mode: z.enum(["single", "bulk"]).describe(
-    "Operation mode - 'single' for one project, 'bulk' for multiple projects"
+    "Operation strategy - 'single' for individual removal, 'bulk' for batch operations"
   ),
   id: z.string().optional().describe(
-    "Project ID to delete (required for mode='single')"
+    "Target project identifier for removal (required for mode='single')"
   ),
   projectIds: z.array(z.string()).optional().describe(
-    "Array of project IDs to delete (required for mode='bulk')"
+    "Collection of project identifiers to process (required for mode='bulk')"
   )
 } as const;
 

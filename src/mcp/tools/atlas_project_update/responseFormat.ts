@@ -33,7 +33,7 @@ interface BulkProjectResponse {
 }
 
 /**
- * Formatter for single project update responses
+ * Formatter for individual project modification responses
  */
 export class SingleProjectUpdateFormatter implements ResponseFormatter<SingleProjectResponse> {
   format(data: SingleProjectResponse): string {
@@ -41,15 +41,15 @@ export class SingleProjectUpdateFormatter implements ResponseFormatter<SinglePro
     const projectData = data.properties || data;
     const { name, id, status, taskType, updatedAt } = projectData;
     
-    // Create a summary section
-    const summary = `Project Updated Successfully\n\n` +
+    // Create a structured summary section
+    const summary = `Project Modified Successfully\n\n` +
       `Project: ${name || 'Unnamed Project'}\n` +
       `ID: ${id || 'Unknown ID'}\n` +
       `Status: ${status || 'Unknown Status'}\n` +
       `Type: ${taskType || 'Unknown Type'}\n` +
       `Updated: ${updatedAt ? new Date(updatedAt).toLocaleString() : 'Unknown Date'}\n`;
     
-    // Create a details section with all project properties in plain text format
+    // Create a comprehensive details section with all project attributes
     let details = `Project Details\n\n`;
     
     // Add each property with proper formatting
@@ -105,10 +105,10 @@ export class BulkProjectUpdateFormatter implements ResponseFormatter<BulkProject
       `Updated: ${updated.length} project(s)\n` +
       `Errors: ${errors.length} error(s)\n`;
     
-    // List the successfully updated projects
+    // List all successfully modified projects
     let updatedSection = "";
     if (updated.length > 0) {
-      updatedSection = `Updated Projects\n\n`;
+      updatedSection = `Modified Projects\n\n`;
       
       updatedSection += updated.map((project, index) => {
         // Extract project properties from Neo4j structure
@@ -139,11 +139,11 @@ export class BulkProjectUpdateFormatter implements ResponseFormatter<BulkProject
 }
 
 /**
- * Create a formatted response for the atlas_project_update tool
+ * Create a formatted, human-readable response for the atlas_project_update tool
  * 
- * @param data The raw project update response
- * @param isError Whether this response represents an error
- * @returns Formatted MCP tool response
+ * @param data The raw project modification response
+ * @param isError Whether this response represents an error condition
+ * @returns Formatted MCP tool response with appropriate structure
  */
 export function formatProjectUpdateResponse(data: any, isError = false): any {
   // Determine if this is a single or bulk project response
