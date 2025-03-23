@@ -33,7 +33,7 @@ export function createFormattedResponse<T>(
     content: [
       {
         type: "text",
-        text: `\`\`\`markdown\n${formattedDisplay}\n\`\`\``
+        text: formattedDisplay
       }
     ],
     isError,
