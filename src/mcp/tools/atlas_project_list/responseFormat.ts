@@ -5,6 +5,31 @@ import { Project, ProjectListResponse } from "./types.js";
  * Formatter for structured project query responses
  */
 export class ProjectListFormatter implements ResponseFormatter<ProjectListResponse> {
+  /**
+   * Get an emoji indicator for the task status
+   */
+  private getStatusEmoji(status: string): string {
+    switch (status) {
+      case 'backlog': return '📋';
+      case 'todo': return '📝';
+      case 'in_progress': return '🔄';
+      case 'completed': return '✅';
+      default: return '❓';
+    }
+  }
+  
+  /**
+   * Get a visual indicator for the priority level
+   */
+  private getPriorityIndicator(priority: string): string {
+    switch (priority) {
+      case 'critical': return '[!!!]';
+      case 'high': return '[!!]';
+      case 'medium': return '[!]';
+      case 'low': return '[-]';
+      default: return '[?]';
+    }
+  }
   format(data: ProjectListResponse): string {
     const { projects, total, page, limit, totalPages } = data;
     
@@ -73,11 +98,23 @@ export class ProjectListFormatter implements ResponseFormatter<ProjectListRespon
         projectSection += `\nTasks (${project.tasks.length})\n\n`;
         
         projectSection += project.tasks.map((task, taskIndex) => {
-          return `Task ${taskIndex + 1}. ${task.title}\n\n` +
-            `ID: ${task.id}\n` +
-            `Status: ${task.status}\n` +
-            `Priority: ${task.priority}\n` +
-            `Created: ${task.createdAt ? new Date(task.createdAt).toLocaleString() : 'Unknown Date'}\n`;
+          // Ensure we're accessing the task properties correctly
+          const taskTitle = task.title || 'Unnamed Task';
+          const taskId = task.id || 'Unknown ID';
+          const taskStatus = task.status || 'Unknown Status';
+          const taskPriority = task.priority || 'Unknown Priority';
+          const taskCreatedAt = task.createdAt ? new Date(task.createdAt).toLocaleString() : 'Unknown Date';
+          
+          // Get status emoji for the task
+          const statusEmoji = this.getStatusEmoji(taskStatus);
+          // Get priority indicator for the task
+          const priorityIndicator = this.getPriorityIndicator(taskPriority);
+          
+          return `Task ${taskIndex + 1}. ${statusEmoji} ${priorityIndicator} ${taskTitle}\n\n` +
+            `ID: ${taskId}\n` +
+            `Status: ${taskStatus}\n` +
+            `Priority: ${taskPriority}\n` +
+            `Created: ${taskCreatedAt}\n`;
         }).join("\n\n");
       }
       

@@ -127,8 +127,9 @@ export async function listProjects(request: ProjectListRequest): Promise<Project
             
             return {
               id: knowledgeProps.id,
-              text: knowledgeProps.text && knowledgeProps.text.length > 100 ? 
-                    knowledgeProps.text.substring(0, 100) + '...' : 
+              // Show a preview of the text - increased to 200 characters
+              text: knowledgeProps.text && knowledgeProps.text.length > 200 ? 
+                    knowledgeProps.text.substring(0, 200) + '... (truncated)' : 
                     knowledgeProps.text,
               tags: knowledgeProps.tags,
               domain: knowledgeProps.domain,
@@ -152,13 +153,34 @@ export async function listProjects(request: ProjectListRequest): Promise<Project
             sortDirection: 'desc'
           });
 
-          project.tasks = tasksResult.data.map(item => ({
-            id: item.id,
-            title: item.title,
-            status: item.status,
-            priority: item.priority,
-            createdAt: item.createdAt
-          }));
+          // Add debug logging
+          logger.info('Tasks retrieved for project', { 
+            projectId: project.properties.id,
+            count: tasksResult.data.length,
+            firstItem: tasksResult.data[0] ? JSON.stringify(tasksResult.data[0]) : 'none'
+          });
+
+          project.tasks = tasksResult.data.map(item => {
+            // Handle raw Neo4j record structure which includes properties field
+            const rawItem = item as any;
+            const taskProps = rawItem.properties || rawItem;
+            
+            // Debug info
+            logger.debug('Processing task item', { 
+              id: taskProps.id,
+              title: taskProps.title,
+              status: taskProps.status,
+              priority: taskProps.priority
+            });
+
+            return {
+              id: taskProps.id,
+              title: taskProps.title,
+              status: taskProps.status,
+              priority: taskProps.priority,
+              createdAt: taskProps.createdAt
+            };
+          });
         } else {
           // For list mode, get abbreviated task items
           const tasksResult = await TaskService.getTasks({
@@ -168,14 +190,21 @@ export async function listProjects(request: ProjectListRequest): Promise<Project
             sortBy: 'priority',
             sortDirection: 'desc'
           });
-
-          project.tasks = tasksResult.data.map(item => ({
-            id: item.id,
-            title: item.title,
-            status: item.status,
-            priority: item.priority,
-            createdAt: item.createdAt
-          }));
+          
+          // Process task items similarly to detailed view
+          project.tasks = tasksResult.data.map(item => {
+            // Handle raw Neo4j record structure which includes properties field
+            const rawItem = item as any;
+            const taskProps = rawItem.properties || rawItem;
+            
+            return {
+              id: taskProps.id,
+              title: taskProps.title,
+              status: taskProps.status,
+              priority: taskProps.priority,
+              createdAt: taskProps.createdAt
+            };
+          });
         }
       }
     }
