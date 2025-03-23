@@ -1,9 +1,9 @@
 import { ProjectService } from '../../../services/neo4j/projectService.js';
 import { BaseErrorCode, McpError, ProjectErrorCode } from '../../../types/errors.js';
-import { createToolResponse } from '../../../types/mcp.js';
 import { logger } from '../../../utils/logger.js';
 import { ToolContext } from '../../../utils/security.js';
 import { AtlasProjectCreateInput, AtlasProjectCreateSchema } from './types.js';
+import { formatProjectCreateResponse } from './responseFormat.js';
 
 export const atlasCreateProject = async (
   input: unknown,
@@ -91,7 +91,8 @@ export const atlasCreateProject = async (
         requestId: context.requestContext?.requestId 
       });
 
-      return createToolResponse(JSON.stringify(results, null, 2));
+      // Use the formatter instead of createToolResponse
+      return formatProjectCreateResponse(results);
 
     } else {
       // Single project creation
@@ -139,7 +140,8 @@ export const atlasCreateProject = async (
         requestId: context.requestContext?.requestId 
       });
 
-      return createToolResponse(JSON.stringify(project, null, 2));
+      // Use the formatter instead of createToolResponse
+      return formatProjectCreateResponse(project);
     }
   } catch (error) {
     // Handle specific error cases

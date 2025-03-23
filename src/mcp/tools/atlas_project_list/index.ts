@@ -4,6 +4,7 @@ import { ProjectStatus } from '../../../types/mcp.js';
 import { createToolExample, createToolMetadata, registerTool } from '../../../types/tool.js';
 import { listProjects } from './listProjects.js';
 import { ProjectListRequest } from './types.js';
+import { formatProjectListResponse } from './responseFormat.js';
 
 /**
  * Registers the atlas_project_list tool with the MCP server
@@ -40,15 +41,8 @@ export function registerAtlasProjectListTool(server: McpServer): void {
       // Parse and process input
       const result = await listProjects(input as unknown as ProjectListRequest);
       
-      // Return the result as a tool response
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(result, null, 2)
-          }
-        ]
-      };
+      // Return the result using the formatter for rich display
+      return formatProjectListResponse(result);
     },
     createToolMetadata({
       examples: [
