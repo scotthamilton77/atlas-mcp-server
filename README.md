@@ -1,4 +1,4 @@
-# ATLAS MCP Server
+# ATLAS: Task Management System
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
 [![Model Context Protocol](https://img.shields.io/badge/MCP-1.7.0-green.svg)](https://modelcontextprotocol.io/)
@@ -7,7 +7,9 @@
 [![Status](https://img.shields.io/badge/Status-Stable-blue.svg)]()
 [![GitHub](https://img.shields.io/github/stars/cyanheads/atlas-mcp-server?style=social)](https://github.com/cyanheads/atlas-mcp-server)
 
-ATLAS (Adaptive Task & Logic Automation System) is a Model Context Protocol server designed for LLMs to manage complex projects. Built with TypeScript and featuring Neo4j graph database integration, efficient project management, and collaborative features, ATLAS provides LLM Agents project management capabilities through a clean, flexible tool interface.
+ATLAS (Adaptive Task & Logic Automation System) is a task management system that helps organize and track complex projects through a structured approach. Built on a three-tier architecture of Projects, Tasks, and Knowledge, ATLAS makes it easier to manage projects, create tasks with clear organization and dependency tracking, and maintain a knowledge repository for project-related information.
+
+Implemented as a Model Context Protocol (MCP) server, ATLAS allows LLM agents to interact with project management tools, enabling managing projects effectively.
 
 > **Important Version Note**: [Version 1.5.4](https://github.com/cyanheads/atlas-mcp-server/releases/tag/v1.5.4) is the last version that uses SQLite as the database. Version 2.0 and onwards has been completely rewritten to use Neo4j, which requires either:
 >
@@ -280,11 +282,11 @@ ATLAS exposes system resources through standard MCP endpoints:
 
 ### Direct Resources
 
-| Resource            | Description                                                                              |
-| ------------------- | ---------------------------------------------------------------------------------------- |
-| `atlas://projects`  | List of all projects in the Atlas platform with pagination support.                      |
-| `atlas://tasks`     | List of all tasks in the Atlas platform with pagination and filtering support.           |
-| `atlas://knowledge` | List of all knowledge in the Atlas platform with pagination and filtering support.       |
+| Resource            | Description                                                                        |
+| ------------------- | ---------------------------------------------------------------------------------- |
+| `atlas://projects`  | List of all projects in the Atlas platform with pagination support.                |
+| `atlas://tasks`     | List of all tasks in the Atlas platform with pagination and filtering support.     |
+| `atlas://knowledge` | List of all knowledge in the Atlas platform with pagination and filtering support. |
 
 ### Resource Templates
 
