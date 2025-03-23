@@ -24,7 +24,7 @@ export const ProjectSchema = z.object({
       url: z.string()
     })
   ).optional().describe(
-    "Links to relevant documentation, specifications, and resources (e.g., 'https://example.com' or 'file://path/to/file.ts')"
+    "Links to relevant documentation, specifications, and resources (e.g., 'https://example.com' or 'file://path/to/index.ts')"
   ),
   completionRequirements: z.string().describe(
     "Clear definition of done with measurable success criteria"
@@ -35,7 +35,7 @@ export const ProjectSchema = z.object({
   outputFormat: z.string().describe(
     "Required format and structure for project deliverables"
   ),
-  taskType: z.enum([TaskType.RESEARCH, TaskType.GENERATION, TaskType.ANALYSIS, TaskType.INTEGRATION]).describe(
+  taskType: z.enum([TaskType.RESEARCH, TaskType.GENERATION, TaskType.ANALYSIS, TaskType.INTEGRATION]).or(z.string()).describe(
     "Classification of project purpose for organization and workflow"
   )
 });
@@ -55,7 +55,7 @@ const SingleProjectSchema = z.object({
   completionRequirements: z.string(),
   dependencies: z.array(z.string()).optional(),
   outputFormat: z.string(),
-  taskType: z.enum([TaskType.RESEARCH, TaskType.GENERATION, TaskType.ANALYSIS, TaskType.INTEGRATION])
+  taskType: z.enum([TaskType.RESEARCH, TaskType.GENERATION, TaskType.ANALYSIS, TaskType.INTEGRATION]).or(z.string())
 }).describe(
   "Creates a single project with comprehensive details and metadata"
 );
@@ -101,7 +101,7 @@ export const AtlasProjectCreateSchemaShape = {
   outputFormat: z.string().optional().describe(
     "Format specification for project deliverables (required for mode='single')"
   ),
-  taskType: z.enum([TaskType.RESEARCH, TaskType.GENERATION, TaskType.ANALYSIS, TaskType.INTEGRATION]).optional().describe(
+  taskType: z.enum([TaskType.RESEARCH, TaskType.GENERATION, TaskType.ANALYSIS, TaskType.INTEGRATION]).or(z.string()).optional().describe(
     "Project type classification for workflow organization (required for mode='single')"
   ),
   projects: z.array(ProjectSchema).min(1).max(100).optional().describe(

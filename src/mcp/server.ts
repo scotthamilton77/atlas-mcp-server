@@ -17,6 +17,7 @@ import { registerAtlasTaskListTool } from "./tools/atlas_task_list/index.js";
 import { registerAtlasTaskUpdateTool } from "./tools/atlas_task_update/index.js";
 import { registerAtlasDatabaseCleanTool } from "./tools/atlas_database_clean/index.js";
 import { registerAtlasKnowledgeAddTool } from "./tools/atlas_knowledge_add/index.js";
+import { registerAtlasKnowledgeDeleteTool } from "./tools/atlas_knowledge_delete/index.js";
 import { registerAtlasKnowledgeListTool } from "./tools/atlas_knowledge_list/index.js";
 import { registerAtlasUnifiedSearchTool } from "./tools/atlas_unified_search/index.js";
 
@@ -57,6 +58,7 @@ export const createMcpServer = async () => {
     registerAtlasTaskUpdateTool(server); // atlas_task_update
     registerAtlasDatabaseCleanTool(server); // atlas_database_clean
     registerAtlasKnowledgeAddTool(server); // atlas_knowledge_add
+    registerAtlasKnowledgeDeleteTool(server); // atlas_knowledge_delete
     registerAtlasKnowledgeListTool(server); // atlas_knowledge_list
     registerAtlasUnifiedSearchTool(server); // atlas_unified_search
 
