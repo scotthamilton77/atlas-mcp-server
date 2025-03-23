@@ -62,10 +62,24 @@ ATLAS implements the Model Context Protocol (MCP), enabling standardized communi
 
 **Tasks** are discrete units of work that contribute to project completion, representing specific actions, assignments, or deliverables. Tasks:
 
-- Are always associated with a parent project
-- Follow a defined lifecycle from backlog to completion
-- Can be assigned, prioritized, and categorized
-- Can be linked to dependencies to create structured workflows
+```mermaid
+graph TD
+    Project[Project] --> Task[Task]
+    
+    Task --> Lifecycle["Lifecycle: backlog → todo → in_progress → completed"]
+    Task --> Assignment["Assignment & Prioritization"]
+    Task --> Categories["Categorization & Tags"]
+    Task --> Dependencies["Dependency Relationships"]
+    
+    Assignment --> Priority["Priority Levels: low, medium, high, critical"]
+    Assignment --> Assignee["Assigned to User/Agent"]
+    Dependencies --> TaskDep["Task ↔ Task Dependencies"]
+    
+    style Task fill:#4CAF50,stroke:#388E3C,color:white
+    style Project fill:#2196F3,stroke:#1976D2,color:white
+    style Lifecycle fill:#FF9800,stroke:#F57C00,color:white
+    style Dependencies fill:#9C27B0,stroke:#7B1FA2,color:white
+```
 
 **Knowledge** represents information assets associated with projects, including research findings, documentation, references, or any valuable information. Knowledge items:
 
