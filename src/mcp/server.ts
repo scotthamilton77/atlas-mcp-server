@@ -12,6 +12,7 @@ import { registerAtlasProjectDeleteTool } from "./tools/atlas_project_delete/ind
 import { registerAtlasProjectListTool } from "./tools/atlas_project_list/index.js";
 import { registerAtlasProjectUpdateTool } from "./tools/atlas_project_update/index.js";
 import { registerAtlasTaskCreateTool } from "./tools/atlas_task_create/index.js";
+import { registerAtlasDatabaseCleanTool } from "./tools/atlas_database_clean/index.js";
 
 export const createMcpServer = async () => {
   try {
@@ -45,6 +46,7 @@ export const createMcpServer = async () => {
     registerAtlasProjectUpdateTool(server); // atlas_project_update
     registerAtlasProjectDeleteTool(server); // atlas_project_delete
     registerAtlasTaskCreateTool(server); // atlas_task_create
+    registerAtlasDatabaseCleanTool(server); // atlas_database_clean
 
     // Register resources
 
