@@ -48,7 +48,7 @@ export const TaskSchema = z.object({
   outputFormat: z.string().describe(
     "Required format specification for task deliverables"
   ),
-  taskType: z.enum([TaskType.RESEARCH, TaskType.GENERATION, TaskType.ANALYSIS, TaskType.INTEGRATION]).describe(
+  taskType: z.enum([TaskType.RESEARCH, TaskType.GENERATION, TaskType.ANALYSIS, TaskType.INTEGRATION]).or(z.string()).describe(
     "Classification of task purpose"
   )
 });
@@ -72,7 +72,7 @@ const SingleTaskSchema = z.object({
   completionRequirements: z.string(),
   dependencies: z.array(z.string()).optional(),
   outputFormat: z.string(),
-  taskType: z.enum([TaskType.RESEARCH, TaskType.GENERATION, TaskType.ANALYSIS, TaskType.INTEGRATION])
+  taskType: z.enum([TaskType.RESEARCH, TaskType.GENERATION, TaskType.ANALYSIS, TaskType.INTEGRATION]).or(z.string())
 }).describe(
   "Creates a single task with comprehensive details and metadata"
 );
@@ -130,7 +130,7 @@ export const AtlasTaskCreateSchemaShape = {
   outputFormat: z.string().optional().describe(
     "Required format and structure specification for the task's deliverables, artifacts, and documentation (required for mode='single')"
   ),
-  taskType: z.enum([TaskType.RESEARCH, TaskType.GENERATION, TaskType.ANALYSIS, TaskType.INTEGRATION]).optional().describe(
+  taskType: z.enum([TaskType.RESEARCH, TaskType.GENERATION, TaskType.ANALYSIS, TaskType.INTEGRATION]).or(z.string()).optional().describe(
     "Classification of task purpose for workflow organization, filtering, and reporting (required for mode='single')"
   ),
   tasks: z.array(TaskSchema).min(1).max(100).optional().describe(

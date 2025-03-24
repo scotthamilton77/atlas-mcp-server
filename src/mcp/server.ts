@@ -5,6 +5,7 @@ import { config } from "../config/index.js";
 import { BaseErrorCode, McpError } from "../types/errors.js";
 import { logger } from "../utils/logger.js";
 import { configureSecurity } from "../utils/security.js";
+import { initializeNeo4jServices } from "../services/neo4j/index.js";
 
 // Import tool registrations
 import { registerAtlasProjectCreateTool } from "./tools/atlas_project_create/index.js";
@@ -30,6 +31,11 @@ export const createMcpServer = async () => {
     configureSecurity({
       authRequired: config.security.authRequired
     });
+
+    // Initialize Neo4j database and services
+    logger.info("Initializing Neo4j services...");
+    await initializeNeo4jServices();
+    logger.info("Neo4j services initialized successfully");
 
     const server = new McpServer({
       name: config.mcpServerName,

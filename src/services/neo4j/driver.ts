@@ -1,6 +1,7 @@
 import neo4j, { Driver, ManagedTransaction, Session } from 'neo4j-driver';
 import { config } from '../../config/index.js';
 import { logger } from '../../utils/logger.js';
+import { databaseEvents, DatabaseEventType } from './events.js';
 
 /**
  * Neo4j connection management singleton
@@ -10,6 +11,7 @@ class Neo4jDriver {
   private static instance: Neo4jDriver;
   private driver: Driver | null = null;
   private connectionPromise: Promise<Driver> | null = null;
+  private transactionCounter: number = 0;
 
   private constructor() {}
 
@@ -107,6 +109,9 @@ class Neo4jDriver {
         return queryResult.records;
       });
       
+      // Publish write operation event
+      this.publishWriteOperation({ query: cypher, params });
+      
       return result as unknown as T;
     } catch (error) {
       logger.error('Error executing Neo4j query', { 
@@ -114,6 +119,15 @@ class Neo4jDriver {
         query: cypher,
         params: JSON.stringify(params)
       });
+      
+      // Publish error event
+      databaseEvents.publish(DatabaseEventType.ERROR, {
+        timestamp: new Date().toISOString(),
+        operation: 'executeQuery',
+        error: error instanceof Error ? error.message : String(error),
+        query: cypher
+      });
+      
       throw error;
     } finally {
       await session.close();
@@ -140,6 +154,12 @@ class Neo4jDriver {
         return queryResult.records;
       });
       
+      // Publish read operation event
+      databaseEvents.publish(DatabaseEventType.READ_OPERATION, {
+        timestamp: new Date().toISOString(),
+        query: cypher
+      });
+      
       return result as unknown as T;
     } catch (error) {
       logger.error('Error executing Neo4j read query', { 
@@ -147,10 +167,33 @@ class Neo4jDriver {
         query: cypher,
         params: JSON.stringify(params)
       });
+      
+      // Publish error event
+      databaseEvents.publish(DatabaseEventType.ERROR, {
+        timestamp: new Date().toISOString(),
+        operation: 'executeReadQuery',
+        error: error instanceof Error ? error.message : String(error),
+        query: cypher
+      });
+      
       throw error;
     } finally {
       await session.close();
     }
+  }
+
+  /**
+   * Publish a database write operation event
+   * @param operation Details about the operation
+   * @private
+   */
+  private publishWriteOperation(operation: { query: string, params?: Record<string, any> }): void {
+    this.transactionCounter++;
+    databaseEvents.publish(DatabaseEventType.WRITE_OPERATION, {
+      timestamp: new Date().toISOString(),
+      transactionId: this.transactionCounter,
+      operation
+    });
   }
 
   /**

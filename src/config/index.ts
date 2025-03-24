@@ -1,12 +1,34 @@
 import dotenv from "dotenv";
-import { readFileSync } from "fs";
+import { readFileSync, mkdirSync, existsSync } from "fs";
+import path, { dirname, join } from "path";
 import { fileURLToPath } from "url";
-import { dirname, join } from "path";
-import path from "path";
 dotenv.config();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(readFileSync(join(__dirname, '../../package.json'), 'utf-8'));
+
+// Ensure backup directory exists on startup
+const ensureBackupDir = (backupPath: string): void => {
+  if (!existsSync(backupPath)) {
+    try {
+      mkdirSync(backupPath, { recursive: true });
+      console.log(`Created backup directory: ${backupPath}`);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      console.error(`Error creating backup directory: ${errorMessage}`);
+    }
+  }
+};
+
+// Determine the backup path
+const backupPath = process.env.BACKUP_FILE_DIR 
+  ? (path.isAbsolute(process.env.BACKUP_FILE_DIR) 
+      ? process.env.BACKUP_FILE_DIR 
+      : path.resolve(process.cwd(), process.env.BACKUP_FILE_DIR))
+  : path.resolve(process.cwd(), 'backups');
+
+// Ensure the backup directory exists
+ensureBackupDir(backupPath);
 
 export const config = {
   neo4jUri: process.env.NEO4J_URI || "bolt://localhost:7687",
@@ -17,52 +39,11 @@ export const config = {
   logLevel: process.env.LOG_LEVEL || "info",
   environment: process.env.NODE_ENV || "development",
   backup: {
-    enabled: process.env.BACKUP_ENABLED !== 'false', 
-    schedule: process.env.BACKUP_SCHEDULE ? process.env.BACKUP_SCHEDULE.split('#')[0].trim() : '0 */6 * * *', // Handle possible inline comments
     maxBackups: parseInt(process.env.BACKUP_MAX_COUNT || '10', 10),
-    backupOnStart: process.env.BACKUP_ON_START === 'true', 
-    backupPath: process.env.BACKUP_FILE_PATH 
-      ? (path.isAbsolute(process.env.BACKUP_FILE_PATH) 
-          ? process.env.BACKUP_FILE_PATH 
-          : path.resolve(process.cwd(), process.env.BACKUP_FILE_PATH))
-      : path.resolve(process.cwd(), 'backups'),
-    compressionLevel: parseInt(process.env.BACKUP_COMPRESSION_LEVEL || '6', 10),
-    retentionDays: parseInt(process.env.BACKUP_RETENTION_DAYS || '30', 10)
+    backupPath
   },
   security: {
-    // Default to false in development, true in production
-    authRequired: process.env.NODE_ENV === 'production' 
-      ? process.env.AUTH_REQUIRED !== 'false'  // Default to true in prod unless explicitly disabled
-      : process.env.AUTH_REQUIRED === 'true'   // Default to false in dev unless explicitly enabled
-  },
-  skills: {
-    // Path to coding standards file - use absolute path if provided, otherwise resolve relative to CWD
-    codingStandardsPath: process.env.ATLAS_CODING_STANDARDS_PATH 
-      ? (path.isAbsolute(process.env.ATLAS_CODING_STANDARDS_PATH)
-          ? process.env.ATLAS_CODING_STANDARDS_PATH
-          : path.resolve(process.cwd(), process.env.ATLAS_CODING_STANDARDS_PATH))
-      : null,
-    
-    // Git configuration
-    git: {
-      username: process.env.GIT_USERNAME || undefined,
-      email: process.env.GIT_EMAIL || undefined,
-      defaultBranchPrefix: process.env.GIT_BRANCH_PREFIX || 'feature'
-    },
-    
-    // Code style preferences
-    codeStyle: {
-      indentStyle: process.env.CODING_INDENT_STYLE || 'spaces',
-      indentSize: parseInt(process.env.CODING_INDENT_SIZE || '2', 10),
-      lineLength: parseInt(process.env.CODING_MAX_LINE_LENGTH || '100', 10),
-      defaultLicense: process.env.CODING_DEFAULT_LICENSE || 'MIT'
-    },
-    
-    // Project-specific configuration
-    project: {
-      defaultFramework: process.env.PROJECT_DEFAULT_FRAMEWORK || 'typescript',
-      useDocker: process.env.PROJECT_USE_DOCKER === 'true',
-      cicdProvider: process.env.PROJECT_CICD_PROVIDER || 'github-actions'
-    }
+    // Internal auth is disabled by default, will implement later if needed
+    authRequired: false
   }
-};
+}

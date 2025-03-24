@@ -1,10 +1,7 @@
 #!/usr/bin/env node
 import { createMcpServer } from "./mcp/server.js";
-import { logger } from "./utils/logger.js";
-import { neo4jDriver } from "./services/neo4j/driver.js";
 import { closeNeo4jConnection } from "./services/neo4j/index.js";
-import { config } from "./config/index.js";
-import { BackupService } from "./services/neo4j/backup_service/index.js";
+import { logger } from "./utils/logger.js";
 
 let server: Awaited<ReturnType<typeof createMcpServer>> | undefined;
 
@@ -12,11 +9,6 @@ const shutdown = async (signal: string) => {
   logger.info(`Received ${signal}. Starting graceful shutdown...`);
 
   try {
-    // Stop the backup service
-    logger.info("Stopping database backup service...");
-    BackupService.stop();
-    logger.info("Database backup service stopped.");
-
     if (server) {
       logger.info("Closing MCP server...");
       await server.close();
@@ -41,10 +33,6 @@ const start = async () => {
     
     // Create and store server instance
     server = await createMcpServer();
-    
-    // Initialize the backup service
-    logger.info("Initializing database backup service...");
-    await BackupService.init();
     
     logger.info("ATLAS MCP Server is running and awaiting messages.");
 

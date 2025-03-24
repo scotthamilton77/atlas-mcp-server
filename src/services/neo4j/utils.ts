@@ -46,21 +46,9 @@ export class Neo4jUtils {
         `)
       ]);
       
-      // Create foreign key constraints
-      await Promise.all([
-        neo4jDriver.executeQuery(`
-          CREATE CONSTRAINT task_project_fk IF NOT EXISTS
-          FOR (t:${NodeLabels.Task}) REQUIRE EXISTS {
-            MATCH (p:${NodeLabels.Project}) WHERE t.projectId = p.id
-          }
-        `),
-        neo4jDriver.executeQuery(`
-          CREATE CONSTRAINT knowledge_project_fk IF NOT EXISTS
-          FOR (k:${NodeLabels.Knowledge}) REQUIRE EXISTS {
-            MATCH (p:${NodeLabels.Project}) WHERE k.projectId = p.id
-          }
-        `)
-      ]);
+      // Note: Skip foreign key constraints for compatibility with older Neo4j versions
+      // Instead, we'll use application-level validation
+      logger.info('Schema initialization: Skipping foreign key constraints (not supported in this Neo4j version)');
       
       // Create indexes for frequently queried properties
       await Promise.all([
@@ -279,5 +267,32 @@ export class Neo4jUtils {
       
       return node as T;
     }).filter((item): item is T => item !== null);
+  }
+  
+  /**
+   * Check if the database is empty (no nodes exist)
+   * @returns Promise<boolean> - true if database is empty, false otherwise
+   */
+  static async isDatabaseEmpty(): Promise<boolean> {
+    try {
+      const query = `
+        MATCH (n)
+        RETURN count(n) AS nodeCount
+        LIMIT 1
+      `;
+      
+      const result = await neo4jDriver.executeReadQuery(query);
+      
+      if (!result || result.length === 0) {
+        return true;
+      }
+      
+      const nodeCount = result[0]?.get('nodeCount');
+      return nodeCount === 0;
+    } catch (error) {
+      logger.error('Error checking if database is empty', { error });
+      // If we can't check, assume it's not empty to be safe
+      return false;
+    }
   }
 }
