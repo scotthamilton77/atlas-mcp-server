@@ -86,16 +86,47 @@ export class AutoExportManager {
     
     // Run export in background using Promise to avoid blocking
     Promise.resolve().then(async () => {
-      try {
-        const exportPath = await this.exportService.autoExport();
-        if (exportPath) {
-          logger.info(`Database auto-exported to ${exportPath}`);
+      const maxRetries = 3;
+      let retries = 0;
+      let success = false;
+      
+      while (retries < maxRetries && !success) {
+        try {
+          if (retries > 0) {
+            logger.info(`Auto-export retry attempt ${retries} of ${maxRetries}`);
+            // Exponential backoff - wait longer between each retry
+            await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retries)));
+          }
+          
+          const exportPath = await this.exportService.autoExport();
+          if (exportPath) {
+            logger.info(`Database auto-exported to ${exportPath}`);
+            success = true;
+            
+            // Publish success event
+            databaseEvents.publish(DatabaseEventType.TRANSACTION_COMPLETE, {
+              operation: 'auto-export',
+              timestamp: new Date().toISOString(),
+              filepath: exportPath
+            });
+          }
+        } catch (error) {
+          retries++;
+          logger.error(`Auto-export attempt ${retries} failed`, { error });
+          
+          if (retries >= maxRetries) {
+            // Publish error event for monitoring
+            databaseEvents.publish(DatabaseEventType.ERROR, {
+              operation: 'auto-export',
+              timestamp: new Date().toISOString(),
+              error: error instanceof Error ? error.message : String(error),
+              retries
+            });
+          }
         }
-      } catch (error) {
-        logger.error('Auto-export failed', { error });
-      } finally {
-        this.isExportInProgress = false;
       }
+      
+      this.isExportInProgress = false;
     });
   }
 
@@ -125,12 +156,46 @@ export class AutoExportManager {
     this.changeCounter = 0;
     
     try {
-      const exportPath = await this.exportService.exportAllData();
-      logger.info(`Database force-exported to ${exportPath}`);
-      return exportPath;
-    } catch (error) {
-      logger.error('Forced export failed', { error });
-      return null;
+      const maxRetries = 3;
+      let retries = 0;
+      
+      while (retries <= maxRetries) {
+        try {
+          if (retries > 0) {
+            logger.info(`Force export retry attempt ${retries} of ${maxRetries}`);
+            // Exponential backoff - wait longer between each retry
+            await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retries)));
+          }
+          
+          const exportPath = await this.exportService.exportAllData();
+          logger.info(`Database force-exported to ${exportPath}`);
+          
+          // Publish success event
+          databaseEvents.publish(DatabaseEventType.TRANSACTION_COMPLETE, {
+            operation: 'forced-export',
+            timestamp: new Date().toISOString(),
+            filepath: exportPath
+          });
+          
+          return exportPath;
+        } catch (error) {
+          retries++;
+          logger.error(`Force export attempt ${retries} failed`, { error });
+          
+          // If we've exceeded max retries, give up and publish error
+          if (retries > maxRetries) {
+            databaseEvents.publish(DatabaseEventType.ERROR, {
+              operation: 'forced-export',
+              timestamp: new Date().toISOString(),
+              error: error instanceof Error ? error.message : String(error),
+              retries
+            });
+            return null;
+          }
+        }
+      }
+      
+      return null; // Should never reach here, but TypeScript wants a return
     } finally {
       this.isExportInProgress = false;
     }

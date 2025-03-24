@@ -15,8 +15,10 @@ export { Neo4jUtils } from './utils.js';
 
 // Export entity services
 export { backupManager, BackupManager } from './backup_services/backupManager.js';
+export { backupMonitor, BackupMonitor } from './backup_services/backupMonitor.js';
 export { exportService, ExportService } from './backup_services/exportService.js';
 export { importService, ImportService } from './backup_services/importService.js';
+export { resilientConnection, ResilientConnection } from './backup_services/resilientConnection.js';
 export { KnowledgeService } from './knowledgeService.js';
 export { ProjectService } from './projectService.js';
 export { SearchService } from './searchService.js';
@@ -40,6 +42,7 @@ export async function initializeNeo4jServices(): Promise<void> {
     const { importService } = await import('./backup_services/importService.js');
     const { autoExportManager } = await import('./backup_services/autoExportManager.js');
     const { backupManager } = await import('./backup_services/backupManager.js');
+    const { backupMonitor } = await import('./backup_services/backupMonitor.js');
     
     // Initialize in correct order
     exportService.initialize();
@@ -48,8 +51,11 @@ export async function initializeNeo4jServices(): Promise<void> {
     // Connect autoExportManager with exportService
     autoExportManager.initializeWithExportService(exportService);
     
-    // Initialize backupManager last since it depends on other services
+    // Initialize backupManager 
     backupManager.initialize();
+    
+    // Initialize backup monitor last since it depends on all other services
+    backupMonitor.initialize();
     
     console.log('Neo4j services initialized successfully');
   } catch (error) {

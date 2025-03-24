@@ -4,7 +4,7 @@
 [![Model Context Protocol](https://img.shields.io/badge/MCP-1.7.0-green.svg)](https://modelcontextprotocol.io/)
 [![Version](https://img.shields.io/badge/Version-2.5.0-blue.svg)]()
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Status](https://img.shields.io/badge/Status-Stable-blue.svg)]()
+[![Status](https://img.shields.io/badge/Status-Beta-orange.svg)]()
 [![GitHub](https://img.shields.io/github/stars/cyanheads/atlas-mcp-server?style=social)](https://github.com/cyanheads/atlas-mcp-server)
 
 ATLAS (Adaptive Task & Logic Automation System) is a task management system that helps organize and track complex projects through a structured approach. Built on a three-tier architecture of Projects, Tasks, and Knowledge, ATLAS makes it easier to manage projects, create tasks with clear organization and dependency tracking, and maintain a knowledge repository for project-related information.
