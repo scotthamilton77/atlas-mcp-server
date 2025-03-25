@@ -139,7 +139,11 @@ export interface KnowledgeResource {
  * Convert Neo4j Project to Project Resource
  */
 export function toProjectResource(project: Neo4jProject): ProjectResource {
-  return {
+  // Log the incoming project structure for debugging
+  console.log('Converting project to resource:', JSON.stringify(project, null, 2));
+  
+  // Ensure all fields are properly extracted
+  const resource: ProjectResource = {
     id: project.id,
     name: project.name,
     description: project.description,
@@ -151,13 +155,19 @@ export function toProjectResource(project: Neo4jProject): ProjectResource {
     createdAt: project.createdAt,
     updatedAt: project.updatedAt
   };
+  
+  console.log('Created resource:', JSON.stringify(resource, null, 2));
+  return resource;
 }
 
 /**
  * Convert Neo4j Task to Task Resource
  */
 export function toTaskResource(task: Neo4jTask): TaskResource {
-  return {
+  // Log the incoming task structure for debugging
+  console.log('Converting task to resource:', JSON.stringify(task, null, 2));
+  
+  const resource: TaskResource = {
     id: task.id,
     projectId: task.projectId,
     title: task.title,
@@ -173,13 +183,19 @@ export function toTaskResource(task: Neo4jTask): TaskResource {
     createdAt: task.createdAt,
     updatedAt: task.updatedAt
   };
+  
+  console.log('Created task resource:', JSON.stringify(resource, null, 2));
+  return resource;
 }
 
 /**
  * Convert Neo4j Knowledge to Knowledge Resource
  */
 export function toKnowledgeResource(knowledge: Neo4jKnowledge): KnowledgeResource {
-  return {
+  // Log the incoming knowledge structure for debugging
+  console.log('Converting knowledge to resource:', JSON.stringify(knowledge, null, 2));
+  
+  const resource: KnowledgeResource = {
     id: knowledge.id,
     projectId: knowledge.projectId,
     text: knowledge.text,
@@ -189,4 +205,7 @@ export function toKnowledgeResource(knowledge: Neo4jKnowledge): KnowledgeResourc
     createdAt: knowledge.createdAt,
     updatedAt: knowledge.updatedAt
   };
+  
+  console.log('Created knowledge resource:', JSON.stringify(resource, null, 2));
+  return resource;
 }

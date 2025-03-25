@@ -109,7 +109,20 @@ export class TaskService {
     try {
       const query = `
         MATCH (t:${NodeLabels.Task} {id: $id})
-        RETURN t
+        RETURN t.id as id,
+               t.projectId as projectId,
+               t.title as title,
+               t.description as description,
+               t.priority as priority,
+               t.status as status,
+               t.assignedTo as assignedTo,
+               t.urls as urls,
+               t.tags as tags,
+               t.completionRequirements as completionRequirements,
+               t.outputFormat as outputFormat,
+               t.taskType as taskType,
+               t.createdAt as createdAt,
+               t.updatedAt as updatedAt
       `;
       
       const result = await session.executeRead(async (tx) => {
@@ -117,8 +130,28 @@ export class TaskService {
         return result.records;
       });
       
-      const tasks = Neo4jUtils.processRecords<Neo4jTask>(result, 't');
-      return tasks.length > 0 ? tasks[0] : null;
+      // No longer need processRecords as properties are explicit
+      if (result.length === 0) {
+        return null;
+      }
+      const record = result[0];
+      const task: Neo4jTask = {
+        id: record.get('id'),
+        projectId: record.get('projectId'),
+        title: record.get('title'),
+        description: record.get('description'),
+        priority: record.get('priority'),
+        status: record.get('status'),
+        assignedTo: record.get('assignedTo'),
+        urls: Neo4jUtils.parseJsonString(record.get('urls'), []),
+        tags: record.get('tags') || [],
+        completionRequirements: record.get('completionRequirements'),
+        outputFormat: record.get('outputFormat'),
+        taskType: record.get('taskType'),
+        createdAt: record.get('createdAt'),
+        updatedAt: record.get('updatedAt')
+      };
+      return task;
     } catch (error) {
       logger.error('Error getting task by ID', { error, id });
       throw error;
@@ -306,7 +339,20 @@ export class TaskService {
       const query = `
         MATCH (t:${NodeLabels.Task})
         ${whereClause}
-        RETURN t
+        RETURN t.id as id,
+               t.projectId as projectId,
+               t.title as title,
+               t.description as description,
+               t.priority as priority,
+               t.status as status,
+               t.assignedTo as assignedTo,
+               t.urls as urls,
+               t.tags as tags,
+               t.completionRequirements as completionRequirements,
+               t.outputFormat as outputFormat,
+               t.taskType as taskType,
+               t.createdAt as createdAt,
+               t.updatedAt as updatedAt
         ORDER BY t.${sortField} ${sortDirection.toUpperCase()}
       `;
       
@@ -315,8 +361,23 @@ export class TaskService {
         return result.records;
       });
       
-      const tasks = Neo4jUtils.processRecords<Neo4jTask>(result, 't');
-      
+      const tasks: Neo4jTask[] = result.map(record => ({
+        id: record.get('id'),
+        projectId: record.get('projectId'),
+        title: record.get('title'),
+        description: record.get('description'),
+        priority: record.get('priority'),
+        status: record.get('status'),
+        assignedTo: record.get('assignedTo'),
+        urls: Neo4jUtils.parseJsonString(record.get('urls'), []),
+        tags: record.get('tags') || [],
+        completionRequirements: record.get('completionRequirements'),
+        outputFormat: record.get('outputFormat'),
+        taskType: record.get('taskType'),
+        createdAt: record.get('createdAt'),
+        updatedAt: record.get('updatedAt')
+      }));
+
       // Apply pagination
       return Neo4jUtils.paginateResults(tasks, {
         page: options.page,

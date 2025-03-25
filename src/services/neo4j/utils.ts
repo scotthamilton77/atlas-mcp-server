@@ -242,7 +242,25 @@ export class Neo4jUtils {
   static getCurrentTimestamp(): string {
     return new Date().toISOString();
   }
-  
+
+  /**
+   * Safely parse a JSON string, returning a default value on error
+   * @param jsonString The JSON string to parse
+   * @param defaultValue The default value to return if parsing fails
+   * @returns The parsed object or the default value
+   */
+  static parseJsonString<T>(jsonString: string | null | undefined, defaultValue: T): T {
+    if (!jsonString) {
+      return defaultValue;
+    }
+    try {
+      return JSON.parse(jsonString);
+    } catch (error) {
+      logger.error('Failed to parse JSON string', { error, jsonString });
+      return defaultValue;
+    }
+  }
+
   /**
    * Process Neo4j result records into a standardized format
    * @param records Neo4j result records
@@ -258,14 +276,39 @@ export class Neo4jUtils {
       const node = record.get(primaryKey);
       
       if (!node) {
+        console.log('Missing node for key:', primaryKey, 'in record:', record);
         return null;
       }
       
+      // For Neo4j Node objects with properties method
       if (typeof node.properties === 'function') {
-        return node.properties() as T;
+        const props = node.properties();
+        console.log('Extracted properties via function:', props);
+        
+        // Parse any serialized JSON fields
+        let result = {...props};
+        if (result.urls && typeof result.urls === 'string') {
+          try {
+            result.urls = JSON.parse(result.urls);
+          } catch (e) {
+            console.error('Failed to parse URLs JSON:', e);
+            result.urls = [];
+          }
+        }
+        
+        return result as T;
       }
       
-      return node as T;
+      // For already extracted property objects
+      console.log('Using node directly:', node);
+      
+      // Parse any serialized JSON fields
+      let result = {...node};
+      if (result.urls && typeof result.urls === 'string') {
+        result.urls = this.parseJsonString(result.urls, []);
+      }
+      
+      return result as T;
     }).filter((item): item is T => item !== null);
   }
   

@@ -1,8 +1,8 @@
 # ATLAS: Task Management System
 
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
-[![Model Context Protocol](https://img.shields.io/badge/MCP-1.7.0-green.svg)](https://modelcontextprotocol.io/)
-[![Version](https://img.shields.io/badge/Version-2.5.0-blue.svg)]()
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue.svg)](https://www.typescriptlang.org/)
+[![Model Context Protocol](https://img.shields.io/badge/MCP-1.8.0-green.svg)](https://modelcontextprotocol.io/)
+[![Version](https://img.shields.io/badge/Version-2.5.0-blue.svg)](https://github.com/cyanheads/atlas-mcp-server/releases)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Status](https://img.shields.io/badge/Status-Beta-orange.svg)]()
 [![GitHub](https://img.shields.io/github/stars/cyanheads/atlas-mcp-server?style=social)](https://github.com/cyanheads/atlas-mcp-server)
@@ -143,14 +143,6 @@ The Atlas Platform integrates these components into a cohesive system:
 
 ## Installation
 
-### Option 1: Install via npm
-
-```bash
-npm install atlas-mcp-server
-```
-
-### Option 2: Install from source
-
 1. Clone the repository:
 
 ```bash
@@ -222,16 +214,15 @@ The codebase follows a modular structure:
 
 ```
 src/
-├── config/          # Configuration management
-├── mcp/             # MCP server implementation
-│   ├── resources/   # MCP resources
-│   └── tools/       # MCP tools
-├── scripts/         # Build and maintenance scripts
-├── logs/            # Application logs
-├── services/        # Core services
-│   └── neo4j/       # Neo4j database services
-├── types/           # TypeScript type definitions
-└── utils/           # Utility functions
+├── config/          # Configuration management (index.ts)
+├── index.ts         # Main server entry point
+├── mcp/             # MCP server implementation (server.ts)
+│   ├── resources/   # MCP resource handlers (index.ts, types.ts, knowledge/, projects/, tasks/)
+│   └── tools/       # MCP tool handlers (individual tool directories)
+├── services/        # Core application services
+│   └── neo4j/       # Neo4j database services (index.ts, driver.ts, backupRestoreService.ts, etc.)
+├── types/           # Shared TypeScript type definitions (errors.ts, mcp.ts, tool.ts)
+└── utils/           # Utility functions (logger.ts, errorHandler.ts, idGenerator.ts, etc.)
 ```
 
 ## Tools
@@ -300,31 +291,32 @@ ATLAS exposes system resources through standard MCP endpoints:
 
 ## Database Backup and Restore
 
-ATLAS provides robust database backup and restore capabilities through the Neo4j BackupService.
+ATLAS provides functionality to back up and restore the Neo4j database content. The core logic resides in `src/services/neo4j/backupRestoreService.ts`.
 
-### Backup Configuration Options
+### Automatic Backups (Note)
 
-The backup service supports:
+The `src/services/neo4j/driver.ts` includes a `triggerBackgroundBackup` function that calls `exportDatabase` after every write operation. This provides a basic, frequent backup mechanism. However, for robust backup strategies (e.g., scheduled backups, rotation, off-site storage), consider implementing a more sophisticated solution or leveraging Neo4j's enterprise backup features if applicable.
 
-- **Selective Content Backup**: Include/exclude projects, tasks, or knowledge
-- **Compression**: Configurable compression levels
-- **Encryption**: Optional backup encryption
-- **Scheduled Backups**: Configure frequency (daily/weekly/monthly)
-- **Retention Policies**: Manage backup storage with configurable retention periods and maximum backup counts
+### Backup Process
 
-### Backup Management
+-   **Mechanism**: The backup process exports all `Project`, `Task`, and `Knowledge` nodes, along with their relationships, into separate JSON files.
+-   **Output**: Each backup creates a timestamped directory (e.g., `atlas-backup-YYYYMMDDHHMMSS`) within the configured backup path (default: `./atlas-backups/`). This directory contains `projects.json`, `tasks.json`, `knowledge.json`, and `relationships.json`.
+-   **Manual Backup**: You can trigger a manual backup using the provided script:
+    ```bash
+    npm run db:backup
+    ```
+    This command executes `scripts/db-backup.ts`, which calls the `exportDatabase` function.
 
-Key backup service methods:
+### Restore Process
 
-- `createBackup(options)`: Creates a compressed backup of the Neo4j database
-- `verifyBackup(backupPath)`: Verifies the integrity of a backup file
-- `listBackups(backupDir)`: Lists all available backups in a directory
-
-The backup service automatically handles:
-
-- Compression of backup data using gzip
-- Scheduled backup rotation based on retention policies
-- Backup verification for integrity checks
+-   **Mechanism**: The restore process first completely clears the existing Neo4j database. Then, it imports nodes and relationships from the JSON files located in the specified backup directory.
+-   **Warning**: Restoring from a backup is a destructive operation. **It will overwrite all current data in your Neo4j database.**
+-   **Manual Restore**: To restore the database from a backup directory, use the import script:
+    ```bash
+    npm run db:import <path_to_backup_directory>
+    ```
+    Replace `<path_to_backup_directory>` with the actual path to the backup folder (e.g., `./atlas-backups/atlas-backup-20250326120000`). This command executes `scripts/db-import.ts`, which calls the `importDatabase` function.
+-   **Relationship Handling**: The import process attempts to recreate relationships based on the `id` properties stored within the nodes during export. Ensure your nodes have consistent `id` properties for relationships to be restored correctly.
 
 ## Contributing
 

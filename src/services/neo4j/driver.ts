@@ -2,6 +2,7 @@ import neo4j, { Driver, ManagedTransaction, Session } from 'neo4j-driver';
 import { config } from '../../config/index.js';
 import { logger } from '../../utils/logger.js';
 import { databaseEvents, DatabaseEventType } from './events.js';
+import { exportDatabase } from './backupRestoreService.js'; // Import the export function
 
 /**
  * Neo4j connection management singleton
@@ -111,7 +112,10 @@ class Neo4jDriver {
       
       // Publish write operation event
       this.publishWriteOperation({ query: cypher, params });
-      
+
+      // Trigger background backup after successful write
+      this.triggerBackgroundBackup();
+
       return result as unknown as T;
     } catch (error) {
       logger.error('Error executing Neo4j query', { 
@@ -194,6 +198,23 @@ class Neo4jDriver {
       transactionId: this.transactionCounter,
       operation
     });
+  }
+
+  /**
+   * Triggers a database backup in the background.
+   * Logs errors but does not throw to avoid interrupting the main flow.
+   * @private
+   */
+  private triggerBackgroundBackup(): void {
+    logger.debug('Triggering background database backup...');
+    exportDatabase()
+      .then(backupPath => {
+        logger.info(`Background database backup successful: ${backupPath}`);
+      })
+      .catch(error => {
+        logger.error('Background database backup failed:', { error });
+        // Decide if further action is needed, e.g., retry logic or notification
+      });
   }
 
   /**

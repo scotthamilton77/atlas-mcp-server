@@ -1,6 +1,6 @@
 # atlas-mcp-server - Directory Structure
 
-Generated on: 2025-03-23 16:45:51
+Generated on: 2025-03-25 11:40:52
 
 
 ```
@@ -10,13 +10,14 @@ atlas-mcp-server
     └── tree.md
 ├── scripts
     ├── clean.ts
+    ├── db-backup.ts
     ├── generate-tree.ts
     ├── make-executable.ts
     └── update-deps.ts
 ├── src
-    ├── atlas
     ├── config
     │   └── index.ts
+    ├── docs
     ├── mcp
     │   ├── resources
     │   │   ├── knowledge
@@ -96,8 +97,16 @@ atlas-mcp-server
     │   └── server.ts
     ├── services
     │   └── neo4j
-    │   │   ├── backupService.ts
+    │   │   ├── backup_services
+    │   │       ├── autoExportManager.ts
+    │   │       ├── backupCoordinator.ts
+    │   │       ├── backupManager.ts
+    │   │       ├── backupMonitor.ts
+    │   │       ├── exportService.ts
+    │   │       ├── importService.ts
+    │   │       └── resilientConnection.ts
     │   │   ├── driver.ts
+    │   │   ├── events.ts
     │   │   ├── helpers.ts
     │   │   ├── index.ts
     │   │   ├── knowledgeService.ts
@@ -122,11 +131,13 @@ atlas-mcp-server
     ├── atlas-mcp-server-production-readiness-report-03-07-25.md
     └── prompt.md
 ├── .clinerules
+├── .repomixignore
 ├── docker-compose.yml
 ├── LICENSE
 ├── package-lock.json
 ├── package.json
 ├── README.md
+├── repomix.config.json
 └── tsconfig.json
 
 ```

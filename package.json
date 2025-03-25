@@ -16,7 +16,8 @@
     "docker:logs": "docker-compose logs -f",
     "rebuild": "node --import 'data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"ts-node/esm\", pathToFileURL(\"./\"));' scripts/clean.ts && npm run build",
     "tree": "node --import 'data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"ts-node/esm\", pathToFileURL(\"./\"));' scripts/generate-tree.ts",
-    "db:backup": "node --import 'data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"ts-node/esm\", pathToFileURL(\"./\"));' scripts/db-backup.ts"
+    "db:backup": "node --import 'data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"ts-node/esm\", pathToFileURL(\"./\"));' scripts/db-backup.ts",
+    "db:import": "node --import 'data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"ts-node/esm\", pathToFileURL(\"./\"));' scripts/db-import.ts"
   },
   "keywords": [
     "mcp",
@@ -37,12 +38,13 @@
   "author": "@cyanheads",
   "license": "Apache-2.0",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.7.0",
+    "@modelcontextprotocol/sdk": "^1.8.0",
     "@types/express": "^5.0.1",
-    "@types/node": "^22.13.11",
+    "@types/node": "^22.13.13",
     "@types/node-cron": "^3.0.11",
     "commander": "^13.1.0",
     "cross-env": "^7.0.3",
+    "date-fns": "^4.1.0",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "fuzzysort": "^3.1.0",

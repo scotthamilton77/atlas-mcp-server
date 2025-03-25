@@ -108,7 +108,14 @@ export class KnowledgeService {
     try {
       const query = `
         MATCH (k:${NodeLabels.Knowledge} {id: $id})
-        RETURN k
+        RETURN k.id as id,
+               k.projectId as projectId,
+               k.text as text,
+               k.tags as tags,
+               k.domain as domain,
+               k.citations as citations,
+               k.createdAt as createdAt,
+               k.updatedAt as updatedAt
       `;
       
       const result = await session.executeRead(async (tx) => {
@@ -116,8 +123,21 @@ export class KnowledgeService {
         return result.records;
       });
       
-      const knowledge = Neo4jUtils.processRecords<Neo4jKnowledge>(result, 'k');
-      return knowledge.length > 0 ? knowledge[0] : null;
+      if (result.length === 0) {
+        return null;
+      }
+      const record = result[0];
+      const knowledge: Neo4jKnowledge = {
+        id: record.get('id'),
+        projectId: record.get('projectId'),
+        text: record.get('text'),
+        tags: record.get('tags') || [],
+        domain: record.get('domain'),
+        citations: record.get('citations') || [], // Citations are stored as string array
+        createdAt: record.get('createdAt'),
+        updatedAt: record.get('updatedAt')
+      };
+      return knowledge;
     } catch (error) {
       logger.error('Error getting knowledge by ID', { error, id });
       throw error;
@@ -312,7 +332,14 @@ export class KnowledgeService {
       const query = `
         MATCH (k:${NodeLabels.Knowledge})
         ${whereClause}
-        RETURN k
+        RETURN k.id as id,
+               k.projectId as projectId,
+               k.text as text,
+               k.tags as tags,
+               k.domain as domain,
+               k.citations as citations,
+               k.createdAt as createdAt,
+               k.updatedAt as updatedAt
         ORDER BY k.createdAt DESC
       `;
       
@@ -321,8 +348,17 @@ export class KnowledgeService {
         return result.records;
       });
       
-      const knowledge = Neo4jUtils.processRecords<Neo4jKnowledge>(result, 'k');
-      
+      const knowledge: Neo4jKnowledge[] = result.map(record => ({
+        id: record.get('id'),
+        projectId: record.get('projectId'),
+        text: record.get('text'),
+        tags: record.get('tags') || [],
+        domain: record.get('domain'),
+        citations: record.get('citations') || [], // Citations are stored as string array
+        createdAt: record.get('createdAt'),
+        updatedAt: record.get('updatedAt')
+      }));
+
       // Apply pagination
       return Neo4jUtils.paginateResults(knowledge, {
         page: options.page,
