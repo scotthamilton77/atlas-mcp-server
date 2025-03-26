@@ -18,6 +18,7 @@ export interface McpToolResponse {
 export const ProjectStatus = {
   ACTIVE: "active",
   PENDING: "pending",
+  IN_PROGRESS: "in-progress",
   COMPLETED: "completed",
   ARCHIVED: "archived"
 } as const;
@@ -25,7 +26,7 @@ export const ProjectStatus = {
 export const TaskStatus = {
   BACKLOG: "backlog",
   TODO: "todo",
-  IN_PROGRESS: "in_progress",
+  IN_PROGRESS: "in-progress",
   COMPLETED: "completed"
 } as const;
 
@@ -93,11 +94,32 @@ export interface KnowledgeResponse {
   updatedAt: string;
 }
 
+// Zod enum creators - these functions create Zod enums from our constant objects
+export const createProjectStatusEnum = () => {
+  return z.enum(Object.values(ProjectStatus) as [string, ...string[]]);
+};
+
+export const createTaskStatusEnum = () => {
+  return z.enum(Object.values(TaskStatus) as [string, ...string[]]);
+};
+
+export const createPriorityLevelEnum = () => {
+  return z.enum(Object.values(PriorityLevel) as [string, ...string[]]);
+};
+
+export const createTaskTypeEnum = () => {
+  return z.enum(Object.values(TaskType) as [string, ...string[]]);
+};
+
+export const createKnowledgeDomainEnum = () => {
+  return z.enum(Object.values(KnowledgeDomain) as [string, ...string[]]);
+};
+
 // Project-specific schemas
 export const ProjectInputSchema = {
   name: z.string().min(1),
   description: z.string().optional(),
-  status: z.enum([ProjectStatus.ACTIVE, ProjectStatus.PENDING, ProjectStatus.COMPLETED, ProjectStatus.ARCHIVED]).default(ProjectStatus.ACTIVE)
+  status: createProjectStatusEnum().default(ProjectStatus.ACTIVE)
 } as const;
 
 export const UpdateProjectInputSchema = {

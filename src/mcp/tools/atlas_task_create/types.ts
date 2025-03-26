@@ -3,7 +3,10 @@ import {
   McpToolResponse,
   PriorityLevel,
   TaskStatus,
-  TaskType
+  TaskType,
+  createPriorityLevelEnum,
+  createTaskStatusEnum,
+  createTaskTypeEnum
 } from '../../../types/mcp.js';
 
 export const TaskSchema = z.object({
@@ -19,10 +22,10 @@ export const TaskSchema = z.object({
   description: z.string().describe(
     "Detailed explanation of the task requirements and context"
   ),
-  priority: z.enum([PriorityLevel.LOW, PriorityLevel.MEDIUM, PriorityLevel.HIGH, PriorityLevel.CRITICAL]).default(PriorityLevel.MEDIUM).describe(
+  priority: createPriorityLevelEnum().default(PriorityLevel.MEDIUM).describe(
     "Importance level"
   ),
-  status: z.enum([TaskStatus.BACKLOG, TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.COMPLETED]).default(TaskStatus.TODO).describe(
+  status: createTaskStatusEnum().default(TaskStatus.TODO).describe(
     "Current task state"
   ),
   assignedTo: z.string().optional().describe(
@@ -48,7 +51,7 @@ export const TaskSchema = z.object({
   outputFormat: z.string().describe(
     "Required format specification for task deliverables"
   ),
-  taskType: z.enum([TaskType.RESEARCH, TaskType.GENERATION, TaskType.ANALYSIS, TaskType.INTEGRATION]).or(z.string()).describe(
+  taskType: createTaskTypeEnum().or(z.string()).describe(
     "Classification of task purpose"
   )
 });
@@ -59,8 +62,8 @@ const SingleTaskSchema = z.object({
   projectId: z.string(),
   title: z.string().min(5).max(150),
   description: z.string(),
-  priority: z.enum([PriorityLevel.LOW, PriorityLevel.MEDIUM, PriorityLevel.HIGH, PriorityLevel.CRITICAL]).optional().default(PriorityLevel.MEDIUM),
-  status: z.enum([TaskStatus.BACKLOG, TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.COMPLETED]).optional().default(TaskStatus.TODO),
+  priority: createPriorityLevelEnum().optional().default(PriorityLevel.MEDIUM),
+  status: createTaskStatusEnum().optional().default(TaskStatus.TODO),
   assignedTo: z.string().optional(),
   urls: z.array(
     z.object({
@@ -72,7 +75,7 @@ const SingleTaskSchema = z.object({
   completionRequirements: z.string(),
   dependencies: z.array(z.string()).optional(),
   outputFormat: z.string(),
-  taskType: z.enum([TaskType.RESEARCH, TaskType.GENERATION, TaskType.ANALYSIS, TaskType.INTEGRATION]).or(z.string())
+  taskType: createTaskTypeEnum().or(z.string())
 }).describe(
   "Creates a single task with comprehensive details and metadata"
 );
@@ -101,10 +104,10 @@ export const AtlasTaskCreateSchemaShape = {
   description: z.string().optional().describe(
     "Detailed explanation of the task requirements, context, approach, and implementation details (required for mode='single')"
   ),
-  priority: z.enum([PriorityLevel.LOW, PriorityLevel.MEDIUM, PriorityLevel.HIGH, PriorityLevel.CRITICAL]).optional().describe(
+  priority: createPriorityLevelEnum().optional().describe(
     "Importance level for task prioritization and resource allocation (Default: medium)"
   ),
-  status: z.enum([TaskStatus.BACKLOG, TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.COMPLETED]).optional().describe(
+  status: createTaskStatusEnum().optional().describe(
     "Current task workflow state for tracking task lifecycle and progress (Default: todo)"
   ),
   assignedTo: z.string().optional().describe(
@@ -130,7 +133,7 @@ export const AtlasTaskCreateSchemaShape = {
   outputFormat: z.string().optional().describe(
     "Required format and structure specification for the task's deliverables, artifacts, and documentation (required for mode='single')"
   ),
-  taskType: z.enum([TaskType.RESEARCH, TaskType.GENERATION, TaskType.ANALYSIS, TaskType.INTEGRATION]).or(z.string()).optional().describe(
+  taskType: createTaskTypeEnum().or(z.string()).optional().describe(
     "Classification of task purpose for workflow organization, filtering, and reporting (required for mode='single')"
   ),
   tasks: z.array(TaskSchema).min(1).max(100).optional().describe(

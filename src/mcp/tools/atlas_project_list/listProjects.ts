@@ -1,12 +1,11 @@
-import { McpError } from '../../../types/errors.js';
-import { BaseErrorCode } from '../../../types/errors.js';
-import { logger } from '../../../utils/logger.js';
-import { 
+import {
   KnowledgeService,
   ProjectService,
   TaskService
 } from '../../../services/neo4j/index.js';
-import { Project, ProjectListRequest, ProjectListResponse } from './types.js';
+import { BaseErrorCode, McpError } from '../../../types/errors.js';
+import { logger } from '../../../utils/logger.js';
+import { Project, ProjectListRequest, ProjectListResponse, Knowledge, Task } from './types.js'; // Import Knowledge and Task
 
 /**
  * Retrieve and filter project entities based on specified criteria
@@ -46,16 +45,17 @@ export async function listProjects(request: ProjectListRequest): Promise<Project
 
     if (mode === 'details') {
       // Retrieve specific project entity by identifier
-      const project = await ProjectService.getProjectById(id!);
+      const projectResult = await ProjectService.getProjectById(id!);
       
-      if (!project) {
+      if (!projectResult) {
         throw new McpError(
           BaseErrorCode.NOT_FOUND,
           `Project with identifier ${id} not found`
         );
       }
 
-      projects = [project as unknown as Project];
+      // Cast to the tool's Project type
+      projects = [projectResult as Project]; 
       total = 1;
       totalPages = 1;
     } else {
@@ -67,7 +67,8 @@ export async function listProjects(request: ProjectListRequest): Promise<Project
         limit: validatedLimit
       });
 
-      projects = projectsResult.data as unknown as Project[];
+      // Cast each project to the tool's Project type
+      projects = projectsResult.data.map(p => p as Project); 
       total = projectsResult.total;
       totalPages = projectsResult.totalPages;
     }
@@ -78,62 +79,48 @@ export async function listProjects(request: ProjectListRequest): Promise<Project
         if (mode === 'details') {
           // For detailed view, retrieve comprehensive knowledge resources
           const knowledgeResult = await KnowledgeService.getKnowledge({
-            projectId: project.properties.id,
+            projectId: project.id, // Access directly
             page: 1,
             limit: 100 // Reasonable threshold for associated resources
           });
 
           // Add debug logging
           logger.info('Knowledge items retrieved', { 
-            projectId: project.properties.id,
+            projectId: project.id, // Access directly
             count: knowledgeResult.data.length,
             firstItem: knowledgeResult.data[0] ? JSON.stringify(knowledgeResult.data[0]) : 'none'
           });
 
-          // Handle raw Neo4j record structure which includes properties field
+          // Map directly, assuming KnowledgeService returns Neo4jKnowledge objects
           project.knowledge = knowledgeResult.data.map(item => {
-            // Neo4j records have a properties field containing the actual data
-            // TypeScript doesn't know about this structure since Neo4jKnowledge doesn't include it
-            const rawItem = item as any;
-            const knowledgeProps = rawItem.properties || rawItem;
-            
             // More explicit mapping with debug info
             logger.debug('Processing knowledge item', { 
-              id: knowledgeProps.id,
-              domain: knowledgeProps.domain,
-              textLength: knowledgeProps.text ? knowledgeProps.text.length : 0
+              id: item.id,
+              domain: item.domain,
+              textLength: item.text ? item.text.length : 0
             });
             
-            return {
-              id: knowledgeProps.id,
-              text: knowledgeProps.text,
-              tags: knowledgeProps.tags,
-              domain: knowledgeProps.domain,
-              createdAt: knowledgeProps.createdAt
-            };
+            // Cast to the tool's Knowledge type
+            return item as Knowledge; 
           });
         } else {
           // For list mode, get abbreviated knowledge items
           const knowledgeResult = await KnowledgeService.getKnowledge({
-            projectId: project.properties.id,
+            projectId: project.id, // Access directly
             page: 1,
             limit: 5 // Just a few for summary view
           });
 
+          // Map directly, assuming KnowledgeService returns Neo4jKnowledge objects
           project.knowledge = knowledgeResult.data.map(item => {
-            // Neo4j records have a properties field containing the actual data
-            const rawItem = item as any;
-            const knowledgeProps = rawItem.properties || rawItem;
-            
+            // Cast to the tool's Knowledge type, potentially truncating text
+            const knowledgeItem = item as Knowledge;
             return {
-              id: knowledgeProps.id,
+              ...knowledgeItem,
               // Show a preview of the text - increased to 200 characters
-              text: knowledgeProps.text && knowledgeProps.text.length > 200 ? 
-                    knowledgeProps.text.substring(0, 200) + '... (truncated)' : 
-                    knowledgeProps.text,
-              tags: knowledgeProps.tags,
-              domain: knowledgeProps.domain,
-              createdAt: knowledgeProps.createdAt
+              text: item.text && item.text.length > 200 ? 
+                    item.text.substring(0, 200) + '... (truncated)' : 
+                    item.text,
             };
           });
         }
@@ -146,7 +133,7 @@ export async function listProjects(request: ProjectListRequest): Promise<Project
         if (mode === 'details') {
           // For detailed view, retrieve prioritized task entities
           const tasksResult = await TaskService.getTasks({
-            projectId: project.properties.id,
+            projectId: project.id, // Access directly
             page: 1,
             limit: 100, // Reasonable threshold for associated entities
             sortBy: 'priority',
@@ -155,55 +142,38 @@ export async function listProjects(request: ProjectListRequest): Promise<Project
 
           // Add debug logging
           logger.info('Tasks retrieved for project', { 
-            projectId: project.properties.id,
+            projectId: project.id, // Access directly
             count: tasksResult.data.length,
             firstItem: tasksResult.data[0] ? JSON.stringify(tasksResult.data[0]) : 'none'
           });
 
+          // Map directly, assuming TaskService returns Neo4jTask objects
           project.tasks = tasksResult.data.map(item => {
-            // Handle raw Neo4j record structure which includes properties field
-            const rawItem = item as any;
-            const taskProps = rawItem.properties || rawItem;
-            
             // Debug info
             logger.debug('Processing task item', { 
-              id: taskProps.id,
-              title: taskProps.title,
-              status: taskProps.status,
-              priority: taskProps.priority
+              id: item.id,
+              title: item.title,
+              status: item.status,
+              priority: item.priority
             });
 
-            return {
-              id: taskProps.id,
-              title: taskProps.title,
-              status: taskProps.status,
-              priority: taskProps.priority,
-              createdAt: taskProps.createdAt
-            };
+            // Cast to the tool's Task type
+            return item as Task; 
           });
         } else {
           // For list mode, get abbreviated task items
           const tasksResult = await TaskService.getTasks({
-            projectId: project.properties.id,
+            projectId: project.id, // Access directly
             page: 1,
             limit: 5, // Just a few for summary view
             sortBy: 'priority',
             sortDirection: 'desc'
           });
           
-          // Process task items similarly to detailed view
+          // Map directly, assuming TaskService returns Neo4jTask objects
           project.tasks = tasksResult.data.map(item => {
-            // Handle raw Neo4j record structure which includes properties field
-            const rawItem = item as any;
-            const taskProps = rawItem.properties || rawItem;
-            
-            return {
-              id: taskProps.id,
-              title: taskProps.title,
-              status: taskProps.status,
-              priority: taskProps.priority,
-              createdAt: taskProps.createdAt
-            };
+            // Cast to the tool's Task type
+            return item as Task; 
           });
         }
       }

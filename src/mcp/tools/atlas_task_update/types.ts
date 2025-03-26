@@ -3,7 +3,10 @@ import {
   McpToolResponse,
   PriorityLevel,
   TaskStatus,
-  TaskType
+  TaskType,
+  createPriorityLevelEnum,
+  createTaskStatusEnum,
+  createTaskTypeEnum
 } from '../../../types/mcp.js';
 
 export const TaskUpdateSchema = z.object({
@@ -15,10 +18,10 @@ export const TaskUpdateSchema = z.object({
     description: z.string().optional().describe(
       "Revised task description and requirements"
     ),
-    priority: z.enum([PriorityLevel.LOW, PriorityLevel.MEDIUM, PriorityLevel.HIGH, PriorityLevel.CRITICAL]).optional().describe(
+    priority: createPriorityLevelEnum().optional().describe(
       "Updated priority level reflecting current importance"
     ),
-    status: z.enum([TaskStatus.BACKLOG, TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.COMPLETED]).optional().describe(
+    status: createTaskStatusEnum().optional().describe(
       "Updated task status reflecting current progress"
     ),
     assignedTo: z.string().optional().describe(
@@ -41,7 +44,7 @@ export const TaskUpdateSchema = z.object({
     outputFormat: z.string().optional().describe(
       "Modified deliverable specification for task output"
     ),
-    taskType: z.enum([TaskType.RESEARCH, TaskType.GENERATION, TaskType.ANALYSIS, TaskType.INTEGRATION]).optional().describe(
+    taskType: createTaskTypeEnum().optional().describe(
       "Revised classification for task categorization"
     )
   }).describe(
@@ -55,8 +58,8 @@ const SingleTaskUpdateSchema = z.object({
   updates: z.object({
     title: z.string().min(5).max(150).optional(),
     description: z.string().optional(),
-    priority: z.enum([PriorityLevel.LOW, PriorityLevel.MEDIUM, PriorityLevel.HIGH, PriorityLevel.CRITICAL]).optional(),
-    status: z.enum([TaskStatus.BACKLOG, TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.COMPLETED]).optional(),
+    priority: createPriorityLevelEnum().optional(),
+    status: createTaskStatusEnum().optional(),
     assignedTo: z.string().optional(),
     urls: z.array(
       z.object({
@@ -67,7 +70,7 @@ const SingleTaskUpdateSchema = z.object({
     tags: z.array(z.string()).optional(),
     completionRequirements: z.string().optional(),
     outputFormat: z.string().optional(),
-    taskType: z.enum([TaskType.RESEARCH, TaskType.GENERATION, TaskType.ANALYSIS, TaskType.INTEGRATION]).optional()
+    taskType: createTaskTypeEnum().optional()
   })
 }).describe(
   "Update an individual task with selective field modifications"
@@ -81,8 +84,8 @@ const BulkTaskUpdateSchema = z.object({
       updates: z.object({
         title: z.string().min(5).max(150).optional(),
         description: z.string().optional(),
-        priority: z.enum([PriorityLevel.LOW, PriorityLevel.MEDIUM, PriorityLevel.HIGH, PriorityLevel.CRITICAL]).optional(),
-        status: z.enum([TaskStatus.BACKLOG, TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.COMPLETED]).optional(),
+        priority: createPriorityLevelEnum().optional(),
+        status: createTaskStatusEnum().optional(),
         assignedTo: z.string().optional(),
         urls: z.array(
           z.object({
@@ -93,7 +96,7 @@ const BulkTaskUpdateSchema = z.object({
         tags: z.array(z.string()).optional(),
         completionRequirements: z.string().optional(),
         outputFormat: z.string().optional(),
-        taskType: z.enum([TaskType.RESEARCH, TaskType.GENERATION, TaskType.ANALYSIS, TaskType.INTEGRATION]).optional()
+        taskType: createTaskTypeEnum().optional()
       })
     })
   ).min(1).max(100).describe(
@@ -112,8 +115,8 @@ export const AtlasTaskUpdateSchemaShape = {
   updates: z.object({
     title: z.string().min(5).max(150).optional(),
     description: z.string().optional(),
-    priority: z.enum([PriorityLevel.LOW, PriorityLevel.MEDIUM, PriorityLevel.HIGH, PriorityLevel.CRITICAL]).optional(),
-    status: z.enum([TaskStatus.BACKLOG, TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.COMPLETED]).optional(),
+    priority: createPriorityLevelEnum().optional(),
+    status: createTaskStatusEnum().optional(),
     assignedTo: z.string().optional(),
     urls: z.array(
       z.object({
@@ -124,7 +127,7 @@ export const AtlasTaskUpdateSchemaShape = {
     tags: z.array(z.string()).optional(),
     completionRequirements: z.string().optional(),
     outputFormat: z.string().optional(),
-    taskType: z.enum([TaskType.RESEARCH, TaskType.GENERATION, TaskType.ANALYSIS, TaskType.INTEGRATION]).optional()
+    taskType: createTaskTypeEnum().optional()
   }).optional().describe(
     "Object containing fields to modify (only specified fields will be updated) (required for mode='single')"
   ),
@@ -134,8 +137,8 @@ export const AtlasTaskUpdateSchemaShape = {
       updates: z.object({
         title: z.string().min(5).max(150).optional(),
         description: z.string().optional(),
-        priority: z.enum([PriorityLevel.LOW, PriorityLevel.MEDIUM, PriorityLevel.HIGH, PriorityLevel.CRITICAL]).optional(),
-        status: z.enum([TaskStatus.BACKLOG, TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.COMPLETED]).optional(),
+        priority: createPriorityLevelEnum().optional(),
+        status: createTaskStatusEnum().optional(),
         assignedTo: z.string().optional(),
         urls: z.array(
           z.object({
@@ -146,7 +149,7 @@ export const AtlasTaskUpdateSchemaShape = {
         tags: z.array(z.string()).optional(),
         completionRequirements: z.string().optional(),
         outputFormat: z.string().optional(),
-        taskType: z.enum([TaskType.RESEARCH, TaskType.GENERATION, TaskType.ANALYSIS, TaskType.INTEGRATION]).optional()
+        taskType: createTaskTypeEnum().optional()
       })
     })
   ).optional().describe(

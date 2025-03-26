@@ -24,7 +24,7 @@ export interface Neo4jEntity {
 export interface Neo4jProject extends Neo4jEntity {
   name: string;
   description: string;
-  status: typeof ProjectStatus[keyof typeof ProjectStatus];
+  status: string; // Allow any status value from ProjectStatus
   urls?: Array<{ title: string; url: string }>;
   completionRequirements: string;
   outputFormat: string;
@@ -38,8 +38,8 @@ export interface Neo4jTask extends Neo4jEntity {
   projectId: string;
   title: string;
   description: string;
-  priority: typeof PriorityLevel[keyof typeof PriorityLevel];
-  status: typeof TaskStatus[keyof typeof TaskStatus];
+  priority: string; // Allow any priority value from PriorityLevel
+  status: string; // Allow any status value from TaskStatus
   assignedTo?: string;
   urls?: Array<{ title: string; url: string }>;
   tags?: string[];
@@ -145,7 +145,7 @@ export interface PaginatedResult<T> {
  * Filter options for Project queries
  */
 export interface ProjectFilterOptions extends PaginationOptions {
-  status?: 'active' | 'pending' | 'completed' | 'archived' | ('active' | 'pending' | 'completed' | 'archived')[];
+  status?: 'active' | 'pending' | 'in-progress' | 'completed' | 'archived' | ('active' | 'pending' | 'in-progress' | 'completed' | 'archived')[];
   taskType?: string;
   searchTerm?: string;
 }
@@ -155,7 +155,7 @@ export interface ProjectFilterOptions extends PaginationOptions {
  */
 export interface TaskFilterOptions extends PaginationOptions {
   projectId: string;
-  status?: 'backlog' | 'todo' | 'in_progress' | 'completed' | ('backlog' | 'todo' | 'in_progress' | 'completed')[];
+  status?: 'backlog' | 'todo' | 'in-progress' | 'completed' | ('backlog' | 'todo' | 'in-progress' | 'completed')[];
   priority?: 'low' | 'medium' | 'high' | 'critical' | ('low' | 'medium' | 'high' | 'critical')[];
   assignedTo?: string;
   tags?: string[];

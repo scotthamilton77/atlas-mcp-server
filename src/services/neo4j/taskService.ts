@@ -173,6 +173,36 @@ export class TaskService {
    * @param updates Task updates
    * @returns The updated task
    */
+  /**
+   * Check if all dependencies of a task are completed
+   * @param taskId Task ID to check dependencies for
+   * @returns True if all dependencies are completed, false otherwise
+   */
+  static async areAllDependenciesCompleted(taskId: string): Promise<boolean> {
+    const session = await neo4jDriver.getSession();
+    
+    try {
+      const query = `
+        MATCH (t:${NodeLabels.Task} {id: $taskId})-[:${RelationshipTypes.DEPENDS_ON}]->(dep:${NodeLabels.Task})
+        WHERE dep.status <> 'completed'
+        RETURN count(dep) AS incompleteCount
+      `;
+      
+      const result = await session.executeRead(async (tx) => {
+        const result = await tx.run(query, { taskId });
+        return result.records[0]?.get('incompleteCount') || 0;
+      });
+      
+      return result === 0;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('Error checking task dependencies completion status', { error: errorMessage, taskId });
+      throw error;
+    } finally {
+      await session.close();
+    }
+  }
+  
   static async updateTask(id: string, updates: Partial<Omit<Neo4jTask, 'id' | 'projectId' | 'createdAt' | 'updatedAt'>>): Promise<Neo4jTask> {
     const session = await neo4jDriver.getSession();
     
@@ -180,6 +210,14 @@ export class TaskService {
       const exists = await Neo4jUtils.nodeExists(NodeLabels.Task, 'id', id);
       if (!exists) {
         throw new Error(`Task with ID ${id} not found`);
+      }
+      
+      // Check dependency requirements when changing status to in-progress or completed
+      if (updates.status === 'in-progress' || updates.status === 'completed') {
+        const depsCompleted = await this.areAllDependenciesCompleted(id);
+        if (!depsCompleted) {
+          throw new Error(`Cannot mark task as ${updates.status} because not all dependencies are completed`);
+        }
       }
       
       const updateParams: Record<string, any> = {

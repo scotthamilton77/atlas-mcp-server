@@ -14,7 +14,7 @@ export const ProjectUpdateSchema = z.object({
     description: z.string().optional().describe(
       "Revised project scope, goals, and implementation details"
     ),
-    status: z.enum([ProjectStatus.ACTIVE, ProjectStatus.PENDING, ProjectStatus.COMPLETED, ProjectStatus.ARCHIVED]).optional().describe(
+    status: z.enum([ProjectStatus.ACTIVE, ProjectStatus.PENDING, ProjectStatus.IN_PROGRESS, ProjectStatus.COMPLETED, ProjectStatus.ARCHIVED]).optional().describe(
       "Updated lifecycle state reflecting current project progress"
     ),
     urls: z.array(
@@ -45,7 +45,7 @@ const SingleProjectUpdateSchema = z.object({
   updates: z.object({
     name: z.string().min(1).max(100).optional(),
     description: z.string().optional(),
-    status: z.enum([ProjectStatus.ACTIVE, ProjectStatus.PENDING, ProjectStatus.COMPLETED, ProjectStatus.ARCHIVED]).optional(),
+    status: z.enum([ProjectStatus.ACTIVE, ProjectStatus.PENDING, ProjectStatus.IN_PROGRESS, ProjectStatus.COMPLETED, ProjectStatus.ARCHIVED]).optional(),
     urls: z.array(
       z.object({
         title: z.string(),
@@ -68,7 +68,7 @@ const BulkProjectUpdateSchema = z.object({
       updates: z.object({
         name: z.string().min(1).max(100).optional(),
         description: z.string().optional(),
-        status: z.enum([ProjectStatus.ACTIVE, ProjectStatus.PENDING, ProjectStatus.COMPLETED, ProjectStatus.ARCHIVED]).optional(),
+        status: z.enum([ProjectStatus.ACTIVE, ProjectStatus.PENDING, ProjectStatus.IN_PROGRESS, ProjectStatus.COMPLETED, ProjectStatus.ARCHIVED]).optional(),
         urls: z.array(
           z.object({
             title: z.string(),
@@ -96,7 +96,7 @@ export const AtlasProjectUpdateSchemaShape = {
   updates: z.object({
     name: z.string().min(1).max(100).optional(),
     description: z.string().optional(),
-    status: z.enum([ProjectStatus.ACTIVE, ProjectStatus.PENDING, ProjectStatus.COMPLETED, ProjectStatus.ARCHIVED]).optional(),
+    status: z.enum([ProjectStatus.ACTIVE, ProjectStatus.PENDING, ProjectStatus.IN_PROGRESS, ProjectStatus.COMPLETED, ProjectStatus.ARCHIVED]).optional(),
     urls: z.array(
       z.object({
         title: z.string(),
@@ -115,7 +115,7 @@ export const AtlasProjectUpdateSchemaShape = {
       updates: z.object({
         name: z.string().min(1).max(100).optional(),
         description: z.string().optional(),
-        status: z.enum([ProjectStatus.ACTIVE, ProjectStatus.PENDING, ProjectStatus.COMPLETED, ProjectStatus.ARCHIVED]).optional(),
+        status: z.enum([ProjectStatus.ACTIVE, ProjectStatus.PENDING, ProjectStatus.IN_PROGRESS, ProjectStatus.COMPLETED, ProjectStatus.ARCHIVED]).optional(),
         urls: z.array(
           z.object({
             title: z.string(),

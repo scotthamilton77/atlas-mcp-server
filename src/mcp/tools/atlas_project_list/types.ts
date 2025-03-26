@@ -51,20 +51,12 @@ export interface ProjectListResponse {
 }
 
 /**
- * Project entity structure for API responses
+ * Project entity structure for API responses, mirroring Neo4jProject structure
  */
 export interface Project {
-  /** Neo4j internal node identifier */
-  identity: number;
+  /** Unique project identifier */
+  id: string;
   
-  /** Neo4j node type designations */
-  labels: string[];
-  
-  /** Core project attributes */
-  properties: {
-    /** Unique project identifier */
-    id: string;
-    
     /** Project title */
     name: string;
     
@@ -89,30 +81,26 @@ export interface Project {
     /** Last modification timestamp (ISO format) */
     updatedAt: string;
     
-    /** Reference materials (serialized or array) */
-    urls: string | any[];
-  };
-  
-  /** Neo4j element identifier */
-  elementId: string;
-  
-  /** Parsed reference materials with titles */
-  urls: Array<{ title: string, url: string }>;
+    /** Parsed reference materials with titles */
+    urls?: Array<{ title: string, url: string }>;
   
   /** Associated knowledge resources (conditional inclusion) */
-  knowledge?: Knowledge[];
+  knowledge?: Knowledge[]; // Note: This structure is simplified for the tool response
   
   /** Associated task entities (conditional inclusion) */
   tasks?: Task[];
 }
 
 /**
- * Knowledge resource model for abbreviated references
+ * Knowledge resource model for abbreviated references, mirroring Neo4jKnowledge structure
  */
 export interface Knowledge {
   /** Unique knowledge resource identifier */
   id: string;
-  
+
+  /** ID of the parent project this knowledge belongs to */
+  projectId: string;
+
   /** Knowledge content */
   text: string;
   
@@ -124,15 +112,24 @@ export interface Knowledge {
   
   /** Resource creation timestamp (ISO format) */
   createdAt: string;
+
+  /** Last modification timestamp (ISO format) */
+  updatedAt: string;
+
+  /** Reference sources supporting this knowledge (URLs, DOIs, etc.) */
+  citations?: string[];
 }
 
 /**
- * Task entity model for abbreviated references
+ * Task entity model for abbreviated references, mirroring Neo4jTask structure
  */
 export interface Task {
   /** Unique task identifier */
   id: string;
-  
+
+  /** ID of the parent project this task belongs to */
+  projectId: string;
+
   /** Task description */
   title: string;
   
@@ -144,4 +141,25 @@ export interface Task {
   
   /** Task creation timestamp (ISO format) */
   createdAt: string;
+
+  /** Last modification timestamp (ISO format) */
+  updatedAt: string;
+
+  /** ID of entity responsible for task completion */
+  assignedTo?: string;
+
+  /** Reference materials */
+  urls?: Array<{ title: string; url: string }>;
+
+  /** Specific, measurable criteria that indicate task completion */
+  completionRequirements: string;
+
+  /** Required format specification for task deliverables */
+  outputFormat: string;
+
+  /** Classification of task purpose */
+  taskType: string;
+
+  /** Organizational labels */
+  tags?: string[];
 }

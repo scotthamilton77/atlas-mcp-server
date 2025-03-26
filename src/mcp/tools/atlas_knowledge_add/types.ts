@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { McpToolResponse } from '../../../types/mcp.js';
+import { McpToolResponse, KnowledgeDomain, createKnowledgeDomainEnum } from '../../../types/mcp.js';
 
 export const KnowledgeSchema = z.object({
   id: z.string().optional().describe(
@@ -14,7 +14,7 @@ export const KnowledgeSchema = z.object({
   tags: z.array(z.string()).optional().describe(
     "Categorical labels for organization and filtering"
   ),
-  domain: z.string().describe(
+  domain: createKnowledgeDomainEnum().or(z.string()).describe(
     "Primary knowledge area or discipline"
   ),
   citations: z.array(z.string()).optional().describe(
@@ -28,7 +28,7 @@ const SingleKnowledgeSchema = z.object({
   projectId: z.string(),
   text: z.string(),
   tags: z.array(z.string()).optional(),
-  domain: z.string(),
+  domain: createKnowledgeDomainEnum().or(z.string()),
   citations: z.array(z.string()).optional()
 }).describe(
   "Adds a single knowledge item with comprehensive details and metadata"
@@ -58,7 +58,7 @@ export const AtlasKnowledgeAddSchemaShape = {
   tags: z.array(z.string()).optional().describe(
     "Array of categorical labels for knowledge organization, thematic grouping, and advanced filtering capabilities"
   ),
-  domain: z.enum(["technical", "business", "scientific"]).or(z.string()).optional().describe(
+  domain: createKnowledgeDomainEnum().or(z.string()).optional().describe(
     "Primary knowledge area or discipline for high-level categorization and domain-specific searching (required for mode='single')"
   ),
   citations: z.array(z.string()).optional().describe(

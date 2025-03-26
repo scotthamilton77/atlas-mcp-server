@@ -45,9 +45,8 @@ export class ProjectListFormatter implements ResponseFormatter<ProjectListRespon
     
     // Format each project
     const projectsSections = projects.map((project, index) => {
-      // Extract project properties from Neo4j entity structure
-      const projectData = project.properties || project;
-      const { name, id, status, taskType, createdAt } = projectData;
+      // Access properties directly from the project object
+      const { name, id, status, taskType, createdAt } = project; 
       
       let projectSection = `${index + 1}. ${name || 'Unnamed Project'}\n\n` +
         `ID: ${id || 'Unknown ID'}\n` +
@@ -58,38 +57,38 @@ export class ProjectListFormatter implements ResponseFormatter<ProjectListRespon
       // Add project details in plain text format
       projectSection += `\nProject Details\n\n`;
       
-      // Add each property with proper formatting
-      if (projectData.id) projectSection += `ID: ${projectData.id}\n`;
-      if (projectData.name) projectSection += `Name: ${projectData.name}\n`;
-      if (projectData.description) projectSection += `Description: ${projectData.description}\n`;
-      if (projectData.status) projectSection += `Status: ${projectData.status}\n`;
+      // Add each property with proper formatting, accessing directly from 'project'
+      if (project.id) projectSection += `ID: ${project.id}\n`;
+      if (project.name) projectSection += `Name: ${project.name}\n`;
+      if (project.description) projectSection += `Description: ${project.description}\n`;
+      if (project.status) projectSection += `Status: ${project.status}\n`;
       
       // Format URLs array
-      if (projectData.urls) {
-        const urlsValue = Array.isArray(projectData.urls) && projectData.urls.length > 0 
-          ? JSON.stringify(projectData.urls) 
+      if (project.urls) {
+        const urlsValue = Array.isArray(project.urls) && project.urls.length > 0 
+          ? JSON.stringify(project.urls) 
           : "None";
         projectSection += `URLs: ${urlsValue}\n`;
       }
       
-      if (projectData.completionRequirements) projectSection += `Completion Requirements: ${projectData.completionRequirements}\n`;
-      if (projectData.outputFormat) projectSection += `Output Format: ${projectData.outputFormat}\n`;
-      if (projectData.taskType) projectSection += `Task Type: ${projectData.taskType}\n`;
+      if (project.completionRequirements) projectSection += `Completion Requirements: ${project.completionRequirements}\n`;
+      if (project.outputFormat) projectSection += `Output Format: ${project.outputFormat}\n`;
+      if (project.taskType) projectSection += `Task Type: ${project.taskType}\n`;
       
       // Format dates
-      if (projectData.createdAt) {
-        const createdDate = typeof projectData.createdAt === 'string' && 
-                           /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(projectData.createdAt)
-          ? new Date(projectData.createdAt).toLocaleString()
-          : projectData.createdAt;
+      if (project.createdAt) {
+        const createdDate = typeof project.createdAt === 'string' && 
+                           /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(project.createdAt)
+          ? new Date(project.createdAt).toLocaleString()
+          : project.createdAt;
         projectSection += `Created At: ${createdDate}\n`;
       }
       
-      if (projectData.updatedAt) {
-        const updatedDate = typeof projectData.updatedAt === 'string' && 
-                           /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(projectData.updatedAt)
-          ? new Date(projectData.updatedAt).toLocaleString()
-          : projectData.updatedAt;
+      if (project.updatedAt) {
+        const updatedDate = typeof project.updatedAt === 'string' && 
+                           /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(project.updatedAt)
+          ? new Date(project.updatedAt).toLocaleString()
+          : project.updatedAt;
         projectSection += `Updated At: ${updatedDate}\n`;
       }
       

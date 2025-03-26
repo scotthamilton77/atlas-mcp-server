@@ -18,10 +18,10 @@ export type EntityType = 'project' | 'task' | 'knowledge';
 export type TaskType = 'research' | 'generation' | 'analysis' | 'integration' | string;
 
 // Project status states
-export type ProjectStatus = 'active' | 'pending' | 'completed' | 'archived';
+export type ProjectStatus = 'active' | 'pending' | 'in-progress' | 'completed' | 'archived';
 
 // Task status states
-export type TaskStatus = 'backlog' | 'todo' | 'in_progress' | 'completed';
+export type TaskStatus = 'backlog' | 'todo' | 'in-progress' | 'completed';
 
 // Priority levels for tasks
 export type PriorityLevel = 'low' | 'medium' | 'high' | 'critical';

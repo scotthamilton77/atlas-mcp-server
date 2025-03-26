@@ -2,7 +2,9 @@ import { z } from "zod";
 import {
   McpToolResponse,
   ProjectStatus,
-  TaskType
+  TaskType,
+  createProjectStatusEnum,
+  createTaskTypeEnum
 } from '../../../types/mcp.js';
 
 export const ProjectSchema = z.object({
@@ -15,7 +17,7 @@ export const ProjectSchema = z.object({
   description: z.string().describe(
     "Comprehensive project overview with scope, goals, and implementation details"
   ),
-  status: z.enum([ProjectStatus.ACTIVE, ProjectStatus.PENDING, ProjectStatus.COMPLETED, ProjectStatus.ARCHIVED]).default(ProjectStatus.ACTIVE).describe(
+  status: createProjectStatusEnum().default(ProjectStatus.ACTIVE).describe(
     "Current project state for tracking progress (Default: active)"
   ),
   urls: z.array(
@@ -35,7 +37,7 @@ export const ProjectSchema = z.object({
   outputFormat: z.string().describe(
     "Required format and structure for project deliverables"
   ),
-  taskType: z.enum([TaskType.RESEARCH, TaskType.GENERATION, TaskType.ANALYSIS, TaskType.INTEGRATION]).or(z.string()).describe(
+  taskType: createTaskTypeEnum().or(z.string()).describe(
     "Classification of project purpose for organization and workflow"
   )
 });
@@ -45,7 +47,7 @@ const SingleProjectSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(1).max(100),
   description: z.string(),
-  status: z.enum([ProjectStatus.ACTIVE, ProjectStatus.PENDING, ProjectStatus.COMPLETED, ProjectStatus.ARCHIVED]).optional().default(ProjectStatus.ACTIVE),
+  status: createProjectStatusEnum().optional().default(ProjectStatus.ACTIVE),
   urls: z.array(
     z.object({
       title: z.string(),
@@ -55,7 +57,7 @@ const SingleProjectSchema = z.object({
   completionRequirements: z.string(),
   dependencies: z.array(z.string()).optional(),
   outputFormat: z.string(),
-  taskType: z.enum([TaskType.RESEARCH, TaskType.GENERATION, TaskType.ANALYSIS, TaskType.INTEGRATION]).or(z.string())
+  taskType: createTaskTypeEnum().or(z.string())
 }).describe(
   "Creates a single project with comprehensive details and metadata"
 );
@@ -81,7 +83,7 @@ export const AtlasProjectCreateSchemaShape = {
   description: z.string().optional().describe(
     "Comprehensive project overview detailing scope, objectives, approach, and implementation details (required for mode='single')"
   ),
-  status: z.enum([ProjectStatus.ACTIVE, ProjectStatus.PENDING, ProjectStatus.COMPLETED, ProjectStatus.ARCHIVED]).optional().describe(
+  status: createProjectStatusEnum().optional().describe(
     "Project lifecycle state for tracking progress and filtering (Default: active)"
   ),
   urls: z.array(
@@ -101,7 +103,7 @@ export const AtlasProjectCreateSchemaShape = {
   outputFormat: z.string().optional().describe(
     "Expected format and structure specification for the project's final deliverables and artifacts (required for mode='single')"
   ),
-  taskType: z.enum([TaskType.RESEARCH, TaskType.GENERATION, TaskType.ANALYSIS, TaskType.INTEGRATION]).or(z.string()).optional().describe(
+  taskType: createTaskTypeEnum().or(z.string()).optional().describe(
     "Project type classification for workflow organization, filtering, and reporting (options: research, generation, analysis, integration, or custom type) (required for mode='single')"
   ),
   projects: z.array(ProjectSchema).min(1).max(100).optional().describe(

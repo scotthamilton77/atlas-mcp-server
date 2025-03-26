@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from 'zod';
-import { ProjectStatus } from '../../../types/mcp.js';
+import { ProjectStatus, createProjectStatusEnum } from '../../../types/mcp.js';
 import { createToolExample, createToolMetadata, registerTool } from '../../../types/tool.js';
 import { atlasUpdateProject } from './updateProject.js';
 import { AtlasProjectUpdateSchemaShape } from './types.js';
@@ -110,7 +110,7 @@ export const registerAtlasProjectUpdateTool = (server: McpServer) => {
           id: z.string().describe("Project ID"),
           name: z.string().describe("Project name"),
           description: z.string().describe("Project description"),
-          status: z.enum([ProjectStatus.ACTIVE, ProjectStatus.PENDING, ProjectStatus.COMPLETED, ProjectStatus.ARCHIVED]).describe("Project status"),
+          status: createProjectStatusEnum().describe("Project status"),
           urls: z.array(z.object({
             title: z.string(),
             url: z.string()
@@ -129,7 +129,7 @@ export const registerAtlasProjectUpdateTool = (server: McpServer) => {
             id: z.string().describe("Project ID"),
             name: z.string().describe("Project name"),
             description: z.string().describe("Project description"),
-            status: z.enum([ProjectStatus.ACTIVE, ProjectStatus.PENDING, ProjectStatus.COMPLETED, ProjectStatus.ARCHIVED]).describe("Project status"),
+            status: createProjectStatusEnum().describe("Project status"),
             urls: z.array(z.object({
               title: z.string(),
               url: z.string()

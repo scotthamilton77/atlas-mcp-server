@@ -138,6 +138,36 @@ export class ProjectService {
   }
   
   /**
+   * Check if all dependencies of a project are completed
+   * @param projectId Project ID to check dependencies for
+   * @returns True if all dependencies are completed, false otherwise
+   */
+  static async areAllDependenciesCompleted(projectId: string): Promise<boolean> {
+    const session = await neo4jDriver.getSession();
+    
+    try {
+      const query = `
+        MATCH (p:${NodeLabels.Project} {id: $projectId})-[:${RelationshipTypes.DEPENDS_ON}]->(dep:${NodeLabels.Project})
+        WHERE dep.status <> 'completed'
+        RETURN count(dep) AS incompleteCount
+      `;
+      
+      const result = await session.executeRead(async (tx) => {
+        const result = await tx.run(query, { projectId });
+        return result.records[0]?.get('incompleteCount') || 0;
+      });
+      
+      return result === 0;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('Error checking project dependencies completion status', { error: errorMessage, projectId });
+      throw error;
+    } finally {
+      await session.close();
+    }
+  }
+  
+  /**
    * Update a project
    * @param id Project ID
    * @param updates Project updates
@@ -150,6 +180,14 @@ export class ProjectService {
       const exists = await Neo4jUtils.nodeExists(NodeLabels.Project, 'id', id);
       if (!exists) {
         throw new Error(`Project with ID ${id} not found`);
+      }
+      
+      // Check dependency requirements when changing status to in-progress or completed
+      if (updates.status === 'in-progress' || updates.status === 'completed') {
+        const depsCompleted = await this.areAllDependenciesCompleted(id);
+        if (!depsCompleted) {
+          throw new Error(`Cannot mark project as ${updates.status} because not all dependencies are completed`);
+        }
       }
       
       const updateParams: Record<string, any> = {
@@ -349,6 +387,21 @@ export class ProjectService {
       
       if (dependencyExists) {
         throw new Error(`Dependency relationship already exists between projects ${sourceProjectId} and ${targetProjectId}`);
+      }
+      
+      // Check for circular dependencies
+      const circularDependencyQuery = `
+        MATCH path = (target:${NodeLabels.Project} {id: $targetProjectId})-[:${RelationshipTypes.DEPENDS_ON}*]->(source:${NodeLabels.Project} {id: $sourceProjectId})
+        RETURN count(path) > 0 AS hasCycle
+      `;
+      
+      const cycleCheckResult = await session.executeRead(async (tx) => {
+        const result = await tx.run(circularDependencyQuery, { sourceProjectId, targetProjectId });
+        return result.records[0]?.get('hasCycle');
+      });
+      
+      if (cycleCheckResult) {
+        throw new Error('Adding this dependency would create a circular dependency chain');
       }
       
       const dependencyId = `pdep_${generateId()}`;
