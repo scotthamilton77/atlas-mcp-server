@@ -7,9 +7,38 @@
 [![Status](https://img.shields.io/badge/Status-Beta-orange.svg)]()
 [![GitHub](https://img.shields.io/github/stars/cyanheads/atlas-mcp-server?style=social)](https://github.com/cyanheads/atlas-mcp-server)
 
-ATLAS (Adaptive Task & Logic Automation System) is a task management system that helps organize and track complex projects through a structured approach. Built on a three-tier architecture of Projects, Tasks, and Knowledge, ATLAS makes it easier to manage projects, create tasks with clear organization and dependency tracking, and maintain a knowledge repository for project-related information.
+ATLAS (Adaptive Task & Logic Automation System) is a task management system for LLM Agents.
 
-Implemented as a Model Context Protocol (MCP) server, ATLAS allows LLM agents to interact with project management tools, enabling managing projects effectively.
+Built on a three-tier architecture:
+
+```mermaid
+graph TD
+    Project[PROJECTS] --> Task[TASKS]
+    Project --> Knowledge[KNOWLEDGE]
+    
+    subgraph "Project Node"
+        Project --- ProjectDesc["High-level initiatives with defined goals<br/>and deliverables that provide context<br/>and structure for all related work."]
+    end
+    
+    subgraph "Task Node"
+        Task --- TaskDesc["Discrete units of work with lifecycle<br/>management, priorities, and dependencies<br/>that contribute to project completion."]
+    end
+    
+    subgraph "Knowledge Node"
+        Knowledge --- KnowledgeDesc["Information assets categorized by domain<br/>with citation support that create<br/>a searchable repository."]
+    end
+    
+    %% Styling to match Neo4j database structure
+    classDef projectClass fill:#2196F3,stroke:#1976D2,color:white,rx:5,ry:5
+    classDef taskClass fill:#4CAF50,stroke:#388E3C,color:white,rx:5,ry:5
+    classDef knowledgeClass fill:#FF5722,stroke:#E64A19,color:white,rx:5,ry:5
+    class Project projectClass
+    class Task taskClass
+    class Knowledge knowledgeClass
+    class ProjectDesc,TaskDesc,KnowledgeDesc transparent,stroke:none
+```
+
+Implemented as a Model Context Protocol (MCP) server, ATLAS allows LLM agents to interact with project management tools, enabling managing projects, tasks, and knowledge items.
 
 > **Important Version Note**: [Version 1.5.4](https://github.com/cyanheads/atlas-mcp-server/releases/tag/v1.5.4) is the last version that uses SQLite as the database. Version 2.0 and onwards has been completely rewritten to use Neo4j, which requires either:
 >
@@ -295,7 +324,9 @@ ATLAS provides functionality to back up and restore the Neo4j database content. 
 
 ### Automatic Backups (Note)
 
-The `src/services/neo4j/driver.ts` includes a `triggerBackgroundBackup` function that calls `exportDatabase` after every write operation. This provides a basic, frequent backup mechanism. However, for robust backup strategies (e.g., scheduled backups, rotation, off-site storage), consider implementing a more sophisticated solution or leveraging Neo4j's enterprise backup features if applicable.
+**Important:** The automatic backup functionality is currently not working. Please use the manual backup process described below until this feature is fully implemented.
+
+The `src/services/neo4j/driver.ts` includes a `triggerBackgroundBackup` function that is intended to call `exportDatabase` after every write operation, but this feature is still under development. For now, rely on regular manual backups to protect your data.
 
 ### Backup Process
 
