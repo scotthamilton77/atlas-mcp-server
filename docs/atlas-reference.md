@@ -283,7 +283,7 @@ interface ProjectListRequest {
   /** Number of results per page, maximum 100 (Default: 20) */
   limit?: number;
 
-  /** Boolean flag to include associated knowledge (Default: false) */
+  /** Boolean flag to include associated knowledge items (Default: false) */
   includeKnowledge?: boolean;
 
   /** Boolean flag to include associated tasks (Default: false) */
@@ -293,7 +293,7 @@ interface ProjectListRequest {
   taskType?: string;
 
   /** Filter results by project status */
-  status?: "active" | "pending" | "completed" | "archived";
+  status?: "active" | "pending" | "in-progress" | "completed" | "archived" | Array<"active" | "pending" | "in-progress" | "completed" | "archived">;
 }
 ```
 
@@ -328,7 +328,7 @@ interface TaskCreateRequest {
   priority?: "low" | "medium" | "high" | "critical";
 
   /** Current task state (Default: todo) */
-  status?: "backlog" | "todo" | "in_progress" | "completed";
+  status?: "backlog" | "todo" | "in-progress" | "completed";
 
   /** ID of entity responsible for task completion */
   assignedTo?: string;
@@ -421,9 +421,9 @@ interface TaskListRequest {
   status?:
     | "backlog"
     | "todo"
-    | "in_progress"
+    | "in-progress"
     | "completed"
-    | Array<"backlog" | "todo" | "in_progress" | "completed">;
+    | Array<"backlog" | "todo" | "in-progress" | "completed">;
 
   /** Filter by assignment ID */
   assignedTo?: string;

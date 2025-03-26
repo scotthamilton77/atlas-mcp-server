@@ -30,10 +30,16 @@
     "llm-agent",
     "collaboration",
     "task-management",
-    "whiteboard",
     "graph-database",
     "automation",
-    "task-automation"
+    "task-automation",
+    "atlas",
+    "knowledge-management",
+    "dependency-tracking",
+    "unified-search",
+    "project-tracking",
+    "neo4j-integration",
+    "three-tier-architecture"
   ],
   "author": "@cyanheads",
   "license": "Apache-2.0",

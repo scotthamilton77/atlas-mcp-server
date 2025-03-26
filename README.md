@@ -1,6 +1,6 @@
 # ATLAS: Task Management System
 
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue.svg)](https://www.typescriptlang.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.8.2-blue.svg)](https://www.typescriptlang.org/)
 [![Model Context Protocol](https://img.shields.io/badge/MCP-1.8.0-green.svg)](https://modelcontextprotocol.io/)
 [![Version](https://img.shields.io/badge/Version-2.5.0-blue.svg)](https://github.com/cyanheads/atlas-mcp-server/releases)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
@@ -67,7 +67,7 @@ graph TD
 graph TD
     Project[Project] --> Task[Task]
 
-    Task --> Lifecycle["Lifecycle: backlog → todo → in_progress → completed"]
+    Task --> Lifecycle["Lifecycle: backlog → todo → in-progress → completed"]
     Task --> Assignment["Assignment & Prioritization"]
     Task --> Categories["Categorization & Tags"]
     Task --> Dependencies["Dependency Relationships"]
@@ -231,21 +231,21 @@ ATLAS provides a comprehensive suite of tools for project, task, and knowledge m
 
 ### Project Operations
 
-| Tool                   | Description                                                                                                                                                                                                                                                        |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `atlas_project_create` | Creates and initializes new projects within the platform ecosystem. Supports both single and bulk creation modes with options for project metadata including name, description, status, URLs, completion requirements, dependencies, output format, and task type. |
-| `atlas_project_list`   | Retrieves and filters project entities based on specified criteria. Offers modes for listing all projects or getting details of a specific project, with options for pagination, including related knowledge and tasks, and filtering by task type or status.      |
-| `atlas_project_update` | Modifies attributes of existing project entities within the system. Supports updating individual projects or applying bulk updates to multiple projects simultaneously, with partial updates that modify only specified fields.                                    |
-| `atlas_project_delete` | Removes project entities and associated resources from the system. Supports deletion of single projects or batch removal of multiple projects in one operation.                                                                                                    |
+| Tool                   | Description                                                                                                                                                                                                                                                                                    |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `atlas_project_create` | Creates and initializes new projects within the platform ecosystem. Supports both single and bulk creation modes with options for project metadata including name, description, status, URLs, completion requirements, dependencies, output format, and task type.                             |
+| `atlas_project_list`   | Retrieves and filters project entities based on specified criteria. Offers modes for listing all projects or getting details of a specific project, with options for pagination, including related knowledge and tasks, and filtering by task type or status (including "in-progress" status). |
+| `atlas_project_update` | Modifies attributes of existing project entities within the system. Supports updating individual projects or applying bulk updates to multiple projects simultaneously, with partial updates that modify only specified fields.                                                                |
+| `atlas_project_delete` | Removes project entities and associated resources from the system. Supports deletion of single projects or batch removal of multiple projects in one operation.                                                                                                                                |
 
 ### Task Operations
 
-| Tool                | Description                                                                                                                                                                                                                                                |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `atlas_task_create` | Creates a new task or multiple tasks in the system. Tasks always belong to a parent project and include details such as title, description, priority, status, assignment, URLs, tags, completion requirements, dependencies, output format, and task type. |
-| `atlas_task_update` | Updates existing task(s) in the system. Supports modifying individual tasks or applying bulk updates to multiple tasks simultaneously, with partial updates that modify only specified fields.                                                             |
-| `atlas_task_delete` | Deletes existing task(s) from the system. Supports deletion of single tasks or batch removal of multiple tasks in one operation.                                                                                                                           |
-| `atlas_task_list`   | Lists tasks according to specified filters. Required to specify a project ID, with options to filter by status, assignment, priority, tags, and task type. Includes sorting and pagination options.                                                        |
+| Tool                | Description                                                                                                                                                                                                                                                                          |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `atlas_task_create` | Creates a new task or multiple tasks in the system. Tasks always belong to a parent project and include details such as title, description, priority, status (including "in-progress"), assignment, URLs, tags, completion requirements, dependencies, output format, and task type. |
+| `atlas_task_update` | Updates existing task(s) in the system. Supports modifying individual tasks or applying bulk updates to multiple tasks simultaneously, with partial updates that modify only specified fields.                                                                                       |
+| `atlas_task_delete` | Deletes existing task(s) from the system. Supports deletion of single tasks or batch removal of multiple tasks in one operation.                                                                                                                                                     |
+| `atlas_task_list`   | Lists tasks according to specified filters. Required to specify a project ID, with options to filter by status (including "in-progress"), assignment, priority, tags, and task type. Includes sorting and pagination options.                                                        |
 
 ### Knowledge Operations
 
@@ -299,24 +299,24 @@ The `src/services/neo4j/driver.ts` includes a `triggerBackgroundBackup` function
 
 ### Backup Process
 
--   **Mechanism**: The backup process exports all `Project`, `Task`, and `Knowledge` nodes, along with their relationships, into separate JSON files.
--   **Output**: Each backup creates a timestamped directory (e.g., `atlas-backup-YYYYMMDDHHMMSS`) within the configured backup path (default: `./atlas-backups/`). This directory contains `projects.json`, `tasks.json`, `knowledge.json`, and `relationships.json`.
--   **Manual Backup**: You can trigger a manual backup using the provided script:
-    ```bash
-    npm run db:backup
-    ```
-    This command executes `scripts/db-backup.ts`, which calls the `exportDatabase` function.
+- **Mechanism**: The backup process exports all `Project`, `Task`, and `Knowledge` nodes, along with their relationships, into separate JSON files.
+- **Output**: Each backup creates a timestamped directory (e.g., `atlas-backup-YYYYMMDDHHMMSS`) within the configured backup path (default: `./atlas-backups/`). This directory contains `projects.json`, `tasks.json`, `knowledge.json`, and `relationships.json`.
+- **Manual Backup**: You can trigger a manual backup using the provided script:
+  ```bash
+  npm run db:backup
+  ```
+  This command executes `scripts/db-backup.ts`, which calls the `exportDatabase` function.
 
 ### Restore Process
 
--   **Mechanism**: The restore process first completely clears the existing Neo4j database. Then, it imports nodes and relationships from the JSON files located in the specified backup directory.
--   **Warning**: Restoring from a backup is a destructive operation. **It will overwrite all current data in your Neo4j database.**
--   **Manual Restore**: To restore the database from a backup directory, use the import script:
-    ```bash
-    npm run db:import <path_to_backup_directory>
-    ```
-    Replace `<path_to_backup_directory>` with the actual path to the backup folder (e.g., `./atlas-backups/atlas-backup-20250326120000`). This command executes `scripts/db-import.ts`, which calls the `importDatabase` function.
--   **Relationship Handling**: The import process attempts to recreate relationships based on the `id` properties stored within the nodes during export. Ensure your nodes have consistent `id` properties for relationships to be restored correctly.
+- **Mechanism**: The restore process first completely clears the existing Neo4j database. Then, it imports nodes and relationships from the JSON files located in the specified backup directory.
+- **Warning**: Restoring from a backup is a destructive operation. **It will overwrite all current data in your Neo4j database.**
+- **Manual Restore**: To restore the database from a backup directory, use the import script:
+  ```bash
+  npm run db:import <path_to_backup_directory>
+  ```
+  Replace `<path_to_backup_directory>` with the actual path to the backup folder (e.g., `./atlas-backups/atlas-backup-20250326120000`). This command executes `scripts/db-import.ts`, which calls the `importDatabase` function.
+- **Relationship Handling**: The import process attempts to recreate relationships based on the `id` properties stored within the nodes during export. Ensure your nodes have consistent `id` properties for relationships to be restored correctly.
 
 ## Contributing
 
