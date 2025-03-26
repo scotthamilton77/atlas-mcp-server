@@ -79,70 +79,6 @@ ATLAS implements the Model Context Protocol (MCP), enabling standardized communi
 - **Servers**: Tools and resources for project, task, and knowledge management
 - **LLM Agents**: AI models that leverage the server's management capabilities
 
-### Core Components
-
-**Projects** are the highest-level organizational units in the Atlas Platform that represent complete initiatives with defined goals, timelines, and deliverables.
-
-```mermaid
-graph TD
-    Project[Project] --> Context["Context & Structure"]
-    Project --> Container["Container for Tasks & Knowledge"]
-    Project --> Completion["Completion Requirements"]
-    Project --> Dependencies["Project Dependencies"]
-
-    Container --> Tasks["Tasks"]
-    Container --> Knowledge["Knowledge Items"]
-    Dependencies --> ProjectDep["Project ↔ Project Dependencies"]
-    Dependencies --> Workflow["Complex Workflow Hierarchies"]
-
-    style Project fill:#2196F3,stroke:#1976D2,color:white
-    style Container fill:#4CAF50,stroke:#388E3C,color:white
-    style Dependencies fill:#9C27B0,stroke:#7B1FA2,color:white
-    style Completion fill:#FF9800,stroke:#F57C00,color:white
-```
-
-**Tasks** are discrete units of work that contribute to project completion, representing specific actions, assignments, or deliverables.
-
-```mermaid
-graph TD
-    Project[Project] --> Task[Task]
-
-    Task --> Lifecycle["Lifecycle: backlog → todo → in-progress → completed"]
-    Task --> Assignment["Assignment & Prioritization"]
-    Task --> Categories["Categorization & Tags"]
-    Task --> Dependencies["Dependency Relationships"]
-
-    Assignment --> Priority["Priority Levels: low, medium, high, critical"]
-    Assignment --> Assignee["Assigned to User/Agent"]
-    Dependencies --> TaskDep["Task ↔ Task Dependencies"]
-
-    style Task fill:#4CAF50,stroke:#388E3C,color:white
-    style Project fill:#2196F3,stroke:#1976D2,color:white
-    style Lifecycle fill:#FF9800,stroke:#F57C00,color:white
-    style Dependencies fill:#9C27B0,stroke:#7B1FA2,color:white
-```
-
-**Knowledge** represents information assets associated with projects, including research findings, documentation, references, or any valuable information.
-
-```mermaid
-graph TD
-    Project[Project] --> Knowledge[Knowledge]
-
-    Knowledge --> Domain["Domain Categorization"]
-    Knowledge --> Citations["Citations & References"]
-    Knowledge --> Repository["Searchable Repository"]
-
-    Domain --> Categories["Technical, Business, Scientific, etc."]
-    Domain --> Tags["Custom Tags & Labels"]
-    Citations --> Sources["External Sources"]
-    Repository --> Search["Content-based Search"]
-
-    style Knowledge fill:#FF5722,stroke:#E64A19,color:white
-    style Project fill:#2196F3,stroke:#1976D2,color:white
-    style Domain fill:#4CAF50,stroke:#388E3C,color:white
-    style Citations fill:#9C27B0,stroke:#7B1FA2,color:white
-```
-
 ### System Integration
 
 The Atlas Platform integrates these components into a cohesive system:
@@ -267,67 +203,135 @@ src/
 
 ## Tools
 
-ATLAS provides a comprehensive suite of tools for project, task, and knowledge management:
+ATLAS provides a comprehensive suite of tools for project, task, and knowledge management, callable via the Model Context Protocol.
 
 ### Project Operations
 
-| Tool                   | Description                                                                                                                                                                                                                                                                                    |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `atlas_project_create` | Creates and initializes new projects within the platform ecosystem. Supports both single and bulk creation modes with options for project metadata including name, description, status, URLs, completion requirements, dependencies, output format, and task type.                             |
-| `atlas_project_list`   | Retrieves and filters project entities based on specified criteria. Offers modes for listing all projects or getting details of a specific project, with options for pagination, including related knowledge and tasks, and filtering by task type or status (including "in-progress" status). |
-| `atlas_project_update` | Modifies attributes of existing project entities within the system. Supports updating individual projects or applying bulk updates to multiple projects simultaneously, with partial updates that modify only specified fields.                                                                |
-| `atlas_project_delete` | Removes project entities and associated resources from the system. Supports deletion of single projects or batch removal of multiple projects in one operation.                                                                                                                                |
+#### `atlas_project_create`
+
+Creates new projects (single or bulk).
+
+- **Key Arguments:** `mode` ('single'/'bulk'), project details (`name`, `description`, `status`, `urls`, `completionRequirements`, `dependencies`, `outputFormat`, `taskType`). Bulk mode uses a `projects` array.
+
+#### `atlas_project_list`
+
+Lists projects (all or details for one).
+
+- **Key Arguments:** `mode` ('all'/'details'), `id` (for details), filters (`status`, `taskType`), pagination (`page`, `limit`), includes (`includeKnowledge`, `includeTasks`).
+
+#### `atlas_project_update`
+
+Updates existing projects (single or bulk).
+
+- **Key Arguments:** `mode` ('single'/'bulk'), `id`, `updates` object (containing fields to change). Bulk mode uses a `projects` array with `id` and `updates`.
+
+#### `atlas_project_delete`
+
+Deletes projects (single or bulk).
+
+- **Key Arguments:** `mode` ('single'/'bulk'), `id` (for single) or `projectIds` array (for bulk).
 
 ### Task Operations
 
-| Tool                | Description                                                                                                                                                                                                                                                                          |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `atlas_task_create` | Creates a new task or multiple tasks in the system. Tasks always belong to a parent project and include details such as title, description, priority, status (including "in-progress"), assignment, URLs, tags, completion requirements, dependencies, output format, and task type. |
-| `atlas_task_update` | Updates existing task(s) in the system. Supports modifying individual tasks or applying bulk updates to multiple tasks simultaneously, with partial updates that modify only specified fields.                                                                                       |
-| `atlas_task_delete` | Deletes existing task(s) from the system. Supports deletion of single tasks or batch removal of multiple tasks in one operation.                                                                                                                                                     |
-| `atlas_task_list`   | Lists tasks according to specified filters. Required to specify a project ID, with options to filter by status (including "in-progress"), assignment, priority, tags, and task type. Includes sorting and pagination options.                                                        |
+#### `atlas_task_create`
+
+Creates new tasks (single or bulk) associated with a project.
+
+- **Key Arguments:** `mode` ('single'/'bulk'), `projectId`, task details (`title`, `description`, `priority`, `status`, `assignedTo`, `tags`, `completionRequirements`, `dependencies`, `outputFormat`, `taskType`). Bulk mode uses a `tasks` array.
+
+#### `atlas_task_update`
+
+Updates existing tasks (single or bulk).
+
+- **Key Arguments:** `mode` ('single'/'bulk'), `id`, `updates` object (containing fields to change). Bulk mode uses a `tasks` array with `id` and `updates`.
+
+#### `atlas_task_delete`
+
+Deletes tasks (single or bulk).
+
+- **Key Arguments:** `mode` ('single'/'bulk'), `id` (for single) or `taskIds` array (for bulk).
+
+#### `atlas_task_list`
+
+Lists tasks for a specific project.
+
+- **Key Arguments:** `projectId` (required), filters (`status`, `assignedTo`, `priority`, `tags`, `taskType`), sorting (`sortBy`, `sortDirection`), pagination (`page`, `limit`).
 
 ### Knowledge Operations
 
-| Tool                     | Description                                                                                                                                                                                                                      |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `atlas_knowledge_add`    | Adds a new knowledge item or multiple items to the system. Knowledge items always belong to a parent project and include text content, tags for organization, domain categorization, and optional citations to external sources. |
-| `atlas_knowledge_delete` | Deletes existing knowledge item(s) from the system. Supports deletion of single items or batch removal of multiple knowledge items in one operation.                                                                             |
-| `atlas_knowledge_list`   | Lists knowledge items according to specified filters. Required to specify a project ID, with options to filter by tags, domain, and text content. Includes pagination options.                                                   |
+#### `atlas_knowledge_add`
+
+Adds new knowledge items (single or bulk) associated with a project.
+
+- **Key Arguments:** `mode` ('single'/'bulk'), `projectId`, knowledge details (`text`, `tags`, `domain`, `citations`). Bulk mode uses a `knowledge` array.
+
+#### `atlas_knowledge_delete`
+
+Deletes knowledge items (single or bulk).
+
+- **Key Arguments:** `mode` ('single'/'bulk'), `id` (for single) or `knowledgeIds` array (for bulk).
+
+#### `atlas_knowledge_list`
+
+Lists knowledge items for a specific project.
+
+- **Key Arguments:** `projectId` (required), filters (`tags`, `domain`, `search`), pagination (`page`, `limit`).
 
 ### Search Operations
 
-| Tool                   | Description                                                                                                                                                                                                                                                                  |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `atlas_unified_search` | Performs a unified search across all entity types (projects, tasks, and knowledge). Supports searching by specific properties with options for case-insensitive and fuzzy matching. Results can be filtered by entity type and task classification, with pagination support. |
+#### `atlas_unified_search`
+
+Performs a unified search across projects, tasks, and knowledge.
+
+- **Key Arguments:** `value` (search term), `property` (optional field to search), filters (`entityTypes`, `taskType`), options (`caseInsensitive`, `fuzzy`), pagination (`page`, `limit`).
 
 ### Database Operations
 
-| Tool                   | Description                                                                                                                                                       |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `atlas_database_clean` | Completely resets the database - permanently removes all data. Requires explicit acknowledgment to prevent accidental data loss. This operation cannot be undone. |
+#### `atlas_database_clean`
+
+**Destructive:** Completely resets the database, removing all projects, tasks, and knowledge.
+
+- **Key Arguments:** `acknowledgement` (must be set to `true` to confirm).
 
 ## Resources
 
-ATLAS exposes system resources through standard MCP endpoints:
+ATLAS exposes project, task, and knowledge data through standard MCP resource endpoints.
 
 ### Direct Resources
 
-| Resource            | Description                                                                        |
-| ------------------- | ---------------------------------------------------------------------------------- |
-| `atlas://projects`  | List of all projects in the Atlas platform with pagination support.                |
-| `atlas://tasks`     | List of all tasks in the Atlas platform with pagination and filtering support.     |
-| `atlas://knowledge` | List of all knowledge in the Atlas platform with pagination and filtering support. |
+#### `atlas://projects`
+
+- **Description:** List of all projects in the Atlas platform with pagination support.
+
+#### `atlas://tasks`
+
+- **Description:** List of all tasks in the Atlas platform with pagination and filtering support.
+
+#### `atlas://knowledge`
+
+- **Description:** List of all knowledge items in the Atlas platform with pagination and filtering support.
 
 ### Resource Templates
 
-| Resource Template                        | Description                                                    |
-| ---------------------------------------- | -------------------------------------------------------------- |
-| `atlas://projects/{projectId}`           | Retrieves a single project by its unique identifier.           |
-| `atlas://tasks/{taskId}`                 | Retrieves a single task by its unique identifier.              |
-| `atlas://projects/{projectId}/tasks`     | Retrieves all tasks belonging to a specific project.           |
-| `atlas://knowledge/{knowledgeId}`        | Retrieves a single knowledge item by its unique identifier.    |
-| `atlas://projects/{projectId}/knowledge` | Retrieves all knowledge items belonging to a specific project. |
+#### `atlas://projects/{projectId}`
+
+- **Description:** Retrieves a single project by its unique identifier (`projectId`).
+
+#### `atlas://tasks/{taskId}`
+
+- **Description:** Retrieves a single task by its unique identifier (`taskId`).
+
+#### `atlas://projects/{projectId}/tasks`
+
+- **Description:** Retrieves all tasks belonging to a specific project (`projectId`).
+
+#### `atlas://knowledge/{knowledgeId}`
+
+- **Description:** Retrieves a single knowledge item by its unique identifier (`knowledgeId`).
+
+#### `atlas://projects/{projectId}/knowledge`
+
+- **Description:** Retrieves all knowledge items belonging to a specific project (`projectId`).
 
 ## Database Backup and Restore
 
