@@ -26,14 +26,13 @@ export class ProjectService {
       const projectId = project.id || `proj_${generateId()}`;
       const now = Neo4jUtils.getCurrentTimestamp();
       
-      // Create project node, passing urls directly as a list of maps
       const query = `
         CREATE (p:${NodeLabels.Project} {
           id: $id,
           name: $name,
           description: $description,
           status: $status,
-          urls: $urls, // Store as native list of maps
+          urls: $urls, // Store as JSON string
           completionRequirements: $completionRequirements,
           outputFormat: $outputFormat,
           taskType: $taskType,
@@ -44,7 +43,7 @@ export class ProjectService {
                p.name as name,
                p.description as description,
                p.status as status,
-               p.urls as urls,
+               p.urls as urls, // Retrieve JSON string
                p.completionRequirements as completionRequirements,
                p.outputFormat as outputFormat,
                p.taskType as taskType,
@@ -52,12 +51,14 @@ export class ProjectService {
                p.updatedAt as updatedAt
       `;
             
+      const serializedUrls = JSON.stringify(project.urls || []);
+
       const params = {
         id: projectId,
         name: project.name,
         description: project.description,
         status: project.status,
-        urls: project.urls || [], // Pass array directly
+        urls: serializedUrls, 
         completionRequirements: project.completionRequirements,
         outputFormat: project.outputFormat,
         taskType: project.taskType,
@@ -67,7 +68,6 @@ export class ProjectService {
       
       const result = await session.executeWrite(async (tx) => {
         const result = await tx.run(query, params);
-        // Return the first record's properties directly
         return result.records.length > 0 ? result.records[0].toObject() : null;
       });
             
@@ -75,11 +75,12 @@ export class ProjectService {
         throw new Error('Failed to create project or retrieve its properties');
       }
       
-      // Result is already a plain object
-      const createdProject = result as Neo4jProject; 
+      // Correctly construct the object before type assertion
+      const createdProjectData = { ...result };
+      createdProjectData.urls = Neo4jUtils.parseJsonString(result.urls, []); 
       
-      logger.info('Project created successfully', { projectId: createdProject.id });
-      return createdProject;
+      logger.info('Project created successfully', { projectId: createdProjectData.id });
+      return createdProjectData as Neo4jProject; // Assert type after construction
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Error creating project', { error: errorMessage, project });
@@ -98,14 +99,13 @@ export class ProjectService {
     const session = await neo4jDriver.getSession();
     
     try {
-      // Return properties directly
       const query = `
         MATCH (p:${NodeLabels.Project} {id: $id})
         RETURN p.id as id,
                p.name as name,
                p.description as description,
                p.status as status,
-               p.urls as urls,
+               p.urls as urls, // Retrieve JSON string
                p.completionRequirements as completionRequirements,
                p.outputFormat as outputFormat,
                p.taskType as taskType,
@@ -122,12 +122,12 @@ export class ProjectService {
         return null;
       }
       
-      // Convert record to plain object
-      const project = result[0].toObject() as Neo4jProject;
-      // Ensure urls is an array, default to empty if null/undefined
-      project.urls = project.urls || []; 
+      // Correctly construct the object before type assertion
+      const recordData = result[0].toObject();
+      const projectData = { ...recordData };
+      projectData.urls = Neo4jUtils.parseJsonString(recordData.urls, []);
       
-      return project;
+      return projectData as Neo4jProject; // Assert type after construction
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Error getting project by ID', { error: errorMessage, id });
@@ -160,13 +160,15 @@ export class ProjectService {
       
       for (const [key, value] of Object.entries(updates)) {
         if (value !== undefined) {
-          // Pass urls array directly
-          updateParams[key] = value; 
+          if (key === 'urls') {
+            updateParams[key] = JSON.stringify(value || []);
+          } else {
+            updateParams[key] = value; 
+          }
           setClauses.push(`p.${key} = $${key}`);
         }
       }
       
-      // Return properties directly
       const query = `
         MATCH (p:${NodeLabels.Project} {id: $id})
         SET ${setClauses.join(', ')}
@@ -174,7 +176,7 @@ export class ProjectService {
                p.name as name,
                p.description as description,
                p.status as status,
-               p.urls as urls,
+               p.urls as urls, // Retrieve JSON string
                p.completionRequirements as completionRequirements,
                p.outputFormat as outputFormat,
                p.taskType as taskType,
@@ -191,12 +193,12 @@ export class ProjectService {
         throw new Error('Failed to update project or retrieve its properties');
       }
       
-      // Result is already a plain object
-      const updatedProject = result as Neo4jProject;
-      updatedProject.urls = updatedProject.urls || []; // Ensure urls is an array
+      // Correctly construct the object before type assertion
+      const updatedProjectData = { ...result };
+      updatedProjectData.urls = Neo4jUtils.parseJsonString(result.urls, []);
 
       logger.info('Project updated successfully', { projectId: id });
-      return updatedProject;
+      return updatedProjectData as Neo4jProject; // Assert type after construction
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Error updating project', { error: errorMessage, id, updates });
@@ -220,24 +222,15 @@ export class ProjectService {
         return false;
       }
       
-      // Use DETACH DELETE for simplicity
       const query = `
         MATCH (p:${NodeLabels.Project} {id: $id})
         DETACH DELETE p
-        RETURN count(p) as deletedCount // Use a different alias
       `;
       
-      const result = await session.executeWrite(async (tx) => {
-        return await tx.run(query, { id });
+      await session.executeWrite(async (tx) => {
+        await tx.run(query, { id });
       });
       
-      // Check if the node was actually deleted by checking the count returned by DETACH DELETE
-      // Note: count(p) after DELETE will be 0. We need to rely on the transaction success.
-      // A better way might be to return the ID before delete or check existence before.
-      // Let's assume transaction success implies deletion for now.
-      // const deletedCount = result.summary.counters.updates().nodesDeleted; // Alternative way
-      
-      // If the query runs without error and the node existed, assume deletion was successful.
       logger.info('Project deleted successfully', { projectId: id });
       return true; 
     } catch (error) {
@@ -277,14 +270,12 @@ export class ProjectService {
       }
       
       if (options.searchTerm) {
-        // Use case-insensitive regex for broader matching
         params.searchTerm = `(?i).*${options.searchTerm}.*`; 
         conditions.push('(p.name =~ $searchTerm OR p.description =~ $searchTerm)');
       }
       
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
       
-      // Construct query to return properties directly
       const query = `
         MATCH (p:${NodeLabels.Project})
         ${whereClause}
@@ -292,7 +283,7 @@ export class ProjectService {
                p.name as name,
                p.description as description,
                p.status as status,
-               p.urls as urls,
+               p.urls as urls, // Retrieve JSON string
                p.completionRequirements as completionRequirements,
                p.outputFormat as outputFormat,
                p.taskType as taskType,
@@ -306,14 +297,14 @@ export class ProjectService {
         return result.records;
       });
       
-      // Process records into plain objects
+      // Correctly construct objects before type assertion
       const projects: Neo4jProject[] = result.map(record => {
-         const project = record.toObject() as Neo4jProject;
-         project.urls = project.urls || []; // Ensure urls is an array
-         return project;
+         const recordData = record.toObject();
+         const projectData = { ...recordData };
+         projectData.urls = Neo4jUtils.parseJsonString(recordData.urls, []);
+         return projectData as Neo4jProject; // Assert type after construction
       });
             
-      // Apply pagination using the utility function
       return Neo4jUtils.paginateResults(projects, {
         page: options.page,
         limit: options.limit
@@ -357,11 +348,10 @@ export class ProjectService {
       );
       
       if (dependencyExists) {
-        // Maybe update existing instead of throwing? For now, throw.
         throw new Error(`Dependency relationship already exists between projects ${sourceProjectId} and ${targetProjectId}`);
       }
       
-      const dependencyId = `pdep_${generateId()}`; // Prefix for project dependency
+      const dependencyId = `pdep_${generateId()}`;
       const query = `
         MATCH (source:${NodeLabels.Project} {id: $sourceProjectId}),
               (target:${NodeLabels.Project} {id: $targetProjectId})
@@ -434,11 +424,9 @@ export class ProjectService {
       const query = `
         MATCH (source:${NodeLabels.Project})-[r:${RelationshipTypes.DEPENDS_ON} {id: $dependencyId}]->(target:${NodeLabels.Project})
         DELETE r
-        RETURN count(r) as deletedCount // Use a different alias
       `;
       
       const result = await session.executeWrite(async (tx) => {
-        // We need summary to check if relationship was deleted
         const res = await tx.run(query, { dependencyId });
         return res.summary.counters.updates().relationshipsDeleted > 0;
       });

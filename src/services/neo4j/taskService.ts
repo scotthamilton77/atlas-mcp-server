@@ -31,7 +31,7 @@ export class TaskService {
       const taskId = task.id || `task_${generateId()}`;
       const now = Neo4jUtils.getCurrentTimestamp();
       
-      // Store urls directly as list of maps
+      // Revert to storing urls as JSON string
       const query = `
         MATCH (p:${NodeLabels.Project} {id: $projectId})
         CREATE (t:${NodeLabels.Task} {
@@ -42,7 +42,7 @@ export class TaskService {
           priority: $priority,
           status: $status,
           assignedTo: $assignedTo,
-          urls: $urls, // Store natively
+          urls: $urls, // Store as JSON string
           tags: $tags,
           completionRequirements: $completionRequirements,
           outputFormat: $outputFormat,
@@ -58,7 +58,7 @@ export class TaskService {
                t.priority as priority,
                t.status as status,
                t.assignedTo as assignedTo,
-               t.urls as urls,
+               t.urls as urls, // Retrieve JSON string
                t.tags as tags,
                t.completionRequirements as completionRequirements,
                t.outputFormat as outputFormat,
@@ -67,6 +67,9 @@ export class TaskService {
                t.updatedAt as updatedAt
       `;
       
+      // Serialize URLs
+      const serializedUrls = JSON.stringify(task.urls || []);
+
       const params = {
         id: taskId,
         projectId: task.projectId,
@@ -75,7 +78,7 @@ export class TaskService {
         priority: task.priority,
         status: task.status,
         assignedTo: task.assignedTo || null,
-        urls: task.urls || [], // Pass array directly
+        urls: serializedUrls, // Pass JSON string
         tags: task.tags || [],
         completionRequirements: task.completionRequirements,
         outputFormat: task.outputFormat,
@@ -93,15 +96,16 @@ export class TaskService {
         throw new Error('Failed to create task or retrieve its properties');
       }
       
-      // Result is already a plain object
-      const createdTask = result as Neo4jTask;
+      // Parse urls back from JSON string
+      const createdTaskData = { ...result };
+      createdTaskData.urls = Neo4jUtils.parseJsonString(result.urls, []);
       
       logger.info('Task created successfully', { 
-        taskId: createdTask.id,
+        taskId: createdTaskData.id,
         projectId: task.projectId
       });
       
-      return createdTask;
+      return createdTaskData as Neo4jTask; // Assert type after construction
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Error creating task', { error: errorMessage, task });
@@ -120,7 +124,7 @@ export class TaskService {
     const session = await neo4jDriver.getSession();
     
     try {
-      // Return properties directly
+      // Retrieve JSON string for urls
       const query = `
         MATCH (t:${NodeLabels.Task} {id: $id})
         RETURN t.id as id,
@@ -130,7 +134,7 @@ export class TaskService {
                t.priority as priority,
                t.status as status,
                t.assignedTo as assignedTo,
-               t.urls as urls,
+               t.urls as urls, // Retrieve JSON string
                t.tags as tags,
                t.completionRequirements as completionRequirements,
                t.outputFormat as outputFormat,
@@ -148,12 +152,12 @@ export class TaskService {
         return null;
       }
       
-      // Convert record to plain object
-      const task = result[0].toObject() as Neo4jTask;
-      // Ensure urls is an array, default to empty if null/undefined
-      task.urls = task.urls || []; 
+      // Parse urls back from JSON string
+      const recordData = result[0].toObject();
+      const taskData = { ...recordData };
+      taskData.urls = Neo4jUtils.parseJsonString(recordData.urls, []);
       
-      return task;
+      return taskData as Neo4jTask; // Assert type after construction
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Error getting task by ID', { error: errorMessage, id });
@@ -186,13 +190,17 @@ export class TaskService {
       
       for (const [key, value] of Object.entries(updates)) {
         if (value !== undefined) {
-          // Pass urls array directly
-          updateParams[key] = value; 
+          // Serialize urls if present
+          if (key === 'urls') {
+            updateParams[key] = JSON.stringify(value || []);
+          } else {
+            updateParams[key] = value; 
+          }
           setClauses.push(`t.${key} = $${key}`);
         }
       }
       
-      // Return properties directly
+      // Retrieve JSON string for urls
       const query = `
         MATCH (t:${NodeLabels.Task} {id: $id})
         SET ${setClauses.join(', ')}
@@ -203,7 +211,7 @@ export class TaskService {
                t.priority as priority,
                t.status as status,
                t.assignedTo as assignedTo,
-               t.urls as urls,
+               t.urls as urls, // Retrieve JSON string
                t.tags as tags,
                t.completionRequirements as completionRequirements,
                t.outputFormat as outputFormat,
@@ -221,12 +229,12 @@ export class TaskService {
         throw new Error('Failed to update task or retrieve its properties');
       }
       
-      // Result is already a plain object
-      const updatedTask = result as Neo4jTask;
-      updatedTask.urls = updatedTask.urls || []; // Ensure urls is an array
+      // Parse urls back from JSON string
+      const updatedTaskData = { ...result };
+      updatedTaskData.urls = Neo4jUtils.parseJsonString(result.urls, []);
 
       logger.info('Task updated successfully', { taskId: id });
-      return updatedTask;
+      return updatedTaskData as Neo4jTask; // Assert type after construction
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Error updating task', { error: errorMessage, id, updates });
@@ -250,18 +258,15 @@ export class TaskService {
         return false;
       }
       
-      // Use DETACH DELETE for simplicity
       const query = `
         MATCH (t:${NodeLabels.Task} {id: $id})
         DETACH DELETE t
-        RETURN count(t) as deletedCount // Use a different alias
       `;
       
-      const result = await session.executeWrite(async (tx) => {
-        return await tx.run(query, { id });
+      await session.executeWrite(async (tx) => {
+        await tx.run(query, { id });
       });
       
-      // Assume transaction success implies deletion
       logger.info('Task deleted successfully', { taskId: id });
       return true;
     } catch (error) {
@@ -318,16 +323,19 @@ export class TaskService {
       }
       
       if (options.tags && options.tags.length > 0) {
-        params.tagsList = options.tags;
-        // Use list containment check
-        conditions.push('ALL(tag IN $tagsList WHERE tag IN t.tags)'); 
+        // Use helper for array parameter generation
+        const tagQuery = Neo4jUtils.generateArrayInListQuery('t', 'tags', 'tagsList', options.tags);
+        if (tagQuery.cypher) {
+          conditions.push(tagQuery.cypher);
+          Object.assign(params, tagQuery.params);
+        }
       }
       
       const sortField = options.sortBy || 'createdAt';
       const sortDirection = options.sortDirection || 'desc';
       const whereClause = `WHERE ${conditions.join(' AND ')}`;
       
-      // Return properties directly
+      // Retrieve JSON string for urls
       const query = `
         MATCH (t:${NodeLabels.Task})
         ${whereClause}
@@ -338,7 +346,7 @@ export class TaskService {
                t.priority as priority,
                t.status as status,
                t.assignedTo as assignedTo,
-               t.urls as urls,
+               t.urls as urls, // Retrieve JSON string
                t.tags as tags,
                t.completionRequirements as completionRequirements,
                t.outputFormat as outputFormat,
@@ -353,14 +361,14 @@ export class TaskService {
         return result.records;
       });
       
-      // Process records into plain objects
+      // Parse urls back from JSON string
       const tasks: Neo4jTask[] = result.map(record => {
-        const task = record.toObject() as Neo4jTask;
-        task.urls = task.urls || []; // Ensure urls is an array
-        return task;
+        const recordData = record.toObject();
+        const taskData = { ...recordData };
+        taskData.urls = Neo4jUtils.parseJsonString(recordData.urls, []);
+        return taskData as Neo4jTask; // Assert type after construction
       });
 
-      // Apply pagination
       return Neo4jUtils.paginateResults(tasks, {
         page: options.page,
         limit: options.limit
@@ -403,7 +411,6 @@ export class TaskService {
         throw new Error(`Dependency relationship already exists between tasks ${sourceTaskId} and ${targetTaskId}`);
       }
       
-      // Detect circular dependencies (Community Edition compatible path check)
       const circularDependencyQuery = `
         MATCH path = (target:${NodeLabels.Task} {id: $targetTaskId})-[:${RelationshipTypes.DEPENDS_ON}*]->(source:${NodeLabels.Task} {id: $sourceTaskId})
         RETURN count(path) > 0 AS hasCycle
@@ -475,7 +482,6 @@ export class TaskService {
       const query = `
         MATCH (source:${NodeLabels.Task})-[r:${RelationshipTypes.DEPENDS_ON} {id: $dependencyId}]->(target:${NodeLabels.Task})
         DELETE r
-        RETURN count(r) as deletedCount // Use a different alias
       `;
       
       const result = await session.executeWrite(async (tx) => {
@@ -528,7 +534,6 @@ export class TaskService {
         throw new Error(`Task with ID ${taskId} not found`);
       }
       
-      // Get outgoing dependencies (tasks this task depends on)
       const dependenciesQuery = `
         MATCH (source:${NodeLabels.Task} {id: $taskId})-[r:${RelationshipTypes.DEPENDS_ON}]->(target:${NodeLabels.Task})
         RETURN r.id as id, // Return relationship ID
@@ -539,7 +544,6 @@ export class TaskService {
         ORDER BY target.priority DESC, target.title
       `;
       
-      // Get incoming dependencies (tasks that depend on this task)
       const dependentsQuery = `
         MATCH (source:${NodeLabels.Task})-[r:${RelationshipTypes.DEPENDS_ON}]->(target:${NodeLabels.Task} {id: $taskId})
         RETURN r.id as id, // Return relationship ID
@@ -594,22 +598,17 @@ export class TaskService {
       const taskExists = await Neo4jUtils.nodeExists(NodeLabels.Task, 'id', taskId);
       if (!taskExists) throw new Error(`Task with ID ${taskId} not found`);
       
-      // Assuming User nodes exist or are created elsewhere
-      // For robustness, you might MERGE the user node here if unsure
       const userExists = await Neo4jUtils.nodeExists(NodeLabels.User, 'id', userId);
       if (!userExists) throw new Error(`User with ID ${userId} not found`); 
       
       const query = `
         MATCH (t:${NodeLabels.Task} {id: $taskId}), (u:${NodeLabels.User} {id: $userId})
         
-        // Remove previous assignment relationship if exists
         OPTIONAL MATCH (t)-[r:${RelationshipTypes.ASSIGNED_TO}]->(:${NodeLabels.User})
         DELETE r
         
-        // Create new assignment relationship
         CREATE (t)-[:${RelationshipTypes.ASSIGNED_TO}]->(u)
         
-        // Update task assignedTo property
         SET t.assignedTo = $userId,
             t.updatedAt = $updatedAt
         
@@ -620,7 +619,7 @@ export class TaskService {
                t.priority as priority,
                t.status as status,
                t.assignedTo as assignedTo,
-               t.urls as urls,
+               t.urls as urls, // Retrieve JSON string
                t.tags as tags,
                t.completionRequirements as completionRequirements,
                t.outputFormat as outputFormat,
@@ -644,11 +643,12 @@ export class TaskService {
         throw new Error('Failed to assign task or retrieve its properties');
       }
       
-      const updatedTask = result as Neo4jTask;
-      updatedTask.urls = updatedTask.urls || []; // Ensure urls is an array
+      // Parse urls back from JSON string
+      const updatedTaskData = { ...result };
+      updatedTaskData.urls = Neo4jUtils.parseJsonString(result.urls, []);
       
       logger.info('Task assigned successfully', { taskId, userId });
-      return updatedTask;
+      return updatedTaskData as Neo4jTask; // Assert type after construction
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Error assigning task', { error: errorMessage, taskId, userId });
@@ -673,11 +673,9 @@ export class TaskService {
       const query = `
         MATCH (t:${NodeLabels.Task} {id: $taskId})
         
-        // Remove assignment relationship
         OPTIONAL MATCH (t)-[r:${RelationshipTypes.ASSIGNED_TO}]->(:${NodeLabels.User})
         DELETE r
         
-        // Update task property
         SET t.assignedTo = null,
             t.updatedAt = $updatedAt
         
@@ -688,7 +686,7 @@ export class TaskService {
                t.priority as priority,
                t.status as status,
                t.assignedTo as assignedTo,
-               t.urls as urls,
+               t.urls as urls, // Retrieve JSON string
                t.tags as tags,
                t.completionRequirements as completionRequirements,
                t.outputFormat as outputFormat,
@@ -711,11 +709,12 @@ export class TaskService {
         throw new Error('Failed to unassign task or retrieve its properties');
       }
       
-      const updatedTask = result as Neo4jTask;
-      updatedTask.urls = updatedTask.urls || []; // Ensure urls is an array
+      // Parse urls back from JSON string
+      const updatedTaskData = { ...result };
+      updatedTaskData.urls = Neo4jUtils.parseJsonString(result.urls, []);
       
       logger.info('Task unassigned successfully', { taskId });
-      return updatedTask;
+      return updatedTaskData as Neo4jTask; // Assert type after construction
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Error unassigning task', { error: errorMessage, taskId });
