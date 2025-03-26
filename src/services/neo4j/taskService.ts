@@ -373,8 +373,15 @@ export class TaskService {
       const sortDirection = options.sortDirection || 'desc';
       const whereClause = `WHERE ${conditions.join(' AND ')}`;
       
-      // Retrieve JSON string for urls
-      const query = `
+      // First query to get total count (for pagination metadata)
+      const countQuery = `
+        MATCH (t:${NodeLabels.Task})
+        ${whereClause}
+        RETURN count(t) as total
+      `;
+      
+      // Second query to get paginated data with SKIP and LIMIT
+      const dataQuery = `
         MATCH (t:${NodeLabels.Task})
         ${whereClause}
         RETURN t.id as id,
@@ -392,25 +399,50 @@ export class TaskService {
                t.createdAt as createdAt,
                t.updatedAt as updatedAt
         ORDER BY t.${sortField} ${sortDirection.toUpperCase()}
+        SKIP toInteger($skip)
+        LIMIT toInteger($limit)
       `;
       
-      const result = await session.executeRead(async (tx) => {
-        const result = await tx.run(query, params);
+      // Calculate pagination parameters
+      const page = Math.max(options.page || 1, 1);
+      const limit = Math.min(Math.max(options.limit || 20, 1), 100);
+      const skip = (page - 1) * limit;
+      
+      // Add pagination parameters and ensure they are integers
+      params.skip = Math.floor(skip);
+      params.limit = Math.floor(limit);
+      
+      // Execute queries sequentially to avoid transaction conflicts
+      const totalResult = await session.executeRead(async (tx) => {
+        const result = await tx.run(countQuery, params);
+        return result.records[0]?.get('total') || 0;
+      });
+      
+      const dataResult = await session.executeRead(async (tx) => {
+        const result = await tx.run(dataQuery, params);
         return result.records;
       });
       
       // Parse urls back from JSON string
-      const tasks: Neo4jTask[] = result.map(record => {
+      const tasks: Neo4jTask[] = dataResult.map(record => {
         const recordData = record.toObject();
         const taskData = { ...recordData };
         taskData.urls = Neo4jUtils.parseJsonString(recordData.urls, []);
         return taskData as Neo4jTask; // Assert type after construction
       });
-
-      return Neo4jUtils.paginateResults(tasks, {
-        page: options.page,
-        limit: options.limit
-      });
+      
+      // Calculate pagination metadata
+      const total = totalResult as number;
+      const totalPages = Math.ceil(total / limit);
+      
+      // Return paginated result without using the helper function
+      return {
+        data: tasks,
+        total,
+        page,
+        limit,
+        totalPages
+      };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Error getting tasks', { error: errorMessage, options });
@@ -592,10 +624,16 @@ export class TaskService {
         ORDER BY source.priority DESC, source.title
       `;
       
-      const [dependenciesResult, dependentsResult] = await Promise.all([
-        session.executeRead(async (tx) => (await tx.run(dependenciesQuery, { taskId })).records),
-        session.executeRead(async (tx) => (await tx.run(dependentsQuery, { taskId })).records)
-      ]);
+      // Execute queries sequentially to avoid transaction conflicts
+      const dependenciesResult = await session.executeRead(async (tx) => {
+        const result = await tx.run(dependenciesQuery, { taskId });
+        return result.records;
+      });
+      
+      const dependentsResult = await session.executeRead(async (tx) => {
+        const result = await tx.run(dependentsQuery, { taskId });
+        return result.records;
+      });
       
       const dependencies = dependenciesResult.map(record => ({
         id: record.get('id'), // Relationship ID
