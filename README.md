@@ -11,34 +11,45 @@ ATLAS (Adaptive Task & Logic Automation System) is a task management system for 
 
 Built on a three-tier architecture:
 
-```mermaid
-graph TD
-    Project[PROJECTS] --> Task[TASKS]
-    Project --> Knowledge[KNOWLEDGE]
-    
-    subgraph "Project Node"
-        Project --- ProjectDesc["High-level initiatives with defined goals<br/>and deliverables that provide context<br/>and structure for all related work."]
-    end
-    
-    subgraph "Task Node"
-        Task --- TaskDesc["Discrete units of work with lifecycle<br/>management, priorities, and dependencies<br/>that contribute to project completion."]
-    end
-    
-    subgraph "Knowledge Node"
-        Knowledge --- KnowledgeDesc["Information assets categorized by domain<br/>with citation support that create<br/>a searchable repository."]
-    end
-    
-    %% Styling to match Neo4j database structure
-    classDef projectClass fill:#2196F3,stroke:#1976D2,color:white,rx:5,ry:5
-    classDef taskClass fill:#4CAF50,stroke:#388E3C,color:white,rx:5,ry:5
-    classDef knowledgeClass fill:#FF5722,stroke:#E64A19,color:white,rx:5,ry:5
-    class Project projectClass
-    class Task taskClass
-    class Knowledge knowledgeClass
-    class ProjectDesc,TaskDesc,KnowledgeDesc transparent,stroke:none
+```
+                  +------------------------------------------+
+                  |                PROJECT                   |
+                  |------------------------------------------|
+                  | id: string                               |
+                  | name: string                             |
+                  | description: string                      |
+                  | status: string                           |
+                  | urls: Array<{title: string, url: string}>|
+                  | completionRequirements: string           |
+                  | outputFormat: string                     |
+                  | taskType: string                         |
+                  | createdAt: string                        |
+                  | updatedAt: string                        |
+                  +----------------+-------------------------+
+                              |                    |
+                              |                    |
+                              v                    v
++------------------------------------------+ +------------------------------------------+
+|                  TASK                    | |                KNOWLEDGE                 |
+|------------------------------------------| |------------------------------------------|
+| id: string                               | | id: string                               |
+| projectId: string                        | | projectId: string                        |
+| title: string                            | | text: string                             |
+| description: string                      | | tags: string[]                           |
+| priority: string                         | | domain: string                           |
+| status: string                           | | citations: string[]                      |
+| assignedTo: string                       | | createdAt: string                        |
+| urls: Array<{title: string, url: string}>| | updatedAt: string                        |
+| tags: string[]                           | |                                          |
+| completionRequirements: string           | |                                          |
+| outputFormat: string                     | |                                          |
+| taskType: string                         | |                                          |
+| createdAt: string                        | |                                          |
+| updatedAt: string                        | |                                          |
++------------------------------------------+ +------------------------------------------+
 ```
 
-Implemented as a Model Context Protocol (MCP) server, ATLAS allows LLM agents to interact with project management tools, enabling managing projects, tasks, and knowledge items.
+Implemented as a Model Context Protocol (MCP) server, ATLAS allows LLM agents to interact with project management database, enabling managing projects, tasks, and knowledge items.
 
 > **Important Version Note**: [Version 1.5.4](https://github.com/cyanheads/atlas-mcp-server/releases/tag/v1.5.4) is the last version that uses SQLite as the database. Version 2.0 and onwards has been completely rewritten to use Neo4j, which requires either:
 >
