@@ -3,6 +3,7 @@ import { ProjectService } from "../../../services/neo4j/projectService.js";
 import { TaskService } from "../../../services/neo4j/taskService.js";
 import { TaskFilterOptions } from "../../../services/neo4j/types.js";
 import { BaseErrorCode, McpError, ProjectErrorCode, TaskErrorCode } from "../../../types/errors.js";
+import { PriorityLevel, TaskStatus } from "../../../types/mcp.js";
 import { logger } from "../../../utils/logger.js";
 import { ResourceTemplates, ResourceURIs, toTaskResource } from "../types.js";
 
@@ -39,16 +40,46 @@ export function registerTaskResources(server: McpServer) {
         projectId
       };
 
-      // Parse status parameter
+      // Parse status parameter using TaskStatus enum
       const status = queryParams.get("status");
       if (status) {
-        filters.status = status as any;
+        switch (status) {
+          case TaskStatus.BACKLOG:
+            filters.status = 'backlog';
+            break;
+          case TaskStatus.TODO:
+            filters.status = 'todo';
+            break;
+          case TaskStatus.IN_PROGRESS:
+            filters.status = 'in-progress';
+            break;
+          case TaskStatus.COMPLETED:
+            filters.status = 'completed';
+            break;
+          default:
+            logger.warn(`Invalid status value: ${status}, ignoring filter`);
+        }
       }
 
-      // Parse priority parameter
+      // Parse priority parameter using PriorityLevel enum
       const priority = queryParams.get("priority");
       if (priority) {
-        filters.priority = priority as any;
+        switch (priority) {
+          case PriorityLevel.LOW:
+            filters.priority = 'low';
+            break;
+          case PriorityLevel.MEDIUM:
+            filters.priority = 'medium';
+            break;
+          case PriorityLevel.HIGH:
+            filters.priority = 'high';
+            break;
+          case PriorityLevel.CRITICAL:
+            filters.priority = 'critical';
+            break;
+          default:
+            logger.warn(`Invalid priority value: ${priority}, ignoring filter`);
+        }
       }
 
       // Parse assignedTo parameter
@@ -73,12 +104,24 @@ export function registerTaskResources(server: McpServer) {
       // Parse sort parameters
       const sortBy = queryParams.get("sortBy");
       if (sortBy) {
-        filters.sortBy = sortBy as any;
+        // Validate sortBy value
+        const validSortByValues = ['priority', 'createdAt', 'status'];
+        if (validSortByValues.includes(sortBy)) {
+          filters.sortBy = sortBy as 'priority' | 'createdAt' | 'status';
+        } else {
+          logger.warn(`Invalid sortBy value: ${sortBy}, using default sorting`);
+        }
       }
 
       const sortDirection = queryParams.get("sortDirection");
       if (sortDirection) {
-        filters.sortDirection = sortDirection as any;
+        // Validate sortDirection value
+        const validDirections = ['asc', 'desc'];
+        if (validDirections.includes(sortDirection)) {
+          filters.sortDirection = sortDirection as 'asc' | 'desc';
+        } else {
+          logger.warn(`Invalid sortDirection value: ${sortDirection}, using default direction`);
+        }
       }
 
       // Parse pagination parameters
@@ -237,16 +280,46 @@ export function registerTaskResources(server: McpServer) {
         projectId
       };
 
-      // Parse status parameter
+      // Parse status parameter using TaskStatus enum
       const status = queryParams.get("status");
       if (status) {
-        filters.status = status as any;
+        switch (status) {
+          case TaskStatus.BACKLOG:
+            filters.status = 'backlog';
+            break;
+          case TaskStatus.TODO:
+            filters.status = 'todo';
+            break;
+          case TaskStatus.IN_PROGRESS:
+            filters.status = 'in-progress';
+            break;
+          case TaskStatus.COMPLETED:
+            filters.status = 'completed';
+            break;
+          default:
+            logger.warn(`Invalid status value: ${status}, ignoring filter`);
+        }
       }
 
-      // Parse priority parameter
+      // Parse priority parameter using PriorityLevel enum
       const priority = queryParams.get("priority");
       if (priority) {
-        filters.priority = priority as any;
+        switch (priority) {
+          case PriorityLevel.LOW:
+            filters.priority = 'low';
+            break;
+          case PriorityLevel.MEDIUM:
+            filters.priority = 'medium';
+            break;
+          case PriorityLevel.HIGH:
+            filters.priority = 'high';
+            break;
+          case PriorityLevel.CRITICAL:
+            filters.priority = 'critical';
+            break;
+          default:
+            logger.warn(`Invalid priority value: ${priority}, ignoring filter`);
+        }
       }
 
       // Parse assignedTo parameter
@@ -271,12 +344,24 @@ export function registerTaskResources(server: McpServer) {
       // Parse sort parameters
       const sortBy = queryParams.get("sortBy");
       if (sortBy) {
-        filters.sortBy = sortBy as any;
+        // Validate sortBy value
+        const validSortByValues = ['priority', 'createdAt', 'status'];
+        if (validSortByValues.includes(sortBy)) {
+          filters.sortBy = sortBy as 'priority' | 'createdAt' | 'status';
+        } else {
+          logger.warn(`Invalid sortBy value: ${sortBy}, using default sorting`);
+        }
       }
 
       const sortDirection = queryParams.get("sortDirection");
       if (sortDirection) {
-        filters.sortDirection = sortDirection as any;
+        // Validate sortDirection value
+        const validDirections = ['asc', 'desc'];
+        if (validDirections.includes(sortDirection)) {
+          filters.sortDirection = sortDirection as 'asc' | 'desc';
+        } else {
+          logger.warn(`Invalid sortDirection value: ${sortDirection}, using default direction`);
+        }
       }
 
       // Parse pagination parameters

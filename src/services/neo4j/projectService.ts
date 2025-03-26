@@ -314,39 +314,72 @@ export class ProjectService {
       
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
       
-      const query = `
+      // First query to get total count (for pagination metadata)
+      const countQuery = `
+        MATCH (p:${NodeLabels.Project})
+        ${whereClause}
+        RETURN count(p) as total
+      `;
+      
+      // Second query to get paginated data with SKIP and LIMIT
+      const dataQuery = `
         MATCH (p:${NodeLabels.Project})
         ${whereClause}
         RETURN p.id as id,
                p.name as name,
                p.description as description,
                p.status as status,
-               p.urls as urls, // Retrieve JSON string
+               p.urls as urls,
                p.completionRequirements as completionRequirements,
                p.outputFormat as outputFormat,
                p.taskType as taskType,
                p.createdAt as createdAt,
                p.updatedAt as updatedAt
         ORDER BY p.createdAt DESC
+        SKIP toInteger($skip)
+        LIMIT toInteger($limit)
       `;
       
-      const result = await session.executeRead(async (tx) => {
-        const result = await tx.run(query, params);
+      // Calculate pagination parameters
+      const page = Math.max(options.page || 1, 1);
+      const limit = Math.min(Math.max(options.limit || 20, 1), 100);
+      const skip = (page - 1) * limit;
+      
+      // Add pagination parameters and ensure they are integers
+      params.skip = Math.floor(skip);
+      params.limit = Math.floor(limit);
+      
+      // Execute queries sequentially to avoid transaction conflicts
+      const totalResult = await session.executeRead(async (tx) => {
+        const result = await tx.run(countQuery, params);
+        return result.records[0]?.get('total') || 0;
+      });
+      
+      const dataResult = await session.executeRead(async (tx) => {
+        const result = await tx.run(dataQuery, params);
         return result.records;
       });
       
-      // Correctly construct objects before type assertion
-      const projects: Neo4jProject[] = result.map(record => {
+      // Correctly construct objects
+      const projects: Neo4jProject[] = dataResult.map(record => {
          const recordData = record.toObject();
          const projectData = { ...recordData };
          projectData.urls = Neo4jUtils.parseJsonString(recordData.urls, []);
-         return projectData as Neo4jProject; // Assert type after construction
+         return projectData as Neo4jProject;
       });
-            
-      return Neo4jUtils.paginateResults(projects, {
-        page: options.page,
-        limit: options.limit
-      });
+      
+      // Calculate pagination metadata
+      const total = totalResult as number;
+      const totalPages = Math.ceil(total / limit);
+      
+      // Return paginated result without using slice()
+      return {
+        data: projects,
+        total,
+        page,
+        limit,
+        totalPages
+      };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Error getting projects', { error: errorMessage, options });
