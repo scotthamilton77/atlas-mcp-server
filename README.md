@@ -29,24 +29,24 @@ Built on a three-tier architecture:
                               |                    |
                               |                    |
                               v                    v
-+---------------------------------------+ +---------------------------------------+
-|                  TASK                 | |                KNOWLEDGE              |
-|---------------------------------------| |---------------------------------------|
-| id: string                            | | id: string                            |
-| projectId: string                     | | projectId: string                     |
-| title: string                         | | text: string                          |
-| description: string                   | | tags: string[]                        |
-| priority: string                      | | domain: string                        |
-| status: string                        | | citations: string[]                   |
-| assignedTo: string                    | | createdAt: string                     |
-| urls: Array<{}>                       | | updatedAt: string                     |
-| tags: string[]                        | |                                       |
-| completionRequirements: string        | |                                       |
-| outputFormat: string                  | |                                       |
-| taskType: string                      | |                                       |
-| createdAt: string                     | |                                       |
-| updatedAt: string                     | |                                       |
-+---------------------------------------+ +---------------------------------------+
++----------------------------------+ +----------------------------------+
+|             TASK                 | |                KNOWLEDGE         |
+|----------------------------------| |----------------------------------|
+| id: string                       | | id: string                       |
+| projectId: string                | | projectId: string                |
+| title: string                    | | text: string                     |
+| description: string              | | tags: string                     |
+| priority: string                 | | domain: string                   |
+| status: string                   | | citations: string[]              |
+| assignedTo: string               | | createdAt: string                |
+| urls: Array<{}>                  | | updatedAt: string                |
+| tags: string[]                   | |                                  |
+| completionRequirements: string   | |                                  |
+| outputFormat: string             | |                                  |
+| taskType: string                 | |                                  |
+| createdAt: string                | |                                  |
+| updatedAt: string                | |                                  |
++----------------------------------+ +----------------------------------+
 ```
 
 Implemented as a Model Context Protocol (MCP) server, ATLAS allows LLM agents to interact with project management database, enabling managing projects, tasks, and knowledge items.
