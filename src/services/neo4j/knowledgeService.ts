@@ -250,35 +250,22 @@ export class KnowledgeService {
       const exists = await Neo4jUtils.nodeExists(NodeLabels.Knowledge, 'id', id);
       
       if (!exists) {
-        return false;
+        return false; // Node not found
       }
       
-      // Delete knowledge and all its relationships
+      // Use DETACH DELETE to remove the node and all its relationships
       const query = `
         MATCH (k:${NodeLabels.Knowledge} {id: $id})
-        
-        // Delete domain relationship
-        OPTIONAL MATCH (k)-[r1:${RelationshipTypes.BELONGS_TO_DOMAIN}]->(:${NodeLabels.Domain})
-        
-        // Delete citation relationships
-        OPTIONAL MATCH (k)-[r2:${RelationshipTypes.CITES}]->(:${NodeLabels.Citation})
-        
-        // Delete all other relationships
-        OPTIONAL MATCH (k)-[r3]-()
-        OPTIONAL MATCH ()-[r4]->(k)
-        
-        // Delete knowledge
-        DELETE r1, r2, r3, r4, k
-        
-        RETURN count(k) as deleted
+        DETACH DELETE k
+        // We can't return count(k) after delete, rely on transaction success
       `;
       
-      const result = await session.executeWrite(async (tx) => {
-        return await tx.run(query, { id });
+      await session.executeWrite(async (tx) => {
+        await tx.run(query, { id });
+        // If query runs without error, assume deletion was successful
       });
       
-      const deletedCount = result.records[0]?.get('deleted');
-      const success = deletedCount > 0;
+      const success = true; // Assume success if no error thrown
       
       if (success) {
         logger.info('Knowledge item deleted successfully', { knowledgeId: id });

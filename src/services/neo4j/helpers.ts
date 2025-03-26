@@ -23,47 +23,32 @@ export function generateTimestampedId(prefix?: string): string {
   return prefix ? `${prefix}_${timestamp}${random}` : `${timestamp}${random}`;
 }
 
-/**
- * Convert an object into a proper Neo4j parameters object
- * Handles serialization of complex objects
- * @param obj The object to convert
- * @returns A Neo4j-compatible parameter object
- */
-export function toNeo4jParams(obj: Record<string, any>): Record<string, any> {
-  return Object.entries(obj).reduce((acc, [key, value]) => {
-    // Handle arrays, objects, and other complex types
-    if (value !== null && typeof value === 'object') {
-      acc[key] = JSON.parse(JSON.stringify(value));
-    } else {
-      acc[key] = value;
-    }
-    return acc;
-  }, {} as Record<string, any>);
-}
+// Removed unused toNeo4jParams function
 
 /**
  * Build a Neo4j update query dynamically based on provided fields
  * @param nodeLabel Neo4j node label
- * @param identifier Node identifier in the query
+ * @param identifier Node identifier in the query (e.g., 'n')
  * @param updates Updates to apply
  * @returns Object with setClauses and params
  */
 export function buildUpdateQuery(
-  nodeLabel: string,
+  nodeLabel: string, // Keep nodeLabel for potential future use or context
   identifier: string,
   updates: Record<string, any>
 ): { setClauses: string[]; params: Record<string, any> } {
   const params: Record<string, any> = {};
   const setClauses: string[] = [];
   
-  // Add update timestamp
+  // Add update timestamp automatically
   const now = new Date().toISOString();
   params.updatedAt = now;
   setClauses.push(`${identifier}.updatedAt = $updatedAt`);
   
-  // Add update clauses for each provided field
+  // Add update clauses for each provided field in the updates object
   for (const [key, value] of Object.entries(updates)) {
-    if (value !== undefined) {
+    // Ensure we don't try to overwrite the id or createdAt
+    if (key !== 'id' && key !== 'createdAt' && value !== undefined) {
       params[key] = value;
       setClauses.push(`${identifier}.${key} = $${key}`);
     }

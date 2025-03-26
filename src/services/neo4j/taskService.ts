@@ -23,9 +23,7 @@ export class TaskService {
     const session = await neo4jDriver.getSession();
     
     try {
-      // Check if the project exists
       const projectExists = await Neo4jUtils.nodeExists(NodeLabels.Project, 'id', task.projectId);
-      
       if (!projectExists) {
         throw new Error(`Project with ID ${task.projectId} not found`);
       }
@@ -33,7 +31,7 @@ export class TaskService {
       const taskId = task.id || `task_${generateId()}`;
       const now = Neo4jUtils.getCurrentTimestamp();
       
-      // Create task node and relationship to project
+      // Store urls directly as list of maps
       const query = `
         MATCH (p:${NodeLabels.Project} {id: $projectId})
         CREATE (t:${NodeLabels.Task} {
@@ -44,7 +42,7 @@ export class TaskService {
           priority: $priority,
           status: $status,
           assignedTo: $assignedTo,
-          urls: $urls,
+          urls: $urls, // Store natively
           tags: $tags,
           completionRequirements: $completionRequirements,
           outputFormat: $outputFormat,
@@ -53,7 +51,20 @@ export class TaskService {
           updatedAt: $updatedAt
         })
         CREATE (p)-[r:${RelationshipTypes.CONTAINS_TASK}]->(t)
-        RETURN t
+        RETURN t.id as id,
+               t.projectId as projectId,
+               t.title as title,
+               t.description as description,
+               t.priority as priority,
+               t.status as status,
+               t.assignedTo as assignedTo,
+               t.urls as urls,
+               t.tags as tags,
+               t.completionRequirements as completionRequirements,
+               t.outputFormat as outputFormat,
+               t.taskType as taskType,
+               t.createdAt as createdAt,
+               t.updatedAt as updatedAt
       `;
       
       const params = {
@@ -64,7 +75,7 @@ export class TaskService {
         priority: task.priority,
         status: task.status,
         assignedTo: task.assignedTo || null,
-        urls: task.urls || [],
+        urls: task.urls || [], // Pass array directly
         tags: task.tags || [],
         completionRequirements: task.completionRequirements,
         outputFormat: task.outputFormat,
@@ -75,14 +86,15 @@ export class TaskService {
       
       const result = await session.executeWrite(async (tx) => {
         const result = await tx.run(query, params);
-        return result.records;
+        return result.records.length > 0 ? result.records[0].toObject() : null;
       });
-      
-      const createdTask = Neo4jUtils.processRecords<Neo4jTask>(result, 't')[0];
-      
-      if (!createdTask) {
-        throw new Error('Failed to create task');
+            
+      if (!result) {
+        throw new Error('Failed to create task or retrieve its properties');
       }
+      
+      // Result is already a plain object
+      const createdTask = result as Neo4jTask;
       
       logger.info('Task created successfully', { 
         taskId: createdTask.id,
@@ -91,7 +103,8 @@ export class TaskService {
       
       return createdTask;
     } catch (error) {
-      logger.error('Error creating task', { error, task });
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('Error creating task', { error: errorMessage, task });
       throw error;
     } finally {
       await session.close();
@@ -107,6 +120,7 @@ export class TaskService {
     const session = await neo4jDriver.getSession();
     
     try {
+      // Return properties directly
       const query = `
         MATCH (t:${NodeLabels.Task} {id: $id})
         RETURN t.id as id,
@@ -129,31 +143,20 @@ export class TaskService {
         const result = await tx.run(query, { id });
         return result.records;
       });
-      
-      // No longer need processRecords as properties are explicit
+            
       if (result.length === 0) {
         return null;
       }
-      const record = result[0];
-      const task: Neo4jTask = {
-        id: record.get('id'),
-        projectId: record.get('projectId'),
-        title: record.get('title'),
-        description: record.get('description'),
-        priority: record.get('priority'),
-        status: record.get('status'),
-        assignedTo: record.get('assignedTo'),
-        urls: Neo4jUtils.parseJsonString(record.get('urls'), []),
-        tags: record.get('tags') || [],
-        completionRequirements: record.get('completionRequirements'),
-        outputFormat: record.get('outputFormat'),
-        taskType: record.get('taskType'),
-        createdAt: record.get('createdAt'),
-        updatedAt: record.get('updatedAt')
-      };
+      
+      // Convert record to plain object
+      const task = result[0].toObject() as Neo4jTask;
+      // Ensure urls is an array, default to empty if null/undefined
+      task.urls = task.urls || []; 
+      
       return task;
     } catch (error) {
-      logger.error('Error getting task by ID', { error, id });
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('Error getting task by ID', { error: errorMessage, id });
       throw error;
     } finally {
       await session.close();
@@ -170,50 +173,63 @@ export class TaskService {
     const session = await neo4jDriver.getSession();
     
     try {
-      // First check if task exists
       const exists = await Neo4jUtils.nodeExists(NodeLabels.Task, 'id', id);
-      
       if (!exists) {
         throw new Error(`Task with ID ${id} not found`);
       }
       
-      // Build dynamic update query based on provided fields
       const updateParams: Record<string, any> = {
         id,
         updatedAt: Neo4jUtils.getCurrentTimestamp()
       };
-      
       let setClauses = ['t.updatedAt = $updatedAt'];
       
-      // Add update clauses for each provided field
       for (const [key, value] of Object.entries(updates)) {
         if (value !== undefined) {
-          updateParams[key] = value;
+          // Pass urls array directly
+          updateParams[key] = value; 
           setClauses.push(`t.${key} = $${key}`);
         }
       }
       
+      // Return properties directly
       const query = `
         MATCH (t:${NodeLabels.Task} {id: $id})
         SET ${setClauses.join(', ')}
-        RETURN t
+        RETURN t.id as id,
+               t.projectId as projectId,
+               t.title as title,
+               t.description as description,
+               t.priority as priority,
+               t.status as status,
+               t.assignedTo as assignedTo,
+               t.urls as urls,
+               t.tags as tags,
+               t.completionRequirements as completionRequirements,
+               t.outputFormat as outputFormat,
+               t.taskType as taskType,
+               t.createdAt as createdAt,
+               t.updatedAt as updatedAt
       `;
       
       const result = await session.executeWrite(async (tx) => {
         const result = await tx.run(query, updateParams);
-        return result.records;
+        return result.records.length > 0 ? result.records[0].toObject() : null;
       });
-      
-      const updatedTask = Neo4jUtils.processRecords<Neo4jTask>(result, 't')[0];
-      
-      if (!updatedTask) {
-        throw new Error('Failed to update task');
+            
+      if (!result) {
+        throw new Error('Failed to update task or retrieve its properties');
       }
       
+      // Result is already a plain object
+      const updatedTask = result as Neo4jTask;
+      updatedTask.urls = updatedTask.urls || []; // Ensure urls is an array
+
       logger.info('Task updated successfully', { taskId: id });
       return updatedTask;
     } catch (error) {
-      logger.error('Error updating task', { error, id, updates });
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('Error updating task', { error: errorMessage, id, updates });
       throw error;
     } finally {
       await session.close();
@@ -229,45 +245,28 @@ export class TaskService {
     const session = await neo4jDriver.getSession();
     
     try {
-      // Check if task exists
       const exists = await Neo4jUtils.nodeExists(NodeLabels.Task, 'id', id);
-      
       if (!exists) {
         return false;
       }
       
-      // Delete task and all its relationships
+      // Use DETACH DELETE for simplicity
       const query = `
         MATCH (t:${NodeLabels.Task} {id: $id})
-        
-        // Delete all task dependency relationships
-        OPTIONAL MATCH (t)-[r1:${RelationshipTypes.DEPENDS_ON}]->()
-        OPTIONAL MATCH ()-[r2:${RelationshipTypes.DEPENDS_ON}]->(t)
-        
-        // Delete all other relationships
-        OPTIONAL MATCH (t)-[r3]-()
-        OPTIONAL MATCH ()-[r4]->(t)
-        
-        // Delete task
-        DELETE r1, r2, r3, r4, t
-        
-        RETURN count(t) as deleted
+        DETACH DELETE t
+        RETURN count(t) as deletedCount // Use a different alias
       `;
       
       const result = await session.executeWrite(async (tx) => {
         return await tx.run(query, { id });
       });
       
-      const deletedCount = result.records[0]?.get('deleted');
-      const success = deletedCount > 0;
-      
-      if (success) {
-        logger.info('Task deleted successfully', { taskId: id });
-      }
-      
-      return success;
+      // Assume transaction success implies deletion
+      logger.info('Task deleted successfully', { taskId: id });
+      return true;
     } catch (error) {
-      logger.error('Error deleting task', { error, id });
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('Error deleting task', { error: errorMessage, id });
       throw error;
     } finally {
       await session.close();
@@ -283,7 +282,6 @@ export class TaskService {
     const session = await neo4jDriver.getSession();
     
     try {
-      // Build filter conditions
       let conditions: string[] = ['t.projectId = $projectId'];
       const params: Record<string, any> = {
         projectId: options.projectId
@@ -319,23 +317,17 @@ export class TaskService {
         conditions.push('t.taskType = $taskType');
       }
       
-      // Handle tags filtering
       if (options.tags && options.tags.length > 0) {
-        const { cypher, params: tagParams } = Neo4jUtils.generateArrayParamQuery('tags', options.tags);
-        if (cypher) {
-          conditions.push(cypher);
-          Object.assign(params, tagParams);
-        }
+        params.tagsList = options.tags;
+        // Use list containment check
+        conditions.push('ALL(tag IN $tagsList WHERE tag IN t.tags)'); 
       }
       
-      // Determine sort field and direction
       const sortField = options.sortBy || 'createdAt';
       const sortDirection = options.sortDirection || 'desc';
-      
-      // Construct WHERE clause
       const whereClause = `WHERE ${conditions.join(' AND ')}`;
       
-      // Construct query
+      // Return properties directly
       const query = `
         MATCH (t:${NodeLabels.Task})
         ${whereClause}
@@ -361,22 +353,12 @@ export class TaskService {
         return result.records;
       });
       
-      const tasks: Neo4jTask[] = result.map(record => ({
-        id: record.get('id'),
-        projectId: record.get('projectId'),
-        title: record.get('title'),
-        description: record.get('description'),
-        priority: record.get('priority'),
-        status: record.get('status'),
-        assignedTo: record.get('assignedTo'),
-        urls: Neo4jUtils.parseJsonString(record.get('urls'), []),
-        tags: record.get('tags') || [],
-        completionRequirements: record.get('completionRequirements'),
-        outputFormat: record.get('outputFormat'),
-        taskType: record.get('taskType'),
-        createdAt: record.get('createdAt'),
-        updatedAt: record.get('updatedAt')
-      }));
+      // Process records into plain objects
+      const tasks: Neo4jTask[] = result.map(record => {
+        const task = record.toObject() as Neo4jTask;
+        task.urls = task.urls || []; // Ensure urls is an array
+        return task;
+      });
 
       // Apply pagination
       return Neo4jUtils.paginateResults(tasks, {
@@ -384,7 +366,8 @@ export class TaskService {
         limit: options.limit
       });
     } catch (error) {
-      logger.error('Error getting tasks', { error, options });
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('Error getting tasks', { error: errorMessage, options });
       throw error;
     } finally {
       await session.close();
@@ -404,26 +387,15 @@ export class TaskService {
     const session = await neo4jDriver.getSession();
     
     try {
-      // Check if both tasks exist
       const sourceExists = await Neo4jUtils.nodeExists(NodeLabels.Task, 'id', sourceTaskId);
       const targetExists = await Neo4jUtils.nodeExists(NodeLabels.Task, 'id', targetTaskId);
       
-      if (!sourceExists) {
-        throw new Error(`Source task with ID ${sourceTaskId} not found`);
-      }
+      if (!sourceExists) throw new Error(`Source task with ID ${sourceTaskId} not found`);
+      if (!targetExists) throw new Error(`Target task with ID ${targetTaskId} not found`);
       
-      if (!targetExists) {
-        throw new Error(`Target task with ID ${targetTaskId} not found`);
-      }
-      
-      // Check if dependency already exists
       const dependencyExists = await Neo4jUtils.relationshipExists(
-        NodeLabels.Task,
-        'id',
-        sourceTaskId,
-        NodeLabels.Task,
-        'id',
-        targetTaskId,
+        NodeLabels.Task, 'id', sourceTaskId,
+        NodeLabels.Task, 'id', targetTaskId,
         RelationshipTypes.DEPENDS_ON
       );
       
@@ -431,17 +403,14 @@ export class TaskService {
         throw new Error(`Dependency relationship already exists between tasks ${sourceTaskId} and ${targetTaskId}`);
       }
       
-      // Detect circular dependencies
+      // Detect circular dependencies (Community Edition compatible path check)
       const circularDependencyQuery = `
         MATCH path = (target:${NodeLabels.Task} {id: $targetTaskId})-[:${RelationshipTypes.DEPENDS_ON}*]->(source:${NodeLabels.Task} {id: $sourceTaskId})
         RETURN count(path) > 0 AS hasCycle
       `;
       
       const cycleCheckResult = await session.executeRead(async (tx) => {
-        const result = await tx.run(circularDependencyQuery, { 
-          sourceTaskId, 
-          targetTaskId 
-        });
+        const result = await tx.run(circularDependencyQuery, { sourceTaskId, targetTaskId });
         return result.records[0]?.get('hasCycle');
       });
       
@@ -449,7 +418,6 @@ export class TaskService {
         throw new Error('Adding this dependency would create a circular dependency chain');
       }
       
-      // Create dependency relationship
       const dependencyId = `tdep_${generateId()}`;
       const query = `
         MATCH (source:${NodeLabels.Task} {id: $sourceTaskId}),
@@ -484,18 +452,11 @@ export class TaskService {
         targetTaskId: record.get('targetTaskId')
       };
       
-      logger.info('Task dependency added successfully', { 
-        sourceTaskId, 
-        targetTaskId 
-      });
-      
+      logger.info('Task dependency added successfully', { sourceTaskId, targetTaskId });
       return dependency;
     } catch (error) {
-      logger.error('Error adding task dependency', { 
-        error, 
-        sourceTaskId, 
-        targetTaskId 
-      });
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('Error adding task dependency', { error: errorMessage, sourceTaskId, targetTaskId });
       throw error;
     } finally {
       await session.close();
@@ -514,25 +475,24 @@ export class TaskService {
       const query = `
         MATCH (source:${NodeLabels.Task})-[r:${RelationshipTypes.DEPENDS_ON} {id: $dependencyId}]->(target:${NodeLabels.Task})
         DELETE r
-        RETURN count(r) as deleted
+        RETURN count(r) as deletedCount // Use a different alias
       `;
       
       const result = await session.executeWrite(async (tx) => {
-        return await tx.run(query, { dependencyId });
+        const res = await tx.run(query, { dependencyId });
+        return res.summary.counters.updates().relationshipsDeleted > 0;
       });
-      
-      const deletedCount = result.records[0]?.get('deleted') as number;
-      const success = deletedCount > 0;
-      
-      if (success) {
+            
+      if (result) {
         logger.info('Task dependency removed successfully', { dependencyId });
       } else {
-        logger.warn('Task dependency not found for removal', { dependencyId });
+        logger.warn('Task dependency not found or not removed', { dependencyId });
       }
       
-      return success;
+      return result;
     } catch (error) {
-      logger.error('Error removing task dependency', { error, dependencyId });
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('Error removing task dependency', { error: errorMessage, dependencyId });
       throw error;
     } finally {
       await session.close();
@@ -546,15 +506,15 @@ export class TaskService {
    */
   static async getTaskDependencies(taskId: string): Promise<{
     dependencies: {
-      id: string;
-      taskId: string;
+      id: string; // Relationship ID
+      taskId: string; // Target Task ID
       title: string;
       status: string;
       priority: string;
     }[];
     dependents: {
-      id: string;
-      taskId: string;
+      id: string; // Relationship ID
+      taskId: string; // Source Task ID
       title: string;
       status: string;
       priority: string;
@@ -563,9 +523,7 @@ export class TaskService {
     const session = await neo4jDriver.getSession();
     
     try {
-      // Check if task exists
       const exists = await Neo4jUtils.nodeExists(NodeLabels.Task, 'id', taskId);
-      
       if (!exists) {
         throw new Error(`Task with ID ${taskId} not found`);
       }
@@ -573,7 +531,8 @@ export class TaskService {
       // Get outgoing dependencies (tasks this task depends on)
       const dependenciesQuery = `
         MATCH (source:${NodeLabels.Task} {id: $taskId})-[r:${RelationshipTypes.DEPENDS_ON}]->(target:${NodeLabels.Task})
-        RETURN target.id AS taskId, 
+        RETURN r.id as id, // Return relationship ID
+               target.id AS taskId, 
                target.title AS title,
                target.status AS status,
                target.priority AS priority
@@ -583,7 +542,8 @@ export class TaskService {
       // Get incoming dependencies (tasks that depend on this task)
       const dependentsQuery = `
         MATCH (source:${NodeLabels.Task})-[r:${RelationshipTypes.DEPENDS_ON}]->(target:${NodeLabels.Task} {id: $taskId})
-        RETURN source.id AS taskId, 
+        RETURN r.id as id, // Return relationship ID
+               source.id AS taskId, 
                source.title AS title,
                source.status AS status,
                source.priority AS priority
@@ -591,28 +551,20 @@ export class TaskService {
       `;
       
       const [dependenciesResult, dependentsResult] = await Promise.all([
-        session.executeRead(async (tx) => {
-          const result = await tx.run(dependenciesQuery, { taskId });
-          return result.records;
-        }),
-        session.executeRead(async (tx) => {
-          const result = await tx.run(dependentsQuery, { taskId });
-          return result.records;
-        })
+        session.executeRead(async (tx) => (await tx.run(dependenciesQuery, { taskId })).records),
+        session.executeRead(async (tx) => (await tx.run(dependentsQuery, { taskId })).records)
       ]);
       
-      // Process dependencies (outgoing)
       const dependencies = dependenciesResult.map(record => ({
-        id: record.get('taskId'),
+        id: record.get('id'), // Relationship ID
         taskId: record.get('taskId'),
         title: record.get('title'),
         status: record.get('status'),
         priority: record.get('priority')
       }));
       
-      // Process dependents (incoming)
       const dependents = dependentsResult.map(record => ({
-        id: record.get('taskId'),
+        id: record.get('id'), // Relationship ID
         taskId: record.get('taskId'),
         title: record.get('title'),
         status: record.get('status'),
@@ -621,7 +573,8 @@ export class TaskService {
       
       return { dependencies, dependents };
     } catch (error) {
-      logger.error('Error getting task dependencies', { error, taskId });
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('Error getting task dependencies', { error: errorMessage, taskId });
       throw error;
     } finally {
       await session.close();
@@ -638,36 +591,42 @@ export class TaskService {
     const session = await neo4jDriver.getSession();
     
     try {
-      // Check if the task exists
       const taskExists = await Neo4jUtils.nodeExists(NodeLabels.Task, 'id', taskId);
+      if (!taskExists) throw new Error(`Task with ID ${taskId} not found`);
       
-      if (!taskExists) {
-        throw new Error(`Task with ID ${taskId} not found`);
-      }
-      
-      // Check if the user exists
+      // Assuming User nodes exist or are created elsewhere
+      // For robustness, you might MERGE the user node here if unsure
       const userExists = await Neo4jUtils.nodeExists(NodeLabels.User, 'id', userId);
+      if (!userExists) throw new Error(`User with ID ${userId} not found`); 
       
-      if (!userExists) {
-        throw new Error(`User with ID ${userId} not found`);
-      }
-      
-      // Assign the task to the user
       const query = `
         MATCH (t:${NodeLabels.Task} {id: $taskId}), (u:${NodeLabels.User} {id: $userId})
         
-        // Remove previous assignment if exists
+        // Remove previous assignment relationship if exists
         OPTIONAL MATCH (t)-[r:${RelationshipTypes.ASSIGNED_TO}]->(:${NodeLabels.User})
         DELETE r
         
-        // Create new assignment
+        // Create new assignment relationship
         CREATE (t)-[:${RelationshipTypes.ASSIGNED_TO}]->(u)
         
-        // Update task assignedTo field
+        // Update task assignedTo property
         SET t.assignedTo = $userId,
             t.updatedAt = $updatedAt
         
-        RETURN t
+        RETURN t.id as id,
+               t.projectId as projectId,
+               t.title as title,
+               t.description as description,
+               t.priority as priority,
+               t.status as status,
+               t.assignedTo as assignedTo,
+               t.urls as urls,
+               t.tags as tags,
+               t.completionRequirements as completionRequirements,
+               t.outputFormat as outputFormat,
+               t.taskType as taskType,
+               t.createdAt as createdAt,
+               t.updatedAt as updatedAt
       `;
       
       const params = {
@@ -678,23 +637,21 @@ export class TaskService {
       
       const result = await session.executeWrite(async (tx) => {
         const result = await tx.run(query, params);
-        return result.records;
+        return result.records.length > 0 ? result.records[0].toObject() : null;
       });
-      
-      const updatedTask = Neo4jUtils.processRecords<Neo4jTask>(result, 't')[0];
-      
-      if (!updatedTask) {
-        throw new Error('Failed to assign task');
+            
+      if (!result) {
+        throw new Error('Failed to assign task or retrieve its properties');
       }
       
-      logger.info('Task assigned successfully', { 
-        taskId, 
-        userId 
-      });
+      const updatedTask = result as Neo4jTask;
+      updatedTask.urls = updatedTask.urls || []; // Ensure urls is an array
       
+      logger.info('Task assigned successfully', { taskId, userId });
       return updatedTask;
     } catch (error) {
-      logger.error('Error assigning task', { error, taskId, userId });
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('Error assigning task', { error: errorMessage, taskId, userId });
       throw error;
     } finally {
       await session.close();
@@ -710,14 +667,9 @@ export class TaskService {
     const session = await neo4jDriver.getSession();
     
     try {
-      // Check if the task exists
       const taskExists = await Neo4jUtils.nodeExists(NodeLabels.Task, 'id', taskId);
+      if (!taskExists) throw new Error(`Task with ID ${taskId} not found`);
       
-      if (!taskExists) {
-        throw new Error(`Task with ID ${taskId} not found`);
-      }
-      
-      // Unassign the task
       const query = `
         MATCH (t:${NodeLabels.Task} {id: $taskId})
         
@@ -725,11 +677,24 @@ export class TaskService {
         OPTIONAL MATCH (t)-[r:${RelationshipTypes.ASSIGNED_TO}]->(:${NodeLabels.User})
         DELETE r
         
-        // Update task
+        // Update task property
         SET t.assignedTo = null,
             t.updatedAt = $updatedAt
         
-        RETURN t
+        RETURN t.id as id,
+               t.projectId as projectId,
+               t.title as title,
+               t.description as description,
+               t.priority as priority,
+               t.status as status,
+               t.assignedTo as assignedTo,
+               t.urls as urls,
+               t.tags as tags,
+               t.completionRequirements as completionRequirements,
+               t.outputFormat as outputFormat,
+               t.taskType as taskType,
+               t.createdAt as createdAt,
+               t.updatedAt as updatedAt
       `;
       
       const params = {
@@ -739,20 +704,21 @@ export class TaskService {
       
       const result = await session.executeWrite(async (tx) => {
         const result = await tx.run(query, params);
-        return result.records;
+        return result.records.length > 0 ? result.records[0].toObject() : null;
       });
-      
-      const updatedTask = Neo4jUtils.processRecords<Neo4jTask>(result, 't')[0];
-      
-      if (!updatedTask) {
-        throw new Error('Failed to unassign task');
+            
+      if (!result) {
+        throw new Error('Failed to unassign task or retrieve its properties');
       }
       
-      logger.info('Task unassigned successfully', { taskId });
+      const updatedTask = result as Neo4jTask;
+      updatedTask.urls = updatedTask.urls || []; // Ensure urls is an array
       
+      logger.info('Task unassigned successfully', { taskId });
       return updatedTask;
     } catch (error) {
-      logger.error('Error unassigning task', { error, taskId });
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('Error unassigning task', { error: errorMessage, taskId });
       throw error;
     } finally {
       await session.close();

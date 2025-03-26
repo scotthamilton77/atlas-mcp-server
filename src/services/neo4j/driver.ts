@@ -2,7 +2,7 @@ import neo4j, { Driver, ManagedTransaction, Session } from 'neo4j-driver';
 import { config } from '../../config/index.js';
 import { logger } from '../../utils/logger.js';
 import { databaseEvents, DatabaseEventType } from './events.js';
-import { exportDatabase } from './backupRestoreService.js'; // Import the export function
+import { exportDatabase } from './backupRestoreService.js'; // Import the export function for backup trigger
 
 /**
  * Neo4j connection management singleton
@@ -51,7 +51,7 @@ class Neo4jDriver {
           maxConnectionLifetime: 3 * 60 * 60 * 1000, // 3 hours
           maxConnectionPoolSize: 50,
           connectionAcquisitionTimeout: 2 * 60 * 1000, // 2 minutes
-          disableLosslessIntegers: true
+          disableLosslessIntegers: true // Recommended for JS compatibility
         }
       );
 
@@ -61,8 +61,9 @@ class Neo4jDriver {
       logger.info('Neo4j driver connection established successfully');
       return this.driver;
     } catch (error) {
-      logger.error('Failed to initialize Neo4j driver', { error });
-      throw new Error(`Failed to initialize Neo4j connection: ${error instanceof Error ? error.message : String(error)}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('Failed to initialize Neo4j driver', { error: errorMessage });
+      throw new Error(`Failed to initialize Neo4j connection: ${errorMessage}`);
     }
   }
 
@@ -84,8 +85,11 @@ class Neo4jDriver {
    */
   public async getSession(database?: string): Promise<Session> {
     const driver = await this.getDriver();
+    // Use the default database configured for the driver instance
+    // Neo4j Community Edition typically uses 'neo4j' or potentially 'system'
+    // Passing undefined lets the driver use its default.
     return driver.session({
-      database: database || undefined,
+      database: database || undefined, 
       defaultAccessMode: neo4j.session.WRITE
     });
   }
@@ -95,13 +99,13 @@ class Neo4jDriver {
    * @param cypher Cypher query to execute
    * @param params Parameters for the query
    * @param database Optional database name
-   * @returns Promise that resolves to the query result
+   * @returns Promise that resolves to the query result records
    */
   public async executeQuery<T = any>(
     cypher: string,
     params: Record<string, any> = {},
     database?: string
-  ): Promise<T> {
+  ): Promise<T[]> {
     const session = await this.getSession(database);
     
     try {
@@ -111,28 +115,31 @@ class Neo4jDriver {
       });
       
       // Publish write operation event
+      // Publish write operation event
       this.publishWriteOperation({ query: cypher, params });
 
       // Trigger background backup after successful write
       this.triggerBackgroundBackup();
 
-      return result as unknown as T;
+      return result as unknown as T[];
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Error executing Neo4j query', { 
-        error, 
+        error: errorMessage, 
         query: cypher,
-        params: JSON.stringify(params)
+        // Avoid logging potentially sensitive params directly in production
+        // params: JSON.stringify(params) 
       });
       
       // Publish error event
       databaseEvents.publish(DatabaseEventType.ERROR, {
         timestamp: new Date().toISOString(),
         operation: 'executeQuery',
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage,
         query: cypher
       });
       
-      throw error;
+      throw error; // Re-throw the original error
     } finally {
       await session.close();
     }
@@ -143,13 +150,13 @@ class Neo4jDriver {
    * @param cypher Cypher query to execute
    * @param params Parameters for the query
    * @param database Optional database name
-   * @returns Promise that resolves to the query result
+   * @returns Promise that resolves to the query result records
    */
   public async executeReadQuery<T = any>(
     cypher: string,
     params: Record<string, any> = {},
     database?: string
-  ): Promise<T> {
+  ): Promise<T[]> {
     const session = await this.getSession(database);
     
     try {
@@ -164,23 +171,24 @@ class Neo4jDriver {
         query: cypher
       });
       
-      return result as unknown as T;
+      return result as unknown as T[];
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Error executing Neo4j read query', { 
-        error, 
+        error: errorMessage, 
         query: cypher,
-        params: JSON.stringify(params)
+        // params: JSON.stringify(params)
       });
       
       // Publish error event
       databaseEvents.publish(DatabaseEventType.ERROR, {
         timestamp: new Date().toISOString(),
         operation: 'executeReadQuery',
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage,
         query: cypher
       });
       
-      throw error;
+      throw error; // Re-throw the original error
     } finally {
       await session.close();
     }
@@ -201,19 +209,21 @@ class Neo4jDriver {
   }
 
   /**
-   * Triggers a database backup in the background.
+   * Triggers a database backup in the background, including rotation logic.
    * Logs errors but does not throw to avoid interrupting the main flow.
    * @private
    */
   private triggerBackgroundBackup(): void {
-    logger.debug('Triggering background database backup...');
+    logger.debug('Triggering background database backup with rotation...');
+    // Run backup in the background without awaiting it
     exportDatabase()
       .then(backupPath => {
         logger.info(`Background database backup successful: ${backupPath}`);
       })
       .catch(error => {
-        logger.error('Background database backup failed:', { error });
-        // Decide if further action is needed, e.g., retry logic or notification
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.error('Background database backup failed:', { error: errorMessage });
+        // Consider adding more robust error handling/notification if needed
       });
   }
 
@@ -222,10 +232,15 @@ class Neo4jDriver {
    */
   public async close(): Promise<void> {
     if (this.driver) {
-      await this.driver.close();
-      this.driver = null;
-      this.connectionPromise = null;
-      logger.info('Neo4j driver connection closed');
+      try {
+        await this.driver.close();
+        this.driver = null;
+        this.connectionPromise = null;
+        logger.info('Neo4j driver connection closed');
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.error('Error closing Neo4j driver connection', { error: errorMessage });
+      }
     }
   }
 }

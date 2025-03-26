@@ -1,6 +1,7 @@
 import { logger } from '../../utils/logger.js';
 import { neo4jDriver } from './driver.js';
 import { NodeLabels, PaginatedResult, PaginationOptions, RelationshipTypes } from './types.js';
+import { Record as Neo4jRecord } from 'neo4j-driver'; // Import Record type
 
 /**
  * Database utility functions for Neo4j
@@ -11,97 +12,65 @@ export class Neo4jUtils {
    * Should be called at application startup
    */
   static async initializeSchema(): Promise<void> {
+    const session = await neo4jDriver.getSession();
     try {
       logger.info('Initializing Neo4j database schema');
       
-      // Create uniqueness constraints
-      await Promise.all([
-        neo4jDriver.executeQuery(`
-          CREATE CONSTRAINT project_id_unique IF NOT EXISTS 
-          FOR (p:${NodeLabels.Project}) REQUIRE p.id IS UNIQUE
-        `),
-        neo4jDriver.executeQuery(`
-          CREATE CONSTRAINT task_id_unique IF NOT EXISTS 
-          FOR (t:${NodeLabels.Task}) REQUIRE t.id IS UNIQUE
-        `),
-        neo4jDriver.executeQuery(`
-          CREATE CONSTRAINT knowledge_id_unique IF NOT EXISTS 
-          FOR (k:${NodeLabels.Knowledge}) REQUIRE k.id IS UNIQUE
-        `),
-        neo4jDriver.executeQuery(`
-          CREATE CONSTRAINT user_id_unique IF NOT EXISTS 
-          FOR (u:${NodeLabels.User}) REQUIRE u.id IS UNIQUE
-        `),
-        neo4jDriver.executeQuery(`
-          CREATE CONSTRAINT citation_id_unique IF NOT EXISTS 
-          FOR (c:${NodeLabels.Citation}) REQUIRE c.id IS UNIQUE
-        `),
-        neo4jDriver.executeQuery(`
-          CREATE CONSTRAINT tasktype_name_unique IF NOT EXISTS 
-          FOR (t:${NodeLabels.TaskType}) REQUIRE t.name IS UNIQUE
-        `),
-        neo4jDriver.executeQuery(`
-          CREATE CONSTRAINT domain_name_unique IF NOT EXISTS 
-          FOR (d:${NodeLabels.Domain}) REQUIRE d.name IS UNIQUE
-        `)
-      ]);
+      const constraints = [
+        `CREATE CONSTRAINT project_id_unique IF NOT EXISTS FOR (p:${NodeLabels.Project}) REQUIRE p.id IS UNIQUE`,
+        `CREATE CONSTRAINT task_id_unique IF NOT EXISTS FOR (t:${NodeLabels.Task}) REQUIRE t.id IS UNIQUE`,
+        `CREATE CONSTRAINT knowledge_id_unique IF NOT EXISTS FOR (k:${NodeLabels.Knowledge}) REQUIRE k.id IS UNIQUE`,
+        `CREATE CONSTRAINT user_id_unique IF NOT EXISTS FOR (u:${NodeLabels.User}) REQUIRE u.id IS UNIQUE`,
+        `CREATE CONSTRAINT citation_id_unique IF NOT EXISTS FOR (c:${NodeLabels.Citation}) REQUIRE c.id IS UNIQUE`,
+        `CREATE CONSTRAINT tasktype_name_unique IF NOT EXISTS FOR (t:${NodeLabels.TaskType}) REQUIRE t.name IS UNIQUE`,
+        `CREATE CONSTRAINT domain_name_unique IF NOT EXISTS FOR (d:${NodeLabels.Domain}) REQUIRE d.name IS UNIQUE`
+      ];
+
+      const indexes = [
+        `CREATE INDEX project_status IF NOT EXISTS FOR (p:${NodeLabels.Project}) ON (p.status)`,
+        `CREATE INDEX project_taskType IF NOT EXISTS FOR (p:${NodeLabels.Project}) ON (p.taskType)`,
+        `CREATE INDEX task_status IF NOT EXISTS FOR (t:${NodeLabels.Task}) ON (t.status)`,
+        `CREATE INDEX task_priority IF NOT EXISTS FOR (t:${NodeLabels.Task}) ON (t.priority)`,
+        `CREATE INDEX task_projectId IF NOT EXISTS FOR (t:${NodeLabels.Task}) ON (t.projectId)`,
+        `CREATE INDEX knowledge_projectId IF NOT EXISTS FOR (k:${NodeLabels.Knowledge}) ON (k.projectId)`,
+        `CREATE INDEX knowledge_domain IF NOT EXISTS FOR (k:${NodeLabels.Knowledge}) ON (k.domain)`
+      ];
+
+      // Full-text indexes (check compatibility with Community Edition version)
+      // These might require specific configuration or versions. Wrap in try-catch if needed.
+      const fullTextIndexes = [
+        `CREATE FULLTEXT INDEX project_fulltext IF NOT EXISTS FOR (p:${NodeLabels.Project}) ON EACH [p.name, p.description]`,
+        `CREATE FULLTEXT INDEX task_fulltext IF NOT EXISTS FOR (t:${NodeLabels.Task}) ON EACH [t.title, t.description]`,
+        `CREATE FULLTEXT INDEX knowledge_fulltext IF NOT EXISTS FOR (k:${NodeLabels.Knowledge}) ON EACH [k.text]`
+      ];
+
+      // Execute schema creation queries within a transaction
+      await session.executeWrite(async tx => {
+        for (const query of [...constraints, ...indexes, ...fullTextIndexes]) {
+          try {
+            await tx.run(query);
+          } catch (error) {
+            // Log index creation errors but don't necessarily fail initialization
+            // Especially full-text might not be supported/enabled
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            if (query.includes("FULLTEXT")) {
+              logger.warn(`Could not create full-text index (potentially unsupported): ${errorMessage}. Query: ${query}`);
+            } else {
+              logger.error(`Failed to execute schema query: ${errorMessage}. Query: ${query}`);
+              // Rethrow for critical constraints/indexes
+              if (!query.includes("FULLTEXT")) throw error; 
+            }
+          }
+        }
+      });
       
-      // Note: Skip foreign key constraints for compatibility with older Neo4j versions
-      // Instead, we'll use application-level validation
-      logger.info('Schema initialization: Skipping foreign key constraints (not supported in this Neo4j version)');
-      
-      // Create indexes for frequently queried properties
-      await Promise.all([
-        neo4jDriver.executeQuery(`
-          CREATE INDEX project_status IF NOT EXISTS 
-          FOR (p:${NodeLabels.Project}) ON (p.status)
-        `),
-        neo4jDriver.executeQuery(`
-          CREATE INDEX project_taskType IF NOT EXISTS 
-          FOR (p:${NodeLabels.Project}) ON (p.taskType)
-        `),
-        neo4jDriver.executeQuery(`
-          CREATE INDEX task_status IF NOT EXISTS 
-          FOR (t:${NodeLabels.Task}) ON (t.status)
-        `),
-        neo4jDriver.executeQuery(`
-          CREATE INDEX task_priority IF NOT EXISTS 
-          FOR (t:${NodeLabels.Task}) ON (t.priority)
-        `),
-        neo4jDriver.executeQuery(`
-          CREATE INDEX task_projectId IF NOT EXISTS 
-          FOR (t:${NodeLabels.Task}) ON (t.projectId)
-        `),
-        neo4jDriver.executeQuery(`
-          CREATE INDEX knowledge_projectId IF NOT EXISTS 
-          FOR (k:${NodeLabels.Knowledge}) ON (k.projectId)
-        `),
-        neo4jDriver.executeQuery(`
-          CREATE INDEX knowledge_domain IF NOT EXISTS 
-          FOR (k:${NodeLabels.Knowledge}) ON (k.domain)
-        `)
-      ]);
-      
-      // Create full-text search indexes
-      await Promise.all([
-        neo4jDriver.executeQuery(`
-          CREATE FULLTEXT INDEX project_fulltext IF NOT EXISTS
-          FOR (p:${NodeLabels.Project}) ON EACH [p.name, p.description]
-        `),
-        neo4jDriver.executeQuery(`
-          CREATE FULLTEXT INDEX task_fulltext IF NOT EXISTS
-          FOR (t:${NodeLabels.Task}) ON EACH [t.title, t.description]
-        `),
-        neo4jDriver.executeQuery(`
-          CREATE FULLTEXT INDEX knowledge_fulltext IF NOT EXISTS
-          FOR (k:${NodeLabels.Knowledge}) ON EACH [k.text]
-        `)
-      ]);
-      
-      logger.info('Neo4j database schema initialized successfully');
+      logger.info('Neo4j database schema initialization attempted');
     } catch (error) {
-      logger.error('Failed to initialize Neo4j database schema', { error });
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('Failed to initialize Neo4j database schema', { error: errorMessage });
       throw error;
+    } finally {
+      await session.close();
     }
   }
   
@@ -110,22 +79,25 @@ export class Neo4jUtils {
    * WARNING: This permanently deletes all data
    */
   static async clearDatabase(): Promise<void> {
+    const session = await neo4jDriver.getSession();
     try {
       logger.warn('Clearing all data from Neo4j database');
       
-      // Delete all relationships
-      await neo4jDriver.executeQuery('MATCH ()-[r]-() DELETE r');
-      
-      // Delete all nodes
-      await neo4jDriver.executeQuery('MATCH (n) DELETE n');
+      // Delete all nodes and relationships
+      await session.executeWrite(async tx => {
+        await tx.run('MATCH (n) DETACH DELETE n');
+      });
       
       // Recreate schema
       await this.initializeSchema();
       
       logger.info('Neo4j database cleared successfully');
     } catch (error) {
-      logger.error('Failed to clear Neo4j database', { error });
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('Failed to clear Neo4j database', { error: errorMessage });
       throw error;
+    } finally {
+      await session.close();
     }
   }
   
@@ -137,46 +109,51 @@ export class Neo4jUtils {
    */
   static paginateResults<T>(data: T[], options: PaginationOptions = {}): PaginatedResult<T> {
     const page = Math.max(options.page || 1, 1);
-    const limit = Math.min(Math.max(options.limit || 20, 1), 100);
+    const limit = Math.min(Math.max(options.limit || 20, 1), 100); // Ensure limit is between 1 and 100
     
+    const total = data.length;
+    const totalPages = Math.ceil(total / limit);
     const startIndex = (page - 1) * limit;
-    const endIndex = startIndex + limit;
+    const endIndex = Math.min(startIndex + limit, total); // Ensure endIndex doesn't exceed total
+    
     const paginatedData = data.slice(startIndex, endIndex);
     
     return {
       data: paginatedData,
-      total: data.length,
-      page,
-      limit,
-      totalPages: Math.ceil(data.length / limit)
+      total: total,
+      page: page,
+      limit: limit,
+      totalPages: totalPages
     };
   }
   
   /**
-   * Generate a Cypher fragment for array parameters
-   * Used for filtering by arrays like tags
-   * @param paramName Name of the parameter
+   * Generate a Cypher fragment for array parameters (e.g., for IN checks)
+   * @param nodeAlias Alias of the node in the query (e.g., 't' for task)
+   * @param propertyName Name of the property on the node (e.g., 'tags')
+   * @param paramName Name for the Cypher parameter (e.g., 'tagsList')
    * @param arrayParam Array parameter value
+   * @param matchAll If true, use ALL items must be in the node's list. If false (default), use ANY item must be in the node's list.
    * @returns Object with cypher fragment and params
    */
-  static generateArrayParamQuery(
+  static generateArrayInListQuery(
+    nodeAlias: string,
+    propertyName: string,
     paramName: string,
-    arrayParam?: string | string[]
+    arrayParam?: string[] | string,
+    matchAll: boolean = false
   ): { cypher: string; params: Record<string, any> } {
     if (!arrayParam || (Array.isArray(arrayParam) && arrayParam.length === 0)) {
       return { cypher: '', params: {} };
     }
     
     const params: Record<string, any> = {};
-    let cypher = '';
+    const listParam = Array.isArray(arrayParam) ? arrayParam : [arrayParam];
+    params[paramName] = listParam;
     
-    if (Array.isArray(arrayParam)) {
-      params[paramName] = arrayParam;
-      cypher = `ANY(item IN $${paramName} WHERE item IN n.${paramName})`;
-    } else {
-      params[paramName] = arrayParam;
-      cypher = `$${paramName} IN n.${paramName}`;
-    }
+    const operator = matchAll ? 'ALL' : 'ANY';
+    // Cypher syntax for checking if items from a parameter list are in a node's list property
+    const cypher = `${operator}(item IN $${paramName} WHERE item IN ${nodeAlias}.${propertyName})`; 
     
     return { cypher, params };
   }
@@ -191,15 +168,29 @@ export class Neo4jUtils {
   static async nodeExists(
     label: NodeLabels,
     property: string,
-    value: string
+    value: string | number // Allow number for potential future use
   ): Promise<boolean> {
-    const query = `
-      MATCH (n:${label} {${property}: $value})
-      RETURN count(n) AS count
-    `;
-    
-    const result = await neo4jDriver.executeReadQuery(query, { value });
-    return result[0]?.get('count') > 0;
+    const session = await neo4jDriver.getSession();
+    try {
+      // Use EXISTS for potentially better performance than COUNT
+      const query = `
+        MATCH (n:${label} {${property}: $value})
+        RETURN EXISTS { (n) } AS nodeExists
+      `;
+      
+      const result = await session.executeRead(async (tx) => {
+        const res = await tx.run(query, { value });
+        return res.records[0]?.get('nodeExists');
+      });
+      
+      return result === true;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error(`Error checking node existence for ${label} {${property}: ${value}}`, { error: errorMessage });
+      throw error; // Re-throw error after logging
+    } finally {
+      await session.close();
+    }
   }
   
   /**
@@ -216,23 +207,34 @@ export class Neo4jUtils {
   static async relationshipExists(
     startLabel: NodeLabels,
     startProperty: string,
-    startValue: string,
+    startValue: string | number,
     endLabel: NodeLabels,
     endProperty: string,
-    endValue: string,
+    endValue: string | number,
     relationshipType: RelationshipTypes
   ): Promise<boolean> {
-    const query = `
-      MATCH (a:${startLabel} {${startProperty}: $startValue})-[r:${relationshipType}]->(b:${endLabel} {${endProperty}: $endValue})
-      RETURN count(r) AS count
-    `;
-    
-    const result = await neo4jDriver.executeReadQuery(query, { 
-      startValue, 
-      endValue 
-    });
-    
-    return result[0]?.get('count') > 0;
+    const session = await neo4jDriver.getSession();
+    try {
+      // Use EXISTS for potentially better performance
+      const query = `
+        MATCH (a:${startLabel} {${startProperty}: $startValue})
+        MATCH (b:${endLabel} {${endProperty}: $endValue})
+        RETURN EXISTS { (a)-[:${relationshipType}]->(b) } AS relExists
+      `;
+      
+      const result = await session.executeRead(async (tx) => {
+        const res = await tx.run(query, { startValue, endValue });
+        return res.records[0]?.get('relExists');
+      });
+      
+      return result === true;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error(`Error checking relationship existence: (${startLabel})-[:${relationshipType}]->(${endLabel})`, { error: errorMessage });
+      throw error;
+    } finally {
+      await session.close();
+    }
   }
   
   /**
@@ -244,72 +246,61 @@ export class Neo4jUtils {
   }
 
   /**
-   * Safely parse a JSON string, returning a default value on error
+   * Safely parse a JSON string, returning a default value on error.
+   * Deprecated: Avoid storing JSON strings in Neo4j properties. Store native types instead.
    * @param jsonString The JSON string to parse
    * @param defaultValue The default value to return if parsing fails
    * @returns The parsed object or the default value
+   * @deprecated Use native Neo4j types (lists, maps) instead of JSON strings.
    */
   static parseJsonString<T>(jsonString: string | null | undefined, defaultValue: T): T {
+    logger.warn("Usage of parseJsonString is deprecated. Store native types in Neo4j.");
     if (!jsonString) {
       return defaultValue;
     }
     try {
       return JSON.parse(jsonString);
     } catch (error) {
-      logger.error('Failed to parse JSON string', { error, jsonString });
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('Failed to parse JSON string', { error: errorMessage, jsonString });
       return defaultValue;
     }
   }
 
   /**
-   * Process Neo4j result records into a standardized format
-   * @param records Neo4j result records
-   * @param primaryKey Name of the primary key in the records
-   * @returns Processed records as an array of objects
+   * Process Neo4j result records into plain JavaScript objects.
+   * Assumes the record contains the node or properties under the specified key.
+   * @param records Neo4j result records array (RecordShape from neo4j-driver).
+   * @param primaryKey The key in the record containing the node or properties map (default: 'n').
+   * @returns Processed records as an array of plain objects.
    */
-  static processRecords<T>(records: any[], primaryKey: string = 'n'): T[] {
+  static processRecords<T>(records: Neo4jRecord[], primaryKey: string = 'n'): T[] {
     if (!records || records.length === 0) {
       return [];
     }
     
     return records.map(record => {
-      const node = record.get(primaryKey);
+      // Use .toObject() which handles conversion from Neo4j types
+      const obj = record.toObject(); 
+      // If the query returns the node directly (e.g., RETURN n), access its properties
+      // If the query returns properties directly (e.g., RETURN n.id as id), obj already has them.
+      const data = obj[primaryKey]?.properties ? obj[primaryKey].properties : obj; 
       
-      if (!node) {
-        console.log('Missing node for key:', primaryKey, 'in record:', record);
-        return null;
+      // Ensure 'urls' is an array if it exists (handles potential null/undefined from DB)
+      if (data && 'urls' in data) {
+        data.urls = data.urls || [];
       }
-      
-      // For Neo4j Node objects with properties method
-      if (typeof node.properties === 'function') {
-        const props = node.properties();
-        console.log('Extracted properties via function:', props);
-        
-        // Parse any serialized JSON fields
-        let result = {...props};
-        if (result.urls && typeof result.urls === 'string') {
-          try {
-            result.urls = JSON.parse(result.urls);
-          } catch (e) {
-            console.error('Failed to parse URLs JSON:', e);
-            result.urls = [];
-          }
-        }
-        
-        return result as T;
+      // Ensure 'tags' is an array if it exists
+      if (data && 'tags' in data) {
+        data.tags = data.tags || [];
       }
-      
-      // For already extracted property objects
-      console.log('Using node directly:', node);
-      
-      // Parse any serialized JSON fields
-      let result = {...node};
-      if (result.urls && typeof result.urls === 'string') {
-        result.urls = this.parseJsonString(result.urls, []);
+       // Ensure 'citations' is an array if it exists
+      if (data && 'citations' in data) {
+        data.citations = data.citations || [];
       }
-      
-      return result as T;
-    }).filter((item): item is T => item !== null);
+
+      return data as T;
+    }).filter((item): item is T => item !== null && item !== undefined);
   }
   
   /**
@@ -317,25 +308,28 @@ export class Neo4jUtils {
    * @returns Promise<boolean> - true if database is empty, false otherwise
    */
   static async isDatabaseEmpty(): Promise<boolean> {
+    const session = await neo4jDriver.getSession();
     try {
       const query = `
         MATCH (n)
-        RETURN count(n) AS nodeCount
+        RETURN count(n) = 0 AS isEmpty
         LIMIT 1
       `;
       
-      const result = await neo4jDriver.executeReadQuery(query);
+      const result = await session.executeRead(async (tx) => {
+        const res = await tx.run(query);
+        // If no records are returned (e.g., DB error), assume not empty for safety
+        return res.records[0]?.get('isEmpty') ?? false; 
+      });
       
-      if (!result || result.length === 0) {
-        return true;
-      }
-      
-      const nodeCount = result[0]?.get('nodeCount');
-      return nodeCount === 0;
+      return result;
     } catch (error) {
-      logger.error('Error checking if database is empty', { error });
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('Error checking if database is empty', { error: errorMessage });
       // If we can't check, assume it's not empty to be safe
       return false;
+    } finally {
+      await session.close();
     }
   }
 }
