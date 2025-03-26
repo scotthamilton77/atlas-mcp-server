@@ -26,11 +26,11 @@ Built on a three-tier architecture:
                   | createdAt: string                        |
                   | updatedAt: string                        |
                   +----------------+-------------------------+
-                              |                    |
-                              |                    |
-                              v                    v
+                            |                    |
+                            |                    |
+                            v                    v
 +----------------------------------+ +----------------------------------+
-|             TASK                 | |                KNOWLEDGE         |
+|               TASK               | |            KNOWLEDGE             |
 |----------------------------------| |----------------------------------|
 | id: string                       | | id: string                       |
 | projectId: string                | | projectId: string                |
