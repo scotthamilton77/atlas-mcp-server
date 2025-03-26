@@ -73,8 +73,10 @@ node_modules/
 
 # Misc
 repomix/
-repomix-output.*
+repomix-output.txt
+repomix-output.xml
+repomix-output.json
 logs/
 ideas/
-.clinerules
 backups/
+atlas-backups/

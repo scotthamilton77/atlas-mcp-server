@@ -1,159 +1,129 @@
 # atlas-mcp-server - Directory Structure
 
-Generated on: 2025-03-09 04:10:26
 
 
 ```
 atlas-mcp-server
 ├── docs
-    ├── creating-new-mcp-tools-in-atlas.md
+    ├── atlas-reference.md
     └── tree.md
 ├── scripts
     ├── clean.ts
-    ├── db-export-import.ts
     ├── generate-tree.ts
     ├── make-executable.ts
     └── update-deps.ts
-├── skills
-    └── coding-standards.md
 ├── src
     ├── config
     │   └── index.ts
     ├── mcp
     │   ├── resources
-    │   │   ├── projectDependencies
-    │   │   │   ├── getProjectDependencies.ts
-    │   │   │   ├── index.ts
-    │   │   │   └── types.ts
-    │   │   ├── projectDetails
-    │   │   │   ├── getProjectDetails.ts
-    │   │   │   ├── index.ts
-    │   │   │   └── types.ts
-    │   │   ├── projectLinks
-    │   │   │   ├── getProjectLinks.ts
-    │   │   │   ├── index.ts
-    │   │   │   └── types.ts
-    │   │   ├── projectList
-    │   │   │   ├── index.ts
-    │   │   │   ├── listProjects.ts
-    │   │   │   └── types.ts
-    │   │   ├── projectMembers
-    │   │   │   ├── getProjectMembers.ts
-    │   │   │   ├── index.ts
-    │   │   │   └── types.ts
-    │   │   └── projectNotes
-    │   │   │   ├── getProjectNotes.ts
-    │   │   │   ├── index.ts
-    │   │   │   └── types.ts
+    │   │   ├── knowledge
+    │   │   │   └── knowledgeResources.ts
+    │   │   ├── projects
+    │   │   │   └── projectResources.ts
+    │   │   ├── tasks
+    │   │   │   └── taskResources.ts
+    │   │   ├── index.ts
+    │   │   └── types.ts
     │   ├── tools
-    │   │   ├── addProjectNote
-    │   │   │   ├── addProjectNote.ts
-    │   │   │   ├── index.ts
-    │   │   │   └── types.ts
-    │   │   ├── atlas-skill
-    │   │   │   ├── index.ts
-    │   │   │   ├── invoke-skills.ts
-    │   │   │   ├── list-skills.ts
-    │   │   │   ├── README.md
-    │   │   │   ├── skill-manager.ts
-    │   │   │   ├── skill-resolver.ts
-    │   │   │   └── types.ts
-    │   │   ├── createProject
-    │   │   │   ├── createProject.ts
-    │   │   │   ├── index.ts
-    │   │   │   └── types.ts
-    │   │   ├── databaseManagement
+    │   │   ├── atlas_database_clean
     │   │   │   ├── cleanDatabase.ts
     │   │   │   ├── index.ts
+    │   │   │   ├── responseFormat.ts
     │   │   │   └── types.ts
-    │   │   ├── deleteProject
+    │   │   ├── atlas_knowledge_add
+    │   │   │   ├── addKnowledge.ts
+    │   │   │   ├── index.ts
+    │   │   │   ├── responseFormat.ts
+    │   │   │   └── types.ts
+    │   │   ├── atlas_knowledge_delete
+    │   │   │   ├── deleteKnowledge.ts
+    │   │   │   ├── index.ts
+    │   │   │   ├── responseFormat.ts
+    │   │   │   └── types.ts
+    │   │   ├── atlas_knowledge_list
+    │   │   │   ├── index.ts
+    │   │   │   ├── listKnowledge.ts
+    │   │   │   ├── responseFormat.ts
+    │   │   │   └── types.ts
+    │   │   ├── atlas_project_create
+    │   │   │   ├── createProject.ts
+    │   │   │   ├── index.ts
+    │   │   │   ├── responseFormat.ts
+    │   │   │   └── types.ts
+    │   │   ├── atlas_project_delete
     │   │   │   ├── deleteProject.ts
     │   │   │   ├── index.ts
+    │   │   │   ├── responseFormat.ts
     │   │   │   └── types.ts
-    │   │   ├── manageDependencies
-    │   │   │   ├── addDependency.ts
+    │   │   ├── atlas_project_list
     │   │   │   ├── index.ts
-    │   │   │   ├── listDependencies.ts
-    │   │   │   ├── removeDependency.ts
+    │   │   │   ├── listProjects.ts
+    │   │   │   ├── responseFormat.ts
     │   │   │   └── types.ts
-    │   │   ├── manageMembers
-    │   │   │   ├── addMember.ts
+    │   │   ├── atlas_project_update
     │   │   │   ├── index.ts
-    │   │   │   ├── listMembers.ts
-    │   │   │   ├── removeMember.ts
-    │   │   │   └── types.ts
-    │   │   ├── manageProjectLinks
-    │   │   │   ├── addProjectLink.ts
-    │   │   │   ├── deleteProjectLink.ts
-    │   │   │   ├── index.ts
-    │   │   │   ├── types.ts
-    │   │   │   └── updateProjectLink.ts
-    │   │   ├── neo4jSearch
-    │   │   │   ├── index.ts
-    │   │   │   ├── neo4jSearch.ts
-    │   │   │   ├── neo4jSearchTool.ts
-    │   │   │   └── types.ts
-    │   │   ├── projectList
-    │   │   │   ├── index.ts
-    │   │   │   ├── projectList.ts
-    │   │   │   └── types.ts
-    │   │   ├── skills
-    │   │   │   ├── base
-    │   │   │   │   ├── coding-standards.ts
-    │   │   │   │   └── software-engineer.ts
-    │   │   │   ├── languages
-    │   │   │   │   ├── react.ts
-    │   │   │   │   └── typescript.ts
-    │   │   │   └── tools
-    │   │   │   │   ├── ci-cd.ts
-    │   │   │   │   ├── docker.ts
-    │   │   │   │   └── git.ts
-    │   │   ├── updateProject
-    │   │   │   ├── index.ts
+    │   │   │   ├── responseFormat.ts
     │   │   │   ├── types.ts
     │   │   │   └── updateProject.ts
-    │   │   └── whiteboard
-    │   │   │   ├── createWhiteboard.ts
-    │   │   │   ├── deleteWhiteboard.ts
-    │   │   │   ├── getWhiteboard.ts
+    │   │   ├── atlas_task_create
+    │   │   │   ├── createTask.ts
     │   │   │   ├── index.ts
+    │   │   │   ├── responseFormat.ts
+    │   │   │   └── types.ts
+    │   │   ├── atlas_task_delete
+    │   │   │   ├── deleteTask.ts
+    │   │   │   ├── index.ts
+    │   │   │   ├── responseFormat.ts
+    │   │   │   └── types.ts
+    │   │   ├── atlas_task_list
+    │   │   │   ├── index.ts
+    │   │   │   ├── listTasks.ts
+    │   │   │   ├── responseFormat.ts
+    │   │   │   └── types.ts
+    │   │   ├── atlas_task_update
+    │   │   │   ├── index.ts
+    │   │   │   ├── responseFormat.ts
     │   │   │   ├── types.ts
-    │   │   │   └── updateWhiteboard.ts
+    │   │   │   └── updateTask.ts
+    │   │   └── atlas_unified_search
+    │   │   │   ├── index.ts
+    │   │   │   ├── responseFormat.ts
+    │   │   │   ├── types.ts
+    │   │   │   └── unifiedSearch.ts
     │   └── server.ts
-    ├── neo4j
-    │   ├── projectService
-    │   │   ├── projectContent.ts
-    │   │   ├── projectCore.ts
-    │   │   ├── projectRelations.ts
+    ├── services
+    │   └── neo4j
+    │   │   ├── backupRestoreService.ts
+    │   │   ├── driver.ts
+    │   │   ├── events.ts
+    │   │   ├── helpers.ts
+    │   │   ├── index.ts
+    │   │   ├── knowledgeService.ts
+    │   │   ├── projectService.ts
+    │   │   ├── searchService.ts
+    │   │   ├── taskService.ts
     │   │   ├── types.ts
     │   │   └── utils.ts
-    │   ├── backupService.ts
-    │   ├── driver.ts
-    │   ├── exportImport.ts
-    │   ├── exportImportTypes.ts
-    │   ├── projectService.ts
-    │   └── whiteboardService.ts
     ├── types
     │   ├── errors.ts
     │   ├── mcp.ts
     │   └── tool.ts
     ├── utils
-    │   ├── bulkOperationManager.ts
     │   ├── errorHandler.ts
     │   ├── idGenerator.ts
     │   ├── logger.ts
-    │   ├── projectHelpers.ts
+    │   ├── responseFormatter.ts
     │   └── security.ts
     └── index.ts
-├── tests
-    ├── atlas-mcp-server-production-readiness-report-03-05-25.md
-    ├── atlas-mcp-server-production-readiness-report-03-07-25.md
-    └── prompt.md
+├── .clinerules
+├── .repomixignore
 ├── docker-compose.yml
 ├── LICENSE
 ├── package-lock.json
 ├── package.json
 ├── README.md
+├── repomix.config.json
 └── tsconfig.json
 
 ```

@@ -1,0 +1,89 @@
+# ATLAS MCP Server Developer Cheat Sheet
+
+## 1. Project Overview
+
+This project implements an MCP (Model Context Protocol) server named atlas-mcp-server. It provides tools and resources for managing projects, tasks, and knowledge items stored in a Neo4j graph database.
+
+## 2. Key Directories
+
+- **`src/`**: Contains all source code.
+  - **`index.ts`**: Main entry point. Initializes the MCP server and handles graceful shutdown.
+  - **`config/`**: Handles application configuration, likely loading from environment variables (see `.env.example`).
+  - **`mcp/`**: Core MCP server logic.
+    - **`server.ts`**: Sets up the MCP server instance and registers handlers.
+    - **`resources/`**: Defines MCP resources (e.g., `atlas://projects/{projectId}`). Organized by entity type (projects, tasks, knowledge).
+    - **`tools/`**: Defines MCP tools (e.g., `atlas_project_create`). Each tool resides in its own subdirectory, typically containing:
+      - `index.ts`: Exports the tool handler.
+      - `[toolName].ts`: Core logic for the tool.
+      - `types.ts`: Input/output types and validation schemas.
+      - `responseFormat.ts`: (Optional) Helper for formatting tool responses.
+  - **`services/`**: Business logic layer, primarily interacting with external services.
+    - **`neo4j/`**: Handles all interactions with the Neo4j database. Includes the driver setup (`driver.ts`), specific services for each entity (`projectService.ts`, `taskService.ts`, `knowledgeService.ts`), helper functions, and types.
+  - **`types/`**: Shared TypeScript interfaces and types used across the application (e.g., `mcp.ts`, `tool.ts`).
+  - **`utils/`**: Common utility functions like logging (`logger.ts`), error handling (`errorHandler.ts`), ID generation (`idGenerator.ts`), etc.
+- **`scripts/`**: Utility scripts for development tasks (e.g., database backup/restore, dependency updates).
+- **`logs/`**: Directory where log files are stored.
+- **`docs/`**: Project documentation.
+
+## 3. Running the Server
+
+1.  **Install Dependencies**: `npm install`
+2.  **Configure Environment**: Copy `.env.example` to `.env` and fill in necessary values (especially Neo4j connection details).
+3.  **Build**: `npm run rebuild`
+4.  **Run**: `The server is automatically started after you build it because you are operating within an MCP Client environment.`
+
+## 4. Development Workflow
+
+- **Adding a New Tool**:
+  1.  Create a new directory under `src/mcp/tools/` (e.g., `src/mcp/tools/my_new_tool/`).
+  2.  Implement the tool logic, types (including input schema), and export a handler function (see existing tools for structure).
+  3.  Register the tool handler in `src/mcp/server.ts`.
+- **Database Migrations**: This project uses Neo4j. Schema changes or data migrations might need manual Cypher queries or potentially a migration tool if integrated.
+- **Logging**: Use the logger instance from `src/utils/logger.ts` for application logging. Check `logs/` for output.
+- **Testing**: (Assuming tests exist or will be added) Run tests using `npm test`.
+
+## 5. Key Technologies
+
+- **TypeScript**: Primary language.
+- **Node.js**: Runtime environment.
+- **MCP SDK**: `@modelcontextprotocol/sdk` for building the MCP server.
+- **Neo4j**: Graph database for storing data. Uses the official `neo4j-driver`.
+- **Winston**: Logging library (used in `logger.ts`).
+- **Zod**: (Likely used for schema validation in tool types, based on common practice).
+
+## 6. Available MCP Tools
+
+The server exposes the following MCP tools:
+
+- **Project Management**:
+
+  - `atlas_project_create`: Create new projects
+  - `atlas_project_list`: List projects with filtering options
+  - `atlas_project_update`: Update project details
+  - `atlas_project_delete`: Remove projects
+
+- **Task Management**:
+
+  - `atlas_task_create`: Create tasks associated with projects
+  - `atlas_task_list`: List tasks with various filters
+  - `atlas_task_update`: Update task details
+  - `atlas_task_delete`: Remove tasks
+
+- **Knowledge Management**:
+
+  - `atlas_knowledge_add`: Add knowledge items to projects
+  - `atlas_knowledge_list`: List knowledge items
+  - `atlas_knowledge_delete`: Remove knowledge items
+
+- **Utilities**:
+  - `atlas_unified_search`: Search across all entity types
+  - `atlas_database_clean`: Reset the database (use with caution)
+
+## 7. Important Notes
+
+- Graceful shutdown logic is implemented in `src/index.ts` to close the MCP server and Neo4j connections properly.
+- Error handling is centralized via `src/utils/errorHandler.ts` and uncaught exception/rejection handlers in `src/index.ts`.
+- Follow the established structure when adding new features (e.g., new tools, services).
+- For database operations, check `src/services/neo4j/` for existing patterns.
+- Docker Compose is available for development with Neo4j (`docker-compose.yml`).
+- Utility scripts in the `scripts/` directory can help with database backups and maintenance.

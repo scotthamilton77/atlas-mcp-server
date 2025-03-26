@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { Project } from '../neo4j/projectService.js';
 
 // Common response types
 export interface McpContent {
@@ -15,19 +14,112 @@ export interface McpToolResponse {
   isError?: boolean;
 }
 
-// Project status enum
+// Atlas Platform Enums
 export const ProjectStatus = {
   ACTIVE: "active",
   PENDING: "pending",
+  IN_PROGRESS: "in-progress",
   COMPLETED: "completed",
   ARCHIVED: "archived"
 } as const;
+
+export const TaskStatus = {
+  BACKLOG: "backlog",
+  TODO: "todo",
+  IN_PROGRESS: "in-progress",
+  COMPLETED: "completed"
+} as const;
+
+export const PriorityLevel = {
+  LOW: "low",
+  MEDIUM: "medium",
+  HIGH: "high",
+  CRITICAL: "critical"
+} as const;
+
+export const TaskType = {
+  RESEARCH: "research",
+  GENERATION: "generation",
+  ANALYSIS: "analysis",
+  INTEGRATION: "integration"
+} as const;
+
+export const KnowledgeDomain = {
+  TECHNICAL: "technical",
+  BUSINESS: "business",
+  SCIENTIFIC: "scientific"
+} as const;
+
+// Atlas Platform response types
+export interface ProjectResponse {
+  id: string;
+  name: string;
+  description: string;
+  status: string;
+  urls?: Array<{ title: string, url: string }>;
+  completionRequirements: string;
+  dependencies?: string[];
+  outputFormat: string;
+  taskType: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TaskResponse {
+  id: string;
+  projectId: string;
+  title: string;
+  description: string;
+  priority: string;
+  status: string;
+  assignedTo?: string;
+  urls?: Array<{ title: string, url: string }>;
+  tags?: string[];
+  completionRequirements: string;
+  dependencies?: string[];
+  outputFormat: string;
+  taskType: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface KnowledgeResponse {
+  id: string;
+  projectId: string;
+  text: string;
+  tags?: string[];
+  domain: string;
+  citations?: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Zod enum creators - these functions create Zod enums from our constant objects
+export const createProjectStatusEnum = () => {
+  return z.enum(Object.values(ProjectStatus) as [string, ...string[]]);
+};
+
+export const createTaskStatusEnum = () => {
+  return z.enum(Object.values(TaskStatus) as [string, ...string[]]);
+};
+
+export const createPriorityLevelEnum = () => {
+  return z.enum(Object.values(PriorityLevel) as [string, ...string[]]);
+};
+
+export const createTaskTypeEnum = () => {
+  return z.enum(Object.values(TaskType) as [string, ...string[]]);
+};
+
+export const createKnowledgeDomainEnum = () => {
+  return z.enum(Object.values(KnowledgeDomain) as [string, ...string[]]);
+};
 
 // Project-specific schemas
 export const ProjectInputSchema = {
   name: z.string().min(1),
   description: z.string().optional(),
-  status: z.enum([ProjectStatus.ACTIVE, ProjectStatus.PENDING, ProjectStatus.COMPLETED, ProjectStatus.ARCHIVED]).default(ProjectStatus.ACTIVE)
+  status: createProjectStatusEnum().default(ProjectStatus.ACTIVE)
 } as const;
 
 export const UpdateProjectInputSchema = {
