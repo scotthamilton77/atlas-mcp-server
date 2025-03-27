@@ -37,9 +37,5 @@ export interface FormattedDatabaseCleanResponse {
   success: boolean;
   message: string;
   timestamp: string;
-  details?: {
-    deletedRelationships?: number;
-    deletedNodes?: number;
-    schemaInitialized?: boolean;
-  };
+  // Removed optional 'details' field as the current implementation doesn't provide these counts
 }

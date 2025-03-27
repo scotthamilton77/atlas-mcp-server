@@ -1,5 +1,6 @@
 import { ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { Neo4jKnowledge, Neo4jProject, Neo4jTask } from "../../services/neo4j/types.js";
+import { logger } from "../../utils/logger.js";
 
 /**
  * Resource URIs for the Atlas MCP resources
@@ -140,7 +141,7 @@ export interface KnowledgeResource {
  */
 export function toProjectResource(project: Neo4jProject): ProjectResource {
   // Log the incoming project structure for debugging
-  console.log('Converting project to resource:', JSON.stringify(project, null, 2));
+  logger.debug('Converting project to resource:', { project });
   
   // Ensure all fields are properly extracted
   const resource: ProjectResource = {
@@ -156,7 +157,7 @@ export function toProjectResource(project: Neo4jProject): ProjectResource {
     updatedAt: project.updatedAt
   };
   
-  console.log('Created resource:', JSON.stringify(resource, null, 2));
+  logger.debug('Created project resource:', { resource });
   return resource;
 }
 
@@ -165,7 +166,7 @@ export function toProjectResource(project: Neo4jProject): ProjectResource {
  */
 export function toTaskResource(task: Neo4jTask): TaskResource {
   // Log the incoming task structure for debugging
-  console.log('Converting task to resource:', JSON.stringify(task, null, 2));
+  logger.debug('Converting task to resource:', { task });
   
   const resource: TaskResource = {
     id: task.id,
@@ -184,7 +185,7 @@ export function toTaskResource(task: Neo4jTask): TaskResource {
     updatedAt: task.updatedAt
   };
   
-  console.log('Created task resource:', JSON.stringify(resource, null, 2));
+  logger.debug('Created task resource:', { resource });
   return resource;
 }
 
@@ -193,7 +194,7 @@ export function toTaskResource(task: Neo4jTask): TaskResource {
  */
 export function toKnowledgeResource(knowledge: Neo4jKnowledge): KnowledgeResource {
   // Log the incoming knowledge structure for debugging
-  console.log('Converting knowledge to resource:', JSON.stringify(knowledge, null, 2));
+  logger.debug('Converting knowledge to resource:', { knowledge });
   
   const resource: KnowledgeResource = {
     id: knowledge.id,
@@ -206,6 +207,6 @@ export function toKnowledgeResource(knowledge: Neo4jKnowledge): KnowledgeResourc
     updatedAt: knowledge.updatedAt
   };
   
-  console.log('Created knowledge resource:', JSON.stringify(resource, null, 2));
+  logger.debug('Created knowledge resource:', { resource });
   return resource;
 }

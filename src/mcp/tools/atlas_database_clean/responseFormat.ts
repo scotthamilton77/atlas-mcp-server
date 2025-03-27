@@ -6,7 +6,8 @@ import { FormattedDatabaseCleanResponse } from "./types.js";
  */
 export class DatabaseCleanFormatter implements ResponseFormatter<FormattedDatabaseCleanResponse> {
   format(data: FormattedDatabaseCleanResponse): string {
-    const { success, message, timestamp, details } = data;
+    // Destructure without 'details' as it's no longer part of the interface or provided by the implementation
+    const { success, message, timestamp } = data;
     
     // Create a summary section with operation results
     const summaryHeader = success ? "Database Reset Successfully" : "Database Reset Failed";
@@ -15,30 +16,15 @@ export class DatabaseCleanFormatter implements ResponseFormatter<FormattedDataba
       `Message: ${message}\n` +
       `Timestamp: ${new Date(timestamp).toLocaleString()}\n`;
     
-    // Add details section if available
-    let detailsSection = "";
-    if (details) {
-      detailsSection = "\nOperation Details\n\n";
-      
-      if (details.deletedRelationships !== undefined) {
-        detailsSection += `Relationships Removed: ${details.deletedRelationships}\n`;
-      }
-      
-      if (details.deletedNodes !== undefined) {
-        detailsSection += `Nodes Removed: ${details.deletedNodes}\n`;
-      }
-      
-      if (details.schemaInitialized !== undefined) {
-        detailsSection += `Schema Reinitialized: ${details.schemaInitialized ? "Yes" : "No"}\n`;
-      }
-    }
+    // Removed the 'detailsSection' as the implementation doesn't provide these details
     
     // Add warning about permanent data loss
     const warning = "\n⚠️ WARNING\n" +
       "This operation has permanently removed all data from the database. " +
       "This action cannot be undone. If you need to restore the data, you must use a backup.";
     
-    return `${summary}${detailsSection}${warning}`;
+    // Return summary and warning only
+    return `${summary}${warning}`;
   }
 }
 

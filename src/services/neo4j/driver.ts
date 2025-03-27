@@ -118,8 +118,8 @@ class Neo4jDriver {
       // Publish write operation event
       this.publishWriteOperation({ query: cypher, params });
 
-      // Trigger background backup after successful write
-      this.triggerBackgroundBackup();
+      // Removed: Trigger background backup after successful write
+      // this.triggerBackgroundBackup(); // This was inefficient
 
       return result as unknown as T[];
     } catch (error) {
