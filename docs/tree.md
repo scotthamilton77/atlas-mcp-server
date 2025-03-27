@@ -1,14 +1,23 @@
 # atlas-mcp-server - Directory Structure
 
+Generated on: 2025-03-27 11:49:02
 
 
 ```
 atlas-mcp-server
 ├── docs
-    ├── atlas-reference.md
     └── tree.md
+├── examples
+    ├── backup-example
+    │   ├── knowledges.json
+    │   ├── projects.json
+    │   ├── relationships.json
+    │   └── tasks.json
+    └── README.md
 ├── scripts
     ├── clean.ts
+    ├── db-backup.ts
+    ├── db-import.ts
     ├── generate-tree.ts
     ├── make-executable.ts
     └── update-deps.ts
@@ -111,7 +120,6 @@ atlas-mcp-server
     │   └── tool.ts
     ├── utils
     │   ├── errorHandler.ts
-    │   ├── idGenerator.ts
     │   ├── logger.ts
     │   ├── responseFormatter.ts
     │   └── security.ts
