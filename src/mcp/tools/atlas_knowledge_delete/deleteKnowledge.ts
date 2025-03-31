@@ -1,9 +1,10 @@
-import { KnowledgeService } from '../../../services/neo4j/knowledgeService.js';
-import { BaseErrorCode, McpError } from '../../../types/errors.js';
-import { logger } from '../../../utils/logger.js';
-import { ToolContext } from '../../../utils/security.js';
-import { AtlasKnowledgeDeleteInput, AtlasKnowledgeDeleteSchema } from './types.js';
-import { formatKnowledgeDeleteResponse } from './responseFormat.js';
+import { KnowledgeService } from "../../../services/neo4j/knowledgeService.js";
+import { BaseErrorCode, McpError } from "../../../types/errors.js";
+import { ResponseFormat, createToolResponse } from "../../../types/mcp.js";
+import { logger } from "../../../utils/logger.js";
+import { ToolContext } from "../../../utils/security.js";
+import { AtlasKnowledgeDeleteInput, AtlasKnowledgeDeleteSchema } from "./types.js";
+import { formatKnowledgeDeleteResponse } from "./responseFormat.js";
 
 export const atlasDeleteKnowledge = async (
   input: unknown,
@@ -81,9 +82,12 @@ export const atlasDeleteKnowledge = async (
         requestId: context.requestContext?.requestId 
       });
 
-      // Use the formatter to format the response
-      return formatKnowledgeDeleteResponse(results);
-
+      // Conditionally format response
+      if (validatedInput.responseFormat === ResponseFormat.JSON) {
+        return createToolResponse(JSON.stringify(results, null, 2));
+      } else {
+        return formatKnowledgeDeleteResponse(results);
+      }
     } else {
       // Process single entity removal
       const { id } = validatedInput;
@@ -113,12 +117,18 @@ export const atlasDeleteKnowledge = async (
         requestId: context.requestContext?.requestId 
       });
 
-      // Return formatted success response
-      return formatKnowledgeDeleteResponse({
+      const result = {
         id,
         success: true,
-        message: `Knowledge item with ID ${id} removed successfully`
-      });
+        message: `Knowledge item with ID ${id} removed successfully`,
+      };
+
+      // Conditionally format response
+      if (validatedInput.responseFormat === ResponseFormat.JSON) {
+        return createToolResponse(JSON.stringify(result, null, 2));
+      } else {
+        return formatKnowledgeDeleteResponse(result);
+      }
     }
   } catch (error) {
     // Handle specific error cases

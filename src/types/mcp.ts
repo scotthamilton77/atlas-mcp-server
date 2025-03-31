@@ -115,6 +115,15 @@ export const createKnowledgeDomainEnum = () => {
   return z.enum(Object.values(KnowledgeDomain) as [string, ...string[]]);
 };
 
+export enum ResponseFormat {
+  FORMATTED = "formatted",
+  JSON = "json",
+}
+
+export function createResponseFormatEnum() {
+  return z.nativeEnum(ResponseFormat);
+}
+
 // Project-specific schemas
 export const ProjectInputSchema = {
   name: z.string().min(1),

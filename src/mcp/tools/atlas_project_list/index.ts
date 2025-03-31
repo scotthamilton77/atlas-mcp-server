@@ -1,8 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { z } from 'zod';
-import { ProjectStatus } from '../../../types/mcp.js';
-import { createToolExample, createToolMetadata, registerTool } from '../../../types/tool.js';
-import { listProjects } from './listProjects.js';
+import { z } from "zod";
+import { ProjectStatus, ResponseFormat, createResponseFormatEnum, createToolResponse } from "../../../types/mcp.js";
+import { createToolExample, createToolMetadata, registerTool } from "../../../types/tool.js";
+import { listProjects } from "./listProjects.js";
 import { ProjectListRequest } from './types.js';
 import { formatProjectListResponse } from './responseFormat.js';
 
@@ -33,16 +33,25 @@ export function registerAtlasProjectListTool(server: McpServer): void {
         .describe('Filter results by project classification or category type'),
       status: z.union([
         z.enum(['active', 'pending', 'completed', 'archived']),
-        z.array(z.enum(['active', 'pending', 'completed', 'archived']))
+        z.array(z.enum(["active", "pending", "completed", "archived"])),
       ]).optional()
-        .describe('Filter results by project status or multiple statuses')
+        .describe("Filter results by project status or multiple statuses"),
+      responseFormat: createResponseFormatEnum().optional().default(ResponseFormat.FORMATTED).describe(
+        "Desired response format: 'formatted' (default string) or 'json' (raw object)"
+      ),
     },
     async (input, context) => {
-      // Parse and process input
-      const result = await listProjects(input as unknown as ProjectListRequest);
-      
-      // Return the result using the formatter for rich display
-      return formatProjectListResponse(result);
+      // Parse and process input (assuming validation happens implicitly via registerTool)
+      const validatedInput = input as unknown as ProjectListRequest & { responseFormat?: ResponseFormat };
+      const result = await listProjects(validatedInput);
+
+      // Conditionally format response
+      if (validatedInput.responseFormat === ResponseFormat.JSON) {
+        return createToolResponse(JSON.stringify(result, null, 2));
+      } else {
+        // Return the result using the formatter for rich display
+        return formatProjectListResponse(result);
+      }
     },
     createToolMetadata({
       examples: [

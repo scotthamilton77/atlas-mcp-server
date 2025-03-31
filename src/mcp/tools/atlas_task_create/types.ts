@@ -2,12 +2,14 @@ import { z } from "zod";
 import {
   McpToolResponse,
   PriorityLevel,
+  ResponseFormat,
   TaskStatus,
   TaskType,
   createPriorityLevelEnum,
+  createResponseFormatEnum,
   createTaskStatusEnum,
-  createTaskTypeEnum
-} from '../../../types/mcp.js';
+  createTaskTypeEnum,
+} from "../../../types/mcp.js";
 
 export const TaskSchema = z.object({
   id: z.string().optional().describe(
@@ -75,7 +77,10 @@ const SingleTaskSchema = z.object({
   completionRequirements: z.string(),
   dependencies: z.array(z.string()).optional(),
   outputFormat: z.string(),
-  taskType: createTaskTypeEnum().or(z.string())
+  taskType: createTaskTypeEnum().or(z.string()),
+  responseFormat: createResponseFormatEnum().optional().default(ResponseFormat.FORMATTED).describe(
+    "Desired response format: 'formatted' (default string) or 'json' (raw object)"
+  ),
 }).describe(
   "Creates a single task with comprehensive details and metadata"
 );
@@ -84,7 +89,10 @@ const BulkTaskSchema = z.object({
   mode: z.literal("bulk"),
   tasks: z.array(TaskSchema).min(1).max(100).describe(
     "Collection of task definitions to create in a single operation"
-  )
+  ),
+  responseFormat: createResponseFormatEnum().optional().default(ResponseFormat.FORMATTED).describe(
+    "Desired response format: 'formatted' (default string) or 'json' (raw object)"
+  ),
 }).describe("Create multiple related tasks in a single efficient transaction");
 
 // Schema shapes for tool registration
@@ -138,7 +146,10 @@ export const AtlasTaskCreateSchemaShape = {
   ),
   tasks: z.array(TaskSchema).min(1).max(100).optional().describe(
     "Array of complete task definition objects to create in a single transaction (supports 1-100 tasks, required for mode='bulk')"
-  )
+  ),
+  responseFormat: createResponseFormatEnum().optional().describe(
+    "Desired response format: 'formatted' (default string) or 'json' (raw object)"
+  ),
 } as const;
 
 // Schema for validation

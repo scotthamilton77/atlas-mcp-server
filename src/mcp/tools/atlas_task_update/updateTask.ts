@@ -1,9 +1,10 @@
-import { TaskService } from '../../../services/neo4j/taskService.js';
-import { BaseErrorCode, McpError, ProjectErrorCode } from '../../../types/errors.js';
-import { logger } from '../../../utils/logger.js';
-import { ToolContext } from '../../../utils/security.js';
-import { AtlasTaskUpdateInput, AtlasTaskUpdateSchema } from './types.js';
-import { formatTaskUpdateResponse } from './responseFormat.js';
+import { TaskService } from "../../../services/neo4j/taskService.js";
+import { BaseErrorCode, McpError } from "../../../types/errors.js";
+import { ResponseFormat, createToolResponse } from "../../../types/mcp.js";
+import { logger } from "../../../utils/logger.js";
+import { ToolContext } from "../../../utils/security.js";
+import { AtlasTaskUpdateInput, AtlasTaskUpdateSchema } from "./types.js";
+import { formatTaskUpdateResponse } from "./responseFormat.js";
 
 export const atlasUpdateTask = async (
   input: unknown,
@@ -76,9 +77,12 @@ export const atlasUpdateTask = async (
         requestId: context.requestContext?.requestId 
       });
 
-      // Use the formatter to create the response
-      return formatTaskUpdateResponse(results);
-
+      // Conditionally format response
+      if (validatedInput.responseFormat === ResponseFormat.JSON) {
+        return createToolResponse(JSON.stringify(results, null, 2));
+      } else {
+        return formatTaskUpdateResponse(results);
+      }
     } else {
       // Process single task modification
       const { mode, id, updates } = validatedInput;
@@ -107,8 +111,12 @@ export const atlasUpdateTask = async (
         requestId: context.requestContext?.requestId 
       });
 
-      // Use the formatter to create the response
-      return formatTaskUpdateResponse(updatedTask);
+      // Conditionally format response
+      if (validatedInput.responseFormat === ResponseFormat.JSON) {
+        return createToolResponse(JSON.stringify(updatedTask, null, 2));
+      } else {
+        return formatTaskUpdateResponse(updatedTask);
+      }
     }
   } catch (error) {
     // Handle specific error cases

@@ -1,9 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { z } from 'zod';
-import { PriorityLevel, TaskStatus } from '../../../types/mcp.js';
-import { createToolExample, createToolMetadata, registerTool } from '../../../types/tool.js';
-import { atlasListTasks } from './listTasks.js';
-import { TaskListRequestSchema } from './types.js';
+import { z } from "zod";
+import { PriorityLevel, ResponseFormat, TaskStatus, createResponseFormatEnum, createToolResponse } from "../../../types/mcp.js";
+import { createToolExample, createToolMetadata, registerTool } from "../../../types/tool.js";
+import { atlasListTasks } from "./listTasks.js";
+import { formatTaskListResponse } from "./responseFormat.js";
+import { TaskListRequestInput } from "./types.js"; // Corrected import
 
 // Schema shapes for tool registration
 const TaskListRequestSchemaShape = {
@@ -42,7 +43,10 @@ const TaskListRequestSchemaShape = {
   ),
   limit: z.number().optional().describe(
     "Number of results per page, maximum 100 (Default: 20)"
-  )
+  ),
+  responseFormat: createResponseFormatEnum().optional().default(ResponseFormat.FORMATTED).describe(
+    "Desired response format: 'formatted' (default string) or 'json' (raw object)"
+  ),
 };
 
 export const registerAtlasTaskListTool = (server: McpServer) => {
@@ -51,7 +55,19 @@ export const registerAtlasTaskListTool = (server: McpServer) => {
     "atlas_task_list",
     "Lists tasks according to specified filters with advanced filtering, sorting, and pagination capabilities",
     TaskListRequestSchemaShape,
-    atlasListTasks,
+    async (input, context) => {
+      // Parse and process input (assuming validation happens implicitly via registerTool)
+      const validatedInput = input as unknown as TaskListRequestInput & { responseFormat?: ResponseFormat }; // Corrected type cast
+      const result = await atlasListTasks(validatedInput, context); // Added context argument
+
+      // Conditionally format response
+      if (validatedInput.responseFormat === ResponseFormat.JSON) {
+        return createToolResponse(JSON.stringify(result, null, 2));
+      } else {
+        // Return the result using the formatter for rich display
+        return formatTaskListResponse(result, false); // Added second argument
+      }
+    },
     createToolMetadata({
       examples: [
         createToolExample(

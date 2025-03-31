@@ -2,8 +2,10 @@ import { z } from "zod";
 import {
   McpToolResponse,
   ProjectStatus,
-  TaskType
-} from '../../../types/mcp.js';
+  ResponseFormat,
+  TaskType,
+  createResponseFormatEnum,
+} from "../../../types/mcp.js";
 
 export const ProjectUpdateSchema = z.object({
   id: z.string().describe("Identifier of the existing project to be modified"),
@@ -36,7 +38,7 @@ export const ProjectUpdateSchema = z.object({
     )
   }).describe(
     "Partial update object containing only fields that need modification"
-  )
+  ),
 });
 
 const SingleProjectUpdateSchema = z.object({
@@ -54,8 +56,11 @@ const SingleProjectUpdateSchema = z.object({
     ).optional(),
     completionRequirements: z.string().optional(),
     outputFormat: z.string().optional(),
-    taskType: z.enum([TaskType.RESEARCH, TaskType.GENERATION, TaskType.ANALYSIS, TaskType.INTEGRATION]).optional()
-  })
+    taskType: z.enum([TaskType.RESEARCH, TaskType.GENERATION, TaskType.ANALYSIS, TaskType.INTEGRATION]).optional(),
+  }),
+  responseFormat: createResponseFormatEnum().optional().default(ResponseFormat.FORMATTED).describe(
+    "Desired response format: 'formatted' (default string) or 'json' (raw object)"
+  ),
 }).describe(
   "Atomically update a single project with selective field modifications"
 );
@@ -82,7 +87,10 @@ const BulkProjectUpdateSchema = z.object({
     })
   ).min(1).max(100).describe(
     "Collection of project updates to be applied in a single transaction"
-  )
+  ),
+  responseFormat: createResponseFormatEnum().optional().default(ResponseFormat.FORMATTED).describe(
+    "Desired response format: 'formatted' (default string) or 'json' (raw object)"
+  ),
 }).describe("Update multiple related projects in a single efficient transaction");
 
 // Schema shapes for tool registration
@@ -129,7 +137,10 @@ export const AtlasProjectUpdateSchemaShape = {
     })
   ).optional().describe(
     "Collection of project modifications to apply in a single transaction (required for mode='bulk')"
-  )
+  ),
+  responseFormat: createResponseFormatEnum().optional().describe(
+    "Desired response format: 'formatted' (default string) or 'json' (raw object)"
+  ),
 } as const;
 
 // Schema for validation

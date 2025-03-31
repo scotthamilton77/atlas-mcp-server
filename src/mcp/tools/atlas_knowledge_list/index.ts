@@ -1,8 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { z } from 'zod';
-import { createToolExample, createToolMetadata, registerTool } from '../../../types/tool.js';
-import { listKnowledge } from './listKnowledge.js';
-import { formatKnowledgeListResponse } from './responseFormat.js';
+import { z } from "zod";
+import { ResponseFormat, createResponseFormatEnum, createToolResponse } from "../../../types/mcp.js";
+import { createToolExample, createToolMetadata, registerTool } from "../../../types/tool.js";
+import { listKnowledge } from "./listKnowledge.js";
+import { formatKnowledgeListResponse } from "./responseFormat.js";
+import { KnowledgeListRequest } from "./types.js"; // Corrected import name
 
 /**
  * Registers the atlas_knowledge_list tool with the MCP server
@@ -26,14 +28,23 @@ export function registerAtlasKnowledgeListTool(server: McpServer): void {
       page: z.number().min(1).optional().default(1)
         .describe('Page number for paginated results (Default: 1)'),
       limit: z.number().min(1).max(100).optional().default(20)
-        .describe('Number of results per page, maximum 100 (Default: 20)')
+        .describe('Number of results per page, maximum 100 (Default: 20)'),
+      responseFormat: createResponseFormatEnum().optional().default(ResponseFormat.FORMATTED).describe(
+        "Desired response format: 'formatted' (default string) or 'json' (raw object)"
+      ),
     },
     async (input, context) => {
       // Process knowledge list request
-      const result = await listKnowledge(input as any);
-      
-      // Return the result using the formatter for rich display
-      return formatKnowledgeListResponse(result);
+      const validatedInput = input as unknown as KnowledgeListRequest & { responseFormat?: ResponseFormat }; // Corrected type cast
+      const result = await listKnowledge(validatedInput);
+
+      // Conditionally format response
+      if (validatedInput.responseFormat === ResponseFormat.JSON) {
+        return createToolResponse(JSON.stringify(result, null, 2));
+      } else {
+        // Return the result using the formatter for rich display
+        return formatKnowledgeListResponse(result, false);
+      }
     },
     createToolMetadata({
       examples: [

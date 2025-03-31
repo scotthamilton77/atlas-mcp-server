@@ -1,9 +1,10 @@
-import { ProjectService } from '../../../services/neo4j/projectService.js';
-import { BaseErrorCode, McpError, ProjectErrorCode } from '../../../types/errors.js';
-import { logger } from '../../../utils/logger.js';
-import { ToolContext } from '../../../utils/security.js';
-import { AtlasProjectUpdateInput, AtlasProjectUpdateSchema } from './types.js';
-import { formatProjectUpdateResponse } from './responseFormat.js';
+import { ProjectService } from "../../../services/neo4j/projectService.js";
+import { BaseErrorCode, McpError, ProjectErrorCode } from "../../../types/errors.js";
+import { ResponseFormat, createToolResponse } from "../../../types/mcp.js";
+import { logger } from "../../../utils/logger.js";
+import { ToolContext } from "../../../utils/security.js";
+import { AtlasProjectUpdateInput, AtlasProjectUpdateSchema } from "./types.js";
+import { formatProjectUpdateResponse } from "./responseFormat.js";
 
 export const atlasUpdateProject = async (
   input: unknown,
@@ -76,9 +77,12 @@ export const atlasUpdateProject = async (
         requestId: context.requestContext?.requestId 
       });
 
-      // Use the formatter to create the response
-      return formatProjectUpdateResponse(results);
-
+      // Conditionally format response
+      if (validatedInput.responseFormat === ResponseFormat.JSON) {
+        return createToolResponse(JSON.stringify(results, null, 2));
+      } else {
+        return formatProjectUpdateResponse(results);
+      }
     } else {
       // Process single project modification
       const { mode, id, updates } = validatedInput;
@@ -107,8 +111,12 @@ export const atlasUpdateProject = async (
         requestId: context.requestContext?.requestId 
       });
 
-      // Use the formatter to create the response
-      return formatProjectUpdateResponse(updatedProject);
+      // Conditionally format response
+      if (validatedInput.responseFormat === ResponseFormat.JSON) {
+        return createToolResponse(JSON.stringify(updatedProject, null, 2));
+      } else {
+        return formatProjectUpdateResponse(updatedProject);
+      }
     }
   } catch (error) {
     // Handle specific error cases

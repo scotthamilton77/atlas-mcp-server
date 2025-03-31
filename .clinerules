@@ -1,89 +1,390 @@
-# ATLAS MCP Server Developer Cheat Sheet
+# ATLAS MCP Server Developer Cheatsheet
 
-## 1. Project Overview
+This cheatsheet provides quick references for common patterns, utilities, and key modules within the `atlas-mcp-server` codebase.
 
-This project implements an MCP (Model Context Protocol) server named atlas-mcp-server. It provides tools and resources for managing projects, tasks, and knowledge items stored in a Neo4j graph database.
+## Core Utilities Integration
 
-## 2. Key Directories
+### 1. Logging (`src/utils/logger.ts`)
 
-- **`src/`**: Contains all source code.
-  - **`index.ts`**: Main entry point. Initializes the MCP server and handles graceful shutdown.
-  - **`config/`**: Handles application configuration, likely loading from environment variables (see `.env.example`).
-  - **`mcp/`**: Core MCP server logic.
-    - **`server.ts`**: Sets up the MCP server instance and registers handlers.
-    - **`resources/`**: Defines MCP resources (e.g., `atlas://projects/{projectId}`). Organized by entity type (projects, tasks, knowledge).
-    - **`tools/`**: Defines MCP tools (e.g., `atlas_project_create`). Each tool resides in its own subdirectory, typically containing:
-      - `index.ts`: Exports the tool handler.
-      - `[toolName].ts`: Core logic for the tool.
-      - `types.ts`: Input/output types and validation schemas.
-      - `responseFormat.ts`: (Optional) Helper for formatting tool responses.
-  - **`services/`**: Business logic layer, primarily interacting with external services.
-    - **`neo4j/`**: Handles all interactions with the Neo4j database. Includes the driver setup (`driver.ts`), specific services for each entity (`projectService.ts`, `taskService.ts`, `knowledgeService.ts`), helper functions, and types.
-  - **`types/`**: Shared TypeScript interfaces and types used across the application (e.g., `mcp.ts`, `tool.ts`).
-  - **`utils/`**: Common utility functions like logging (`logger.ts`), error handling (`errorHandler.ts`), ID generation (`idGenerator.ts`), etc.
-- **`scripts/`**: Utility scripts for development tasks (e.g., database backup/restore, dependency updates).
-- **`logs/`**: Directory where log files are stored.
-- **`docs/`**: Project documentation.
+- **Purpose**: Structured logging for debugging and monitoring server operations. Logs to files in the `logs/` directory.
+- **Usage**: Import the singleton `logger` instance.
 
-## 3. Running the Server
+```typescript
+import { logger } from './src/utils/logger.js';
+
+// Inside a function or handler
+logger.info("Processing MCP request");
+logger.debug("Detailed request info", { requestId: '...', params: { ... } });
+logger.warn("Potential issue detected during DB query");
+logger.error("An error occurred", { error: err.message, stack: err.stack });
+```
+
+- **Key Files**:
+  - `src/utils/logger.ts`: Logger implementation (Winston).
+  - `logs/`: Directory where log files are stored (`combined.log`, `error.log`, etc.).
+
+### 2. Error Handling (`src/types/errors.ts`, `src/utils/errorHandler.ts`)
+
+- **Purpose**: Standardized error objects (`McpError`, `Neo4jError`, etc.) and centralized handling. Ensures consistent error responses in the MCP protocol.
+- **Usage**:
+  - Throw specific error types (e.g., `McpError` with `ErrorCode`) for protocol-level errors.
+  - Use `try...catch` blocks within tool/resource handlers to catch internal errors (like database errors) and potentially wrap them in `McpError` or log them appropriately.
+  - Global error handlers in `src/index.ts` catch unhandled exceptions/rejections.
+
+```typescript
+import { McpError, ErrorCode } from "@modelcontextprotocol/sdk"; // Assuming SDK provides base errors
+import { logger } from "./src/utils/logger.js";
+// Potentially custom error types from './src/types/errors.js'
+
+async function handleToolRequest(params: any) {
+  try {
+    if (!params.requiredField) {
+      throw new McpError(
+        ErrorCode.InvalidParams, // Use appropriate ErrorCode from SDK or custom
+        "Missing required parameter: requiredField"
+      );
+    }
+    // ... perform tool logic, potentially interacting with Neo4jService ...
+    const result = await neo4jService.performQuery(params.query);
+    return result;
+  } catch (error) {
+    logger.error("Error handling tool request", {
+      error: error.message,
+      params,
+    });
+    if (error instanceof McpError) {
+      // Re-throw MCP specific errors to be handled by the server framework
+      throw error;
+    } else {
+      // Wrap unexpected internal errors
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Internal server error: ${error.message}`
+      );
+    }
+  }
+}
+```
+
+- **Key Files**:
+  - `src/types/errors.ts`: Defines custom server-specific error types/codes (if any).
+  - `src/utils/errorHandler.ts`: Contains utility functions for handling or formatting errors (if created, otherwise handled in `index.ts` and tool/resource logic).
+  - `src/index.ts`: Global `uncaughtException` and `unhandledRejection` handlers.
+
+### 3. ID Generation (`src/services/neo4j/utils.ts` - potentially)
+
+- **Purpose**: Generate unique IDs for Neo4j nodes (Projects, Tasks, Knowledge). Uses `nanoid`.
+- **Usage**: Likely used internally within the Neo4j service functions (`projectService.ts`, `taskService.ts`, `knowledgeService.ts`).
+
+```typescript
+// Example (Conceptual - actual usage is within service files)
+import { nanoid } from "nanoid";
+
+function generateNodeId(prefix: string = "node"): string {
+  return `${prefix}_${nanoid(10)}`; // Example: prj_aBcDeFgHiJ
+}
+
+// Inside projectService.createProject:
+// const projectId = generateNodeId('prj');
+// cypherQuery = `CREATE (p:Project {id: $projectId, ...}) ...`
+```
+
+- **Key Files**:
+  - `src/services/neo4j/utils.ts`: May contain helper functions for ID generation.
+  - `src/services/neo4j/*.ts`: Service files where IDs are generated and used in Cypher queries.
+
+### 4. Sanitization / Security (`src/utils/security.ts`)
+
+- **Purpose**: Provides functions for security-related tasks, potentially including input sanitization if needed (though less common for server-internal operations unless handling external data).
+- **Usage**: Import functions as needed.
+
+```typescript
+// Example (Conceptual - if sanitization functions exist)
+import { sanitizeInput } from "./src/utils/security.js";
+
+const userInput = "<script>alert('xss')</script>";
+const sanitized = sanitizeInput(userInput); // Assuming a basic sanitizer
+```
+
+- **Key Files**:
+  - `src/utils/security.ts`: Contains security-related utility functions.
+
+### 5. Response Formatting (`src/utils/responseFormatter.ts`)
+
+- **Purpose**: Provides utilities (`createFormattedResponse`, `objectToMarkdownTable`, `arrayToMarkdownTables`) to format raw tool output (often JSON) into more readable formats like Markdown tables for display in the MCP client.
+- **Usage**: Import `createFormattedResponse` and potentially a specific formatter implementation within tool handlers (`src/mcp/tools/[tool_name]/responseFormat.ts` or directly in the handler) to structure the final `McpToolResponse`.
+
+```typescript
+// Example (Conceptual - actual usage is within tool response formatting logic)
+import {
+  createFormattedResponse,
+  ResponseFormatter,
+  arrayToMarkdownTables,
+} from "./src/utils/responseFormatter.js";
+import { McpToolResponse } from "./src/types/mcp.js"; // Adjust path as needed
+
+interface MyToolOutput {
+  /* ... data structure ... */
+}
+
+const myToolOutputFormatter: ResponseFormatter<MyToolOutput[]> = {
+  format: (data: MyToolOutput[]): string => {
+    if (!data || data.length === 0) return "No results found.";
+    // Use arrayToMarkdownTables or custom logic
+    return arrayToMarkdownTables(
+      data.map((item) => ({
+        /* transform item for table */
+      }))
+    );
+  },
+};
+
+function formatMyToolResponse(rawData: MyToolOutput[]): McpToolResponse {
+  return createFormattedResponse(rawData, myToolOutputFormatter);
+}
+```
+
+- **Key Files**:
+  - `src/utils/responseFormatter.ts`: Contains the core formatting functions and interfaces.
+  - `src/mcp/tools/[tool_name]/responseFormat.ts`: (Optional convention) Specific formatters for individual tools.
+
+## Key Modules & Features
+
+### 1. MCP Server Core (`src/mcp/`)
+
+- **Purpose**: Implements the core Model Context Protocol server logic. Handles incoming requests, routes them to appropriate handlers, and sends responses.
+- **Key Files**:
+  - `src/mcp/server.ts`: Initializes the `@modelcontextprotocol/sdk` `Server` instance, registers all tool and resource handlers, sets up request/response logging.
+  - `src/mcp/resources/`: Defines handlers for MCP resource requests (e.g., `ListResources`, `ReadResource`). Organized by entity type (projects, tasks, knowledge).
+    - `index.ts`: Aggregates and exports resource handlers.
+    - `types.ts`: Shared types for resources.
+    - `*/[entity]Resources.ts`: Logic for handling resource requests for a specific entity.
+  - `src/mcp/tools/`: Defines handlers for MCP tool calls (`CallTool`). Each tool has its own subdirectory.
+    - `[tool_name]/index.ts`: Exports the main handler function for the tool.
+    - `[tool_name]/[toolName].ts`: Contains the core business logic for executing the tool. Often calls Neo4j services.
+    - `[tool_name]/types.ts`: Defines the Zod schema for input validation (`[ToolName]InputSchema`) and potentially output types.
+    - `[tool_name]/responseFormat.ts`: (Optional) Helper functions to format the tool's response.
+
+### 2. Neo4j Service (`src/services/neo4j/`)
+
+- **Purpose**: Encapsulates all interactions with the Neo4j graph database. Provides a service layer for CRUD operations on Projects, Tasks, and Knowledge nodes and their relationships.
+- **Key Files**:
+  - `src/services/neo4j/index.ts`: Exports key functions and potentially initializes the schema/connection.
+  - `src/services/neo4j/driver.ts`: Initializes and manages the Neo4j driver instance and session handling. Exports `getDriver` and `closeDriver`.
+  - `src/services/neo4j/projectService.ts`: Contains functions for creating, reading, updating, deleting, and listing Project nodes.
+  - `src/services/neo4j/taskService.ts`: Functions for managing Task nodes and their relationships to Projects.
+  - `src/services/neo4j/knowledgeService.ts`: Functions for managing Knowledge nodes and their relationships to Projects.
+  - `src/services/neo4j/searchService.ts`: Implements the logic for `atlas_unified_search`.
+  - `src/services/neo4j/backupRestoreService.ts`: Logic for database backup and import (used by scripts).
+  - `src/services/neo4j/helpers.ts`: Utility functions specifically for Neo4j interactions (e.g., formatting data for Cypher).
+  - `src/services/neo4j/types.ts`: TypeScript interfaces representing the structure of nodes and relationships in the database.
+  - `src/services/neo4j/utils.ts`: General utility functions used within the Neo4j service layer.
+  - `src/services/neo4j/events.ts`: Defines event constants or types related to database operations.
+
+### 3. Configuration (`src/config/index.ts`)
+
+- **Purpose**: Loads and provides access to application configuration, primarily from environment variables (`.env` file). Uses `dotenv`.
+- **Key Files**:
+  - `src/config/index.ts`: Loads environment variables and exports a configuration object.
+  - `.env.example`: Template for required environment variables (Neo4j URI, user, password).
+
+### 4. Shared Types (`src/types/`)
+
+- **Purpose**: Contains shared TypeScript interfaces and types used across different modules of the application.
+- **Key Files**:
+  - `src/types/mcp.ts`: Types related to MCP interactions.
+  - `src/types/tool.ts`: General types related to MCP tools.
+  - `src/types/errors.ts`: Custom error types/codes.
+
+### 5. Utility Scripts (`scripts/`)
+
+- **Purpose**: Provides command-line scripts for development and maintenance tasks.
+- **Key Files**:
+  - `scripts/db-backup.ts`: Backs up the Neo4j database.
+  - `scripts/db-import.ts`: Imports data into the Neo4j database from backup files.
+  - `scripts/clean.ts`: Potentially cleans build artifacts or logs.
+  - `scripts/generate-tree.ts`: Generates `docs/tree.md`.
+  - `scripts/make-executable.ts`: Makes built JS files executable.
+  - `scripts/update-deps.ts`: Updates project dependencies.
+
+## Running the Server
 
 1.  **Install Dependencies**: `npm install`
-2.  **Configure Environment**: Copy `.env.example` to `.env` and fill in necessary values (especially Neo4j connection details).
-3.  **Build**: `npm run rebuild`
-4.  **Run**: `The server is automatically started after you build it because you are operating within an MCP Client environment.`
+2.  **Configure Environment**: Copy `.env.example` to `.env` and fill in Neo4j connection details.
+3.  **Build**: `npm run rebuild` (Compiles TypeScript to JavaScript in `dist/`)
+4.  **Run**: The server is automatically started by the MCP client environment after a successful build. For standalone testing: `node dist/index.js`.
 
-## 4. Development Workflow
+## Development Workflow
 
 - **Adding a New Tool**:
-  1.  Create a new directory under `src/mcp/tools/` (e.g., `src/mcp/tools/my_new_tool/`).
-  2.  Implement the tool logic, types (including input schema), and export a handler function (see existing tools for structure).
-  3.  Register the tool handler in `src/mcp/server.ts`.
-- **Database Migrations**: This project uses Neo4j. Schema changes or data migrations might need manual Cypher queries or potentially a migration tool if integrated.
-- **Logging**: Use the logger instance from `src/utils/logger.ts` for application logging. Check `logs/` for output.
-- **Testing**: (Assuming tests exist or will be added) Run tests using `npm test`.
+  1.  Create `src/mcp/tools/my_new_tool/`.
+  2.  Implement `my_new_tool/types.ts` (with Zod input schema).
+  3.  Implement `my_new_tool/myNewTool.ts` (core logic, likely calling Neo4j services).
+  4.  Implement `my_new_tool/index.ts` (export handler, perform validation, call core logic).
+  5.  Register the tool handler in `src/mcp/server.ts` within the `registerToolHandlers` method.
+- **Database Changes**: Modify Cypher queries within the relevant `src/services/neo4j/*Service.ts` files. Ensure `src/services/neo4j/types.ts` reflects any node/relationship property changes.
+- **Testing**: Run tests using `npm test` (if tests are configured).
 
-## 5. Key Technologies
+## Key Technologies
 
 - **TypeScript**: Primary language.
 - **Node.js**: Runtime environment.
-- **MCP SDK**: `@modelcontextprotocol/sdk` for building the MCP server.
-- **Neo4j**: Graph database for storing data. Uses the official `neo4j-driver`.
-- **Winston**: Logging library (used in `logger.ts`).
-- **Zod**: (Likely used for schema validation in tool types, based on common practice).
+- **MCP SDK**: `@modelcontextprotocol/sdk` for server implementation.
+- **Neo4j**: Graph database (`neo4j-driver`).
+- **Winston**: Logging library.
+- **Zod**: Schema declaration and validation (used heavily in tool types).
+- **tsx**: For running TypeScript scripts directly (`scripts/`).
+- **Docker/Docker Compose**: For running Neo4j locally during development.
 
-## 6. Available MCP Tools
+## Available MCP Tools Summary
 
-The server exposes the following MCP tools:
+- **Projects**: `create`, `list`, `update`, `delete`
+- **Tasks**: `create`, `list`, `update`, `delete`
+- **Knowledge**: `add`, `list`, `delete`
+- **Database**: `unified_search`, `database_clean`
 
-- **Project Management**:
+## Important Notes
 
-  - `atlas_project_create`: Create new projects
-  - `atlas_project_list`: List projects with filtering options
-  - `atlas_project_update`: Update project details
-  - `atlas_project_delete`: Remove projects
+- Graceful shutdown logic in `src/index.ts` ensures Neo4j driver and MCP server connections are closed properly on `SIGINT`/`SIGTERM`.
+- Centralized error handling via global handlers in `src/index.ts` and specific error handling within tool/resource handlers.
+- Follow existing patterns in `src/services/neo4j/` for database interactions.
+- Use `docker-compose up -d` to start a local Neo4j instance for development.
 
-- **Task Management**:
+# atlas-mcp-server - Directory Structure
 
-  - `atlas_task_create`: Create tasks associated with projects
-  - `atlas_task_list`: List tasks with various filters
-  - `atlas_task_update`: Update task details
-  - `atlas_task_delete`: Remove tasks
+Generated on: 2025-03-31 14:01:54
 
-- **Knowledge Management**:
+```
+atlas-mcp-server
+├── docs
+    └── tree.md
+├── examples
+    ├── backup-example
+    │   ├── knowledges.json
+    │   ├── projects.json
+    │   ├── relationships.json
+    │   └── tasks.json
+    └── README.md
+├── scripts
+    ├── clean.ts
+    ├── db-backup.ts
+    ├── db-import.ts
+    ├── generate-tree.ts
+    ├── make-executable.ts
+    └── update-deps.ts
+├── src
+    ├── config
+    │   └── index.ts
+    ├── mcp
+    │   ├── resources
+    │   │   ├── knowledge
+    │   │   │   └── knowledgeResources.ts
+    │   │   ├── projects
+    │   │   │   └── projectResources.ts
+    │   │   ├── tasks
+    │   │   │   └── taskResources.ts
+    │   │   ├── index.ts
+    │   │   └── types.ts
+    │   ├── tools
+    │   │   ├── atlas_database_clean
+    │   │   │   ├── cleanDatabase.ts
+    │   │   │   ├── index.ts
+    │   │   │   ├── responseFormat.ts
+    │   │   │   └── types.ts
+    │   │   ├── atlas_knowledge_add
+    │   │   │   ├── addKnowledge.ts
+    │   │   │   ├── index.ts
+    │   │   │   ├── responseFormat.ts
+    │   │   │   └── types.ts
+    │   │   ├── atlas_knowledge_delete
+    │   │   │   ├── deleteKnowledge.ts
+    │   │   │   ├── index.ts
+    │   │   │   ├── responseFormat.ts
+    │   │   │   └── types.ts
+    │   │   ├── atlas_knowledge_list
+    │   │   │   ├── index.ts
+    │   │   │   ├── listKnowledge.ts
+    │   │   │   ├── responseFormat.ts
+    │   │   │   └── types.ts
+    │   │   ├── atlas_project_create
+    │   │   │   ├── createProject.ts
+    │   │   │   ├── index.ts
+    │   │   │   ├── responseFormat.ts
+    │   │   │   └── types.ts
+    │   │   ├── atlas_project_delete
+    │   │   │   ├── deleteProject.ts
+    │   │   │   ├── index.ts
+    │   │   │   ├── responseFormat.ts
+    │   │   │   └── types.ts
+    │   │   ├── atlas_project_list
+    │   │   │   ├── index.ts
+    │   │   │   ├── listProjects.ts
+    │   │   │   ├── responseFormat.ts
+    │   │   │   └── types.ts
+    │   │   ├── atlas_project_update
+    │   │   │   ├── index.ts
+    │   │   │   ├── responseFormat.ts
+    │   │   │   ├── types.ts
+    │   │   │   └── updateProject.ts
+    │   │   ├── atlas_task_create
+    │   │   │   ├── createTask.ts
+    │   │   │   ├── index.ts
+    │   │   │   ├── responseFormat.ts
+    │   │   │   └── types.ts
+    │   │   ├── atlas_task_delete
+    │   │   │   ├── deleteTask.ts
+    │   │   │   ├── index.ts
+    │   │   │   ├── responseFormat.ts
+    │   │   │   └── types.ts
+    │   │   ├── atlas_task_list
+    │   │   │   ├── index.ts
+    │   │   │   ├── listTasks.ts
+    │   │   │   ├── responseFormat.ts
+    │   │   │   └── types.ts
+    │   │   ├── atlas_task_update
+    │   │   │   ├── index.ts
+    │   │   │   ├── responseFormat.ts
+    │   │   │   ├── types.ts
+    │   │   │   └── updateTask.ts
+    │   │   └── atlas_unified_search
+    │   │   │   ├── index.ts
+    │   │   │   ├── responseFormat.ts
+    │   │   │   ├── types.ts
+    │   │   │   └── unifiedSearch.ts
+    │   └── server.ts
+    ├── services
+    │   └── neo4j
+    │   │   ├── backupRestoreService.ts
+    │   │   ├── driver.ts
+    │   │   ├── events.ts
+    │   │   ├── helpers.ts
+    │   │   ├── index.ts
+    │   │   ├── knowledgeService.ts
+    │   │   ├── projectService.ts
+    │   │   ├── searchService.ts
+    │   │   ├── taskService.ts
+    │   │   ├── types.ts
+    │   │   └── utils.ts
+    ├── types
+    │   ├── errors.ts
+    │   ├── mcp.ts
+    │   └── tool.ts
+    ├── utils
+    │   ├── errorHandler.ts
+    │   ├── logger.ts
+    │   ├── responseFormatter.ts
+    │   └── security.ts
+    └── index.ts
+├── .clinerules
+├── .repomixignore
+├── docker-compose.yml
+├── LICENSE
+├── package-lock.json
+├── package.json
+├── README.md
+├── repomix.config.json
+└── tsconfig.json
 
-  - `atlas_knowledge_add`: Add knowledge items to projects
-  - `atlas_knowledge_list`: List knowledge items
-  - `atlas_knowledge_delete`: Remove knowledge items
+```
 
-- **Utilities**:
-  - `atlas_unified_search`: Search across all entity types
-  - `atlas_database_clean`: Reset the database (use with caution)
-
-## 7. Important Notes
-
-- Graceful shutdown logic is implemented in `src/index.ts` to close the MCP server and Neo4j connections properly.
-- Error handling is centralized via `src/utils/errorHandler.ts` and uncaught exception/rejection handlers in `src/index.ts`.
-- Follow the established structure when adding new features (e.g., new tools, services).
-- For database operations, check `src/services/neo4j/` for existing patterns.
-- Docker Compose is available for development with Neo4j (`docker-compose.yml`).
-- Utility scripts in the `scripts/` directory can help with database backups and maintenance.
+_Note: This tree excludes files and directories matched by .gitignore and common patterns like node_modules._

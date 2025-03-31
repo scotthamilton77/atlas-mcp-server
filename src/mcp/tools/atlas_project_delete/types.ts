@@ -1,12 +1,15 @@
 import { z } from "zod";
-import { McpToolResponse } from '../../../types/mcp.js';
+import { McpToolResponse, ResponseFormat, createResponseFormatEnum } from "../../../types/mcp.js";
 
 // Schema for individual project removal
 const SingleProjectSchema = z.object({
   mode: z.literal("single"),
   id: z.string().describe(
     "Project identifier to permanently remove from the system"
-  )
+  ),
+  responseFormat: createResponseFormatEnum().optional().default(ResponseFormat.FORMATTED).describe(
+    "Desired response format: 'formatted' (default string) or 'json' (raw object)"
+  ),
 }).describe(
   "Remove a specific project entity by its unique identifier"
 );
@@ -16,7 +19,10 @@ const BulkProjectSchema = z.object({
   mode: z.literal("bulk"),
   projectIds: z.array(z.string()).min(1).describe(
     "Collection of project identifiers to remove in a single operation"
-  )
+  ),
+  responseFormat: createResponseFormatEnum().optional().default(ResponseFormat.FORMATTED).describe(
+    "Desired response format: 'formatted' (default string) or 'json' (raw object)"
+  ),
 }).describe(
   "Batch removal of multiple project entities in a single transaction"
 );
@@ -31,7 +37,10 @@ export const AtlasProjectDeleteSchemaShape = {
   ),
   projectIds: z.array(z.string()).optional().describe(
     "Collection of project identifiers to permanently remove in a single atomic transaction (required for mode='bulk')"
-  )
+  ),
+  responseFormat: createResponseFormatEnum().optional().describe(
+    "Desired response format: 'formatted' (default string) or 'json' (raw object)"
+  ),
 } as const;
 
 // Schema for validation

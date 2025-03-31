@@ -1,9 +1,10 @@
 import { ProjectService } from '../../../services/neo4j/projectService.js';
-import { BaseErrorCode, McpError, ProjectErrorCode } from '../../../types/errors.js';
-import { logger } from '../../../utils/logger.js';
-import { ToolContext } from '../../../utils/security.js';
-import { AtlasProjectCreateInput, AtlasProjectCreateSchema } from './types.js';
-import { formatProjectCreateResponse } from './responseFormat.js';
+import { BaseErrorCode, McpError, ProjectErrorCode } from "../../../types/errors.js";
+import { ResponseFormat, createToolResponse } from "../../../types/mcp.js";
+import { logger } from "../../../utils/logger.js";
+import { ToolContext } from "../../../utils/security.js";
+import { AtlasProjectCreateInput, AtlasProjectCreateSchema } from "./types.js";
+import { formatProjectCreateResponse } from "./responseFormat.js";
 
 export const atlasCreateProject = async (
   input: unknown,
@@ -91,9 +92,12 @@ export const atlasCreateProject = async (
         requestId: context.requestContext?.requestId 
       });
 
-      // Use the formatter instead of createToolResponse
-      return formatProjectCreateResponse(results);
-
+      // Conditionally format response
+      if (validatedInput.responseFormat === ResponseFormat.JSON) {
+        return createToolResponse(JSON.stringify(results, null, 2));
+      } else {
+        return formatProjectCreateResponse(results);
+      }
     } else {
       // Process single project creation
       const { mode, id, name, description, status, urls, completionRequirements, dependencies, outputFormat, taskType } = validatedInput;
@@ -137,11 +141,15 @@ export const atlasCreateProject = async (
       
       logger.info("Project initialized successfully", { 
         projectId: project.id,
-        requestId: context.requestContext?.requestId 
+        requestId: context.requestContext?.requestId
       });
 
-      // Use the formatter instead of createToolResponse
-      return formatProjectCreateResponse(project);
+      // Conditionally format response
+      if (validatedInput.responseFormat === ResponseFormat.JSON) {
+        return createToolResponse(JSON.stringify(project, null, 2));
+      } else {
+        return formatProjectCreateResponse(project);
+      }
     }
   } catch (error) {
     // Handle specific error cases

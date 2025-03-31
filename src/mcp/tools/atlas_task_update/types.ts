@@ -2,12 +2,14 @@ import { z } from "zod";
 import {
   McpToolResponse,
   PriorityLevel,
+  ResponseFormat,
   TaskStatus,
   TaskType,
   createPriorityLevelEnum,
+  createResponseFormatEnum,
   createTaskStatusEnum,
-  createTaskTypeEnum
-} from '../../../types/mcp.js';
+  createTaskTypeEnum,
+} from "../../../types/mcp.js";
 
 export const TaskUpdateSchema = z.object({
   id: z.string().describe("Identifier of the existing task to be modified"),
@@ -70,8 +72,11 @@ const SingleTaskUpdateSchema = z.object({
     tags: z.array(z.string()).optional(),
     completionRequirements: z.string().optional(),
     outputFormat: z.string().optional(),
-    taskType: createTaskTypeEnum().optional()
-  })
+    taskType: createTaskTypeEnum().optional(),
+  }),
+  responseFormat: createResponseFormatEnum().optional().default(ResponseFormat.FORMATTED).describe(
+    "Desired response format: 'formatted' (default string) or 'json' (raw object)"
+  ),
 }).describe(
   "Update an individual task with selective field modifications"
 );
@@ -101,7 +106,10 @@ const BulkTaskUpdateSchema = z.object({
     })
   ).min(1).max(100).describe(
     "Collection of task updates to be applied in a single transaction"
-  )
+  ),
+  responseFormat: createResponseFormatEnum().optional().default(ResponseFormat.FORMATTED).describe(
+    "Desired response format: 'formatted' (default string) or 'json' (raw object)"
+  ),
 }).describe("Update multiple related tasks in a single efficient transaction");
 
 // Schema shapes for tool registration
@@ -154,7 +162,10 @@ export const AtlasTaskUpdateSchemaShape = {
     })
   ).optional().describe(
     "Array of task updates, each containing an ID and updates object (required for mode='bulk')"
-  )
+  ),
+  responseFormat: createResponseFormatEnum().optional().describe(
+    "Desired response format: 'formatted' (default string) or 'json' (raw object)"
+  ),
 } as const;
 
 // Schema for validation

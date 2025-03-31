@@ -1,4 +1,5 @@
 import { BaseErrorCode, McpError } from "../../../types/errors.js";
+import { ResponseFormat, createToolResponse } from "../../../types/mcp.js";
 import { logger } from "../../../utils/logger.js";
 import { ToolContext } from "../../../utils/security.js";
 import { formatDatabaseCleanResponse } from "./responseFormat.js";
@@ -39,15 +40,21 @@ export const atlasDatabaseClean = async (
       // Log successful operation
       logger.warn("Database reset completed successfully", {
         requestId: context.requestContext?.requestId,
-        executionTime: `${executionTime}ms`
+        executionTime: `${executionTime}ms`,
       });
-      
-      // Return formatted success response
-      return formatDatabaseCleanResponse({
+
+      const result = {
         success: true,
         message: "Database has been completely reset - all nodes and relationships removed",
-        timestamp: new Date().toISOString()
-      });
+        timestamp: new Date().toISOString(),
+      };
+
+      // Conditionally format response
+      if (validatedInput.responseFormat === ResponseFormat.JSON) {
+        return createToolResponse(JSON.stringify(result, null, 2));
+      } else {
+        return formatDatabaseCleanResponse(result);
+      }
     } catch (error) {
       throw new Error(`Failed to execute database reset: ${error instanceof Error ? error.message : String(error)}`);
     }

@@ -1,9 +1,10 @@
-import { ProjectService } from '../../../services/neo4j/projectService.js';
-import { BaseErrorCode, McpError, ProjectErrorCode } from '../../../types/errors.js';
-import { logger } from '../../../utils/logger.js';
-import { ToolContext } from '../../../utils/security.js';
-import { AtlasProjectDeleteInput, AtlasProjectDeleteSchema } from './types.js';
-import { formatProjectDeleteResponse } from './responseFormat.js';
+import { ProjectService } from "../../../services/neo4j/projectService.js";
+import { BaseErrorCode, McpError, ProjectErrorCode } from "../../../types/errors.js";
+import { ResponseFormat, createToolResponse } from "../../../types/mcp.js";
+import { logger } from "../../../utils/logger.js";
+import { ToolContext } from "../../../utils/security.js";
+import { AtlasProjectDeleteInput, AtlasProjectDeleteSchema } from "./types.js";
+import { formatProjectDeleteResponse } from "./responseFormat.js";
 
 export const atlasDeleteProject = async (
   input: unknown,
@@ -81,9 +82,12 @@ export const atlasDeleteProject = async (
         requestId: context.requestContext?.requestId 
       });
 
-      // Use the formatter to format the response
-      return formatProjectDeleteResponse(results);
-
+      // Conditionally format response
+      if (validatedInput.responseFormat === ResponseFormat.JSON) {
+        return createToolResponse(JSON.stringify(results, null, 2));
+      } else {
+        return formatProjectDeleteResponse(results);
+      }
     } else {
       // Process single entity removal
       const { id } = validatedInput;
@@ -113,12 +117,18 @@ export const atlasDeleteProject = async (
         requestId: context.requestContext?.requestId 
       });
 
-      // Return formatted success response
-      return formatProjectDeleteResponse({
+      const result = {
         id,
         success: true,
-        message: `Project with ID ${id} removed successfully`
-      });
+        message: `Project with ID ${id} removed successfully`,
+      };
+
+      // Conditionally format response
+      if (validatedInput.responseFormat === ResponseFormat.JSON) {
+        return createToolResponse(JSON.stringify(result, null, 2));
+      } else {
+        return formatProjectDeleteResponse(result);
+      }
     }
   } catch (error) {
     // Handle specific error cases

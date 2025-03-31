@@ -2,10 +2,12 @@ import { z } from "zod";
 import {
   McpToolResponse,
   ProjectStatus,
+  ResponseFormat,
   TaskType,
   createProjectStatusEnum,
-  createTaskTypeEnum
-} from '../../../types/mcp.js';
+  createResponseFormatEnum,
+  createTaskTypeEnum,
+} from "../../../types/mcp.js";
 
 export const ProjectSchema = z.object({
   id: z.string().optional().describe(
@@ -57,7 +59,10 @@ const SingleProjectSchema = z.object({
   completionRequirements: z.string(),
   dependencies: z.array(z.string()).optional(),
   outputFormat: z.string(),
-  taskType: createTaskTypeEnum().or(z.string())
+  taskType: createTaskTypeEnum().or(z.string()),
+  responseFormat: createResponseFormatEnum().optional().default(ResponseFormat.FORMATTED).describe(
+    "Desired response format: 'formatted' (default string) or 'json' (raw object)"
+  )
 }).describe(
   "Creates a single project with comprehensive details and metadata"
 );
@@ -66,6 +71,9 @@ const BulkProjectSchema = z.object({
   mode: z.literal("bulk"),
   projects: z.array(ProjectSchema).min(1).max(100).describe(
     "Collection of project definitions to create in a single operation"
+  ),
+  responseFormat: createResponseFormatEnum().optional().default(ResponseFormat.FORMATTED).describe(
+    "Desired response format: 'formatted' (default string) or 'json' (raw object)"
   )
 }).describe("Create multiple related projects in a single efficient transaction");
 
@@ -108,6 +116,9 @@ export const AtlasProjectCreateSchemaShape = {
   ),
   projects: z.array(ProjectSchema).min(1).max(100).optional().describe(
     "Array of complete project definition objects to create in a single transaction (supports 1-100 projects, required for mode='bulk')"
+  ),
+  responseFormat: createResponseFormatEnum().optional().describe(
+    "Desired response format: 'formatted' (default string) or 'json' (raw object)"
   )
 } as const;
 

@@ -1,8 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { z } from 'zod';
-import { createToolExample, createToolMetadata, registerTool } from '../../../types/tool.js';
-import { atlasUnifiedSearch } from './unifiedSearch.js';
-import { UnifiedSearchRequestSchema } from './types.js';
+import { z } from "zod";
+import { ResponseFormat, createResponseFormatEnum, createToolResponse } from "../../../types/mcp.js";
+import { createToolExample, createToolMetadata, registerTool } from "../../../types/tool.js";
+import { atlasUnifiedSearch } from "./unifiedSearch.js";
+import { UnifiedSearchRequestInput, UnifiedSearchRequestSchema } from "./types.js"; // Corrected type import
+import { formatUnifiedSearchResponse } from "./responseFormat.js";
 
 export const registerAtlasUnifiedSearchTool = (server: McpServer) => {
   registerTool(
@@ -33,11 +35,26 @@ export const registerAtlasUnifiedSearchTool = (server: McpServer) => {
       page: z.number().optional().describe(
         "Page number for paginated results (Default: 1)"
       ),
-      limit: z.number().optional().describe(
+      limit: z.number().optional().describe( // Corrected syntax: added 'limit:' key
         "Number of results per page, maximum 100 (Default: 20)"
-      )
+      ),
+      responseFormat: createResponseFormatEnum().optional().default(ResponseFormat.FORMATTED).describe(
+        "Desired response format: 'formatted' (default string) or 'json' (raw object)"
+      ),
     },
-    atlasUnifiedSearch,
+    async (input, context) => {
+      // Process unified search request
+      const validatedInput = input as unknown as UnifiedSearchRequestInput & { responseFormat?: ResponseFormat }; // Corrected type cast
+      const result = await atlasUnifiedSearch(validatedInput, context); // Added context argument
+
+      // Conditionally format response
+      if (validatedInput.responseFormat === ResponseFormat.JSON) {
+        return createToolResponse(JSON.stringify(result, null, 2));
+      } else {
+        // Return the result using the formatter for rich display
+        return formatUnifiedSearchResponse(result, false); // Corrected: Already had the second argument, error was likely from previous state. Keeping it explicit.
+      }
+    },
     createToolMetadata({
       examples: [
         createToolExample(

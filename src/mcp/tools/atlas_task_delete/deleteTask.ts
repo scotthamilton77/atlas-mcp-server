@@ -1,9 +1,10 @@
-import { TaskService } from '../../../services/neo4j/taskService.js';
-import { BaseErrorCode, McpError } from '../../../types/errors.js';
-import { logger } from '../../../utils/logger.js';
-import { ToolContext } from '../../../utils/security.js';
-import { AtlasTaskDeleteInput, AtlasTaskDeleteSchema } from './types.js';
-import { formatTaskDeleteResponse } from './responseFormat.js';
+import { TaskService } from "../../../services/neo4j/taskService.js";
+import { BaseErrorCode, McpError } from "../../../types/errors.js";
+import { ResponseFormat, createToolResponse } from "../../../types/mcp.js";
+import { logger } from "../../../utils/logger.js";
+import { ToolContext } from "../../../utils/security.js";
+import { AtlasTaskDeleteInput, AtlasTaskDeleteSchema } from "./types.js";
+import { formatTaskDeleteResponse } from "./responseFormat.js";
 
 export const atlasDeleteTask = async (
   input: unknown,
@@ -81,9 +82,12 @@ export const atlasDeleteTask = async (
         requestId: context.requestContext?.requestId 
       });
 
-      // Use the formatter to format the response
-      return formatTaskDeleteResponse(results);
-
+      // Conditionally format response
+      if (validatedInput.responseFormat === ResponseFormat.JSON) {
+        return createToolResponse(JSON.stringify(results, null, 2));
+      } else {
+        return formatTaskDeleteResponse(results);
+      }
     } else {
       // Process single entity removal
       const { id } = validatedInput;
@@ -113,12 +117,18 @@ export const atlasDeleteTask = async (
         requestId: context.requestContext?.requestId 
       });
 
-      // Return formatted success response
-      return formatTaskDeleteResponse({
+      const result = {
         id,
         success: true,
-        message: `Task with ID ${id} removed successfully`
-      });
+        message: `Task with ID ${id} removed successfully`,
+      };
+
+      // Conditionally format response
+      if (validatedInput.responseFormat === ResponseFormat.JSON) {
+        return createToolResponse(JSON.stringify(result, null, 2));
+      } else {
+        return formatTaskDeleteResponse(result);
+      }
     }
   } catch (error) {
     // Handle specific error cases

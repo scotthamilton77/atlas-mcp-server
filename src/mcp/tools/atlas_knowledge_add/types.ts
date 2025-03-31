@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { McpToolResponse, KnowledgeDomain, createKnowledgeDomainEnum } from '../../../types/mcp.js';
+import { McpToolResponse, KnowledgeDomain, createKnowledgeDomainEnum, ResponseFormat, createResponseFormatEnum } from "../../../types/mcp.js";
 
 export const KnowledgeSchema = z.object({
   id: z.string().optional().describe(
@@ -29,7 +29,10 @@ const SingleKnowledgeSchema = z.object({
   text: z.string(),
   tags: z.array(z.string()).optional(),
   domain: createKnowledgeDomainEnum().or(z.string()),
-  citations: z.array(z.string()).optional()
+  citations: z.array(z.string()).optional(),
+  responseFormat: createResponseFormatEnum().optional().default(ResponseFormat.FORMATTED).describe(
+    "Desired response format: 'formatted' (default string) or 'json' (raw object)"
+  ),
 }).describe(
   "Adds a single knowledge item with comprehensive details and metadata"
 );
@@ -38,7 +41,10 @@ const BulkKnowledgeSchema = z.object({
   mode: z.literal("bulk"),
   knowledge: z.array(KnowledgeSchema).min(1).max(100).describe(
     "Array of knowledge objects with the above fields"
-  )
+  ),
+  responseFormat: createResponseFormatEnum().optional().default(ResponseFormat.FORMATTED).describe(
+    "Desired response format: 'formatted' (default string) or 'json' (raw object)"
+  ),
 }).describe("Add multiple knowledge items in a single efficient transaction");
 
 // Schema shapes for tool registration
@@ -66,7 +72,10 @@ export const AtlasKnowledgeAddSchemaShape = {
   ),
   knowledge: z.array(KnowledgeSchema).min(1).max(100).optional().describe(
     "Array of complete knowledge definition objects to create in a single transaction (supports 1-100 items, required for mode='bulk')"
-  )
+  ),
+  responseFormat: createResponseFormatEnum().optional().describe(
+    "Desired response format: 'formatted' (default string) or 'json' (raw object)"
+  ),
 } as const;
 
 // Schema for validation

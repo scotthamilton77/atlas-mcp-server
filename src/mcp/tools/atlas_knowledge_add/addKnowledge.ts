@@ -1,9 +1,10 @@
-import { KnowledgeService } from '../../../services/neo4j/knowledgeService.js';
-import { BaseErrorCode, McpError, ProjectErrorCode } from '../../../types/errors.js';
-import { logger } from '../../../utils/logger.js';
-import { ToolContext } from '../../../utils/security.js';
-import { AtlasKnowledgeAddInput, AtlasKnowledgeAddSchema } from './types.js';
-import { formatKnowledgeAddResponse } from './responseFormat.js';
+import { KnowledgeService } from "../../../services/neo4j/knowledgeService.js";
+import { BaseErrorCode, McpError, ProjectErrorCode } from "../../../types/errors.js";
+import { ResponseFormat, createToolResponse } from "../../../types/mcp.js";
+import { logger } from "../../../utils/logger.js";
+import { ToolContext } from "../../../utils/security.js";
+import { AtlasKnowledgeAddInput, AtlasKnowledgeAddSchema } from "./types.js";
+import { formatKnowledgeAddResponse } from "./responseFormat.js";
 
 export const atlasAddKnowledge = async (
   input: unknown,
@@ -69,9 +70,12 @@ export const atlasAddKnowledge = async (
         requestId: context.requestContext?.requestId 
       });
 
-      // Use the formatter to create the response
-      return formatKnowledgeAddResponse(results);
-
+      // Conditionally format response
+      if (validatedInput.responseFormat === ResponseFormat.JSON) {
+        return createToolResponse(JSON.stringify(results, null, 2));
+      } else {
+        return formatKnowledgeAddResponse(results);
+      }
     } else {
       // Process single knowledge item addition
       const { mode, id, projectId, text, tags, domain, citations } = validatedInput;
@@ -97,8 +101,12 @@ export const atlasAddKnowledge = async (
         requestId: context.requestContext?.requestId 
       });
 
-      // Use the formatter to create the response
-      return formatKnowledgeAddResponse(knowledge);
+      // Conditionally format response
+      if (validatedInput.responseFormat === ResponseFormat.JSON) {
+        return createToolResponse(JSON.stringify(knowledge, null, 2));
+      } else {
+        return formatKnowledgeAddResponse(knowledge);
+      }
     }
   } catch (error) {
     // Handle specific error cases

@@ -1,10 +1,11 @@
-import { TaskService } from '../../../services/neo4j/taskService.js';
-import { ProjectService } from '../../../services/neo4j/projectService.js';
-import { BaseErrorCode, McpError, ProjectErrorCode } from '../../../types/errors.js';
-import { logger } from '../../../utils/logger.js';
-import { ToolContext } from '../../../utils/security.js';
-import { AtlasTaskCreateInput, AtlasTaskCreateSchema } from './types.js';
-import { formatTaskCreateResponse } from './responseFormat.js';
+import { TaskService } from "../../../services/neo4j/taskService.js";
+import { ProjectService } from "../../../services/neo4j/projectService.js";
+import { BaseErrorCode, McpError, ProjectErrorCode } from "../../../types/errors.js";
+import { ResponseFormat, createToolResponse } from "../../../types/mcp.js";
+import { logger } from "../../../utils/logger.js";
+import { ToolContext } from "../../../utils/security.js";
+import { AtlasTaskCreateInput, AtlasTaskCreateSchema } from "./types.js";
+import { formatTaskCreateResponse } from "./responseFormat.js";
 
 export const atlasCreateTask = async (
   input: unknown,
@@ -104,9 +105,12 @@ export const atlasCreateTask = async (
         requestId: context.requestContext?.requestId 
       });
 
-      // Use the formatter to create the response
-      return formatTaskCreateResponse(results);
-
+      // Conditionally format response
+      if (validatedInput.responseFormat === ResponseFormat.JSON) {
+        return createToolResponse(JSON.stringify(results, null, 2));
+      } else {
+        return formatTaskCreateResponse(results);
+      }
     } else {
       // Process single task creation
       const { mode, id, projectId, title, description, priority, status, assignedTo, urls, tags, completionRequirements, dependencies, outputFormat, taskType } = validatedInput;
@@ -166,8 +170,12 @@ export const atlasCreateTask = async (
         requestId: context.requestContext?.requestId 
       });
 
-      // Use the formatter to create the response
-      return formatTaskCreateResponse(task);
+      // Conditionally format response
+      if (validatedInput.responseFormat === ResponseFormat.JSON) {
+        return createToolResponse(JSON.stringify(task, null, 2));
+      } else {
+        return formatTaskCreateResponse(task);
+      }
     }
   } catch (error) {
     // Handle specific error cases
