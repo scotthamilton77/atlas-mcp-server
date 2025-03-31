@@ -1,6 +1,6 @@
 {
   "name": "atlas-mcp-server",
-  "version": "2.5.1",
+  "version": "2.5.3",
   "description": "A Model Context Protocol (MCP) server for ATLAS, a Neo4j-powered task management system for LLM Agents - implementing a three-tier architecture (Projects, Tasks, Knowledge) to manage complex workflows.",
   "type": "module",
   "main": "dist/index.js",
@@ -46,13 +46,13 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.8.0",
     "@types/express": "^5.0.1",
-    "@types/node": "^22.13.13",
+    "@types/node": "^22.13.14",
     "@types/node-cron": "^3.0.11",
     "commander": "^13.1.0",
     "cross-env": "^7.0.3",
     "date-fns": "^4.1.0",
     "dotenv": "^16.4.7",
-    "express": "^4.21.2",
+    "express": "^5.1.0",
     "fuzzysort": "^3.1.0",
     "neo4j-driver": "^5.28.1",
     "node-cron": "^3.0.3",

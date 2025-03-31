@@ -2,7 +2,7 @@
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8.2-blue.svg)](https://www.typescriptlang.org/)
 [![Model Context Protocol](https://img.shields.io/badge/MCP-1.8.0-green.svg)](https://modelcontextprotocol.io/)
-[![Version](https://img.shields.io/badge/Version-2.5.1-blue.svg)](https://github.com/cyanheads/atlas-mcp-server/releases)
+[![Version](https://img.shields.io/badge/Version-2.5.3-blue.svg)](https://github.com/cyanheads/atlas-mcp-server/releases)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Status](https://img.shields.io/badge/Status-Stable-green.svg)]()
 [![GitHub](https://img.shields.io/github/stars/cyanheads/atlas-mcp-server?style=social)](https://github.com/cyanheads/atlas-mcp-server)
@@ -212,25 +212,25 @@ ATLAS provides a comprehensive suite of tools for project, task, and knowledge m
 
 Creates new projects (single or bulk).
 
-- **Key Arguments:** `mode` ('single'/'bulk'), project details (`name`, `description`, `status`, `urls`, `completionRequirements`, `dependencies`, `outputFormat`, `taskType`). Bulk mode uses a `projects` array.
+- **Key Arguments:** `mode` ('single'/'bulk'), project details (`name`, `description`, `status`, `urls`, `completionRequirements`, `dependencies`, `outputFormat`, `taskType`), `responseFormat` ('formatted'/'json', optional, default: 'formatted'). Bulk mode uses a `projects` array.
 
 #### `atlas_project_list`
 
 Lists projects (all or details for one).
 
-- **Key Arguments:** `mode` ('all'/'details'), `id` (for details), filters (`status`, `taskType`), pagination (`page`, `limit`), includes (`includeKnowledge`, `includeTasks`).
+- **Key Arguments:** `mode` ('all'/'details'), `id` (for details), filters (`status`, `taskType`), pagination (`page`, `limit`), includes (`includeKnowledge`, `includeTasks`), `responseFormat` ('formatted'/'json', optional, default: 'formatted').
 
 #### `atlas_project_update`
 
 Updates existing projects (single or bulk).
 
-- **Key Arguments:** `mode` ('single'/'bulk'), `id`, `updates` object (containing fields to change). Bulk mode uses a `projects` array with `id` and `updates`.
+- **Key Arguments:** `mode` ('single'/'bulk'), `id`, `updates` object (containing fields to change), `responseFormat` ('formatted'/'json', optional, default: 'formatted'). Bulk mode uses a `projects` array with `id` and `updates`.
 
 #### `atlas_project_delete`
 
 Deletes projects (single or bulk).
 
-- **Key Arguments:** `mode` ('single'/'bulk'), `id` (for single) or `projectIds` array (for bulk).
+- **Key Arguments:** `mode` ('single'/'bulk'), `id` (for single) or `projectIds` array (for bulk), `responseFormat` ('formatted'/'json', optional, default: 'formatted').
 
 ### Task Operations
 
@@ -238,25 +238,25 @@ Deletes projects (single or bulk).
 
 Creates new tasks (single or bulk) associated with a project.
 
-- **Key Arguments:** `mode` ('single'/'bulk'), `projectId`, task details (`title`, `description`, `priority`, `status`, `assignedTo`, `tags`, `completionRequirements`, `dependencies`, `outputFormat`, `taskType`). Bulk mode uses a `tasks` array.
+- **Key Arguments:** `mode` ('single'/'bulk'), `projectId`, task details (`title`, `description`, `priority`, `status`, `assignedTo`, `tags`, `completionRequirements`, `dependencies`, `outputFormat`, `taskType`), `responseFormat` ('formatted'/'json', optional, default: 'formatted'). Bulk mode uses a `tasks` array.
 
 #### `atlas_task_update`
 
 Updates existing tasks (single or bulk).
 
-- **Key Arguments:** `mode` ('single'/'bulk'), `id`, `updates` object (containing fields to change). Bulk mode uses a `tasks` array with `id` and `updates`.
+- **Key Arguments:** `mode` ('single'/'bulk'), `id`, `updates` object (containing fields to change), `responseFormat` ('formatted'/'json', optional, default: 'formatted'). Bulk mode uses a `tasks` array with `id` and `updates`.
 
 #### `atlas_task_delete`
 
 Deletes tasks (single or bulk).
 
-- **Key Arguments:** `mode` ('single'/'bulk'), `id` (for single) or `taskIds` array (for bulk).
+- **Key Arguments:** `mode` ('single'/'bulk'), `id` (for single) or `taskIds` array (for bulk), `responseFormat` ('formatted'/'json', optional, default: 'formatted').
 
 #### `atlas_task_list`
 
 Lists tasks for a specific project.
 
-- **Key Arguments:** `projectId` (required), filters (`status`, `assignedTo`, `priority`, `tags`, `taskType`), sorting (`sortBy`, `sortDirection`), pagination (`page`, `limit`).
+- **Key Arguments:** `projectId` (required), filters (`status`, `assignedTo`, `priority`, `tags`, `taskType`), sorting (`sortBy`, `sortDirection`), pagination (`page`, `limit`), `responseFormat` ('formatted'/'json', optional, default: 'formatted').
 
 ### Knowledge Operations
 
@@ -264,19 +264,19 @@ Lists tasks for a specific project.
 
 Adds new knowledge items (single or bulk) associated with a project.
 
-- **Key Arguments:** `mode` ('single'/'bulk'), `projectId`, knowledge details (`text`, `tags`, `domain`, `citations`). Bulk mode uses a `knowledge` array.
+- **Key Arguments:** `mode` ('single'/'bulk'), `projectId`, knowledge details (`text`, `tags`, `domain`, `citations`), `responseFormat` ('formatted'/'json', optional, default: 'formatted'). Bulk mode uses a `knowledge` array.
 
 #### `atlas_knowledge_delete`
 
 Deletes knowledge items (single or bulk).
 
-- **Key Arguments:** `mode` ('single'/'bulk'), `id` (for single) or `knowledgeIds` array (for bulk).
+- **Key Arguments:** `mode` ('single'/'bulk'), `id` (for single) or `knowledgeIds` array (for bulk), `responseFormat` ('formatted'/'json', optional, default: 'formatted').
 
 #### `atlas_knowledge_list`
 
 Lists knowledge items for a specific project.
 
-- **Key Arguments:** `projectId` (required), filters (`tags`, `domain`, `search`), pagination (`page`, `limit`).
+- **Key Arguments:** `projectId` (required), filters (`tags`, `domain`, `search`), pagination (`page`, `limit`), `responseFormat` ('formatted'/'json', optional, default: 'formatted').
 
 ### Search Operations
 
@@ -284,7 +284,7 @@ Lists knowledge items for a specific project.
 
 Performs a unified search across projects, tasks, and knowledge.
 
-- **Key Arguments:** `value` (search term), `property` (optional field to search), filters (`entityTypes`, `taskType`), options (`caseInsensitive`, `fuzzy`), pagination (`page`, `limit`).
+- **Key Arguments:** `value` (search term), `property` (optional field to search), filters (`entityTypes`, `taskType`), options (`caseInsensitive`, `fuzzy`), pagination (`page`, `limit`), `responseFormat` ('formatted'/'json', optional, default: 'formatted').
 
 ### Database Operations
 
@@ -292,7 +292,7 @@ Performs a unified search across projects, tasks, and knowledge.
 
 **Destructive:** Completely resets the database, removing all projects, tasks, and knowledge.
 
-- **Key Arguments:** `acknowledgement` (must be set to `true` to confirm).
+- **Key Arguments:** `acknowledgement` (must be set to `true` to confirm), `responseFormat` ('formatted'/'json', optional, default: 'formatted').
 
 ## Resources
 
