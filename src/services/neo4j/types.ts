@@ -2,11 +2,6 @@
  * Common type definitions for the Neo4j service
  */
 
-import {
-  PriorityLevel,
-  ProjectStatus,
-  TaskStatus
-} from '../../types/mcp.js';
 
 /**
  * Neo4j entity base interface

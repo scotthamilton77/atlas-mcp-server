@@ -21,6 +21,7 @@ import { registerAtlasKnowledgeAddTool } from "./tools/atlas_knowledge_add/index
 import { registerAtlasKnowledgeDeleteTool } from "./tools/atlas_knowledge_delete/index.js";
 import { registerAtlasKnowledgeListTool } from "./tools/atlas_knowledge_list/index.js";
 import { registerAtlasUnifiedSearchTool } from "./tools/atlas_unified_search/index.js";
+import { registerAtlasDeepResearchTool } from "./tools/atlas_deep_research/index.js"; // Import the new tool registration
 
 // Import resource registrations
 import { registerMcpResources } from "./resources/index.js";
@@ -70,6 +71,7 @@ export const createMcpServer = async () => {
     registerAtlasKnowledgeDeleteTool(server); // atlas_knowledge_delete
     registerAtlasKnowledgeListTool(server); // atlas_knowledge_list
     registerAtlasUnifiedSearchTool(server); // atlas_unified_search
+    registerAtlasDeepResearchTool(server); // atlas_deep_research (Register the new tool)
 
     // Register resources
     registerMcpResources(server);

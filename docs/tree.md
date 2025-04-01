@@ -1,6 +1,6 @@
 # atlas-mcp-server - Directory Structure
 
-Generated on: 2025-03-31 14:27:42
+Generated on: 2025-04-01 08:52:43
 
 
 ```
@@ -37,6 +37,11 @@ atlas-mcp-server
     │   ├── tools
     │   │   ├── atlas_database_clean
     │   │   │   ├── cleanDatabase.ts
+    │   │   │   ├── index.ts
+    │   │   │   ├── responseFormat.ts
+    │   │   │   └── types.ts
+    │   │   ├── atlas_deep_research
+    │   │   │   ├── deepResearch.ts
     │   │   │   ├── index.ts
     │   │   │   ├── responseFormat.ts
     │   │   │   └── types.ts
