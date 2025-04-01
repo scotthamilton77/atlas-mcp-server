@@ -145,6 +145,6 @@ Funding a solo-led community project in Covington requires strategic planning. W
 
 For a complete export of the research collected in the Atlas database, including detailed information about each grant opportunity, eligibility criteria, application processes, and contact information, please refer to the file:
 
-`./full-export.json`
+[./full-export.json](./full-export.json)
 
 This export contains all structured knowledge nodes created during the research process, including relationships between different funding sources and programs. The database can be imported into other Atlas instances or used for reference when developing grant applications.
