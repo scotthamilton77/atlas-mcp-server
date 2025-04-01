@@ -11,7 +11,13 @@ export const DeepResearchSubTopicSchema = z.object({
   /** Initial search queries or keywords relevant to this sub-topic. */
   initialSearchQueries: z.array(z.string()).optional().describe("Initial search queries or keywords relevant to this sub-topic."),
   /** Optional client-provided ID for the knowledge node representing this sub-topic. */
-  nodeId: z.string().optional().describe("Optional client-provided ID for this sub-topic knowledge node.")
+  nodeId: z.string().optional().describe("Optional client-provided ID for this sub-topic knowledge node."),
+  /** Optional priority for the task created for this sub-topic. */
+  priority: z.enum(["low", "medium", "high", "critical"]).optional().describe("Optional priority for the task created for this sub-topic."),
+  /** Optional assignee ID for the task created for this sub-topic. */
+  assignedTo: z.string().optional().describe("Optional assignee ID for the task created for this sub-topic."),
+  /** Optional initial status for the task created for this sub-topic. */
+  initialStatus: z.enum(["backlog", "todo", "in-progress", "completed"]).optional().default("todo").describe("Optional initial status for the task created for this sub-topic (default: todo).")
 });
 
 /**
@@ -58,6 +64,8 @@ export const AtlasDeepResearchSchemaShape = {
   responseFormat: createResponseFormatEnum().optional().default(ResponseFormat.FORMATTED).describe(
     "Desired response format: 'formatted' (default string) or 'json' (raw object)."
   ),
+  /** Flag to control whether corresponding tasks should be created for sub-topics. */
+  createTasks: z.boolean().optional().default(true).describe("Whether to create corresponding Atlas Tasks for each sub-topic (default: true).")
 } as const;
 
 /**
@@ -79,6 +87,8 @@ export const DeepResearchSubTopicNodeResultSchema = z.object({
   question: z.string().describe("The sub-topic question."),
   /** ID of the created knowledge node for this sub-topic. */
   nodeId: z.string().describe("ID of the created knowledge node for this sub-topic."),
+  /** ID of the corresponding task created for this sub-topic, if applicable. */
+  taskId: z.string().optional().describe("ID of the corresponding task created for this sub-topic, if applicable."),
   /** Initial search queries provided for this sub-topic, if any. */
   initialSearchQueries: z.array(z.string()).optional().describe("Initial search queries provided for this sub-topic.")
 });
@@ -100,8 +110,10 @@ export interface DeepResearchResult {
   planNodeId: string;
   /** The initial tags applied to the root plan node, if any. */
   initialTags?: string[];
-  /** An array containing details about each created sub-topic knowledge node. */
+  /** An array containing details about each created sub-topic knowledge node and associated task. */
   subTopicNodes: DeepResearchSubTopicNodeResult[];
+  /** Indicates whether tasks were created as part of this operation. */
+  tasksCreated: boolean;
 }
 
 /**
@@ -117,9 +129,11 @@ export const AtlasDeepResearchOutputSchema = z.object({
   planNodeId: z.string().describe("ID of the created root research plan knowledge node."),
   /** Tags applied to the root plan node, if any. */
   initialTags: z.array(z.string()).optional().describe("Tags applied to the root plan node."),
-  /** Details of the created sub-topic knowledge nodes. */
+  /** Details of the created sub-topic knowledge nodes and associated tasks. */
   subTopicNodes: z.array(DeepResearchSubTopicNodeResultSchema)
-    .describe("Details of the created sub-topic knowledge nodes.")
+    .describe("Details of the created sub-topic knowledge nodes and associated tasks."),
+  /** Indicates whether tasks were created. */
+  tasksCreated: z.boolean().describe("Indicates whether tasks were created.")
 });
 
 /**

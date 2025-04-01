@@ -30,11 +30,16 @@ export const DeepResearchBaseFormatter: ResponseFormatter<DeepResearchResult> = 
 
     // Add details about the created sub-topic nodes
     if (data.subTopicNodes && data.subTopicNodes.length > 0) {
-      lines.push(`\n### Sub-Topics Created (${data.subTopicNodes.length}):`);
+      lines.push(
+        `\n### Sub-Topics Created (${data.subTopicNodes.length})${
+          data.tasksCreated ? ' (with Tasks)' : ''
+        }:`
+      );
       data.subTopicNodes.forEach((node) => {
+        const taskInfo = node.taskId ? `\n  - **Task ID:** \`${node.taskId}\`` : '';
         // Basic info available directly from the result data
         lines.push(
-          `- **Question:** ${node.question}\n  - **Node ID:** \`${node.nodeId}\``
+          `- **Question:** ${node.question}\n  - **Node ID:** \`${node.nodeId}\`${taskInfo}`
           // Note: Initial Search Queries are added by the contextual formatter below
         );
       });
@@ -94,15 +99,24 @@ export function formatDeepResearchResponse(
         lines.push(`\n### Sub-Topics Created (${data.subTopicNodes.length}):`);
         data.subTopicNodes.forEach((node) => {
           // Find the corresponding sub-topic in the input to retrieve initial search queries
-          const inputSubTopic = input.subTopics.find(st => st.question === node.question);
-          const searchQueries = inputSubTopic?.initialSearchQueries?.join(', ') || 'N/A'; // Format queries or show N/A
+          // Find the corresponding sub-topic in the input to retrieve initial search queries and task details
+          const inputSubTopic = input.subTopics.find(
+            (st) => st.question === node.question
+          );
+          const searchQueries =
+            inputSubTopic?.initialSearchQueries?.join(', ') || 'N/A'; // Format queries or show N/A
+          const taskInfo = node.taskId ? `\n  - **Task ID:** \`${node.taskId}\`` : ''; // Add Task ID if present
+          const priorityInfo = inputSubTopic?.priority ? `\n  - **Task Priority:** ${inputSubTopic.priority}` : '';
+          const assigneeInfo = inputSubTopic?.assignedTo ? `\n  - **Task Assignee:** ${inputSubTopic.assignedTo}` : '';
+          const statusInfo = inputSubTopic?.initialStatus ? `\n  - **Task Status:** ${inputSubTopic.initialStatus}` : '';
+
 
           lines.push(
-            `- **Question:** ${node.question}\n  - **Node ID:** \`${node.nodeId}\`\n  - **Initial Search Queries:** ${searchQueries}` // Add search queries
+            `- **Question:** ${node.question}\n  - **Node ID:** \`${node.nodeId}\`${taskInfo}${priorityInfo}${assigneeInfo}${statusInfo}\n  - **Initial Search Queries:** ${searchQueries}` // Add search queries and task details
           );
         });
       } else {
-        lines.push("\nNo sub-topics were specified or created.");
+        lines.push('\nNo sub-topics were specified or created.');
       }
 
       return lines.join("\n"); // Combine all lines into the final Markdown string

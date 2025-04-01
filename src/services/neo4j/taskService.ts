@@ -114,7 +114,59 @@ export class TaskService {
       await session.close();
     }
   }
-  
+
+  /**
+   * Link a Task to a Knowledge item with a specified relationship type.
+   * @param taskId ID of the source Task item
+   * @param knowledgeId ID of the target Knowledge item
+   * @param relationshipType The type of relationship to create (e.g., 'ADDRESSES', 'REFERENCES')
+   * @returns True if the link was created successfully, false otherwise
+   */
+  static async linkTaskToKnowledge(taskId: string, knowledgeId: string, relationshipType: string): Promise<boolean> {
+    const session = await neo4jDriver.getSession();
+    logger.debug(`Attempting to link task ${taskId} to knowledge ${knowledgeId} with type ${relationshipType}`);
+
+    try {
+      // Check if both nodes exist first
+      const taskExists = await Neo4jUtils.nodeExists(NodeLabels.Task, 'id', taskId);
+      const knowledgeExists = await Neo4jUtils.nodeExists(NodeLabels.Knowledge, 'id', knowledgeId);
+
+      if (!taskExists || !knowledgeExists) {
+        logger.warn(`Cannot link: Task (${taskId} exists: ${taskExists}) or Knowledge (${knowledgeId} exists: ${knowledgeExists}) not found.`);
+        return false;
+      }
+
+      // Use MERGE for the relationship to avoid duplicates
+      const query = `
+        MATCH (task:${NodeLabels.Task} {id: $taskId})
+        MATCH (knowledge:${NodeLabels.Knowledge} {id: $knowledgeId})
+        MERGE (task)-[r:${relationshipType}]->(knowledge)
+        RETURN r // Return the relationship to confirm creation/existence
+      `;
+
+      const result = await session.executeWrite(async (tx) => {
+        const runResult = await tx.run(query, { taskId, knowledgeId });
+        return runResult.records;
+      });
+
+      const linkCreated = result.length > 0;
+
+      if (linkCreated) {
+        logger.info(`Successfully linked task ${taskId} to knowledge ${knowledgeId} with type ${relationshipType}`);
+      } else {
+        logger.warn(`Failed to link task ${taskId} to knowledge ${knowledgeId} (MERGE returned no relationship)`);
+      }
+
+      return linkCreated;
+    } catch (error) {
+      logger.error('Error linking task to knowledge item', { error, taskId, knowledgeId, relationshipType });
+      throw error; // Re-throw the error
+    } finally {
+      await session.close();
+    }
+  }
+
+
   /**
    * Get a task by ID
    * @param id Task ID

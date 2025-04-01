@@ -78,63 +78,95 @@ async function handler(
     if (error instanceof McpError) {
       throw error;
     }
-    // Wrap unexpected errors in a standard internal error response
+    // Wrap unexpected errors in a standard internal error response, including requestId if available
+    const errorMessage = `Atlas deep research tool execution failed (Request ID: ${requestId ?? 'N/A'}): ${
+      error instanceof Error ? error.message : String(error)
+    }`;
     throw new McpError(
       BaseErrorCode.INTERNAL_ERROR,
-      `Atlas deep research tool execution failed: ${
-        error instanceof Error ? error.message : String(error)
-      }`
+      errorMessage
     );
   }
 }
 
 // Define Tool Examples
 const examples = [
-  createToolExample(
+  createToolExample( // Example 1: Detailed PQC research with tasks
     {
       projectId: "proj_123abc",
       researchTopic: "Quantum-Resistant Encryption Algorithms",
-      researchGoal: "Identify and summarize leading PQC algorithms, their pros/cons, and adoption timelines.",
-      scopeDefinition: "Focus on NIST PQC finalists and winners. Exclude theoretical-only algorithms.",
+      researchGoal:
+        'Identify and summarize leading PQC algorithms, their pros/cons, and adoption timelines.',
+      scopeDefinition:
+        'Focus on NIST PQC finalists and winners. Exclude theoretical-only algorithms.',
       subTopics: [
         {
-          question: "What are the main categories of post-quantum cryptography (PQC)?",
-          initialSearchQueries: ["PQC categories", "lattice-based", "hash-based", "code-based", "multivariate"],
-          nodeId: "client_sub_001" // Example client-provided ID
+          question:
+            'What are the main categories of post-quantum cryptography (PQC)?',
+          initialSearchQueries: [
+            'PQC categories',
+            'lattice-based',
+            'hash-based',
+            'code-based',
+            'multivariate',
+          ],
+          nodeId: 'client_sub_001', // Example client-provided ID
+          priority: 'high', // Assign priority to the task
+          initialStatus: 'todo',
         },
         {
-          question: "What are the NIST PQC standardization finalists/winners?",
-          initialSearchQueries: ["NIST PQC", "CRYSTALS-Kyber", "CRYSTALS-Dilithium", "Falcon", "SPHINCS+"]
+          question: 'What are the NIST PQC standardization finalists/winners?',
+          initialSearchQueries: [
+            'NIST PQC',
+            'CRYSTALS-Kyber',
+            'CRYSTALS-Dilithium',
+            'Falcon',
+            'SPHINCS+',
+          ],
+          assignedTo: 'user_alice', // Assign task
         },
         {
-          question: "What are the performance implications (speed, key size, signature size)?",
-          initialSearchQueries: ["PQC performance", "Kyber performance", "Dilithium size"]
+          question:
+            'What are the performance implications (speed, key size, signature size)?',
+          initialSearchQueries: [
+            'PQC performance',
+            'Kyber performance',
+            'Dilithium size',
+          ],
+          priority: 'medium',
         },
         {
-          question: "What are the current challenges and timelines for PQC adoption?",
-          initialSearchQueries: ["PQC adoption challenges", "migration strategy", "quantum timeline"]
-        }
+          question:
+            'What are the current challenges and timelines for PQC adoption?',
+          initialSearchQueries: [
+            'PQC adoption challenges',
+            'migration strategy',
+            'quantum timeline',
+          ],
+        },
       ],
-      researchDomain: "technical",
-      initialTags: ["#cryptography", "#pqc"],
-      planNodeId: "client_plan_001", // Example client-provided ID
-      responseFormat: "formatted"
+      researchDomain: 'technical',
+      initialTags: ['#cryptography', '#pqc'],
+      planNodeId: 'client_plan_001', // Example client-provided ID
+      createTasks: true, // Explicitly request task creation
+      responseFormat: 'formatted',
     },
     // Expected formatted output (conceptual, actual output depends on formatter)
-    `## Deep Research Plan Initiated\n**Topic:** Quantum-Resistant Encryption Algorithms\n**Goal:** Identify and summarize leading PQC algorithms...\n**Plan Node ID:** plan_...\n**Sub-Topics Created:** 4\n... (details of sub-topic nodes)`,
-    "Initiate a detailed deep research plan on Post-Quantum Cryptography (PQC) algorithms, providing specific sub-topics, tags, and requesting formatted output."
-  ),
-  createToolExample(
+    `## Deep Research Plan Initiated\n**Topic:** Quantum-Resistant Encryption Algorithms\n**Goal:** Identify and summarize leading PQC algorithms...\n**Plan Node ID:** plan_...\n**Sub-Topics Created:** 4 (with Tasks)\n- **Question:** What are the main categories...?\n  - **Node ID:** \`sub_...\`\n  - **Task ID:** \`task_...\`\n  - **Task Priority:** high\n  - **Task Status:** todo\n  - **Initial Search Queries:** ...\n... (more sub-topics)`,
+    'Initiate a detailed deep research plan on PQC algorithms, creating corresponding tasks with specific priorities/assignees, and requesting formatted output.'
+  ), // Removed extra parenthesis here
+  createToolExample( // Example 2: Market analysis without tasks
     {
-      projectId: "proj_456def",
+      projectId: 'proj_456def',
       researchTopic: "Market Analysis for AI-Powered Code Review Tools",
-      researchGoal: "Identify key players, market size, and trends.",
+      researchGoal: 'Identify key players, market size, and trends.',
       subTopics: [
-        { question: "Who are the main competitors?" },
-        { question: "What is the estimated market size and growth rate?" },
-        { question: "What are the common pricing models?" }
+        { question: 'Who are the main competitors?' },
+        { question: 'What is the estimated market size and growth rate?' },
+        { question: 'What are the common pricing models?' },
       ],
-      responseFormat: "json" // Requesting raw JSON output
+      createTasks: false, // Explicitly disable task creation
+      responseFormat: 'json', // Requesting raw JSON output
     },
     // Expected JSON output (structure matches AtlasDeepResearchOutput)
     `{
@@ -146,9 +178,10 @@ const examples = [
         { "question": "Who are the main competitors?", "nodeId": "sub_...", "initialSearchQueries": [] },
         { "question": "What is the estimated market size and growth rate?", "nodeId": "sub_...", "initialSearchQueries": [] },
         { "question": "What are the common pricing models?", "nodeId": "sub_...", "initialSearchQueries": [] }
-      ]
+      ],
+      "tasksCreated": false
     }`,
-    "Initiate a market analysis research plan with minimal input, requesting the raw JSON response."
+    'Initiate a market analysis research plan, explicitly disabling task creation, and requesting the raw JSON response.'
   )
 ];
 
@@ -161,13 +194,14 @@ const examples = [
 export function registerAtlasDeepResearchTool(server: McpServer): void {
   registerTool(
     server,
-    "atlas_deep_research", // Tool name
-    "Initiates a structured deep research process by creating a hierarchical plan within the Atlas knowledge base. Use this tool to kickstart deep research efforts by helping define a knowledge graph of search queries and topics. Use this in conjunction with other tools to perform the research.", // Tool description
+    'atlas_deep_research', // Tool name
+    'Initiates a structured deep research process by creating a hierarchical plan within the Atlas knowledge base, optionally creating linked tasks for sub-topics. Use this tool to kickstart deep research efforts by defining a knowledge graph of search queries, topics, and actionable tasks.', // Updated Tool description
     AtlasDeepResearchSchemaShape, // Input schema shape (used to generate full schema)
     handler, // The handler function defined above
     createToolMetadata({
       examples: examples, // Tool usage examples
-      requiredPermission: "knowledge:create", // Required permission to execute
+      // Required permissions might need adjustment if task creation is always enabled or based on input
+      requiredPermission: 'knowledge:create task:create', // Combined into single string
       returnSchema: AtlasDeepResearchOutputSchema, // Schema for the structured output
       // Optional: Define rate limits if needed
       // rateLimit: { windowMs: 60 * 1000, maxRequests: 10 }

@@ -96,7 +96,61 @@ export class KnowledgeService {
       await session.close();
     }
   }
-  
+
+  /**
+   * Link two knowledge items with a specified relationship type.
+   * @param sourceId ID of the source knowledge item
+   * @param targetId ID of the target knowledge item
+   * @param relationshipType The type of relationship to create (e.g., 'RELATED_TO', 'IS_SUBTOPIC_OF')
+   * @returns True if the link was created successfully, false otherwise
+   */
+  static async linkKnowledgeToKnowledge(sourceId: string, targetId: string, relationshipType: string): Promise<boolean> {
+    const session = await neo4jDriver.getSession();
+    logger.debug(`Attempting to link knowledge ${sourceId} to ${targetId} with type ${relationshipType}`);
+
+    try {
+      // Check if both nodes exist first (optional but recommended)
+      const sourceExists = await Neo4jUtils.nodeExists(NodeLabels.Knowledge, 'id', sourceId);
+      const targetExists = await Neo4jUtils.nodeExists(NodeLabels.Knowledge, 'id', targetId);
+
+      if (!sourceExists || !targetExists) {
+        logger.warn(`Cannot link knowledge: Source (${sourceId} exists: ${sourceExists}) or Target (${targetId} exists: ${targetExists}) not found.`);
+        return false;
+      }
+
+      // Use MERGE for the relationship to avoid duplicates if the link already exists
+      // Ensure the relationship type is sanitized or comes from a controlled source if needed
+      const query = `
+        MATCH (source:${NodeLabels.Knowledge} {id: $sourceId})
+        MATCH (target:${NodeLabels.Knowledge} {id: $targetId})
+        MERGE (source)-[r:${relationshipType}]->(target)
+        RETURN r // Return the relationship to confirm creation/existence
+      `;
+
+      const result = await session.executeWrite(async (tx) => {
+        const runResult = await tx.run(query, { sourceId, targetId });
+        return runResult.records;
+      });
+
+      const linkCreated = result.length > 0; // If a relationship was returned (created or matched)
+
+      if (linkCreated) {
+        logger.info(`Successfully linked knowledge ${sourceId} to ${targetId} with type ${relationshipType}`);
+      } else {
+        // This case might indicate an issue if MERGE didn't return anything, though unlikely if nodes exist
+        logger.warn(`Failed to link knowledge ${sourceId} to ${targetId} (MERGE returned no relationship)`);
+      }
+
+      return linkCreated;
+    } catch (error) {
+      logger.error('Error linking knowledge items', { error, sourceId, targetId, relationshipType });
+      throw error; // Re-throw the error for higher-level handling
+    } finally {
+      await session.close();
+    }
+  }
+
+
   /**
    * Get a knowledge item by ID
    * @param id Knowledge ID
