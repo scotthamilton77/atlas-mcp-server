@@ -1,6 +1,6 @@
 # atlas-mcp-server - Directory Structure
 
-Generated on: 2025-04-01 08:52:43
+Generated on: 2025-04-01 17:08:19
 
 
 ```
@@ -13,6 +13,9 @@ atlas-mcp-server
     │   ├── projects.json
     │   ├── relationships.json
     │   └── tasks.json
+    ├── deep-research-example
+    │   ├── covington_community_grant_research.md
+    │   └── full-export.json
     └── README.md
 ├── scripts
     ├── clean.ts
@@ -131,6 +134,7 @@ atlas-mcp-server
     └── index.ts
 ├── .clinerules
 ├── .repomixignore
+├── CHANGELOG.md
 ├── docker-compose.yml
 ├── LICENSE
 ├── package-lock.json
