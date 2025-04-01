@@ -195,7 +195,7 @@ export function registerAtlasDeepResearchTool(server: McpServer): void {
   registerTool(
     server,
     'atlas_deep_research', // Tool name
-    'Initiates a structured deep research process by creating a hierarchical plan within the Atlas knowledge base, optionally creating linked tasks for sub-topics. Use this tool to kickstart deep research efforts by defining a knowledge graph of search queries, topics, and actionable tasks.', // Updated Tool description
+    'Initiates a structured deep research process by creating a hierarchical plan within the Atlas knowledge base, optionally creating linked tasks for sub-topics. Facilitates a smarter research flow by emphasizing initial gathering of specific, real-world details (e.g., proper nouns, specific names) relevant to the topic, and performing smart recursive searches to pinpoint necessary facts. Use this tool to kickstart deep research, define a knowledge graph of queries and topics, and ensure Atlas knowledge is continuously updated with precise, factual information.', // Updated Tool description
     AtlasDeepResearchSchemaShape, // Input schema shape (used to generate full schema)
     handler, // The handler function defined above
     createToolMetadata({

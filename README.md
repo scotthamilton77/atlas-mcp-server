@@ -2,7 +2,7 @@
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8.2-blue.svg)](https://www.typescriptlang.org/)
 [![Model Context Protocol](https://img.shields.io/badge/MCP-1.8.0-green.svg)](https://modelcontextprotocol.io/)
-[![Version](https://img.shields.io/badge/Version-2.6.1-blue.svg)](https://github.com/cyanheads/atlas-mcp-server/releases)
+[![Version](https://img.shields.io/badge/Version-2.6.2-blue.svg)](https://github.com/cyanheads/atlas-mcp-server/releases)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Status](https://img.shields.io/badge/Status-Stable-green.svg)]()
 [![GitHub](https://img.shields.io/github/stars/cyanheads/atlas-mcp-server?style=social)](https://github.com/cyanheads/atlas-mcp-server)
@@ -19,7 +19,7 @@ Built on a three-tier architecture:
                   | name: string                             |
                   | description: string                      |
                   | status: string                           |
-                  | urls?: Array<{title: string, url: string}> |
+                  | urls?: Array<{title: string, url: string}>|
                   | completionRequirements: string           |
                   | outputFormat: string                     |
                   | taskType: string                         |
@@ -39,7 +39,8 @@ Built on a three-tier architecture:
 | priority: string                 | | domain: string                   |
 | status: string                   | | citations?: string[]             |
 | assignedTo?: string              | | createdAt: string                |
-| urls?: Array<{title: string, url: string}> | | updatedAt: string     |
+| urls?: Array<{title: string,     | |                                  |
+|   url: string}>                  | | updatedAt: string                |
 | tags?: string[]                  | |                                  |
 | completionRequirements: string   | |                                  |
 | outputFormat: string             | |                                  |
