@@ -19,7 +19,7 @@ Built on a three-tier architecture:
                   | name: string                             |
                   | description: string                      |
                   | status: string                           |
-                  | urls: Array<{title: string, url: string}>|
+                  | urls?: Array<{title: string, url: string}> |
                   | completionRequirements: string           |
                   | outputFormat: string                     |
                   | taskType: string                         |
@@ -35,12 +35,12 @@ Built on a three-tier architecture:
 | id: string                       | | id: string                       |
 | projectId: string                | | projectId: string                |
 | title: string                    | | text: string                     |
-| description: string              | | tags: string                     |
+| description: string              | | tags?: string[]                  |
 | priority: string                 | | domain: string                   |
-| status: string                   | | citations: string[]              |
-| assignedTo: string               | | createdAt: string                |
-| urls: Array<{}>                  | | updatedAt: string                |
-| tags: string[]                   | |                                  |
+| status: string                   | | citations?: string[]             |
+| assignedTo?: string              | | createdAt: string                |
+| urls?: Array<{title: string, url: string}> | | updatedAt: string     |
+| tags?: string[]                  | |                                  |
 | completionRequirements: string   | |                                  |
 | outputFormat: string             | |                                  |
 | taskType: string                 | |                                  |
@@ -199,8 +199,10 @@ src/
 ├── services/        # Core application services
 │   └── neo4j/       # Neo4j database services (index.ts, driver.ts, backupRestoreService.ts, etc.)
 ├── types/           # Shared TypeScript type definitions (errors.ts, mcp.ts, tool.ts)
-└── utils/           # Utility functions (logger.ts, errorHandler.ts, idGenerator.ts, etc.)
+└── utils/           # Utility functions (logger.ts, errorHandler.ts, etc.)
 ```
+
+_Note: ID generation logic is implemented within the specific service files (e.g., projectService.ts, taskService.ts, knowledgeService.ts) rather than in a separate utility file._
 
 ## Tools
 
@@ -208,99 +210,47 @@ ATLAS provides a comprehensive suite of tools for project, task, and knowledge m
 
 ### Project Operations
 
-| Tool Name              | Description                          | Key Arguments                                                                                                                                                                                             |
-| :--------------------- | :----------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `atlas_project_create` | Creates new projects (single/bulk).  | `mode` ('single'/'bulk'), project details (`name`, `description`, `status`, `urls`, `completionRequirements`, `dependencies`, `outputFormat`, `taskType`), `responseFormat` ('formatted'/'json', optional). |
-| `atlas_project_list`   | Lists projects (all/details).        | `mode` ('all'/'details'), `id` (for details), filters (`status`, `taskType`), pagination (`page`, `limit`), includes (`includeKnowledge`, `includeTasks`), `responseFormat` ('formatted'/'json', optional). |
-| `atlas_project_update` | Updates existing projects (single/bulk). | `mode` ('single'/'bulk'), `id`, `updates` object, `responseFormat` ('formatted'/'json', optional). Bulk mode uses `projects` array.                                                                    |
-| `atlas_project_delete` | Deletes projects (single/bulk).      | `mode` ('single'/'bulk'), `id` (single) or `projectIds` array (bulk), `responseFormat` ('formatted'/'json', optional).                                                                                    |
+| Tool Name              | Description                              | Key Arguments                                                                                                                                                                                               |
+| :--------------------- | :--------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `atlas_project_create` | Creates new projects (single/bulk).      | `mode` ('single'/'bulk'), project details (`name`, `description`, `status`, `urls`, `completionRequirements`, `dependencies`, `outputFormat`, `taskType`), `responseFormat` ('formatted'/'json', optional). |
+| `atlas_project_list`   | Lists projects (all/details).            | `mode` ('all'/'details'), `id` (for details), filters (`status`, `taskType`), pagination (`page`, `limit`), includes (`includeKnowledge`, `includeTasks`), `responseFormat` ('formatted'/'json', optional). |
+| `atlas_project_update` | Updates existing projects (single/bulk). | `mode` ('single'/'bulk'), `id`, `updates` object, `responseFormat` ('formatted'/'json', optional). Bulk mode uses `projects` array.                                                                         |
+| `atlas_project_delete` | Deletes projects (single/bulk).          | `mode` ('single'/'bulk'), `id` (single) or `projectIds` array (bulk), `responseFormat` ('formatted'/'json', optional).                                                                                      |
 
 ### Task Operations
 
-| Tool Name           | Description                                | Key Arguments                                                                                                                                                                                                                            |
-| :------------------ | :----------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `atlas_task_create` | Creates new tasks (single/bulk).           | `mode` ('single'/'bulk'), `projectId`, task details (`title`, `description`, `priority`, `status`, `assignedTo`, `tags`, `completionRequirements`, `dependencies`, `outputFormat`, `taskType`), `responseFormat` ('formatted'/'json', optional). |
-| `atlas_task_update` | Updates existing tasks (single/bulk).      | `mode` ('single'/'bulk'), `id`, `updates` object, `responseFormat` ('formatted'/'json', optional). Bulk mode uses `tasks` array.                                                                                                             |
-| `atlas_task_delete` | Deletes tasks (single/bulk).               | `mode` ('single'/'bulk'), `id` (single) or `taskIds` array (bulk), `responseFormat` ('formatted'/'json', optional).                                                                                                                       |
-| `atlas_task_list`   | Lists tasks for a specific project.        | `projectId` (required), filters (`status`, `assignedTo`, `priority`, `tags`, `taskType`), sorting (`sortBy`, `sortDirection`), pagination (`page`, `limit`), `responseFormat` ('formatted'/'json', optional).                               |
+| Tool Name           | Description                           | Key Arguments                                                                                                                                                                                                                                    |
+| :------------------ | :------------------------------------ | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `atlas_task_create` | Creates new tasks (single/bulk).      | `mode` ('single'/'bulk'), `projectId`, task details (`title`, `description`, `priority`, `status`, `assignedTo`, `tags`, `completionRequirements`, `dependencies`, `outputFormat`, `taskType`), `responseFormat` ('formatted'/'json', optional). |
+| `atlas_task_update` | Updates existing tasks (single/bulk). | `mode` ('single'/'bulk'), `id`, `updates` object, `responseFormat` ('formatted'/'json', optional). Bulk mode uses `tasks` array.                                                                                                                 |
+| `atlas_task_delete` | Deletes tasks (single/bulk).          | `mode` ('single'/'bulk'), `id` (single) or `taskIds` array (bulk), `responseFormat` ('formatted'/'json', optional).                                                                                                                              |
+| `atlas_task_list`   | Lists tasks for a specific project.   | `projectId` (required), filters (`status`, `assignedTo`, `priority`, `tags`, `taskType`), sorting (`sortBy`, `sortDirection`), pagination (`page`, `limit`), `responseFormat` ('formatted'/'json', optional).                                    |
 
 ### Knowledge Operations
 
-| Tool Name                | Description                                  | Key Arguments                                                                                                                                                           |
-| :----------------------- | :------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `atlas_knowledge_add`    | Adds new knowledge items (single/bulk).      | `mode` ('single'/'bulk'), `projectId`, knowledge details (`text`, `tags`, `domain`, `citations`), `responseFormat` ('formatted'/'json', optional). Bulk mode uses `knowledge` array. |
-| `atlas_knowledge_delete` | Deletes knowledge items (single/bulk).       | `mode` ('single'/'bulk'), `id` (single) or `knowledgeIds` array (bulk), `responseFormat` ('formatted'/'json', optional).                                                  |
-| `atlas_knowledge_list`   | Lists knowledge items for a specific project. | `projectId` (required), filters (`tags`, `domain`, `search`), pagination (`page`, `limit`), `responseFormat` ('formatted'/'json', optional).                               |
+| Tool Name                | Description                                   | Key Arguments                                                                                                                                                                        |
+| :----------------------- | :-------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `atlas_knowledge_add`    | Adds new knowledge items (single/bulk).       | `mode` ('single'/'bulk'), `projectId`, knowledge details (`text`, `tags`, `domain`, `citations`), `responseFormat` ('formatted'/'json', optional). Bulk mode uses `knowledge` array. |
+| `atlas_knowledge_delete` | Deletes knowledge items (single/bulk).        | `mode` ('single'/'bulk'), `id` (single) or `knowledgeIds` array (bulk), `responseFormat` ('formatted'/'json', optional).                                                             |
+| `atlas_knowledge_list`   | Lists knowledge items for a specific project. | `projectId` (required), filters (`tags`, `domain`, `search`), pagination (`page`, `limit`), `responseFormat` ('formatted'/'json', optional).                                         |
 
 ### Search Operations
 
-| Tool Name              | Description                                           | Key Arguments                                                                                                                                                                                          |
-| :--------------------- | :---------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `atlas_unified_search` | Performs unified search across entities.              | `value` (search term), `property` (optional), filters (`entityTypes`, `taskType`), options (`caseInsensitive`, `fuzzy`), pagination (`page`, `limit`), `responseFormat` ('formatted'/'json', optional). |
+| Tool Name              | Description                              | Key Arguments                                                                                                                                                                                           |
+| :--------------------- | :--------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `atlas_unified_search` | Performs unified search across entities. | `value` (search term), `property` (optional), filters (`entityTypes`, `taskType`), options (`caseInsensitive`, `fuzzy`), pagination (`page`, `limit`), `responseFormat` ('formatted'/'json', optional). |
 
 ### Research Operations
 
-#### `atlas_task_update`
-
-Updates existing tasks (single or bulk).
-
-- **Key Arguments:** `mode` ('single'/'bulk'), `id`, `updates` object (containing fields to change), `responseFormat` ('formatted'/'json', optional, default: 'formatted'). Bulk mode uses a `tasks` array with `id` and `updates`.
-
-#### `atlas_task_delete`
-
-Deletes tasks (single or bulk).
-
-- **Key Arguments:** `mode` ('single'/'bulk'), `id` (for single) or `taskIds` array (for bulk), `responseFormat` ('formatted'/'json', optional, default: 'formatted').
-
-#### `atlas_task_list`
-
-Lists tasks for a specific project.
-
-- **Key Arguments:** `projectId` (required), filters (`status`, `assignedTo`, `priority`, `tags`, `taskType`), sorting (`sortBy`, `sortDirection`), pagination (`page`, `limit`), `responseFormat` ('formatted'/'json', optional, default: 'formatted').
-
-### Knowledge Operations
-
-#### `atlas_knowledge_add`
-
-Adds new knowledge items (single or bulk) associated with a project.
-
-- **Key Arguments:** `mode` ('single'/'bulk'), `projectId`, knowledge details (`text`, `tags`, `domain`, `citations`), `responseFormat` ('formatted'/'json', optional, default: 'formatted'). Bulk mode uses a `knowledge` array.
-
-#### `atlas_knowledge_delete`
-
-Deletes knowledge items (single or bulk).
-
-- **Key Arguments:** `mode` ('single'/'bulk'), `id` (for single) or `knowledgeIds` array (for bulk), `responseFormat` ('formatted'/'json', optional, default: 'formatted').
-
-#### `atlas_knowledge_list`
-
-Lists knowledge items for a specific project.
-
-- **Key Arguments:** `projectId` (required), filters (`tags`, `domain`, `search`), pagination (`page`, `limit`), `responseFormat` ('formatted'/'json', optional, default: 'formatted').
-
-### Search Operations
-
-#### `atlas_unified_search`
-
-Performs a unified search across projects, tasks, and knowledge.
-
-- **Key Arguments:** `value` (search term), `property` (optional field to search), filters (`entityTypes`, `taskType`), options (`caseInsensitive`, `fuzzy`), pagination (`page`, `limit`), `responseFormat` ('formatted'/'json', optional, default: 'formatted').
-
-### Research Operations
-
-#### `atlas_deep_research`
-
-Initiates a structured deep research process by creating a hierarchical plan within the Atlas knowledge base. Use this tool to kickstart deep research efforts by helping define a knowledge graph of search queries and topics. Use this in conjunction with other tools to perform the research.
-
-- **Key Arguments:** `projectId` (required), `researchTopic` (required), `researchGoal` (required), `scopeDefinition` (optional), `subTopics` (required array of objects with `question` and optional `initialSearchQueries`, `nodeId`), `researchDomain` (optional), `initialTags` (optional), `planNodeId` (optional), `responseFormat` ('formatted'/'json', optional, default: 'formatted').
+| Tool Name             | Description                                                                                                   | Key Arguments                                                                                                                                                                                                                                                                             |
+| :-------------------- | :------------------------------------------------------------------------------------------------------------ | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `atlas_deep_research` | Initiates a structured deep research process by creating a hierarchical plan within the Atlas knowledge base. | `projectId` (required), `researchTopic` (required), `researchGoal` (required), `scopeDefinition` (optional), `subTopics` (required array with questions and search queries), `researchDomain` (optional), `initialTags` (optional), `planNodeId` (optional), `responseFormat` (optional). |
 
 ### Database Operations
 
-#### `atlas_database_clean`
-
-**Destructive:** Completely resets the database, removing all projects, tasks, and knowledge.
-
-- **Key Arguments:** `acknowledgement` (must be set to `true` to confirm), `responseFormat` ('formatted'/'json', optional, default: 'formatted').
+| Tool Name              | Description                                                                                   | Key Arguments                                                                                          |
+| :--------------------- | :-------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------- |
+| `atlas_database_clean` | **Destructive:** Completely resets the database, removing all projects, tasks, and knowledge. | `acknowledgement` (must be set to `true` to confirm), `responseFormat` ('formatted'/'json', optional). |
 
 ## Resources
 
@@ -308,39 +258,21 @@ ATLAS exposes project, task, and knowledge data through standard MCP resource en
 
 ### Direct Resources
 
-#### `atlas://projects`
-
-- **Description:** List of all projects in the Atlas platform with pagination support.
-
-#### `atlas://tasks`
-
-- **Description:** List of all tasks in the Atlas platform with pagination and filtering support.
-
-#### `atlas://knowledge`
-
-- **Description:** List of all knowledge items in the Atlas platform with pagination and filtering support.
+| Resource Name       | Description                                                                              |
+| :------------------ | :--------------------------------------------------------------------------------------- |
+| `atlas://projects`  | List of all projects in the Atlas platform with pagination support.                      |
+| `atlas://tasks`     | List of all tasks in the Atlas platform with pagination and filtering support.           |
+| `atlas://knowledge` | List of all knowledge items in the Atlas platform with pagination and filtering support. |
 
 ### Resource Templates
 
-#### `atlas://projects/{projectId}`
-
-- **Description:** Retrieves a single project by its unique identifier (`projectId`).
-
-#### `atlas://tasks/{taskId}`
-
-- **Description:** Retrieves a single task by its unique identifier (`taskId`).
-
-#### `atlas://projects/{projectId}/tasks`
-
-- **Description:** Retrieves all tasks belonging to a specific project (`projectId`).
-
-#### `atlas://knowledge/{knowledgeId}`
-
-- **Description:** Retrieves a single knowledge item by its unique identifier (`knowledgeId`).
-
-#### `atlas://projects/{projectId}/knowledge`
-
-- **Description:** Retrieves all knowledge items belonging to a specific project (`projectId`).
+| Resource Name                            | Description                                                                  |
+| :--------------------------------------- | :--------------------------------------------------------------------------- |
+| `atlas://projects/{projectId}`           | Retrieves a single project by its unique identifier (`projectId`).           |
+| `atlas://tasks/{taskId}`                 | Retrieves a single task by its unique identifier (`taskId`).                 |
+| `atlas://projects/{projectId}/tasks`     | Retrieves all tasks belonging to a specific project (`projectId`).           |
+| `atlas://knowledge/{knowledgeId}`        | Retrieves a single knowledge item by its unique identifier (`knowledgeId`).  |
+| `atlas://projects/{projectId}/knowledge` | Retrieves all knowledge items belonging to a specific project (`projectId`). |
 
 ## Database Backup and Restore
 
@@ -348,9 +280,7 @@ ATLAS provides functionality to back up and restore the Neo4j database content. 
 
 ### Automatic Backups (Note)
 
-**Important:** The automatic backup functionality is currently not working. Please use the manual backup process described below until this feature is fully implemented.
-
-The `src/services/neo4j/driver.ts` includes a `triggerBackgroundBackup` function that is intended to call `exportDatabase` after every write operation, but this feature is still under development. For now, rely on regular manual backups to protect your data.
+**Important:** The automatic backup functionality has been removed due to inefficiency. The call to `triggerBackgroundBackup` in `src/services/neo4j/driver.ts` is commented out with a note indicating it was removed. Please use the manual backup process described below to protect your data.
 
 ### Backup Process
 
