@@ -91,97 +91,130 @@ async function handler(
 
 // Define Tool Examples
 const examples = [
-  createToolExample( // Example 1: Detailed PQC research with tasks
+  createToolExample( // Example 1: Structured technical research with comprehensive subtasks
     {
       projectId: "proj_123abc",
       researchTopic: "Quantum-Resistant Encryption Algorithms",
       researchGoal:
-        'Identify and summarize leading PQC algorithms, their pros/cons, and adoption timelines.',
+        'Systematically identify and critically evaluate leading PQC algorithms, analyzing their technical strengths/limitations and projected adoption timelines.',
       scopeDefinition:
-        'Focus on NIST PQC finalists and winners. Exclude theoretical-only algorithms.',
+        'Focus on NIST PQC finalists and standardized algorithms with practical implementation potential. Exclude purely theoretical approaches without near-term implementation viability.',
       subTopics: [
         {
           question:
-            'What are the main categories of post-quantum cryptography (PQC)?',
+            'What are the fundamental taxonomic categories of post-quantum cryptography (PQC) and their underlying mathematical foundations?',
           initialSearchQueries: [
-            'PQC categories',
-            'lattice-based',
-            'hash-based',
-            'code-based',
-            'multivariate',
+            'PQC taxonomic classification',
+            'lattice-based cryptography NIST',
+            'hash-based signature schemes',
+            'code-based encryption methods',
+            'multivariate cryptographic systems',
           ],
           nodeId: 'client_sub_001', // Example client-provided ID
-          priority: 'high', // Assign priority to the task
+          priority: 'high', // Strategic priority assignment
           initialStatus: 'todo',
         },
         {
-          question: 'What are the NIST PQC standardization finalists/winners?',
+          question: 'Which specific algorithms have achieved NIST PQC standardization status or finalist positions?',
           initialSearchQueries: [
-            'NIST PQC',
-            'CRYSTALS-Kyber',
-            'CRYSTALS-Dilithium',
-            'Falcon',
-            'SPHINCS+',
+            'NIST PQC Round 3 finalists',
+            'CRYSTALS-Kyber specification',
+            'CRYSTALS-Dilithium implementation',
+            'Falcon signature scheme',
+            'SPHINCS+ hash-based signatures',
           ],
-          assignedTo: 'user_alice', // Assign task
+          assignedTo: 'user_alice', // Clear accountability assignment
         },
         {
           question:
-            'What are the performance implications (speed, key size, signature size)?',
+            'What are the quantifiable performance characteristics and resource requirements (computational overhead, key/signature sizes) for leading PQC algorithms?',
           initialSearchQueries: [
-            'PQC performance',
-            'Kyber performance',
-            'Dilithium size',
+            'PQC comparative performance metrics',
+            'Kyber key size benchmarks',
+            'Dilithium signature size optimization',
           ],
           priority: 'medium',
         },
         {
           question:
-            'What are the current challenges and timelines for PQC adoption?',
+            'What practical implementation challenges and realistic adoption timelines exist for PQC deployment across critical infrastructure?',
           initialSearchQueries: [
-            'PQC adoption challenges',
-            'migration strategy',
-            'quantum timeline',
+            'PQC integration challenges enterprise systems',
+            'quantum-resistant migration strategy financial sector',
+            'realistic quantum threat timeline infrastructure',
           ],
         },
       ],
       researchDomain: 'technical',
-      initialTags: ['#cryptography', '#pqc'],
+      initialTags: ['#cryptography', '#pqc', '#cybersecurity'],
       planNodeId: 'client_plan_001', // Example client-provided ID
-      createTasks: true, // Explicitly request task creation
+      createTasks: true, // Enable operational workflow integration
       responseFormat: 'formatted',
     },
     // Expected formatted output (conceptual, actual output depends on formatter)
-    `## Deep Research Plan Initiated\n**Topic:** Quantum-Resistant Encryption Algorithms\n**Goal:** Identify and summarize leading PQC algorithms...\n**Plan Node ID:** plan_...\n**Sub-Topics Created:** 4 (with Tasks)\n- **Question:** What are the main categories...?\n  - **Node ID:** \`sub_...\`\n  - **Task ID:** \`task_...\`\n  - **Task Priority:** high\n  - **Task Status:** todo\n  - **Initial Search Queries:** ...\n... (more sub-topics)`,
-    'Initiate a detailed deep research plan on PQC algorithms, creating corresponding tasks with specific priorities/assignees, and requesting formatted output.'
-  ), // Removed extra parenthesis here
-  createToolExample( // Example 2: Market analysis without tasks
+    `## Structured Deep Research Plan Initiated\n**Topic:** Quantum-Resistant Encryption Algorithms\n**Goal:** Systematically identify and critically evaluate leading PQC algorithms...\n**Plan Node ID:** plan_...\n**Sub-Topics Created:** 4 (with Operational Tasks)\n- **Question:** What are the fundamental taxonomic categories...?\n  - **Knowledge Node ID:** \`sub_...\`\n  - **Task ID:** \`task_...\`\n  - **Strategic Priority:** high\n  - **Workflow Status:** todo\n  - **Precision Search Queries:** ...\n... (additional focused sub-topics)`,
+    'Initiate a comprehensive technical deep research plan on post-quantum cryptography, creating structured knowledge nodes with corresponding prioritized workflow tasks and precise search queries for systematic investigation.'
+  ),
+  createToolExample( // Example 2: Strategic market analysis with focused inquiries
     {
       projectId: 'proj_456def',
-      researchTopic: "Market Analysis for AI-Powered Code Review Tools",
-      researchGoal: 'Identify key players, market size, and trends.',
+      researchTopic: "Strategic Market Analysis for AI-Powered Code Review Tools",
+      researchGoal: 'Identify key market participants, quantify addressable market size, and identify emerging technology and adoption trends.',
       subTopics: [
-        { question: 'Who are the main competitors?' },
-        { question: 'What is the estimated market size and growth rate?' },
-        { question: 'What are the common pricing models?' },
+        { 
+          question: 'Who are the established and emerging competitors within the AI code review space?',
+          initialSearchQueries: [
+            'leading AI code review platforms',
+            'GitHub Copilot market position',
+            'emerging static analysis AI tools'
+          ] 
+        },
+        { 
+          question: 'What is the current market valuation and projected compound annual growth rate (CAGR) for developer tools with AI integration?',
+          initialSearchQueries: [
+            'developer tools market size analysis 2025',
+            'AI code review CAGR forecast',
+            'static analysis tools market growth'
+          ]
+        },
+        { 
+          question: 'What differentiated pricing models and monetization strategies are proving most effective in this market segment?',
+          initialSearchQueries: [
+            'AI code review pricing models comparison',
+            'developer tools subscription economics',
+            'open-core vs SaaS code analysis tools'
+          ]
+        },
       ],
-      createTasks: false, // Explicitly disable task creation
-      responseFormat: 'json', // Requesting raw JSON output
+      createTasks: false, // Focus on knowledge capture without operational workflow items
+      responseFormat: 'json', // Request machine-processable structured output
     },
     // Expected JSON output (structure matches AtlasDeepResearchOutput)
     `{
       "success": true,
-      "message": "Successfully created deep research plan \\"Market Analysis for AI-Powered Code Review Tools\\" with root node plan_... and 3 sub-topic nodes.",
+      "message": "Successfully created comprehensive research plan \\"Strategic Market Analysis for AI-Powered Code Review Tools\\" with primary knowledge node plan_... and 3 specialized sub-topic nodes.",
       "planNodeId": "plan_...",
       "initialTags": [],
       "subTopicNodes": [
-        { "question": "Who are the main competitors?", "nodeId": "sub_...", "initialSearchQueries": [] },
-        { "question": "What is the estimated market size and growth rate?", "nodeId": "sub_...", "initialSearchQueries": [] },
-        { "question": "What are the common pricing models?", "nodeId": "sub_...", "initialSearchQueries": [] }
+        { 
+          "question": "Who are the established and emerging competitors within the AI code review space?", 
+          "nodeId": "sub_...", 
+          "initialSearchQueries": ["leading AI code review platforms", "GitHub Copilot market position", "emerging static analysis AI tools"]
+        },
+        { 
+          "question": "What is the current market valuation and projected compound annual growth rate (CAGR) for developer tools with AI integration?", 
+          "nodeId": "sub_...", 
+          "initialSearchQueries": ["developer tools market size analysis 2025", "AI code review CAGR forecast", "static analysis tools market growth"]
+        },
+        { 
+          "question": "What differentiated pricing models and monetization strategies are proving most effective in this market segment?", 
+          "nodeId": "sub_...", 
+          "initialSearchQueries": ["AI code review pricing models comparison", "developer tools subscription economics", "open-core vs SaaS code analysis tools"]
+        }
       ],
       "tasksCreated": false
     }`,
-    'Initiate a market analysis research plan, explicitly disabling task creation, and requesting the raw JSON response.'
+    'Conduct targeted market intelligence gathering on AI code review tools ecosystem, focusing on competitive landscape analysis, market sizing, and business model evaluation, with precise search parameters for each inquiry area.'
   )
 ];
 
@@ -195,7 +228,7 @@ export function registerAtlasDeepResearchTool(server: McpServer): void {
   registerTool(
     server,
     'atlas_deep_research', // Tool name
-    'Initiates a structured deep research process by creating a hierarchical plan within the Atlas knowledge base, optionally creating linked tasks for sub-topics. Facilitates a smarter research flow by emphasizing initial gathering of specific, real-world details (e.g., proper nouns, specific names) relevant to the topic, and performing smart recursive searches to pinpoint necessary facts. Use this tool to kickstart deep research, define a knowledge graph of queries and topics, and ensure Atlas knowledge is continuously updated with precise, factual information.', // Updated Tool description
+    'Initiates a strategically structured deep research process by creating a hierarchical knowledge plan within the Atlas system, optionally generating linked operational tasks for systematic investigation. Facilitates methodical research workflows by emphasizing initial collection of high-specificity factual details (proper nouns, specific terminology, precise identifiers) relevant to the inquiry domain, followed by targeted recursive investigation to build comprehensive knowledge graphs. This tool operationalizes research by decomposing complex topics into discrete, manageable components with clear investigative parameters, optimizing for both depth and efficiency in knowledge acquisition. Use it to orchestrate comprehensive research initiatives, construct semantic knowledge networks with well-defined relationships, and ensure continuous knowledge base enrichment with high-precision, factually-verified information.', // Enhanced tool description
     AtlasDeepResearchSchemaShape, // Input schema shape (used to generate full schema)
     handler, // The handler function defined above
     createToolMetadata({
