@@ -6,23 +6,25 @@ import { UnifiedSearchResponse } from "./types.js";
  * Formatter for unified search responses
  */
 export class UnifiedSearchFormatter implements ResponseFormatter<UnifiedSearchResponse> {
-  format(data: UnifiedSearchResponse): string {
-    const { results, total, page, limit, totalPages } = data;
-    
+  // The input 'responseData' should match the UnifiedSearchResponse type structure.
+  format(responseData: UnifiedSearchResponse): string { 
+    // Destructure the 'results' property as defined in UnifiedSearchResponse
+    const { results, total, page, limit, totalPages } = responseData;
+
     // Create a summary section with pagination info
     const summary = `Search Results\n\n` +
-      `Found ${total} result(s)\n` +
-      `Page ${page} of ${totalPages} (${limit} per page)\n`;
-    
-    // Early return if no results found
-    if (results.length === 0) {
+      `Found ${total ?? 0} result(s)\n` + // Use nullish coalescing for safety
+      `Page ${page ?? 1} of ${totalPages ?? 1} (${limit ?? 0} per page)\n`; // Use nullish coalescing
+
+    // Add a robust check for results being a valid array before accessing length
+    if (!Array.isArray(results) || results.length === 0) {
       return `${summary}\nNo matches found for the specified search criteria.`;
     }
     
     // Group results by entity type for better organization
     const groupedResults: Record<string, SearchResultItem[]> = {};
     
-    results.forEach(result => {
+    results.forEach((result: SearchResultItem) => { // Add explicit type here
       if (!groupedResults[result.type]) {
         groupedResults[result.type] = [];
       }
@@ -63,12 +65,17 @@ export class UnifiedSearchFormatter implements ResponseFormatter<UnifiedSearchRe
         // Add a snippet of the matched content
         if (item.matchedValue) {
           const matchSnippet = this.truncateText(item.matchedValue, 100);
-          resultsOutput += `   Content: "${matchSnippet}"\n`;
-        }
-        
-        resultsOutput += `   Created: ${new Date(item.createdAt).toLocaleString()}\n\n`;
-      });
-    });
+           resultsOutput += `   Content: "${matchSnippet}"\n`;
+         }
+         
+         // Conditionally add created date if available
+         if (item.createdAt) {
+           resultsOutput += `   Created: ${new Date(item.createdAt).toLocaleString()}\n`;
+         }
+         // Add a blank line after each item
+         resultsOutput += `\n`; 
+       });
+     });
     
     // Add help text for pagination
     let paginationHelp = "";
@@ -99,8 +106,14 @@ export class UnifiedSearchFormatter implements ResponseFormatter<UnifiedSearchRe
   /**
    * Truncate text to a specified length with ellipsis
    */
-  private truncateText(text: string, maxLength: number): string {
-    if (text.length <= maxLength) return text;
+  private truncateText(text: string | null | undefined, maxLength: number): string {
+    // Add check to ensure text is a string and handle null/undefined
+    if (typeof text !== 'string' || text.length === 0) {
+      return ''; // Return empty string if text is not valid
+    }
+    if (text.length <= maxLength) {
+      return text;
+    }
     return text.substring(0, maxLength - 3) + '...';
   }
 }
