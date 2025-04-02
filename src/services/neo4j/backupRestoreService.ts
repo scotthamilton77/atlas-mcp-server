@@ -58,12 +58,11 @@ const manageBackupRotation = async (): Promise<void> => {
 };
 
 /**
- * Interface for the full export containing all entities and their relationships in a nested structure
+ * Interface for the full export containing all entities and their relationships in a nested structure.
+ * Nodes are stored in an object keyed by their label.
  */
 interface FullExport {
-  projects: Record<string, any>[];
-  tasks: Record<string, any>[];
-  knowledge: Record<string, any>[];
+  nodes: { [label: string]: Record<string, any>[] };
   relationships: {
     startNodeId: string;
     endNodeId: string;
@@ -89,12 +88,10 @@ export const exportDatabase = async (): Promise<string> => {
   
   // Create full export object to store all data
   const fullExport: FullExport = {
-    projects: [],
-    tasks: [],
-    knowledge: [],
+    nodes: {}, // Store nodes keyed by label
     relationships: []
   };
-  
+
   try {
     session = await neo4jDriver.getSession(); // Get session from singleton
     logger.info(`Starting database export to ${backupDir}...`);
@@ -103,27 +100,34 @@ export const exportDatabase = async (): Promise<string> => {
       logger.debug(`Created backup directory: ${backupDir}`);
     }
 
-    const nodeLabels = ["Project", "Task", "Knowledge"];
+    // Fetch all distinct node labels from the database
+    logger.debug("Fetching all node labels from database...");
+    const labelsResult = await session.run("CALL db.labels() YIELD label RETURN label");
+    const nodeLabels: string[] = labelsResult.records.map(record => record.get("label"));
+    logger.info(`Found labels: ${nodeLabels.join(', ')}`);
+
+    // Export nodes for each label
     for (const label of nodeLabels) {
+      // Skip internal or potentially problematic labels if necessary (optional)
+      // if (label.startsWith('_') || label === 'AnotherLabelToSkip') {
+      //   logger.debug(`Skipping export for label: ${label}`);
+      //   continue;
+      // }
       logger.debug(`Exporting nodes with label: ${label}`);
+      // Escape label name if it contains special characters (though typically not needed for standard labels)
+      const escapedLabel = `\`${label.replace(/`/g, '``')}\``;
       // Fetch all properties directly
-      const result = await session.run(`MATCH (n:${label}) RETURN n`);
+      const nodeResult = await session.run(`MATCH (n:${escapedLabel}) RETURN n`);
       // Extract properties from each node
-      const nodes = result.records.map(record => record.get("n").properties);
+      const nodes = nodeResult.records.map(record => record.get("n").properties);
 
       // No need for sanitization if disableLosslessIntegers: true is set on driver
       const filePath = path.join(backupDir, `${label.toLowerCase()}s.json`);
       writeFileSync(filePath, JSON.stringify(nodes, null, 2));
       logger.info(`Successfully exported ${nodes.length} ${label} nodes to ${filePath}`);
-      
-      // Add to full export
-      if (label === "Project") {
-        fullExport.projects = nodes;
-      } else if (label === "Task") {
-        fullExport.tasks = nodes;
-      } else if (label === "Knowledge") {
-        fullExport.knowledge = nodes;
-      }
+
+      // Add nodes to the full export object under their label
+      fullExport.nodes[label] = nodes;
     }
 
     // Export Relationships
@@ -211,33 +215,30 @@ export const importDatabase = async (backupDir: string): Promise<void> => {
       // Import from full export file
       const fullExportContent = readFileSync(fullExportPath, 'utf-8');
       const fullExport: FullExport = JSON.parse(fullExportContent);
-      
-      // 2a. Import nodes from full export
-      const nodeLabels = [
-        { label: "Project", data: fullExport.projects },
-        { label: "Task", data: fullExport.tasks },
-        { label: "Knowledge", data: fullExport.knowledge }
-      ];
-      
-      for (const { label, data } of nodeLabels) {
-        if (!data || data.length === 0) {
-          logger.info(`No ${label} nodes to import from full-export.json.`);
-          continue;
+
+      // 2a. Import nodes from full export (iterating through labels in the nodes object)
+      for (const label in fullExport.nodes) {
+        if (Object.prototype.hasOwnProperty.call(fullExport.nodes, label)) {
+          const nodesToImport = fullExport.nodes[label];
+          if (!nodesToImport || nodesToImport.length === 0) {
+            logger.info(`No ${label} nodes to import from full-export.json.`);
+            continue;
+          }
+
+          logger.debug(`Importing ${nodesToImport.length} ${label} nodes from full-export.json`);
+          const escapedLabel = `\`${label.replace(/`/g, '``')}\``; 
+          // Use UNWIND for batching node creation
+          const query = `
+            UNWIND $nodes as nodeProps
+            CREATE (n:${escapedLabel})
+            SET n = nodeProps
+          `;
+
+          await session.run(query, { nodes: nodesToImport });
+          logger.info(`Successfully imported ${nodesToImport.length} ${label} nodes from full-export.json`);
         }
-        
-        logger.debug(`Importing ${data.length} ${label} nodes from full-export.json`);
-        
-        // Use UNWIND for batching node creation
-        const query = `
-          UNWIND $nodes as nodeProps
-          CREATE (n:${label})
-          SET n = nodeProps
-        `;
-        
-        await session.run(query, { nodes: data });
-        logger.info(`Successfully imported ${data.length} ${label} nodes from full-export.json`);
       }
-      
+
       // 3a. Import relationships from full export
       if (fullExport.relationships && fullExport.relationships.length > 0) {
         logger.info(`Found ${fullExport.relationships.length} relationships in full-export.json.`);
@@ -247,34 +248,50 @@ export const importDatabase = async (backupDir: string): Promise<void> => {
       }
     } else {
       logger.info(`No full-export.json found. Using individual entity files.`);
-      
+
       // 2b. Import nodes from individual files
-      const nodeLabels = ["Project", "Task", "Knowledge"];
-      for (const label of nodeLabels) {
-        const filePath = path.join(backupDir, `${label.toLowerCase()}s.json`);
+      // Attempt to read all *.json files in the backup dir except relationships.json and full-export.json
+      const filesInBackupDir = readdirSync(backupDir);
+      const nodeFiles = filesInBackupDir.filter(file => 
+        file.toLowerCase().endsWith('.json') && 
+        file !== 'relationships.json' && 
+        file !== 'full-export.json'
+      );
+
+      for (const nodeFile of nodeFiles) {
+        const filePath = path.join(backupDir, nodeFile);
+        // Infer label from filename (e.g., projects.json -> Project)
+        const inferredLabelFromFile = path.basename(nodeFile, '.json');
+        // Basic pluralization removal and capitalization - adjust if needed for complex names
+        const label = inferredLabelFromFile.endsWith('s') 
+          ? inferredLabelFromFile.charAt(0).toUpperCase() + inferredLabelFromFile.slice(1, -1) 
+          : inferredLabelFromFile.charAt(0).toUpperCase() + inferredLabelFromFile.slice(1);
+
         if (!existsSync(filePath)) {
-          logger.warn(`Backup file not found for label ${label}: ${filePath}. Skipping.`);
+          // This check is slightly redundant due to readdirSync but kept for safety
+          logger.warn(`Node file ${nodeFile} (inferred label ${label}) not found at ${filePath}. Skipping.`);
           continue;
         }
 
-        logger.debug(`Importing nodes with label: ${label} from ${filePath}`);
+        logger.debug(`Importing nodes with inferred label: ${label} from ${filePath}`);
         const fileContent = readFileSync(filePath, 'utf-8');
-        const nodes: Record<string, any>[] = JSON.parse(fileContent);
+        const nodesToImport: Record<string, any>[] = JSON.parse(fileContent);
 
-        if (nodes.length === 0) {
+        if (nodesToImport.length === 0) {
           logger.info(`No ${label} nodes to import from ${filePath}.`);
           continue;
         }
 
+        const escapedLabel = `\`${label.replace(/`/g, '``')}\``; 
         // Use UNWIND for batching node creation
         const query = `
           UNWIND $nodes as nodeProps
-          CREATE (n:${label})
+          CREATE (n:${escapedLabel})
           SET n = nodeProps
         `;
-        
-        await session.run(query, { nodes });
-        logger.info(`Successfully imported ${nodes.length} ${label} nodes from ${filePath}`);
+
+        await session.run(query, { nodes: nodesToImport });
+        logger.info(`Successfully imported ${nodesToImport.length} ${label} nodes from ${filePath}`);
       }
 
       // 3b. Import Relationships from relationships.json
