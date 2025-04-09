@@ -88,7 +88,7 @@ const SingleTaskSchema = z.object({
 const BulkTaskSchema = z.object({
   mode: z.literal("bulk"),
   tasks: z.array(TaskSchema).min(1).max(100).describe(
-    "Collection of task definitions to create in a single operation"
+    "Collection of task definitions to create in a single operation. Each object must include all fields required for single task creation (projectId, title, description, completionRequirements, outputFormat, taskType)."
   ),
   responseFormat: createResponseFormatEnum().optional().default(ResponseFormat.FORMATTED).describe(
     "Desired response format: 'formatted' (default string) or 'json' (raw object)"
@@ -145,7 +145,7 @@ export const AtlasTaskCreateSchemaShape = {
     "Classification of task purpose for workflow organization, filtering, and reporting (required for mode='single')"
   ),
   tasks: z.array(TaskSchema).min(1).max(100).optional().describe(
-    "Array of complete task definition objects to create in a single transaction (supports 1-100 tasks, required for mode='bulk')"
+    "Array of complete task definition objects to create in a single transaction (supports 1-100 tasks, required for mode='bulk'). Each object must include all fields required for single task creation (projectId, title, description, completionRequirements, outputFormat, taskType)."
   ),
   responseFormat: createResponseFormatEnum().optional().describe(
     "Desired response format: 'formatted' (default string) or 'json' (raw object)"

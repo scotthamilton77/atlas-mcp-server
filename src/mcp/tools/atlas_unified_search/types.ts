@@ -13,7 +13,7 @@ export const UnifiedSearchRequestSchema = z.object({
   entityTypes: z.array(
     z.enum(['project', 'task', 'knowledge'])
   ).optional().describe(
-    "Array of entity types to include in search (Default: all types)"
+    "Array of entity types (lowercase: 'project', 'task', 'knowledge') to include in search (Default: all types if omitted)"
   ),
   caseInsensitive: z.boolean().optional().default(true).describe(
     "Boolean flag to ignore case when searching (Default: true)"

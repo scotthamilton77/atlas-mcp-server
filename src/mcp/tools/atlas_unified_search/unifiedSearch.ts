@@ -33,17 +33,36 @@ export const atlasUnifiedSearch = async (
       );
     }
 
-    // Call the search service to perform the unified search
-    const searchResults: PaginatedResult<SearchResultItem> | undefined = await SearchService.search({
-      property: validatedInput.property || '',
-      value: validatedInput.value,
-      entityTypes: validatedInput.entityTypes,
-      caseInsensitive: validatedInput.caseInsensitive,
-      fuzzy: validatedInput.fuzzy,
-      taskType: validatedInput.taskType,
-      page: validatedInput.page,
-      limit: validatedInput.limit
-    });
+    // Determine which search method to use
+    // Use fullTextSearch by default, unless fuzzy is explicitly true (or maybe property is specified?)
+    // For now, let's default to fullTextSearch as it's generally better.
+    // TODO: Revisit if fuzzy or specific property search should use the regex method.
+    const useFullText = true; // Defaulting to full-text search
+
+    let searchResults: PaginatedResult<SearchResultItem> | undefined;
+
+    if (useFullText) {
+      logger.info("Using full-text search", { searchTerm: validatedInput.value, requestId });
+      searchResults = await SearchService.fullTextSearch(validatedInput.value, {
+        entityTypes: validatedInput.entityTypes,
+        taskType: validatedInput.taskType,
+        page: validatedInput.page,
+        limit: validatedInput.limit
+      });
+    } else {
+       logger.info("Using regex search (property/fuzzy)", { searchTerm: validatedInput.value, property: validatedInput.property, fuzzy: validatedInput.fuzzy, requestId });
+       searchResults = await SearchService.search({
+         property: validatedInput.property || '', // Regex search needs property or defaults
+         value: validatedInput.value,
+         entityTypes: validatedInput.entityTypes,
+         caseInsensitive: validatedInput.caseInsensitive, // Regex search uses these
+         fuzzy: validatedInput.fuzzy,             // Regex search uses these
+         taskType: validatedInput.taskType,
+         page: validatedInput.page,
+         limit: validatedInput.limit
+       });
+    }
+
 
     // Add robust check for searchResults and searchResults.data
     if (!searchResults || !Array.isArray(searchResults.data)) {

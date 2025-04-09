@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import neo4j from 'neo4j-driver'; // Import the neo4j driver
 import { NodeLabels } from './types.js'; // Import NodeLabels
 import { Neo4jUtils } from './utils.js'; // Import Neo4jUtils
 
@@ -185,18 +186,9 @@ export function buildListQuery(
   const page = Math.max(pagination.page || 1, 1);
   const limit = Math.min(Math.max(pagination.limit || 20, 1), 100);
   const skip = (page - 1) * limit;
-  
-  // Add pagination params using neo4j.int if available, otherwise use numbers
-  // Assuming 'int' is imported or available globally from neo4j-driver
-  try {
-    const { int } = require('neo4j-driver'); // Or import if using modules
-    params.skip = int(skip);
-    params.limit = int(limit);
-  } catch (e) {
-    // Fallback if neo4j-driver int is not available
-    params.skip = skip;
-    params.limit = limit;
-  }
+  // Use neo4j.int() to ensure skip and limit are treated as integers
+  params.skip = neo4j.int(skip);
+  params.limit = neo4j.int(limit);
   const paginationClause = `SKIP $skip LIMIT $limit`;
 
   // --- Count Query ---

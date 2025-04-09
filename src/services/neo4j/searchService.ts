@@ -298,12 +298,12 @@ export class SearchService {
    */
   static async fullTextSearch(
     searchValue: string,
-    options: Omit<SearchOptions, 'value' | 'fuzzy' | 'caseInsensitive'> = {} 
+    options: Omit<SearchOptions, 'value' | 'fuzzy' | 'caseInsensitive'> = {}
   ): Promise<PaginatedResult<SearchResultItem>> {
-    const session = await neo4jDriver.getSession();
+    // Remove single session acquisition from here
     try {
       const {
-        entityTypes = ['project', 'task', 'knowledge'], 
+        entityTypes = ['project', 'task', 'knowledge'],
         taskType, 
         page = 1,
         limit = 20
@@ -318,13 +318,18 @@ export class SearchService {
       const typesToUse = rawEntityTypes && Array.isArray(rawEntityTypes) && rawEntityTypes.length > 0 
                          ? rawEntityTypes 
                          : defaultEntityTypes;
-      const targetLabels = typesToUse.map(l => l.toLowerCase()); 
+      const targetLabels = typesToUse.map(l => l.toLowerCase());
 
       const searchResults: SearchResultItem[] = [];
-      const searchPromises: Promise<void>[] = [];
-      
+      // Remove searchPromises array
+
+      // --- Run searches sequentially ---
+
       // Project full-text search
       if (targetLabels.includes('project')) {
+        let projectSession: Session | null = null;
+        try {
+          projectSession = await neo4jDriver.getSession();
         const query = `
           CALL db.index.fulltext.queryNodes("project_fulltext", $searchValue) 
           YIELD node AS p, score
@@ -341,13 +346,14 @@ export class SearchService {
             p.createdAt AS createdAt, p.updatedAt AS updatedAt,
             p.id as projectId,
             p.name as projectName,
-            score * 2 AS adjustedScore 
+            score * 2 AS adjustedScore
         `;
-        searchPromises.push(
-          session.executeRead(async (tx) => {
-            const result = await tx.run(query, { searchValue, ...(taskType && { taskType }) });
-            const items = result.records.map(record => {
-               const data = record.toObject();
+        // Execute directly, not pushing to promise array
+        // Use projectSession here
+        await projectSession.executeRead(async (tx) => {
+          const result = await tx.run(query, { searchValue, ...(taskType && { taskType }) });
+          const items = result.records.map(record => {
+            const data = record.toObject();
                const scoreValue = data.adjustedScore;
                const score = typeof scoreValue === 'number' ? scoreValue : 5;
                return { 
@@ -362,12 +368,20 @@ export class SearchService {
                } as SearchResultItem;
             });
             searchResults.push(...items);
-          })
-        );
+          });
+        } catch(err) {
+           logger.error('Error during project full-text search query', { error: err, searchValue });
+           // Optionally re-throw or just log and continue
+        } finally {
+          if (projectSession) await projectSession.close();
+        }
       }
-      
+
       // Task full-text search
       if (targetLabels.includes('task')) {
+        let taskSession: Session | null = null;
+        try {
+          taskSession = await neo4jDriver.getSession();
         const query = `
           CALL db.index.fulltext.queryNodes("task_fulltext", $searchValue) 
           YIELD node AS t, score
@@ -384,13 +398,13 @@ export class SearchService {
             END AS matchedValue,
             t.createdAt AS createdAt, t.updatedAt AS updatedAt,
             t.projectId AS projectId, p.name AS projectName, // Include project info
-            score * 1.5 AS adjustedScore 
+            score * 1.5 AS adjustedScore
         `;
-        searchPromises.push(
-          session.executeRead(async (tx) => {
-            const result = await tx.run(query, { searchValue, ...(taskType && { taskType }) });
-            const items = result.records.map(record => {
-               const data = record.toObject();
+        // Execute directly, use taskSession
+        await taskSession.executeRead(async (tx) => {
+          const result = await tx.run(query, { searchValue, ...(taskType && { taskType }) });
+          const items = result.records.map(record => {
+            const data = record.toObject();
                const scoreValue = data.adjustedScore;
                const score = typeof scoreValue === 'number' ? scoreValue : 5;
                 return { 
@@ -405,12 +419,19 @@ export class SearchService {
                } as SearchResultItem;
             });
             searchResults.push(...items);
-          })
-        );
+          });
+        } catch(err) {
+           logger.error('Error during task full-text search query', { error: err, searchValue });
+        } finally {
+          if (taskSession) await taskSession.close();
+        }
       }
-      
+
       // Knowledge full-text search
       if (targetLabels.includes('knowledge')) {
+        let knowledgeSession: Session | null = null;
+        try {
+          knowledgeSession = await neo4jDriver.getSession();
         const query = `
           CALL db.index.fulltext.queryNodes("knowledge_fulltext", $searchValue) 
           YIELD node AS k, score
@@ -432,13 +453,13 @@ export class SearchService {
             END AS matchedValue,
             k.createdAt AS createdAt, k.updatedAt AS updatedAt,
             k.projectId AS projectId, p.name AS projectName, // Include project info
-            score AS adjustedScore 
+            score AS adjustedScore
         `;
-        searchPromises.push(
-          session.executeRead(async (tx) => {
-            const result = await tx.run(query, { searchValue });
-            const items = result.records.map(record => {
-               const data = record.toObject();
+        // Execute directly, use knowledgeSession
+        await knowledgeSession.executeRead(async (tx) => {
+          const result = await tx.run(query, { searchValue });
+          const items = result.records.map(record => {
+            const data = record.toObject();
                const scoreValue = data.adjustedScore;
                const score = typeof scoreValue === 'number' ? scoreValue : 5;
                 return { 
@@ -453,12 +474,17 @@ export class SearchService {
                } as SearchResultItem;
             });
             searchResults.push(...items);
-          })
-        );
+          });
+        } catch(err) {
+           logger.error('Error during knowledge full-text search query', { error: err, searchValue });
+        } finally {
+          if (knowledgeSession) await knowledgeSession.close();
+        }
       }
-      
-      await Promise.all(searchPromises);
-      
+
+      // Remove Promise.all
+      // await Promise.all(searchPromises); // No longer needed
+
       searchResults.sort((a, b) => {
         if (b.score !== a.score) return b.score - a.score;
         const dateA = a.updatedAt || a.createdAt || '1970-01-01T00:00:00.000Z';
@@ -475,9 +501,7 @@ export class SearchService {
          logger.warn("Full-text index might not be configured correctly or supported in this Neo4j version.");
          throw new Error(`Full-text search failed: Index not found or query error. (${errorMessage})`);
       }
-      throw error; 
-    } finally {
-      await session.close();
-    }
+      throw error;
+    } // Remove finally block that closes the single session
   }
 }
