@@ -1,4 +1,5 @@
 import { ProjectService } from '../../../services/neo4j/projectService.js';
+import { ProjectDependencyType } from '../../../services/neo4j/types.js'; // Import the enum
 import { BaseErrorCode, McpError, ProjectErrorCode } from "../../../types/errors.js";
 import { ResponseFormat, createToolResponse } from "../../../types/mcp.js";
 import { logger } from "../../../utils/logger.js";
@@ -55,7 +56,7 @@ export const atlasCreateProject = async (
                 await ProjectService.addProjectDependency(
                   createdProject.id,
                   dependencyId,
-                  'requires', // Default type
+                  ProjectDependencyType.REQUIRES, // Use enum member
                   'Dependency created during project creation'
                 );
               } catch (error) {
@@ -126,7 +127,7 @@ export const atlasCreateProject = async (
             await ProjectService.addProjectDependency(
               project.id,
               dependencyId,
-              'requires', // Default type
+              ProjectDependencyType.REQUIRES, // Use enum member
               'Dependency created during project creation'
             );
           } catch (error) {

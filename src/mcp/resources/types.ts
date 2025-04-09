@@ -162,9 +162,9 @@ export function toProjectResource(project: Neo4jProject): ProjectResource {
 }
 
 /**
- * Convert Neo4j Task to Task Resource
+ * Convert Neo4j Task (with added assignedToUserId) to Task Resource
  */
-export function toTaskResource(task: Neo4jTask): TaskResource {
+export function toTaskResource(task: Neo4jTask & { assignedToUserId: string | null }): TaskResource {
   // Log the incoming task structure for debugging
   logger.debug('Converting task to resource:', { task });
   
@@ -175,7 +175,7 @@ export function toTaskResource(task: Neo4jTask): TaskResource {
     description: task.description,
     priority: task.priority,
     status: task.status,
-    assignedTo: task.assignedTo || null,
+    assignedTo: task.assignedToUserId, // Use assignedToUserId from the input object
     urls: task.urls || [],
     tags: task.tags || [],
     completionRequirements: task.completionRequirements,
@@ -190,9 +190,9 @@ export function toTaskResource(task: Neo4jTask): TaskResource {
 }
 
 /**
- * Convert Neo4j Knowledge to Knowledge Resource
+ * Convert Neo4j Knowledge (with added domain/citations) to Knowledge Resource
  */
-export function toKnowledgeResource(knowledge: Neo4jKnowledge): KnowledgeResource {
+export function toKnowledgeResource(knowledge: Neo4jKnowledge & { domain: string | null; citations: string[] }): KnowledgeResource {
   // Log the incoming knowledge structure for debugging
   logger.debug('Converting knowledge to resource:', { knowledge });
   
@@ -201,8 +201,8 @@ export function toKnowledgeResource(knowledge: Neo4jKnowledge): KnowledgeResourc
     projectId: knowledge.projectId,
     text: knowledge.text,
     tags: knowledge.tags || [],
-    domain: knowledge.domain,
-    citations: knowledge.citations || [],
+    domain: knowledge.domain || '', // Use domain from the input object, default to empty string if null
+    citations: knowledge.citations || [], // Use citations from the input object
     createdAt: knowledge.createdAt,
     updatedAt: knowledge.updatedAt
   };

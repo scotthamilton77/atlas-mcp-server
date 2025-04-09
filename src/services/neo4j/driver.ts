@@ -240,6 +240,7 @@ class Neo4jDriver {
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         logger.error('Error closing Neo4j driver connection', { error: errorMessage });
+        throw error; // Re-throw the error to propagate it
       }
     }
   }

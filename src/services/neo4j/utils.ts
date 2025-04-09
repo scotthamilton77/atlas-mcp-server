@@ -246,28 +246,6 @@ export class Neo4jUtils {
   }
 
   /**
-   * Safely parse a JSON string, returning a default value on error.
-   * Deprecated: Avoid storing JSON strings in Neo4j properties. Store native types instead.
-   * @param jsonString The JSON string to parse
-   * @param defaultValue The default value to return if parsing fails
-   * @returns The parsed object or the default value
-   * @deprecated Use native Neo4j types (lists, maps) instead of JSON strings.
-   */
-  static parseJsonString<T>(jsonString: string | null | undefined, defaultValue: T): T {
-    logger.warn("Usage of parseJsonString is deprecated. Store native types in Neo4j.");
-    if (!jsonString) {
-      return defaultValue;
-    }
-    try {
-      return JSON.parse(jsonString);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Failed to parse JSON string', { error: errorMessage, jsonString });
-      return defaultValue;
-    }
-  }
-
-  /**
    * Process Neo4j result records into plain JavaScript objects.
    * Assumes the record contains the node or properties under the specified key.
    * @param records Neo4j result records array (RecordShape from neo4j-driver).

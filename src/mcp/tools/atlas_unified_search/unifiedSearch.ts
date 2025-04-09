@@ -1,28 +1,28 @@
-import { SearchService, SearchResultItem } from '../../../services/neo4j/searchService.js';
-import { PaginatedResult } from '../../../services/neo4j/types.js';
+import { SearchService } from '../../../services/neo4j/searchService.js';
 import { BaseErrorCode, McpError } from '../../../types/errors.js';
 import { ResponseFormat } from '../../../types/mcp.js';
 import { logger } from '../../../utils/logger.js';
 import { ToolContext } from '../../../utils/security.js';
 import { formatUnifiedSearchResponse } from './responseFormat.js';
 // Assuming UnifiedSearchResponse is defined correctly in types.ts
-import { UnifiedSearchRequestInput, UnifiedSearchRequestSchema, UnifiedSearchResponse } from './types.js'; 
+import { UnifiedSearchRequestInput, UnifiedSearchRequestSchema, UnifiedSearchResponse } from './types.js';
 
 export const atlasUnifiedSearch = async (
   input: unknown,
   context: ToolContext
-): Promise<any> => { 
+): Promise<any> => {
   const requestId = context.requestContext?.requestId;
   try {
     // Parse and validate input against schema
     const validatedInput = UnifiedSearchRequestSchema.parse(input) as UnifiedSearchRequestInput & { responseFormat?: ResponseFormat };
 
     // Log operation
-    logger.info("Performing unified search", { 
+    logger.info("Performing unified search", {
       searchTerm: validatedInput.value,
       entityTypes: validatedInput.entityTypes,
       property: validatedInput.property,
-      requestId: requestId 
+      fuzzy: validatedInput.fuzzy,
+      requestId: requestId
     });
 
     if (!validatedInput.value || validatedInput.value.trim() === '') {
@@ -33,17 +33,45 @@ export const atlasUnifiedSearch = async (
       );
     }
 
-    // Call the search service to perform the unified search
-    const searchResults: PaginatedResult<SearchResultItem> | undefined = await SearchService.search({
-      property: validatedInput.property || '',
-      value: validatedInput.value,
+    // --- Simplified Logic: Always use fullTextSearch ---
+
+    // Construct the Lucene query string
+    let luceneQuery: string;
+    const property = validatedInput.property?.trim();
+    const isFuzzy = validatedInput.fuzzy === true;
+
+    // Escape common Lucene special characters, including quotes if we might add them
+    const escapeLucene = (str: string) => str.replace(/([+\-!(){}\[\]^"~*?:\\\/"])/g, '\\$1');
+    const escapedValue = escapeLucene(validatedInput.value);
+
+    if (property) {
+      // Search within a specific property
+      if (isFuzzy) {
+        luceneQuery = `${property}:${escapedValue}~1`; // Fuzzy on specific property
+      } else {
+        luceneQuery = `${property}:"${escapedValue}"`; // Exact phrase on specific property
+      }
+    } else {
+      // Search across default indexed fields
+      if (isFuzzy) {
+        luceneQuery = `${escapedValue}~1`; // Fuzzy on default fields
+      } else {
+        // For non-fuzzy, no-property search, just use the escaped value.
+        // Wrapping in quotes here might be too restrictive if searching description/text.
+        luceneQuery = escapedValue;
+      }
+    }
+
+    logger.info("Using simplified full-text search", { luceneQuery, input: validatedInput, requestId });
+
+    // Always call fullTextSearch with the constructed Lucene query
+    const searchResults = await SearchService.fullTextSearch(luceneQuery, {
       entityTypes: validatedInput.entityTypes,
-      caseInsensitive: validatedInput.caseInsensitive,
-      fuzzy: validatedInput.fuzzy,
       taskType: validatedInput.taskType,
       page: validatedInput.page,
       limit: validatedInput.limit
     });
+
 
     // Add robust check for searchResults and searchResults.data
     if (!searchResults || !Array.isArray(searchResults.data)) {
@@ -53,11 +81,11 @@ export const atlasUnifiedSearch = async (
          "Received invalid data structure from search service."
        );
     }
-    
-    logger.info("Unified search completed successfully", { 
-      resultCount: searchResults.data.length, // Safe to access now
+
+    logger.info("Unified search completed successfully", {
+      resultCount: searchResults.data.length,
       totalResults: searchResults.total,
-      requestId: requestId 
+      requestId: requestId
     });
 
     // Create the response object with search results data, mapping 'data' to 'results'
@@ -71,17 +99,17 @@ export const atlasUnifiedSearch = async (
 
     // Format and return the response
     // formatUnifiedSearchResponse expects UnifiedSearchResponse which has 'results' property
-    return formatUnifiedSearchResponse(responseData); 
-    
+    return formatUnifiedSearchResponse(responseData);
+
   } catch (error) {
     // Log the specific error message and stack if available
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     const errorStack = error instanceof Error ? error.stack : undefined;
-    logger.error("Failed to perform unified search", { 
-      error: errorMessage, 
+    logger.error("Failed to perform unified search", {
+      error: errorMessage,
       stack: errorStack, // Log stack trace
       originalError: error, // Log the original error object
-      requestId: requestId 
+      requestId: requestId
     });
 
     // Re-throw as McpError if not already one
