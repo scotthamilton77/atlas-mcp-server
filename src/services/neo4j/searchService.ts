@@ -63,12 +63,14 @@ export class SearchService {
       }
 
       // Prepare search value once
-      const searchValue = caseInsensitive ? value.toLowerCase() : value;
       const normalizedProperty = property ? property.toLowerCase() : '';
-      // Prepare regex/lucene value for Cypher based on fuzzy flag
-      const cypherSearchValue = fuzzy 
-          ? `(?i).*${searchValue}.*` // Fuzzy, case-insensitive regex (simple version)
-          : `(?i).*${searchValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}.*`; // Non-fuzzy, case-insensitive contains regex
+      const escapedValue = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // Escape original value
+      const caseFlag = caseInsensitive ? '(?i)' : ''; // Determine case flag based on input option
+
+      // Prepare regex value for Cypher based on fuzzy flag
+      const cypherSearchValue = fuzzy
+          ? `${caseFlag}.*${escapedValue}.*` // Fuzzy contains (case flag applied)
+          : `${caseFlag}^${escapedValue}$`;   // Non-fuzzy exact match (case flag applied)
 
       const allResults: SearchResultItem[] = [];
       const searchPromises: Promise<SearchResultItem[]>[] = [];
@@ -188,17 +190,35 @@ export class SearchService {
       
       // Add the search condition for the determined property
       const propExistsCheck = `n.\`${searchProperty}\` IS NOT NULL`;
-      // Remove toString() - assume property is already string or compatible
-      const searchPart = `n.\`${searchProperty}\` =~ $searchValue`; 
+      let searchPart: string;
+      
+      // Special handling for array properties like 'tags'
+      if (searchProperty === 'tags') {
+        // For arrays, use ANY predicate for case-insensitive check.
+        // Extract the original value for comparison.
+        params.exactTagValueLower = params.searchValue.replace(/^\(\?i\)\.\*(.*)\.\*$/, '$1').toLowerCase(); // Ensure lowercase
+        searchPart = `ANY(tag IN n.\`${searchProperty}\` WHERE toLower(tag) = $exactTagValueLower)`;
+      } else {
+        // For strings, use regex matching (already case-insensitive via (?i))
+        searchPart = `n.\`${searchProperty}\` =~ $searchValue`; 
+      }
+      
       whereConditions.push(`(${propExistsCheck} AND ${searchPart})`);
 
       const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
 
       // Simplified Scoring based on the single search property - Remove toString()
+      // Adjust scoring logic slightly for tags using ANY and toLower()
       const scoreValueParam = '$searchValue'; 
+      const scoreExactTagValueLowerParam = '$exactTagValueLower'; // Use lowercase param name
       const scoringLogic = `
         CASE 
-          WHEN n.\`${searchProperty}\` IS NOT NULL AND n.\`${searchProperty}\` =~ ${scoreValueParam} THEN 8 
+          WHEN n.\`${searchProperty}\` IS NOT NULL THEN
+            CASE 
+              WHEN '${searchProperty}' = 'tags' AND ANY(tag IN n.\`${searchProperty}\` WHERE toLower(tag) = ${scoreExactTagValueLowerParam}) THEN 8 // Case-insensitive tag match
+              WHEN n.\`${searchProperty}\` =~ ${scoreValueParam} THEN 8 // Regex match for strings
+              ELSE 5 
+            END
           ELSE 5 
         END AS score
       `;
@@ -215,10 +235,18 @@ export class SearchService {
           COALESCE(n.description, n.text) AS description,
           '${searchProperty}' AS matchedProperty, // Directly use the searched property name
           CASE 
-            WHEN n.\`${searchProperty}\` IS NOT NULL AND n.\`${searchProperty}\` =~ ${valueParam} THEN 
+            WHEN n.\`${searchProperty}\` IS NOT NULL THEN
               CASE 
-                WHEN size(toString(n.\`${searchProperty}\`)) > 100 THEN left(toString(n.\`${searchProperty}\`), 100) + '...' 
-                ELSE n.\`${searchProperty}\` // Return original property value
+                // For tags, find and show the first matched tag (case-insensitive)
+                WHEN '${searchProperty}' = 'tags' AND ANY(t IN n.\`${searchProperty}\` WHERE toLower(t) = ${scoreExactTagValueLowerParam}) THEN 
+                  HEAD([tag IN n.\`${searchProperty}\` WHERE toLower(tag) = ${scoreExactTagValueLowerParam}]) // Get the actual matched tag
+                // For strings, show truncated original value if matched by regex
+                WHEN n.\`${searchProperty}\` =~ ${valueParam} THEN 
+                  CASE 
+                    WHEN size(toString(n.\`${searchProperty}\`)) > 100 THEN left(toString(n.\`${searchProperty}\`), 100) + '...' 
+                    ELSE toString(n.\`${searchProperty}\`) // Ensure string conversion here for safety
+                  END
+                ELSE ''
               END
             ELSE '' 
           END AS matchedValue,
