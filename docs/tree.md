@@ -1,6 +1,6 @@
 # atlas-mcp-server - Directory Structure
 
-Generated on: 2025-04-02 05:35:07
+Generated on: 2025-04-06 21:03:41
 
 
 ```
@@ -128,6 +128,7 @@ atlas-mcp-server
     │   └── tool.ts
     ├── utils
     │   ├── errorHandler.ts
+    │   ├── idGenerator.ts
     │   ├── logger.ts
     │   ├── responseFormatter.ts
     │   └── security.ts
