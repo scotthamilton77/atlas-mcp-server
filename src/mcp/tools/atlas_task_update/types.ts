@@ -26,8 +26,8 @@ export const TaskUpdateSchema = z.object({
     status: createTaskStatusEnum().optional().describe(
       "Updated task status reflecting current progress"
     ),
-    assignedTo: z.string().optional().describe(
-      "Updated assignee ID for task responsibility"
+    assignedTo: z.string().nullable().optional().describe( // Allow null for unassignment
+      "Updated assignee ID for task responsibility (null to unassign)"
     ),
     urls: z.array(
       z.object({
@@ -62,7 +62,7 @@ const SingleTaskUpdateSchema = z.object({
     description: z.string().optional(),
     priority: createPriorityLevelEnum().optional(),
     status: createTaskStatusEnum().optional(),
-    assignedTo: z.string().optional(),
+    assignedTo: z.string().nullable().optional(), // Allow null
     urls: z.array(
       z.object({
         title: z.string(),
@@ -91,7 +91,7 @@ const BulkTaskUpdateSchema = z.object({
         description: z.string().optional(),
         priority: createPriorityLevelEnum().optional(),
         status: createTaskStatusEnum().optional(),
-        assignedTo: z.string().optional(),
+        assignedTo: z.string().nullable().optional(), // Allow null
         urls: z.array(
           z.object({
             title: z.string(),
@@ -125,7 +125,7 @@ export const AtlasTaskUpdateSchemaShape = {
     description: z.string().optional(),
     priority: createPriorityLevelEnum().optional(),
     status: createTaskStatusEnum().optional(),
-    assignedTo: z.string().optional(),
+    assignedTo: z.string().nullable().optional(), // Allow null
     urls: z.array(
       z.object({
         title: z.string(),
@@ -147,7 +147,7 @@ export const AtlasTaskUpdateSchemaShape = {
         description: z.string().optional(),
         priority: createPriorityLevelEnum().optional(),
         status: createTaskStatusEnum().optional(),
-        assignedTo: z.string().optional(),
+        assignedTo: z.string().nullable().optional(), // Allow null
         urls: z.array(
           z.object({
             title: z.string(),

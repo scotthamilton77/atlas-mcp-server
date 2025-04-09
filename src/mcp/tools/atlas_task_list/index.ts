@@ -62,9 +62,11 @@ export const registerAtlasTaskListTool = (server: McpServer) => {
 
       // Conditionally format response
       if (validatedInput.responseFormat === ResponseFormat.JSON) {
+        // Stringify the result and wrap it in a standard text response
+        // The client will need to parse this stringified JSON
         return createToolResponse(JSON.stringify(result, null, 2));
       } else {
-        // Return the result using the formatter for rich display
+        // Return the formatted string using the formatter for rich display
         return formatTaskListResponse(result, false); // Added second argument
       }
     },

@@ -61,8 +61,8 @@ export const atlasListTasks = async (
       totalPages: tasksResult.totalPages
     };
 
-    // Format and return the response
-    return formatTaskListResponse(responseData);
+    // Return the raw response data object
+    return responseData; 
   } catch (error) {
     // Handle specific error cases
     if (error instanceof McpError) {
