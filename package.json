@@ -8,7 +8,7 @@
     "atlas-mcp": "./dist/index.js"
   },
   "scripts": {
-    "build": "tsc && ts-node --esm scripts/make-executable.ts dist/index.js",
+    "build": "tsc && node --loader ts-node/esm scripts/make-executable.ts dist/index.js",
     "start": "node dist/index.js",
     "dev": "tsc -w",
     "docker:up": "docker-compose up -d",
