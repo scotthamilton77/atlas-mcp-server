@@ -1,6 +1,6 @@
 # atlas-mcp-server - Directory Structure
 
-Generated on: 2025-04-09 03:15:48
+Generated on: 2025-04-25 14:32:12
 
 
 ```
@@ -16,13 +16,14 @@ atlas-mcp-server
     ├── deep-research-example
     │   ├── covington_community_grant_research.md
     │   └── full-export.json
+    ├── .DS_Store
     └── README.md
 ├── scripts
     ├── clean.ts
     ├── db-backup.ts
     ├── db-import.ts
-    ├── generate-tree.ts
     ├── make-executable.ts
+    ├── tree.ts
     └── update-deps.ts
 ├── src
     ├── config
@@ -132,6 +133,7 @@ atlas-mcp-server
     │   ├── logger.ts
     │   ├── responseFormatter.ts
     │   └── security.ts
+    ├── .DS_Store
     └── index.ts
 ├── .clinerules
 ├── .repomixignore
