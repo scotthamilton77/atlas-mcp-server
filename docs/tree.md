@@ -1,6 +1,6 @@
 # atlas-mcp-server - Directory Structure
 
-Generated on: 2025-04-25 14:32:12
+Generated on: 2025-04-25 15:04:50
 
 
 ```
@@ -23,8 +23,7 @@ atlas-mcp-server
     ├── db-backup.ts
     ├── db-import.ts
     ├── make-executable.ts
-    ├── tree.ts
-    └── update-deps.ts
+    └── tree.ts
 ├── src
     ├── config
     │   └── index.ts
