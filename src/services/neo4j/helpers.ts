@@ -118,8 +118,10 @@ export function buildListQuery(
   
   // --- Base MATCH Clause ---
   // projectId is handled directly in the MATCH for Task and Knowledge
-  const projectIdFilter = filters.projectId ? `{projectId: $projectId}` : '';
-  if (filters.projectId) {
+  let projectIdFilter = '';
+  // Only add projectId filter if it's provided and not the wildcard '*'
+  if (filters.projectId && filters.projectId !== '*') { 
+    projectIdFilter = `{projectId: $projectId}`;
     params.projectId = filters.projectId;
   }
   let baseMatch = `MATCH (${nodeAlias}:${label} ${projectIdFilter})`;

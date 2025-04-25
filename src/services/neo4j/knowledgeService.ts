@@ -384,10 +384,13 @@ export class KnowledgeService {
     const session = await neo4jDriver.getSession();
     
     try {
-      let conditions: string[] = []; // projectId filter moved to MATCH
-      const params: Record<string, any> = {
-        projectId: options.projectId
-      };
+      let conditions: string[] = []; 
+      const params: Record<string, any> = {}; // Initialize empty params
+      
+      // Conditionally add projectId to params if it's not '*'
+      if (options.projectId && options.projectId !== '*') {
+        params.projectId = options.projectId;
+      }
       
       let domainMatchClause = '';
       if (options.domain) {
@@ -426,9 +429,13 @@ export class KnowledgeService {
       params.skip = int(skip);
       params.limit = int(limit);
 
+      // Construct the base MATCH clause conditionally
+      const projectIdMatchFilter = (options.projectId && options.projectId !== '*') ? '{projectId: $projectId}' : '';
+      const baseMatch = `MATCH (k:${NodeLabels.Knowledge} ${projectIdMatchFilter})`;
+
       // Query for total count matching filters
       const countQuery = `
-        MATCH (k:${NodeLabels.Knowledge} {projectId: $projectId}) // Filter projectId here
+        ${baseMatch} // Use conditional base match
         ${whereClause} // Apply filters to the knowledge node 'k' first
         WITH k // Pass the filtered knowledge nodes
         ${domainMatchClause} // Now match domain relationship if needed for filtering
@@ -437,7 +444,7 @@ export class KnowledgeService {
 
       // Query for paginated data
       const dataQuery = `
-        MATCH (k:${NodeLabels.Knowledge} {projectId: $projectId}) // Filter projectId here
+        ${baseMatch} // Use conditional base match
         ${whereClause} // Apply filters to the knowledge node 'k' first
         WITH k // Pass the filtered knowledge nodes
         ${domainMatchClause} // Match domain relationship
