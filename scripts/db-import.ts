@@ -1,28 +1,65 @@
 #!/usr/bin/env node
+import { existsSync, lstatSync } from 'fs';
+import path from 'path';
 import { importDatabase } from '../src/services/neo4j/backupRestoreService.js';
 import { closeNeo4jConnection } from '../src/services/neo4j/index.js';
 import { logger } from '../src/utils/logger.js';
-import { existsSync, lstatSync } from 'fs';
-import path from 'path';
+
+/**
+ * DB Import Script
+ * ================
+ *
+ * Description:
+ *   Imports data from a specified backup directory into the Neo4j database,
+ *   overwriting existing data. Validates paths for security.
+ *
+ * Usage:
+ *   - Add to package.json: "db:import": "ts-node --esm scripts/db-import.ts"
+ *   - Run directly: npm run db:import <path_to_backup_directory>
+ *   - Example: npm run db:import ./backups/atlas-backup-20230101120000
+ */
+
+// Define the project root directory
+const projectRoot = path.resolve(__dirname, '..');
 
 /**
  * Validates the provided backup directory path.
+ * Ensures the path is within the project root and is a directory.
  * @param backupDir Path to the backup directory.
  * @returns True if valid, false otherwise.
  */
 const isValidBackupDir = (backupDir: string): boolean => {
-  if (!existsSync(backupDir) || !lstatSync(backupDir).isDirectory()) {
-    logger.error(`Invalid backup directory: Path does not exist or is not a directory: ${backupDir}`);
+  const resolvedBackupDir = path.resolve(backupDir); // Resolve to absolute path first
+
+  // Security Check: Ensure the resolved path is within the project root
+  if (!resolvedBackupDir.startsWith(projectRoot + path.sep)) {
+    logger.error(`Invalid backup directory: Path is outside the project boundary: ${resolvedBackupDir}`);
+    return false;
+  }
+
+  // Check if path exists and is a directory
+  if (!existsSync(resolvedBackupDir) || !lstatSync(resolvedBackupDir).isDirectory()) {
+    logger.error(`Invalid backup directory: Path does not exist or is not a directory: ${resolvedBackupDir}`);
     return false;
   }
 
   // Check for expected JSON files (optional, but good practice)
-  const expectedFiles = ['projects.json', 'tasks.json', 'knowledge.json'];
+  const expectedFiles = ['projects.json', 'tasks.json', 'knowledge.json', 'relationships.json']; // Added relationships.json
   for (const file of expectedFiles) {
-    const filePath = path.join(backupDir, file);
-    if (!existsSync(filePath)) {
+    const filePath = path.join(resolvedBackupDir, file); // Use resolved path
+    const resolvedFilePath = path.resolve(filePath); // Resolve again for safety
+
+    // Security Check: Ensure file path is within the resolved backup directory (redundant but safe)
+    if (!resolvedFilePath.startsWith(resolvedBackupDir + path.sep)) {
+        logger.error(`Invalid file path detected: ${resolvedFilePath} is outside the backup directory ${resolvedBackupDir}`);
+        // Decide how to handle: warning or failure. Let's warn for now.
+        logger.warn(`Skipping check for potentially unsafe file path: ${resolvedFilePath}`);
+        continue; // Skip check for this file
+    }
+
+    if (!existsSync(resolvedFilePath)) {
       // Log a warning but don't necessarily fail, maybe some are empty
-      logger.warn(`Expected backup file not found: ${filePath}. Import might be incomplete.`);
+      logger.warn(`Expected backup file not found: ${resolvedFilePath}. Import might be incomplete.`);
     }
   }
   return true;
@@ -39,19 +76,22 @@ const runManualImport = async () => {
     process.exit(1);
   }
 
-  const backupDir = path.resolve(args[0]); // Resolve to absolute path
+  // Note: backupDir is resolved inside isValidBackupDir now for validation
+  const userInputPath = args[0];
+  const resolvedBackupDir = path.resolve(userInputPath); // Resolve once for consistent use
 
-  logger.info(`Starting manual database import from: ${backupDir}`);
+  logger.info(`Attempting manual database import from: ${resolvedBackupDir}`);
   logger.warn('!!! THIS WILL OVERWRITE ALL EXISTING DATA IN THE DATABASE !!!');
 
-  if (!isValidBackupDir(backupDir)) {
+  // Validate the resolved path
+  if (!isValidBackupDir(resolvedBackupDir)) { // Pass the already resolved path
     process.exit(1);
   }
 
   try {
-    await importDatabase(backupDir);
-    logger.info(`Manual import from ${backupDir} completed successfully.`);
-    // Removed the warning about relationships not being restored.
+    // Pass the validated, resolved path to the import function
+    await importDatabase(resolvedBackupDir);
+    logger.info(`Manual import from ${resolvedBackupDir} completed successfully.`);
   } catch (error) {
     logger.error('Manual database import failed:', { error });
     process.exitCode = 1; // Indicate failure
