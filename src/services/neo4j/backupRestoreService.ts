@@ -1,5 +1,6 @@
 import { format } from "date-fns";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { stat } from "fs/promises"; // Use async stat
 import { Session } from "neo4j-driver";
 import path from "path";
 import { config } from "../../config/index.js";
@@ -45,32 +46,43 @@ const manageBackupRotation = async (): Promise<void> => {
 
   try {
     logger.debug(`Checking backup rotation in ${validatedBackupRoot}. Max backups: ${maxBackups}`);
-    
-    const backupDirs = readdirSync(validatedBackupRoot)
-      .map(name => {
+
+    const dirNames = readdirSync(validatedBackupRoot);
+
+    // Asynchronously process each directory entry
+    const processedDirs = await Promise.all(
+      dirNames.map(async (name): Promise<{ path: string; time: number } | null> => {
         // Securely resolve each potential directory path
         const potentialDirPath = secureResolve(validatedBackupRoot, name);
         if (!potentialDirPath) return null; // Skip if path is invalid/outside root
 
         try {
-          // Check if it's a directory using the validated path
-          if (statSync(potentialDirPath).isDirectory()) {
-            return { path: potentialDirPath, time: statSync(potentialDirPath).mtime.getTime() };
+          // Check if it's a directory using the validated path (async)
+          const stats = await stat(potentialDirPath);
+          if (stats.isDirectory()) {
+            return { path: potentialDirPath, time: stats.mtime.getTime() };
           }
         } catch (statError: any) {
-          logger.warn(`Could not stat potential backup directory ${potentialDirPath}: ${statError.message}. Skipping.`);
+          // Log specific error if stat fails (e.g., permission denied) but ignore ENOENT (Not Found)
+          if (statError.code !== 'ENOENT') {
+            logger.warn(`Could not stat potential backup directory ${potentialDirPath}: ${statError.message}. Skipping.`);
+          }
         }
         return null;
       })
-      .filter((dir): dir is { path: string; time: number } => dir !== null) // Filter out nulls (invalid paths or non-dirs)
-      .sort((a, b) => a.time - b.time); // Sort oldest first
+    );
 
-    const backupsToDeleteCount = backupDirs.length - maxBackups;
+    // Filter out nulls (invalid paths or non-dirs) and sort oldest first
+    const validBackupDirs = processedDirs
+      .filter((dir): dir is { path: string; time: number } => dir !== null)
+      .sort((a, b) => a.time - b.time);
+
+    const backupsToDeleteCount = validBackupDirs.length - maxBackups;
 
     if (backupsToDeleteCount > 0) {
-      logger.info(`Found ${backupDirs.length} valid backups. Deleting ${backupsToDeleteCount} oldest backups to maintain limit of ${maxBackups}.`);
+      logger.info(`Found ${validBackupDirs.length} valid backups. Deleting ${backupsToDeleteCount} oldest backups to maintain limit of ${maxBackups}.`);
       for (let i = 0; i < backupsToDeleteCount; i++) {
-        const dirToDelete = backupDirs[i].path; // Path is already validated absolute path
+        const dirToDelete = validBackupDirs[i].path; // Path is already validated absolute path
         // Double check before deleting (redundant but safe)
         if (!dirToDelete.startsWith(validatedBackupRoot + path.sep)) {
             logger.error(`Security Error: Attempting to delete directory outside backup root: ${dirToDelete}. Aborting deletion.`);
@@ -86,7 +98,7 @@ const manageBackupRotation = async (): Promise<void> => {
         }
       }
     } else {
-      logger.debug(`Backup count (${backupDirs.length}) is within the limit (${maxBackups}). No rotation needed.`);
+      logger.debug(`Backup count (${validBackupDirs.length}) is within the limit (${maxBackups}). No rotation needed.`);
     }
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
@@ -247,8 +259,18 @@ export const importDatabase = async (backupDirInput: string): Promise<void> => {
   if (!backupDir) {
       throw new Error(`Invalid backup directory provided: "${backupDirInput}". It must be within "${validatedBackupRoot}".`);
   }
-  if (!existsSync(backupDir) || !statSync(backupDir).isDirectory()) {
-      throw new Error(`Backup directory "${backupDir}" does not exist or is not a directory.`);
+  // --- Validate Input Backup Directory (Async) ---
+  try {
+      const stats = await stat(backupDir); // Use async stat
+      if (!stats.isDirectory()) {
+          throw new Error(`Backup path "${backupDir}" exists but is not a directory.`);
+      }
+  } catch (error: any) {
+      if (error.code === 'ENOENT') { // Handle file not found specifically
+          throw new Error(`Backup directory "${backupDir}" does not exist.`);
+      }
+      // Rethrow other errors (e.g., permissions)
+      throw new Error(`Failed to access backup directory "${backupDir}": ${error.message}`);
   }
   // --- End Validation ---
 
@@ -257,9 +279,13 @@ export const importDatabase = async (backupDirInput: string): Promise<void> => {
 
   try {
     session = await neo4jDriver.getSession(); // Get session from singleton
-    // 1. Clear the database
+    // 1. Clear the database within a transaction
     logger.info("Clearing existing database...");
-    await session.run("MATCH (n) DETACH DELETE n");
+    await session.executeWrite(async tx => {
+      logger.debug("Executing clear database transaction...");
+      await tx.run("MATCH (n) DETACH DELETE n");
+      logger.debug("Clear database transaction executed.");
+    });
     logger.info("Existing database cleared.");
 
     // Variables to store relationships to import
@@ -286,7 +312,12 @@ export const importDatabase = async (backupDirInput: string): Promise<void> => {
           logger.debug(`Importing ${nodesToImport.length} ${label} nodes from full-export.json`);
           const escapedLabel = `\`${label.replace(/`/g, '``')}\``; 
           const query = `UNWIND $nodes as nodeProps CREATE (n:${escapedLabel}) SET n = nodeProps`;
-          await session.run(query, { nodes: nodesToImport });
+          // Wrap node creation in executeWrite
+          await session.executeWrite(async tx => {
+            logger.debug(`Executing node creation transaction for label ${label} (full-export)...`);
+            await tx.run(query, { nodes: nodesToImport });
+            logger.debug(`Node creation transaction for label ${label} (full-export) executed.`);
+          });
           logger.info(`Successfully imported ${nodesToImport.length} ${label} nodes from full-export.json`);
         }
       }
@@ -338,7 +369,12 @@ export const importDatabase = async (backupDirInput: string): Promise<void> => {
 
         const escapedLabel = `\`${label.replace(/`/g, '``')}\``; 
         const query = `UNWIND $nodes as nodeProps CREATE (n:${escapedLabel}) SET n = nodeProps`;
-        await session.run(query, { nodes: nodesToImport });
+        // Wrap node creation in executeWrite
+        await session.executeWrite(async tx => {
+           logger.debug(`Executing node creation transaction for label ${label} (individual file)...`);
+           await tx.run(query, { nodes: nodesToImport });
+           logger.debug(`Node creation transaction for label ${label} (individual file) executed.`);
+        });
         logger.info(`Successfully imported ${nodesToImport.length} ${label} nodes from ${filePath}`);
       }
 
@@ -369,6 +405,7 @@ export const importDatabase = async (backupDirInput: string): Promise<void> => {
         logger.debug(`Processing relationship batch ${i / batchSize + 1}...`);
         try {
           await session.executeWrite(async tx => {
+            logger.debug(`Executing relationship creation transaction batch ${i / batchSize + 1}...`);
             for (const rel of batch) {
               if (!rel.startNodeId || !rel.endNodeId || !rel.type) {
                 logger.warn(`Skipping relationship due to missing data: ${JSON.stringify(rel)}`);
@@ -383,11 +420,13 @@ export const importDatabase = async (backupDirInput: string): Promise<void> => {
                 SET r = $properties
               `;
               try {
+                logger.debug(`Running query for relationship: ${rel.type} from ${rel.startNodeId} to ${rel.endNodeId}`);
                 await tx.run(relQuery, {
                   startNodeId: rel.startNodeId,
                   endNodeId: rel.endNodeId,
                   properties: rel.properties || {}
                 });
+                logger.debug(`Query executed for relationship: ${rel.type}`);
                 importedCount++;
               } catch (relError) {
                 const errorMsg = relError instanceof Error ? relError.message : String(relError);
@@ -395,6 +434,7 @@ export const importDatabase = async (backupDirInput: string): Promise<void> => {
                 failedCount++;
               }
             }
+            logger.debug(`Relationship creation transaction batch ${i / batchSize + 1} finished.`);
           });
           logger.debug(`Completed relationship batch ${i / batchSize + 1}.`);
         } catch (batchError) {

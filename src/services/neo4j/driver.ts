@@ -1,8 +1,8 @@
 import neo4j, { Driver, ManagedTransaction, Session } from 'neo4j-driver';
 import { config } from '../../config/index.js';
 import { logger } from '../../utils/logger.js';
-import { databaseEvents, DatabaseEventType } from './events.js';
 import { exportDatabase } from './backupRestoreService.js'; // Import the export function for backup trigger
+import { databaseEvents, DatabaseEventType } from './events.js';
 
 /**
  * Neo4j connection management singleton
