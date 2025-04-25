@@ -12,32 +12,70 @@ const escapeRelationshipType = (type: string): string => {
   return `\`${type.replace(/`/g, '``')}\``;
 };
 
+// Define the validated root backup path from config
+const validatedBackupRoot = config.backup.backupPath; // This path is already validated in config/index.ts
+
+/**
+ * Securely resolves a path against a base directory and ensures it stays within that base.
+ * @param basePath The absolute, validated base path.
+ * @param targetPath The relative or absolute path to resolve.
+ * @returns The resolved absolute path if it's within the base path, otherwise null.
+ */
+const secureResolve = (basePath: string, targetPath: string): string | null => {
+    const resolvedTarget = path.resolve(basePath, targetPath);
+    if (resolvedTarget.startsWith(basePath + path.sep) || resolvedTarget === basePath) {
+        return resolvedTarget;
+    }
+    logger.error(`Security Violation: Path "${targetPath}" resolves to "${resolvedTarget}", which is outside the allowed base directory "${basePath}".`);
+    return null;
+};
+
+
 /**
  * Manages backup rotation, deleting the oldest backups if the count exceeds the limit.
  */
 const manageBackupRotation = async (): Promise<void> => {
-  const backupRoot = config.backup.backupPath;
   const maxBackups = config.backup.maxBackups;
 
-  if (!existsSync(backupRoot)) {
-    logger.warn(`Backup root directory does not exist: ${backupRoot}. Skipping rotation.`);
+  // Use the validated backup root path
+  if (!existsSync(validatedBackupRoot)) {
+    logger.warn(`Backup root directory does not exist: ${validatedBackupRoot}. Skipping rotation.`);
     return;
   }
 
   try {
-    logger.debug(`Checking backup rotation in ${backupRoot}. Max backups: ${maxBackups}`);
-    const backupDirs = readdirSync(backupRoot)
-      .map(name => path.join(backupRoot, name))
-      .filter(source => statSync(source).isDirectory())
-      .map(dirPath => ({ path: dirPath, time: statSync(dirPath).mtime.getTime() }))
+    logger.debug(`Checking backup rotation in ${validatedBackupRoot}. Max backups: ${maxBackups}`);
+    
+    const backupDirs = readdirSync(validatedBackupRoot)
+      .map(name => {
+        // Securely resolve each potential directory path
+        const potentialDirPath = secureResolve(validatedBackupRoot, name);
+        if (!potentialDirPath) return null; // Skip if path is invalid/outside root
+
+        try {
+          // Check if it's a directory using the validated path
+          if (statSync(potentialDirPath).isDirectory()) {
+            return { path: potentialDirPath, time: statSync(potentialDirPath).mtime.getTime() };
+          }
+        } catch (statError: any) {
+          logger.warn(`Could not stat potential backup directory ${potentialDirPath}: ${statError.message}. Skipping.`);
+        }
+        return null;
+      })
+      .filter((dir): dir is { path: string; time: number } => dir !== null) // Filter out nulls (invalid paths or non-dirs)
       .sort((a, b) => a.time - b.time); // Sort oldest first
 
-    const backupsToDelete = backupDirs.length - maxBackups;
+    const backupsToDeleteCount = backupDirs.length - maxBackups;
 
-    if (backupsToDelete > 0) {
-      logger.info(`Found ${backupDirs.length} backups. Deleting ${backupsToDelete} oldest backups to maintain limit of ${maxBackups}.`);
-      for (let i = 0; i < backupsToDelete; i++) {
-        const dirToDelete = backupDirs[i].path;
+    if (backupsToDeleteCount > 0) {
+      logger.info(`Found ${backupDirs.length} valid backups. Deleting ${backupsToDeleteCount} oldest backups to maintain limit of ${maxBackups}.`);
+      for (let i = 0; i < backupsToDeleteCount; i++) {
+        const dirToDelete = backupDirs[i].path; // Path is already validated absolute path
+        // Double check before deleting (redundant but safe)
+        if (!dirToDelete.startsWith(validatedBackupRoot + path.sep)) {
+            logger.error(`Security Error: Attempting to delete directory outside backup root: ${dirToDelete}. Aborting deletion.`);
+            continue; // Skip this deletion
+        }
         try {
           rmSync(dirToDelete, { recursive: true, force: true });
           logger.info(`Deleted old backup directory: ${dirToDelete}`);
@@ -84,8 +122,14 @@ export const exportDatabase = async (): Promise<string> => {
 
   let session: Session | null = null; // Initialize session variable
   const timestamp = format(new Date(), "yyyyMMddHHmmss");
-  const backupDir = path.join(config.backup.backupPath, `atlas-backup-${timestamp}`);
+  const backupDirName = `atlas-backup-${timestamp}`;
   
+  // Securely create the backup directory path
+  const backupDir = secureResolve(validatedBackupRoot, backupDirName);
+  if (!backupDir) {
+      throw new Error(`Failed to create secure backup directory path for ${backupDirName} within ${validatedBackupRoot}`);
+  }
+
   // Create full export object to store all data
   const fullExport: FullExport = {
     nodes: {}, // Store nodes keyed by label
@@ -95,6 +139,8 @@ export const exportDatabase = async (): Promise<string> => {
   try {
     session = await neo4jDriver.getSession(); // Get session from singleton
     logger.info(`Starting database export to ${backupDir}...`);
+    
+    // Create the validated backup directory
     if (!existsSync(backupDir)) {
       mkdirSync(backupDir, { recursive: true });
       logger.debug(`Created backup directory: ${backupDir}`);
@@ -108,74 +154,77 @@ export const exportDatabase = async (): Promise<string> => {
 
     // Export nodes for each label
     for (const label of nodeLabels) {
-      // Skip internal or potentially problematic labels if necessary (optional)
-      // if (label.startsWith('_') || label === 'AnotherLabelToSkip') {
-      //   logger.debug(`Skipping export for label: ${label}`);
-      //   continue;
-      // }
       logger.debug(`Exporting nodes with label: ${label}`);
-      // Escape label name if it contains special characters (though typically not needed for standard labels)
       const escapedLabel = `\`${label.replace(/`/g, '``')}\``;
-      // Fetch all properties directly
       const nodeResult = await session.run(`MATCH (n:${escapedLabel}) RETURN n`);
-      // Extract properties from each node
       const nodes = nodeResult.records.map(record => record.get("n").properties);
 
-      // No need for sanitization if disableLosslessIntegers: true is set on driver
-      const filePath = path.join(backupDir, `${label.toLowerCase()}s.json`);
+      const fileName = `${label.toLowerCase()}s.json`;
+      const filePath = secureResolve(backupDir, fileName); // Securely resolve file path
+      if (!filePath) {
+          logger.error(`Skipping export for label ${label}: Could not create secure path for ${fileName} in ${backupDir}`);
+          continue; // Skip this label if path is insecure
+      }
+
       writeFileSync(filePath, JSON.stringify(nodes, null, 2));
       logger.info(`Successfully exported ${nodes.length} ${label} nodes to ${filePath}`);
-
-      // Add nodes to the full export object under their label
       fullExport.nodes[label] = nodes;
     }
 
     // Export Relationships
     logger.debug("Exporting relationships...");
-    // Use application-level IDs (assuming 'id' property exists) for reliable matching during import
     const relResult = await session.run(`
       MATCH (start)-[r]->(end)
-      WHERE start.id IS NOT NULL AND end.id IS NOT NULL // Ensure nodes have the 'id' property
+      WHERE start.id IS NOT NULL AND end.id IS NOT NULL
       RETURN 
         start.id as startNodeAppId, 
         end.id as endNodeAppId, 
         type(r) as relType, 
         properties(r) as relProps
     `);
-
     const relationships = relResult.records.map(record => ({
       startNodeId: record.get("startNodeAppId"), 
       endNodeId: record.get("endNodeAppId"),
       type: record.get("relType"),
-      properties: record.get("relProps") || {} // Ensure properties is an object
+      properties: record.get("relProps") || {}
     }));
 
-    const relFilePath = path.join(backupDir, 'relationships.json');
+    const relFileName = 'relationships.json';
+    const relFilePath = secureResolve(backupDir, relFileName); // Securely resolve path
+    if (!relFilePath) {
+        throw new Error(`Failed to create secure path for ${relFileName} in ${backupDir}`);
+    }
     writeFileSync(relFilePath, JSON.stringify(relationships, null, 2));
     logger.info(`Successfully exported ${relationships.length} relationships to ${relFilePath}`);
-    
-    // Add to full export
     fullExport.relationships = relationships;
     
     // Write full export to file
-    const fullExportPath = path.join(backupDir, 'full-export.json');
+    const fullExportFileName = 'full-export.json';
+    const fullExportPath = secureResolve(backupDir, fullExportFileName); // Securely resolve path
+    if (!fullExportPath) {
+        throw new Error(`Failed to create secure path for ${fullExportFileName} in ${backupDir}`);
+    }
     writeFileSync(fullExportPath, JSON.stringify(fullExport, null, 2));
     logger.info(`Successfully created full database export to ${fullExportPath}`);
 
     logger.info(`Database export completed successfully to ${backupDir}`);
-    return backupDir;
+    return backupDir; // Return the validated, absolute path
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error(`Database export failed: ${errorMessage}`, { error });
-    // Clean up partially created backup directory on failure
-    if (existsSync(backupDir)) {
-      try {
-        rmSync(backupDir, { recursive: true, force: true });
-        logger.warn(`Removed partially created backup directory due to export failure: ${backupDir}`);
-      } catch (rmError) {
-        // Log cleanup error but prioritize throwing the original export error
-        const rmErrorMsg = rmError instanceof Error ? rmError.message : String(rmError);
-        logger.error(`Failed to remove partial backup directory ${backupDir}: ${rmErrorMsg}`);
+    // Clean up partially created backup directory on failure (use validated path)
+    if (backupDir && existsSync(backupDir)) { // Check if backupDir was successfully resolved
+      // Double check before deleting
+      if (!backupDir.startsWith(validatedBackupRoot + path.sep)) {
+          logger.error(`Security Error: Attempting cleanup of directory outside backup root: ${backupDir}. Aborting cleanup.`);
+      } else {
+          try {
+            rmSync(backupDir, { recursive: true, force: true });
+            logger.warn(`Removed partially created backup directory due to export failure: ${backupDir}`);
+          } catch (rmError) {
+            const rmErrorMsg = rmError instanceof Error ? rmError.message : String(rmError);
+            logger.error(`Failed to remove partial backup directory ${backupDir}: ${rmErrorMsg}`);
+          }
       }
     }
     throw new Error(`Database export failed: ${errorMessage}`);
@@ -189,34 +238,44 @@ export const exportDatabase = async (): Promise<string> => {
 /**
  * Imports data from JSON files, overwriting the existing database.
  * Can import from either full-export.json (if it exists) or individual entity files.
- * @param backupDir The path to the directory containing the backup JSON files.
- * @throws Error if any step fails.
+ * @param backupDirInput The path to the directory containing the backup JSON files (relative to project root or absolute).
+ * @throws Error if any step fails or if the backup directory is invalid.
  */
-export const importDatabase = async (backupDir: string): Promise<void> => {
+export const importDatabase = async (backupDirInput: string): Promise<void> => {
+  // --- Validate Input Backup Directory ---
+  const backupDir = secureResolve(validatedBackupRoot, path.relative(validatedBackupRoot, path.resolve(backupDirInput))); // Resolve and ensure it's within the root backup dir
+  if (!backupDir) {
+      throw new Error(`Invalid backup directory provided: "${backupDirInput}". It must be within "${validatedBackupRoot}".`);
+  }
+  if (!existsSync(backupDir) || !statSync(backupDir).isDirectory()) {
+      throw new Error(`Backup directory "${backupDir}" does not exist or is not a directory.`);
+  }
+  // --- End Validation ---
+
   let session: Session | null = null; // Initialize session variable
-  logger.warn(`Starting database import from ${backupDir}. THIS WILL OVERWRITE ALL EXISTING DATA.`);
+  logger.warn(`Starting database import from validated directory ${backupDir}. THIS WILL OVERWRITE ALL EXISTING DATA.`);
 
   try {
     session = await neo4jDriver.getSession(); // Get session from singleton
     // 1. Clear the database
     logger.info("Clearing existing database...");
-    // Use DETACH DELETE for simplicity and safety
     await session.run("MATCH (n) DETACH DELETE n");
     logger.info("Existing database cleared.");
 
     // Variables to store relationships to import
     let relationships: Array<{ startNodeId: string; endNodeId: string; type: string; properties: Record<string, any> }> = [];
 
-    // Check if full-export.json exists
-    const fullExportPath = path.join(backupDir, 'full-export.json');
-    if (existsSync(fullExportPath)) {
+    // Check if full-export.json exists (use validated path)
+    const fullExportPath = secureResolve(backupDir, 'full-export.json');
+    
+    if (fullExportPath && existsSync(fullExportPath)) {
       logger.info(`Found full-export.json at ${fullExportPath}. Using consolidated import.`);
       
       // Import from full export file
-      const fullExportContent = readFileSync(fullExportPath, 'utf-8');
+      const fullExportContent = readFileSync(fullExportPath, 'utf-8'); // Safe to read validated path
       const fullExport: FullExport = JSON.parse(fullExportContent);
 
-      // 2a. Import nodes from full export (iterating through labels in the nodes object)
+      // 2a. Import nodes from full export
       for (const label in fullExport.nodes) {
         if (Object.prototype.hasOwnProperty.call(fullExport.nodes, label)) {
           const nodesToImport = fullExport.nodes[label];
@@ -224,16 +283,9 @@ export const importDatabase = async (backupDir: string): Promise<void> => {
             logger.info(`No ${label} nodes to import from full-export.json.`);
             continue;
           }
-
           logger.debug(`Importing ${nodesToImport.length} ${label} nodes from full-export.json`);
           const escapedLabel = `\`${label.replace(/`/g, '``')}\``; 
-          // Use UNWIND for batching node creation
-          const query = `
-            UNWIND $nodes as nodeProps
-            CREATE (n:${escapedLabel})
-            SET n = nodeProps
-          `;
-
+          const query = `UNWIND $nodes as nodeProps CREATE (n:${escapedLabel}) SET n = nodeProps`;
           await session.run(query, { nodes: nodesToImport });
           logger.info(`Successfully imported ${nodesToImport.length} ${label} nodes from full-export.json`);
         }
@@ -247,11 +299,10 @@ export const importDatabase = async (backupDir: string): Promise<void> => {
         logger.info(`No relationships found in full-export.json.`);
       }
     } else {
-      logger.info(`No full-export.json found. Using individual entity files.`);
+      logger.info(`No full-export.json found or path invalid. Using individual entity files from ${backupDir}.`);
 
       // 2b. Import nodes from individual files
-      // Attempt to read all *.json files in the backup dir except relationships.json and full-export.json
-      const filesInBackupDir = readdirSync(backupDir);
+      const filesInBackupDir = readdirSync(backupDir); // Read from validated dir
       const nodeFiles = filesInBackupDir.filter(file => 
         file.toLowerCase().endsWith('.json') && 
         file !== 'relationships.json' && 
@@ -259,22 +310,25 @@ export const importDatabase = async (backupDir: string): Promise<void> => {
       );
 
       for (const nodeFile of nodeFiles) {
-        const filePath = path.join(backupDir, nodeFile);
-        // Infer label from filename (e.g., projects.json -> Project)
+        const filePath = secureResolve(backupDir, nodeFile); // Securely resolve path
+        if (!filePath) {
+            logger.warn(`Skipping potentially insecure node file path: ${nodeFile} in ${backupDir}`);
+            continue;
+        }
+        
+        // Infer label from filename
         const inferredLabelFromFile = path.basename(nodeFile, '.json');
-        // Basic pluralization removal and capitalization - adjust if needed for complex names
         const label = inferredLabelFromFile.endsWith('s') 
           ? inferredLabelFromFile.charAt(0).toUpperCase() + inferredLabelFromFile.slice(1, -1) 
           : inferredLabelFromFile.charAt(0).toUpperCase() + inferredLabelFromFile.slice(1);
 
-        if (!existsSync(filePath)) {
-          // This check is slightly redundant due to readdirSync but kept for safety
+        if (!existsSync(filePath)) { // Check validated path
           logger.warn(`Node file ${nodeFile} (inferred label ${label}) not found at ${filePath}. Skipping.`);
           continue;
         }
 
         logger.debug(`Importing nodes with inferred label: ${label} from ${filePath}`);
-        const fileContent = readFileSync(filePath, 'utf-8');
+        const fileContent = readFileSync(filePath, 'utf-8'); // Read validated path
         const nodesToImport: Record<string, any>[] = JSON.parse(fileContent);
 
         if (nodesToImport.length === 0) {
@@ -283,56 +337,45 @@ export const importDatabase = async (backupDir: string): Promise<void> => {
         }
 
         const escapedLabel = `\`${label.replace(/`/g, '``')}\``; 
-        // Use UNWIND for batching node creation
-        const query = `
-          UNWIND $nodes as nodeProps
-          CREATE (n:${escapedLabel})
-          SET n = nodeProps
-        `;
-
+        const query = `UNWIND $nodes as nodeProps CREATE (n:${escapedLabel}) SET n = nodeProps`;
         await session.run(query, { nodes: nodesToImport });
         logger.info(`Successfully imported ${nodesToImport.length} ${label} nodes from ${filePath}`);
       }
 
       // 3b. Import Relationships from relationships.json
-      const relFilePath = path.join(backupDir, 'relationships.json');
-      if (existsSync(relFilePath)) {
+      const relFilePath = secureResolve(backupDir, 'relationships.json'); // Securely resolve path
+      if (relFilePath && existsSync(relFilePath)) { // Check validated path
         logger.info(`Importing relationships from ${relFilePath}...`);
-        const relFileContent = readFileSync(relFilePath, 'utf-8');
+        const relFileContent = readFileSync(relFilePath, 'utf-8'); // Read validated path
         relationships = JSON.parse(relFileContent);
         
         if (relationships.length === 0) {
           logger.info(`No relationships found to import in ${relFilePath}.`);
         }
       } else {
-        logger.warn(`Relationships file not found: ${relFilePath}. Skipping relationship import.`);
+        logger.warn(`Relationships file not found or path invalid: ${relFilePath}. Skipping relationship import.`);
       }
     }
 
-    // Process relationships (common code for both full-export and individual files)
+    // Process relationships (common code)
     if (relationships.length > 0) {
-      logger.info(`Attempting to import ${relationships.length} relationships individually (Community Edition compatible)...`);
-      
+      logger.info(`Attempting to import ${relationships.length} relationships individually...`);
       let importedCount = 0;
       let failedCount = 0;
-      const batchSize = 500; // Process in batches to manage transaction size/memory
+      const batchSize = 500; 
       
       for (let i = 0; i < relationships.length; i += batchSize) {
         const batch = relationships.slice(i, i + batchSize);
         logger.debug(`Processing relationship batch ${i / batchSize + 1}...`);
-
-        // Use a transaction for each batch
         try {
           await session.executeWrite(async tx => {
             for (const rel of batch) {
               if (!rel.startNodeId || !rel.endNodeId || !rel.type) {
-                logger.warn(`Skipping relationship in batch due to missing startNodeId, endNodeId, or type: ${JSON.stringify(rel)}`);
+                logger.warn(`Skipping relationship due to missing data: ${JSON.stringify(rel)}`);
                 failedCount++;
                 continue;
               }
-
               const escapedType = escapeRelationshipType(rel.type);
-              // Match nodes based on the application-level 'id' property
               const relQuery = `
                 MATCH (start {id: $startNodeId})
                 MATCH (end {id: $endNodeId})
@@ -347,7 +390,6 @@ export const importDatabase = async (backupDir: string): Promise<void> => {
                 });
                 importedCount++;
               } catch (relError) {
-                // Log error for specific relationship but continue batch
                 const errorMsg = relError instanceof Error ? relError.message : String(relError);
                 logger.error(`Failed to create relationship ${rel.type} from ${rel.startNodeId} to ${rel.endNodeId}: ${errorMsg}`, { relationship: rel });
                 failedCount++;
@@ -356,15 +398,11 @@ export const importDatabase = async (backupDir: string): Promise<void> => {
           });
           logger.debug(`Completed relationship batch ${i / batchSize + 1}.`);
         } catch (batchError) {
-          // Log error for the whole batch transaction
           const errorMsg = batchError instanceof Error ? batchError.message : String(batchError);
           logger.error(`Failed to process relationship batch starting at index ${i}: ${errorMsg}`);
-          // Increment failed count for the entire batch size, assuming none succeeded in this failed transaction
           failedCount += batch.length - (batch.filter(rel => !rel.startNodeId || !rel.endNodeId || !rel.type).length); 
-          // Continue with next batch
         }
       }
-      
       logger.info(`Relationship import summary: Attempted=${relationships.length}, Succeeded=${importedCount}, Failed=${failedCount}`);
     } else {
       logger.info(`No relationships to import.`);
