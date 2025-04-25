@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { existsSync, lstatSync } from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url'; // Added for ESM __dirname equivalent
 import { importDatabase } from '../src/services/neo4j/backupRestoreService.js';
 import { closeNeo4jConnection } from '../src/services/neo4j/index.js';
 import { logger } from '../src/utils/logger.js';
@@ -19,7 +20,11 @@ import { logger } from '../src/utils/logger.js';
  *   - Example: npm run db:import ./backups/atlas-backup-20230101120000
  */
 
-// Define the project root directory
+// Calculate __dirname in ES module scope
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Define the project root directory using the calculated __dirname
 const projectRoot = path.resolve(__dirname, '..');
 
 /**

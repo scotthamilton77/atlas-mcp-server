@@ -16,8 +16,8 @@
     "docker:logs": "docker-compose logs -f",
     "rebuild": "ts-node --esm scripts/clean.ts && npm run build",
     "tree": "ts-node --esm scripts/tree.ts",
-    "db:backup": "ts-node --esm scripts/db-backup.ts",
-    "db:import": "ts-node --esm scripts/db-import.ts"
+    "db:backup": "node --loader ts-node/esm scripts/db-backup.ts",
+    "db:import": "node --loader ts-node/esm scripts/db-import.ts"
   },
   "keywords": [
     "mcp",
