@@ -1,6 +1,6 @@
 # atlas-mcp-server - Directory Structure
 
-Generated on: 2025-05-12 00:56:49
+Generated on: 2025-05-12 02:10:12
 
 
 ```
@@ -162,7 +162,9 @@ atlas-mcp-server
 ├── package.json
 ├── README.md
 ├── repomix.config.json
-└── tsconfig.json
+├── smithery.yaml
+├── tsconfig.json
+└── typedoc.json
 
 ```
 
