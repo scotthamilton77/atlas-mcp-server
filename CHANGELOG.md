@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.3] - 2025-05-20
+
+### Added
+
+- Basic Web UI for interacting with the Atlas MCP server. Includes `index.html`, `script.js`, and `style.css` under `src/webui/`.
+
+### Changed
+
+- Updated `docs/tree.md` to reflect the new `src/webui/` directory and current generation date.
+
 ## [2.8.2] - 2025-05-19
 
 ### Changed

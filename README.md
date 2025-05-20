@@ -2,7 +2,7 @@
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8.3-blue.svg)](https://www.typescriptlang.org/)
 [![Model Context Protocol](https://img.shields.io/badge/MCP-1.11.4-green.svg)](https://modelcontextprotocol.io/)
-[![Version](https://img.shields.io/badge/Version-2.8.2-blue.svg)](https://github.com/cyanheads/atlas-mcp-server/releases)
+[![Version](https://img.shields.io/badge/Version-2.8.3-blue.svg)](https://github.com/cyanheads/atlas-mcp-server/releases)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Status](https://img.shields.io/badge/Status-Stable-green.svg)]()
 [![GitHub](https://img.shields.io/github/stars/cyanheads/atlas-mcp-server?style=social)](https://github.com/cyanheads/atlas-mcp-server)
@@ -167,6 +167,8 @@ ATLAS MCP Server supports multiple transport mechanisms for communication:
   npm run start:http
   ```
   This uses the `MCP_TRANSPORT_TYPE=http` setting. The server will listen on the host and port defined in your `.env` file (e.g., `MCP_HTTP_HOST` and `MCP_HTTP_PORT`, defaulting to `127.0.0.1:3010`). Ensure your firewall allows connections if accessing remotely.
+
+- **Web UI (Experimental):** A basic Web UI is available for interacting with the server. After starting the server (stdio or http), you can typically access the UI by opening `src/webui/index.html` in your browser. This UI can be used to send MCP requests and view responses, offering a direct way to test and interact with the server's tools and resources.
 
 ## Configuration
 
