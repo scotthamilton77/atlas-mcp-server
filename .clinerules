@@ -311,7 +311,7 @@ This directory contains the core logic for the Model Context Protocol (MCP) serv
 
 #### 6.2.3. Transports (`src/mcp/transports/`)
 - **Purpose:** Handles the communication protocols for the MCP server, such as HTTP (`httpTransport.ts`) and standard I/O (`stdioTransport.ts`).
-- `authentication/authMiddleware.ts`: Likely contains middleware for authenticating requests before they reach tool handlers or resource accessors, particularly for HTTP transport.
+- `authentication/authMiddleware.ts`: Handles JWT Bearer token authentication for HTTP transport. Verifies tokens, extracts `clientId` and `scopes` into an `AuthInfo` object (conforming to MCP SDK) on `req.auth`, and integrates `requestContextService` for logging.
 - **Convention:** Modifications to how the server receives requests or sends responses, or changes to authentication mechanisms, would be made here.
 
 #### 6.2.4. Server (`src/mcp/server.ts`)
