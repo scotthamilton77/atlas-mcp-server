@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.2] - 2025-05-19
+
+### Changed
+
+- Updated various dependencies including `@modelcontextprotocol/sdk`, `commander`, `openai`, and `zod`.
+- Standardized `RequestContext` usage across the MCP server (`server.ts`) and transport layers (`authMiddleware.ts`, `httpTransport.ts`, `stdioTransport.ts`) for improved logging and request tracing.
+- Aligned `req.auth` in `authMiddleware.ts` with the SDK's `AuthInfo` type and enhanced JWT claim extraction for `clientId` and `scopes`.
+- Alphabetized tool registration imports in `src/mcp/server.ts` for better organization.
+
 ## [2.8.0] - 2025-05-11
 
 - **Repository Alignment**: Updated project structure, dependencies, and development scripts to align with the latest version of the `mcp-ts-template` (https://github.com/cyanheads/mcp-ts-template), ensuring consistency with best practices and template enhancements.
@@ -58,15 +67,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Documentation**: Updated the `docs/tree.md` to reflect the latest directory structure timestamp and changes from recent refactoring.
 - **Task Creation Response**: Corrected the `atlas_task_create` tool to ensure the `assignedTo` field in the JSON response accurately reflects the `assignedToUserId` from the service layer, aligning output with input schema expectations.
-
-## [Unreleased]
-
-### Added
-
-### Changed
-
-### Fixed
-
-### Removed
-
-### Security
