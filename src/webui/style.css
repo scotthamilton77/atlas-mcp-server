@@ -1,0 +1,315 @@
+:root {
+    /* Light Mode (Default) */
+    --bg-color: #f8f9fa;
+    --text-color: #212529;
+    --primary-color: #007bff;
+    --primary-hover-color: #0056b3;
+    --secondary-text-color: #6c757d;
+    --border-color: #dee2e6;
+    --card-bg-color: #ffffff;
+    --shadow-color: rgba(0, 0, 0, 0.1);
+    --error-color: #dc3545;
+    --error-bg-color: #f8d7da;
+    --error-border-color: #f5c6cb;
+    --success-color: #28a745;
+    --warning-color: #ffc107; /* For text */
+    --warning-bg-color: #fff3cd; /* For background */
+    --code-bg-color: #e9ecef;
+    --code-border-color: #e0e0e0;
+    --connection-status-bg: #e9ecef;
+    --data-section-bg: #fdfdfd;
+    --data-item-border-color: #f0f0f0;
+
+    --font-family-sans-serif: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-family-monospace: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.dark-mode {
+    --bg-color: #1a1a1a; /* Darker background */
+    --text-color: #e0e0e0; /* Lighter text */
+    --primary-color: #007bff; /* Keep primary or adjust if needed */
+    --primary-hover-color: #0056b3;
+    --secondary-text-color: #adb5bd; /* Lighter secondary text */
+    --border-color: #495057; /* Darker borders */
+    --card-bg-color: #2c2c2c; /* Darker card background */
+    --shadow-color: rgba(255, 255, 255, 0.05); /* Lighter shadow for dark mode */
+    --error-color: #f8d7da; /* Lighter error text for dark bg */
+    --error-bg-color: #58151c; /* Darker error background */
+    --error-border-color: #842029;
+    --success-color: #28a745; /* Keep or adjust */
+    --warning-color: #ffc107;
+    --warning-bg-color: #664d03;
+    --code-bg-color: #343a40; /* Darker code background */
+    --code-border-color: #495057;
+    --connection-status-bg: #343a40;
+    --data-section-bg: #252525;
+    --data-item-border-color: #404040;
+}
+
+
+body {
+    font-family: var(--font-family-sans-serif);
+    margin: 0;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    line-height: 1.6;
+    transition: background-color 0.3s ease, color 0.3s ease; /* Smooth transition */
+}
+
+#app {
+    position: relative; /* For positioning the theme toggle */
+    max-width: 900px;
+    margin: 40px auto;
+    padding: 30px;
+    background-color: var(--card-bg-color);
+    transition: background-color 0.3s ease;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px var(--shadow-color);
+}
+
+h1, h2, h3 {
+    color: var(--text-color); /* Will inherit from body or .dark-mode */
+    margin-top: 0;
+}
+
+h1 {
+    font-size: 2rem;
+    margin-bottom: 1.5rem;
+    text-align: center;
+    color: var(--primary-color); /* Primary color for main heading */
+}
+
+h2 {
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+    border-bottom: 2px solid var(--primary-color); /* Use primary color for accent */
+    padding-bottom: 0.5rem;
+}
+
+h3 {
+    font-size: 1.25rem;
+    margin-bottom: 0.75rem;
+    color: var(--secondary-text-color); /* Uses themed secondary text color */
+}
+
+label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: bold;
+    color: var(--secondary-text-color); /* Uses themed secondary text color */
+}
+
+select,
+button {
+    padding: 12px 15px;
+    margin-bottom: 20px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    font-size: 1rem;
+    transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, color 0.2s ease-in-out;
+    background-color: var(--card-bg-color); /* Match card or slightly different */
+    color: var(--text-color);
+}
+
+select {
+    width: 100%;
+    max-width: 400px; /* Or adjust as needed */
+    margin-right: 10px; /* Space between select and button if inline */
+}
+
+button {
+    background-color: var(--primary-color);
+    color: var(--card-bg-color); /* Text color for buttons, ensure contrast */
+    cursor: pointer;
+    border-color: var(--primary-color);
+}
+
+button:hover {
+    background-color: var(--primary-hover-color);
+    border-color: var(--primary-hover-color);
+    box-shadow: 0 2px 4px var(--shadow-color); /* Use themed shadow */
+}
+
+.controls-container {
+    display: flex;
+    align-items: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap; /* Allow wrapping on smaller screens */
+}
+
+.controls-container label {
+    margin-right: 10px;
+    margin-bottom: 0; /* Adjust if label is on its own line */
+}
+
+.controls-container select {
+    flex-grow: 1; /* Allow select to take available space */
+    margin-bottom: 0; /* If on same line as button */
+}
+
+.data-section { /* Replaces .project-details, .tasks-list, .knowledge-list */
+    margin-top: 25px;
+    padding: 20px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background-color: var(--data-section-bg); /* Themed background */
+    transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+.data-item { /* Replaces .project-details div, .task-item, .knowledge-item */
+    margin-bottom: 15px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid var(--data-item-border-color); /* Themed border */
+    transition: border-color 0.3s ease;
+}
+
+.data-item:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+.data-item strong {
+    color: var(--text-color); /* Stronger emphasis, themed */
+    min-width: 180px; /* Align keys in details view */
+    display: inline-block;
+}
+
+.data-item div { /* For project details layout */
+    margin-bottom: 8px;
+}
+
+pre {
+    background-color: var(--code-bg-color); /* Themed */
+    color: var(--text-color); /* Ensure text in pre is also themed */
+    padding: 12px;
+    border-radius: 6px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-family: var(--font-family-monospace);
+    font-size: 0.9rem;
+    border: 1px solid var(--code-border-color); /* Themed */
+    max-height: 200px; /* Limit height and make scrollable */
+    overflow-y: auto;
+    transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+}
+
+.error {
+    color: var(--error-color); /* Themed text */
+    font-weight: bold;
+    padding: 10px;
+    background-color: var(--error-bg-color); /* Themed background */
+    border: 1px solid var(--error-border-color); /* Themed border */
+    border-radius: 4px;
+    margin-top: 15px;
+    transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+}
+
+.loading {
+    font-style: italic;
+    color: var(--secondary-text-color); /* Themed */
+    padding: 10px 0;
+}
+
+#connection-status {
+    margin-top: 25px;
+    padding: 12px;
+    background-color: var(--connection-status-bg); /* Themed */
+    border-radius: 6px;
+    text-align: center;
+    font-weight: 500;
+    color: var(--text-color); /* Ensure text is themed */
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+#connection-status span {
+    font-weight: bold;
+    /* Color for span set in JS based on status */
+}
+
+/* Utility classes */
+.hidden {
+    display: none !important; /* Ensure it overrides other display properties */
+}
+
+
+/* Theme Toggle Button */
+.theme-switch-wrapper {
+    display: flex;
+    align-items: center;
+    position: absolute;
+    top: 20px;
+    right: 20px;
+}
+
+.theme-switch {
+    display: inline-block;
+    height: 24px; /* Adjusted height */
+    position: relative;
+    width: 50px; /* Adjusted width */
+}
+
+.theme-switch input {
+    display:none;
+}
+
+.slider {
+    background-color: #ccc;
+    bottom: 0;
+    cursor: pointer;
+    left: 0;
+    position: absolute;
+    right: 0;
+    top: 0;
+    transition: .4s;
+    border-radius: 24px; /* Fully rounded */
+}
+
+.slider:before {
+    background-color: #fff;
+    bottom: 3px; /* Adjusted position */
+    content: "";
+    height: 18px; /* Adjusted size */
+    left: 3px; /* Adjusted position */
+    position: absolute;
+    transition: .4s;
+    width: 18px; /* Adjusted size */
+    border-radius: 50%;
+}
+
+input:checked + .slider {
+    background-color: var(--primary-color);
+}
+
+input:checked + .slider:before {
+    transform: translateX(26px); /* Adjusted translation */
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    #app {
+        margin: 20px;
+        padding: 20px;
+    }
+
+    h1 {
+        font-size: 1.8rem;
+    }
+
+    .controls-container {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .controls-container select,
+    .controls-container button {
+        width: 100%;
+        margin-right: 0;
+        margin-bottom: 15px;
+    }
+
+    .theme-switch-wrapper {
+        top: 10px;
+        right: 10px;
+    }
+}

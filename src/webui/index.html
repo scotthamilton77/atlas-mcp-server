@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Atlas Projects Live View</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app">
+        <div class="theme-switch-wrapper">
+            <label class="theme-switch" for="theme-checkbox">
+                <input type="checkbox" id="theme-checkbox" />
+                <div class="slider round"></div>
+            </label>
+        </div>
+
+        <h1>Atlas Projects Live View</h1>
+        
+        <div class="controls-container">
+            <label for="project-select">Select a Project:</label>
+            <select id="project-select">
+                <option value="">Loading projects...</option>
+            </select>
+            <button id="refresh-button">Refresh Projects</button>
+        </div>
+
+        <div id="project-details-container" class="data-section hidden">
+            <h2>Project Details</h2>
+            <div id="details-content"></div>
+        </div>
+
+        <div id="tasks-container" class="data-section hidden">
+            <h3>Tasks</h3>
+            <div id="tasks-content"></div>
+        </div>
+
+        <div id="knowledge-container" class="data-section hidden">
+            <h3>Knowledge Items</h3>
+            <div id="knowledge-content"></div>
+        </div>
+
+        <div id="error-message" class="error hidden"></div> <!-- Initially hidden -->
+        <div id="connection-status">
+            Connection Status: <span id="neo4j-status">Not Connected</span>
+        </div>
+    </div>
+
+    <!-- Neo4j Browser Driver via CDN -->
+    <script src="https://unpkg.com/neo4j-driver@5/lib/browser/neo4j-web.min.js"></script>
+    
+    <!-- 
+        Optional: User can manually provide credentials here if not using prompt
+        <script>
+            window.NEO4J_URI = "bolt://localhost:7687";
+            window.NEO4J_USER = "neo4j";
+            window.NEO4J_PASSWORD = "password";
+        </script> 
+    -->
+    <script src="script.js"></script>
+</body>
+</html>

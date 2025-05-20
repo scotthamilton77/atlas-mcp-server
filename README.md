@@ -65,6 +65,7 @@ Implemented as a Model Context Protocol (MCP) server, ATLAS allows LLM agents to
 - [Features](#features)
 - [Installation](#installation)
 - [Running the Server](#running-the-server)
+- [Web UI (Experimental)](#web-ui-experimental)
 - [Configuration](#configuration)
 - [Project Structure](#project-structure)
 - [Tools](#tools)
@@ -163,12 +164,26 @@ ATLAS MCP Server supports multiple transport mechanisms for communication:
   This uses the `MCP_TRANSPORT_TYPE=stdio` setting.
 
 - **Streamable HTTP:** This mode allows the server to listen for MCP requests over HTTP, suitable for remote clients or web-based integrations.
+
   ```bash
   npm run start:http
   ```
+
   This uses the `MCP_TRANSPORT_TYPE=http` setting. The server will listen on the host and port defined in your `.env` file (e.g., `MCP_HTTP_HOST` and `MCP_HTTP_PORT`, defaulting to `127.0.0.1:3010`). Ensure your firewall allows connections if accessing remotely.
 
-- **Web UI (Experimental):** A basic Web UI is available for interacting with the server. After starting the server (stdio or http), you can typically access the UI by opening `src/webui/index.html` in your browser. This UI can be used to send MCP requests and view responses, offering a direct way to test and interact with the server's tools and resources.
+## Web UI (Experimental)
+
+A basic Web UI is available for viewing Project, Task, & Knowledge details.
+
+- **Opening the UI**:
+
+  - To open the UI directly in your browser, run the following command in your terminal:
+    ```bash
+    npm run webui
+    ```
+
+- **Functionality**:
+  - You can see an example screenshot of the Web UI [here](./examples/webui-example.png).
 
 ## Configuration
 

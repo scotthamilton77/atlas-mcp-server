@@ -1,6 +1,6 @@
 # atlas-mcp-server - Directory Structure
 
-Generated on: 2025-05-12 02:10:12
+Generated on: 2025-05-20 05:34:28
 
 
 ```
@@ -114,6 +114,7 @@ atlas-mcp-server
     │   │   │   └── authMiddleware.ts
     │   │   ├── httpTransport.ts
     │   │   └── stdioTransport.ts
+    │   ├── .DS_Store
     │   └── server.ts
     ├── services
     │   └── neo4j
@@ -151,6 +152,10 @@ atlas-mcp-server
     │   │   ├── rateLimiter.ts
     │   │   └── sanitization.ts
     │   └── index.ts
+    ├── webui
+    │   ├── index.html
+    │   ├── script.js
+    │   └── style.css
     ├── .DS_Store
     └── index.ts
 ├── .clinerules
