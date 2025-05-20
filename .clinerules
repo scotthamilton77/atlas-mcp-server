@@ -42,12 +42,15 @@ Our `logger` is a singleton instance of a Winston-based logger, adapted for MCP.
 **Log Levels (RFC 5424):**
 `emerg` (0), `alert` (1), `crit` (2), `error` (3), `warning` (4), `notice` (5), `info` (6), `debug` (7)
 
-**Initialization (typically in `src/index.ts`):**
+**Initialization (in `src/index.ts`):**
+The logger is initialized within the `start` function in `src/index.ts`.
 ```typescript
-import { logger } from './src/utils/index.js'; // Or specific path
-import { config } from './src/config/index.js';
+// In src/index.ts
+import { logger } from './src/utils/index.js';
+import { config } from './src/config/index.js'; // McpLogLevel is typically part of config types
 
-async function main() {
+async function start() {
+  // ... other setup ...
   await logger.initialize(config.logLevel); // config.logLevel is McpLogLevel
   // ... rest of app initialization
 }
@@ -155,8 +158,8 @@ import { ErrorHandler } from './src/utils/internal/errorHandler.js';
 
 async function getUser(userId: string) {
   // ... logic to get user ...
-  if (!user) throw new Error("User not found");
-  return user;
+  // if (!user) throw new Error("User not found"); // Example error
+  return { id: userId, name: "Test User" }; // Example success
 }
 
 const safeGetUser = (userId: string) => ErrorHandler.tryCatch(
@@ -168,13 +171,13 @@ try {
   const user = await safeGetUser("123");
 } catch (e) {
   // e will be an McpError, logged by ErrorHandler.handleError
-  console.error("Caught error:", (e as McpError).code, (e as McpError).message);
+  // console.error("Caught error:", (e as McpError).code, (e as McpError).message);
 }
 ```
 
 ## 4. Sanitization (`src/utils/security/sanitization.ts`)
 
-Input sanitization is CRITICAL for security. Use the `sanitization` service.
+Input sanitization is CRITICAL for security. Use the `sanitization` service (from `src/utils/index.js` or `src/utils/security/sanitization.js`).
 
 **`sanitizeInputForLogging(input: unknown): unknown`:**
 Automatically used by `ErrorHandler.handleError` for the `input` field. Manually use it if logging raw input elsewhere. Redacts sensitive fields like 'password', 'token', etc.
@@ -211,9 +214,9 @@ Validates and cleans URLs.
 import { sanitization } from './src/utils/index.js';
 try {
   const cleanUrl = sanitization.sanitizeUrl("https://example.com/path?query=value");
-  const maliciousUrl = sanitization.sanitizeUrl("javascript:alert('evil')"); // Throws McpError
+  // const maliciousUrl = sanitization.sanitizeUrl("javascript:alert('evil')"); // Throws McpError
 } catch (e) {
-  logger.error("URL sanitization failed", e as Error);
+  // logger.error("URL sanitization failed", e as Error);
 }
 ```
 
@@ -237,7 +240,7 @@ try {
   // pathInfo4.sanitizedPath will be "/absolute/path/file.txt"
 
 } catch (e) {
-  logger.error("Path sanitization failed", e as Error);
+  // logger.error("Path sanitization failed", e as Error);
 }
 ```
 
@@ -249,7 +252,7 @@ const jsonString = '{"name": "Test", "value": 123}';
 try {
   const jsonData = sanitization.sanitizeJson<{ name: string, value: number }>(jsonString);
 } catch (e) {
-  logger.error("JSON sanitization failed", e as Error);
+  // logger.error("JSON sanitization failed", e as Error);
 }
 ```
 
@@ -262,7 +265,7 @@ const num2 = sanitization.sanitizeNumber("5", 10, 20); // 10 (clamped)
 try {
   const invalidNum = sanitization.sanitizeNumber("not-a-number"); // Throws McpError
 } catch (e) {
-  logger.error("Number sanitization failed", e as Error);
+  // logger.error("Number sanitization failed", e as Error);
 }
 ```
 
@@ -280,14 +283,26 @@ try {
 
 This section outlines other important directories and their roles within the Atlas MCP Server.
 
+### 6.0. Application Entry Point (`src/index.ts`)
+- **Purpose:** The main entry point for the Atlas MCP Server application. It orchestrates the startup sequence, including logger initialization, configuration loading, server transport initialization, and setting up graceful shutdown handlers.
+- **Key Responsibilities:**
+    - Initializes the `logger` (see Section 2).
+    - Loads application `config` and `environment` from `src/config/index.js` (see Section 6.1).
+    - Calls `initializeAndStartServer` from `src/mcp/server.js` to start the MCP server.
+    - Manages a global `serverInstance` for `stdio` transport to facilitate graceful shutdown.
+    - Implements a `shutdown` function that handles `SIGTERM`, `SIGINT`, `uncaughtException`, and `unhandledRejection` signals/events to ensure services like Neo4j connections (via `closeNeo4jConnection`) are closed properly before exiting.
+    - Uses `requestContextService` for creating context for startup and shutdown operations.
+- **Convention:** This file is critical for understanding the application lifecycle. Modifications here typically relate to fundamental startup or shutdown procedures.
+
 ### 6.1. Configuration (`src/config/index.ts`)
-- **Purpose:** Centralized application configuration. This file likely exports a configuration object loaded from environment variables, `.env` files, or default values.
-- **Usage:** Import the `config` object from this module to access configuration settings throughout the application.
+- **Purpose:** Centralized application configuration. This file likely exports a configuration object (`config`) and an environment identifier (`environment`), loaded from environment variables, `.env` files, or default values.
+- **Usage:** Import the `config` and `environment` objects from this module to access configuration settings and environment context throughout the application.
   ```typescript
-  import { config } from './src/config/index.js';
+  import { config, environment } from './src/config/index.js';
   
   const apiKey = config.someApiServiceKey;
   const port = config.serverPort;
+  const currentEnv = environment; // e.g., 'development', 'production'
   ```
 - **Convention:** Avoid hardcoding configuration values. Define them in `.env` (for local development, gitignored) or environment variables for production, and access them via the exported `config` object.
 
@@ -295,15 +310,15 @@ This section outlines other important directories and their roles within the Atl
 This directory contains the core logic for the Model Context Protocol (MCP) server.
 
 #### 6.2.1. Resources (`src/mcp/resources/`)
-- **Purpose:** Defines and manages the data entities (like knowledge, projects, tasks) that the MCP server exposes. Each subdirectory (e.g., `knowledge/`, `projects/`) typically handles CRUD-like operations or access logic for a specific resource type.
-- `index.ts` in this directory likely aggregates and exports all resource handlers.
-- `types.ts` probably defines common types or interfaces used across different resources.
-- **Convention:** When adding a new data entity to be managed by MCP, create a new subdirectory here with its corresponding logic and types. Ensure it's exported via `src/mcp/resources/index.ts`.
+- **Purpose:** Defines and manages the data entities (like knowledge, projects, tasks) that the MCP server exposes. Each subdirectory (e.g., `knowledge/`, `projects/`, `tasks/`) typically handles CRUD-like operations or access logic for a specific resource type.
+- `index.ts` in this directory aggregates and exports all resource handlers.
+- `types.ts` defines common types or interfaces used across different resources.
+- **Convention:** When adding a new data entity to be managed by MCP, create a new subdirectory here with its corresponding logic (e.g., `*ResourceName*Resources.ts`) and types. Ensure it's exported via `src/mcp/resources/index.ts`.
 
 #### 6.2.2. Tools (`src/mcp/tools/`)
 - **Purpose:** Implements the specific tools that the MCP server offers (e.g., `atlas_deep_research`, `atlas_knowledge_add`). Each tool is usually in its own subdirectory.
 - **Structure per tool:**
-    - `*ToolName*.ts`: Contains the main execution logic for the tool.
+    - `*ToolName*.ts`: Contains the main execution logic for the tool (e.g., `addKnowledge.ts`).
     - `index.ts`: Exports the tool's definition and handler.
     - `responseFormat.ts`: Defines the structure of the tool's successful response.
     - `types.ts`: Defines input/argument types and other specific types for the tool.
@@ -315,14 +330,16 @@ This directory contains the core logic for the Model Context Protocol (MCP) serv
 - **Convention:** Modifications to how the server receives requests or sends responses, or changes to authentication mechanisms, would be made here.
 
 #### 6.2.4. Server (`src/mcp/server.ts`)
-- **Purpose:** The main entry point or orchestrator for the MCP server. It likely initializes transports, registers tools and resources, and starts listening for incoming requests.
+- **Purpose:** The main entry point or orchestrator for the MCP server logic. It likely initializes transports, registers tools and resources, and starts listening for incoming requests. This is called by `src/index.ts`.
 - **Convention:** This file ties together the different parts of the `src/mcp/` layer.
 
 ### 6.3. Services (`src/services/neo4j/`)
-- **Purpose:** Encapsulates all interactions with the Neo4j graph database. Logic is typically separated into service files based on the data entity they manage (e.g., `knowledgeService.ts`, `projectService.ts`, `taskService.ts`).
+- **Purpose:** Encapsulates all interactions with the Neo4j graph database. Logic is typically separated into service files based on the data entity they manage (e.g., `knowledgeService.ts`, `projectService.ts`, `taskService.ts`, `searchService.ts`) or specific functionalities (`backupRestoreService.ts`).
 - `driver.ts`: Manages the Neo4j driver instance and database connection.
+- `events.ts`: May define or handle domain events related to database interactions.
 - `helpers.ts`, `utils.ts`: Contain utility functions specific to Neo4j interactions.
 - `types.ts`: Defines types and interfaces relevant to Neo4j data models and query results.
+- `index.ts`: Barrel file that exports key services and utilities for easy import.
 - **Convention:** All database operations MUST go through these services. Avoid direct database calls from other parts of the application (e.g., from MCP tools). Services should handle query building, execution, and mapping results to application-defined types.
 
 ### 6.4. Core Types (`src/types/`)
@@ -337,9 +354,38 @@ This directory contains the core logic for the Model Context Protocol (MCP) serv
 - Examples:
     - `clean.ts`: Possibly for cleaning build artifacts or temporary files.
     - `db-backup.ts`, `db-import.ts`: For backing up and restoring the Neo4j database.
+    - `fetch-openapi-spec.ts`: For fetching or updating OpenAPI specifications, potentially for tool schema generation or documentation.
     - `make-executable.ts`: Might be used to set execute permissions on scripts.
     - `tree.ts`: Generates the `docs/tree.md` file.
 - **Convention:** Scripts should be well-documented regarding their purpose and usage. Use `npm run script-name` (after defining in `package.json` scripts section) or `npx tsx scripts/scriptName.ts` to execute them.
+
+### 6.6. Core Utilities (`src/utils/`)
+This directory houses various utility modules, organized by concern. Sections 1, 2, 3, and 4 of this document cover `requestContext.ts`, `logger.ts`, `errorHandler.ts` (all in `src/utils/internal/`) and `sanitization.ts` (in `src/utils/security/`) respectively. Other key subdirectories include:
+
+#### 6.6.1. Metrics (`src/utils/metrics/`)
+- **Purpose:** Provides utilities related to application metrics and monitoring.
+- `tokenCounter.ts`: Implements functionality for counting or tracking token usage, which can be essential for services interacting with token-based APIs (e.g., LLMs).
+- `index.ts`: Barrel file exporting metrics utilities.
+
+#### 6.6.2. Parsing (`src/utils/parsing/`)
+- **Purpose:** Contains modules for parsing various data formats safely and effectively.
+- `dateParser.ts`: Utilities for parsing and handling date strings or objects.
+- `jsonParser.ts`: Provides safe JSON parsing capabilities. Note: `sanitization.sanitizeJson` (Section 4) also offers JSON parsing with validation and should be preferred for external inputs. This module might offer alternative or supplementary JSON processing tools.
+- `index.ts`: Barrel file exporting parsing utilities.
+
+#### 6.6.3. Security (`src/utils/security/`)
+- **Purpose:** Centralizes security-related utilities beyond what's covered in Section 4 (Sanitization).
+- `sanitization.ts`: (Covered in detail in Section 4).
+- `idGenerator.ts`: Provides functions for generating various types of unique identifiers used within the application (e.g., UUIDs).
+- `rateLimiter.ts`: Implements mechanisms for rate limiting requests or operations to protect system resources and prevent abuse.
+- `index.ts`: Barrel file exporting security utilities.
+
+#### 6.6.4. General Utilities (`src/utils/index.ts`)
+- The `src/utils/index.ts` file serves as the primary barrel file for all utilities, re-exporting modules from `internal`, `metrics`, `parsing`, and `security` subdirectories, providing a single point of import for most utility functions.
+  ```typescript
+  // Example: Importing multiple utils
+  import { logger, requestContextService, sanitization, idGenerator } from './src/utils/index.js';
+  ```
 
 ---
 *This cheat sheet is a living document. Please contribute improvements and keep it up-to-date.*
