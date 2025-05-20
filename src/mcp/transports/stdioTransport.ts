@@ -15,12 +15,13 @@
  * controlling the server process. This implementation follows that guideline.
  *
  * @see {@link https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/docs/specification/2025-03-26/basic/authorization.mdx | MCP Authorization Specification}
+ * @module src/mcp/transports/stdioTransport
  */
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 // Import core utilities: ErrorHandler for centralized error management and logger for logging.
-import { ErrorHandler, logger } from '../../utils/index.js';
+import { ErrorHandler, logger, RequestContext, requestContextService } from '../../utils/index.js';
 
 /**
  * Connects a given McpServer instance to the Stdio transport. (Asynchronous)
@@ -38,13 +39,17 @@ import { ErrorHandler, logger } from '../../utils/index.js';
  * permitted by the spec for logging purposes.
  *
  * @param {McpServer} server - The McpServer instance containing the core logic (tools, resources).
- * @param {Record<string, any>} context - Logging context for correlation.
+ * @param {RequestContext} parentContext - Logging and tracing context from the calling function.
  * @returns {Promise<void>} A promise that resolves when the connection is successfully established.
  * @throws {Error} Throws an error if the connection fails during setup (e.g., issues connecting server to transport).
  */
-export async function connectStdioTransport(server: McpServer, context: Record<string, any>): Promise<void> {
+export async function connectStdioTransport(server: McpServer, parentContext: RequestContext): Promise<void> {
   // Add a specific operation name to the context for better log filtering.
-  const operationContext = { ...context, operation: 'connectStdioTransport', transportType: 'Stdio' };
+  const operationContext = requestContextService.createRequestContext({
+    ...parentContext,
+    operation: 'connectStdioTransport',
+    transportType: 'Stdio',
+  });
   logger.debug('Attempting to connect stdio transport...', operationContext);
 
   try {
@@ -69,7 +74,11 @@ export async function connectStdioTransport(server: McpServer, context: Record<s
   } catch (err) {
     // Catch and handle any critical errors during the transport connection setup.
     // Mark as critical because the server cannot function without a connected transport.
-    ErrorHandler.handleError(err, { ...operationContext, critical: true });
+    ErrorHandler.handleError(err, {
+      operation: operationContext.operation as string, // Ensure operation is explicitly passed
+      context: operationContext, // Pass the full context
+      critical: true
+    });
     // Rethrow the error to signal the failure to the calling code (e.g., the main server startup).
     throw err;
   }

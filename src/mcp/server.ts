@@ -17,10 +17,15 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 // Import validated configuration and environment details.
 import { config, environment } from '../config/index.js';
 // Import core utilities: ErrorHandler, logger, requestContextService.
-import { ErrorHandler, logger, requestContextService } from '../utils/index.js'; // Corrected path
 import { initializeNeo4jSchema } from '../services/neo4j/index.js'; // Corrected path
+import { ErrorHandler, logger, requestContextService } from '../utils/index.js'; // Corrected path
 
 // Import tool registrations
+import { registerAtlasDatabaseCleanTool } from './tools/atlas_database_clean/index.js';
+import { registerAtlasDeepResearchTool } from './tools/atlas_deep_research/index.js';
+import { registerAtlasKnowledgeAddTool } from './tools/atlas_knowledge_add/index.js';
+import { registerAtlasKnowledgeDeleteTool } from './tools/atlas_knowledge_delete/index.js';
+import { registerAtlasKnowledgeListTool } from './tools/atlas_knowledge_list/index.js';
 import { registerAtlasProjectCreateTool } from './tools/atlas_project_create/index.js';
 import { registerAtlasProjectDeleteTool } from './tools/atlas_project_delete/index.js';
 import { registerAtlasProjectListTool } from './tools/atlas_project_list/index.js';
@@ -29,12 +34,7 @@ import { registerAtlasTaskCreateTool } from './tools/atlas_task_create/index.js'
 import { registerAtlasTaskDeleteTool } from './tools/atlas_task_delete/index.js';
 import { registerAtlasTaskListTool } from './tools/atlas_task_list/index.js';
 import { registerAtlasTaskUpdateTool } from './tools/atlas_task_update/index.js';
-import { registerAtlasDatabaseCleanTool } from './tools/atlas_database_clean/index.js';
-import { registerAtlasKnowledgeAddTool } from './tools/atlas_knowledge_add/index.js';
-import { registerAtlasKnowledgeDeleteTool } from './tools/atlas_knowledge_delete/index.js';
-import { registerAtlasKnowledgeListTool } from './tools/atlas_knowledge_list/index.js';
 import { registerAtlasUnifiedSearchTool } from './tools/atlas_unified_search/index.js';
-import { registerAtlasDeepResearchTool } from './tools/atlas_deep_research/index.js';
 
 // Import resource registrations
 import { registerMcpResources } from './resources/index.js'; // Adjusted path
@@ -51,7 +51,9 @@ import { connectStdioTransport } from './transports/stdioTransport.js';
  * as presented to connecting clients during the MCP initialization phase.
  */
 async function createMcpServerInstance(): Promise<McpServer> {
-  const context = { operation: 'createMcpServerInstance' };
+  const context = requestContextService.createRequestContext({
+    operation: 'createMcpServerInstance',
+  });
   logger.info('Initializing MCP server instance for ATLAS MCP Server', context);
 
   // Configure the request context service (used for correlating logs/errors).
@@ -148,24 +150,27 @@ async function createMcpServerInstance(): Promise<McpServer> {
  */
 async function startTransport(): Promise<McpServer | void> {
   const transportType = config.mcpTransportType;
-  const context = { operation: 'startTransport', transport: transportType };
-  logger.info(`Starting transport for ATLAS MCP Server: ${transportType}`, context);
+  const parentContext = requestContextService.createRequestContext({
+    operation: 'startTransport',
+    transport: transportType,
+  });
+  logger.info(`Starting transport for ATLAS MCP Server: ${transportType}`, parentContext);
 
   if (transportType === 'http') {
-    logger.debug('Delegating to startHttpTransport for ATLAS MCP Server...', context);
-    await startHttpTransport(createMcpServerInstance, context);
+    logger.debug('Delegating to startHttpTransport for ATLAS MCP Server...', parentContext);
+    await startHttpTransport(createMcpServerInstance, parentContext);
     return;
   }
 
   if (transportType === 'stdio') {
-    logger.debug('Creating single McpServer instance for stdio transport (ATLAS MCP Server)...', context);
+    logger.debug('Creating single McpServer instance for stdio transport (ATLAS MCP Server)...', parentContext);
     const server = await createMcpServerInstance();
-    logger.debug('Delegating to connectStdioTransport for ATLAS MCP Server...', context);
-    await connectStdioTransport(server, context);
+    logger.debug('Delegating to connectStdioTransport for ATLAS MCP Server...', parentContext);
+    await connectStdioTransport(server, parentContext);
     return server;
   }
 
-  logger.fatal(`Unsupported transport type configured for ATLAS MCP Server: ${transportType}`, context);
+  logger.fatal(`Unsupported transport type configured for ATLAS MCP Server: ${transportType}`, parentContext);
   throw new Error(`Unsupported transport type: ${transportType}. Must be 'stdio' or 'http'.`);
 }
 
@@ -173,7 +178,9 @@ async function startTransport(): Promise<McpServer | void> {
  * Main application entry point. Initializes and starts the MCP server.
  */
 export async function initializeAndStartServer(): Promise<void | McpServer> {
-  const context = { operation: 'initializeAndStartServer' };
+  const context = requestContextService.createRequestContext({
+    operation: 'initializeAndStartServer',
+  });
   logger.info('ATLAS MCP Server initialization sequence started.', context);
   try {
     const result = await startTransport();
@@ -185,7 +192,11 @@ export async function initializeAndStartServer(): Promise<void | McpServer> {
       error: err instanceof Error ? err.message : String(err),
       stack: err instanceof Error ? err.stack : undefined,
     });
-    ErrorHandler.handleError(err, { ...context, critical: true });
+    ErrorHandler.handleError(err, {
+      operation: 'initializeAndStartServer', // More specific operation
+      context: context, // Pass the existing context
+      critical: true, // This is a critical failure
+    });
     logger.info('Exiting process due to critical initialization error (ATLAS MCP Server).', context);
     process.exit(1);
   }
