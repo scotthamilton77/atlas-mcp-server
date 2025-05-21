@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.4] - 2025-05-21
+
+### Added
+
+- Enhanced Web UI with new features:
+  - **Task Flow Visualization**: Integrated Mermaid.js to display task dependencies as a flow chart.
+  - **View Toggles**: Added "Compact View" and "Detailed View" toggles for Tasks and Knowledge sections.
+  - **Improved Accessibility**: Enhanced HTML structure with ARIA attributes.
+
+### Changed
+
+- **Web UI Overhaul**:
+  - Refactored `src/webui/script.js` into modular components (`config`, `dom`, `state`, `utils`, `apiService`, `renderService`, `eventHandlers`) for better maintainability and readability.
+  - Redesigned `src/webui/style.css` for a modern minimalist aesthetic, including full dark mode support, improved responsiveness, and refined data presentation.
+  - Updated `src/webui/index.html` with new structural elements, Mermaid.js CDN, and accessibility improvements.
+- **Documentation**: Updated `docs/tree.md` to reflect the latest directory structure and generation date.
+- **Version Bump**: Updated project version to `2.8.4` in `package.json` and `README.md`.
+
 ## [2.8.3] - 2025-05-20
 
 ### Added
