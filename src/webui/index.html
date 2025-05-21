@@ -5,56 +5,82 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Atlas Projects Live View</title>
     <link rel="stylesheet" href="style.css">
+    <!-- Mermaid JS CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@latest/dist/mermaid.min.js"></script>
 </head>
 <body>
     <div id="app">
-        <div class="theme-switch-wrapper">
-            <label class="theme-switch" for="theme-checkbox">
-                <input type="checkbox" id="theme-checkbox" />
-                <div class="slider round"></div>
-            </label>
-        </div>
+        <header class="app-header">
+            <div class="theme-switch-wrapper">
+                <label class="theme-switch" for="theme-checkbox" aria-label="Toggle color theme">
+                    <input type="checkbox" id="theme-checkbox" />
+                    <div class="slider round"></div>
+                </label>
+                <span class="theme-label" id="theme-label-text">Toggle Theme</span>
+            </div>
+            <h1>Atlas Projects Live View</h1>
+        </header>
 
-        <h1>Atlas Projects Live View</h1>
-        
-        <div class="controls-container">
-            <label for="project-select">Select a Project:</label>
-            <select id="project-select">
-                <option value="">Loading projects...</option>
-            </select>
-            <button id="refresh-button">Refresh Projects</button>
-        </div>
+        <main>
+            <section class="controls-section" aria-labelledby="controls-heading">
+                <h2 id="controls-heading" class="visually-hidden">Project Controls</h2>
+                <div class="controls-container">
+                    <label for="project-select">Select a Project:</label>
+                    <select id="project-select" aria-label="Select a project to view its details">
+                        <option value="">Loading projects...</option>
+                    </select>
+                    <button id="refresh-button" type="button">Refresh Projects</button>
+                </div>
+            </section>
 
-        <div id="project-details-container" class="data-section hidden">
-            <h2>Project Details</h2>
-            <div id="details-content"></div>
-        </div>
+            <section id="project-details-container" class="data-section hidden" aria-labelledby="project-details-heading">
+                <h2 id="project-details-heading">Project Details</h2>
+                <div id="details-content" class="details-grid"></div>
+            </section>
 
-        <div id="tasks-container" class="data-section hidden">
-            <h3>Tasks</h3>
-            <div id="tasks-content"></div>
-        </div>
+            <section id="tasks-container" class="data-section hidden" aria-labelledby="tasks-heading">
+                <div class="section-header">
+                    <h3 id="tasks-heading">Tasks</h3>
+                    <div class="view-controls">
+                        <button class="view-toggle-button" id="task-view-mode-toggle" type="button" aria-pressed="false" aria-controls="tasks-content">Compact View</button>
+                        <button class="view-toggle-button" id="task-flow-toggle" type="button" aria-pressed="false" aria-controls="task-flow-container tasks-content">View Task Flow</button>
+                    </div>
+                </div>
+                <div id="tasks-content" role="region" aria-live="polite"></div>
+                <div id="task-flow-container" class="hidden mermaid-container" role="region" aria-live="polite">
+                    <!-- Mermaid chart will be rendered here -->
+                </div>
+            </section>
 
-        <div id="knowledge-container" class="data-section hidden">
-            <h3>Knowledge Items</h3>
-            <div id="knowledge-content"></div>
-        </div>
+            <section id="knowledge-container" class="data-section hidden" aria-labelledby="knowledge-heading">
+                <div class="section-header">
+                    <h3 id="knowledge-heading">Knowledge Items</h3>
+                    <div class="view-controls">
+                        <button class="view-toggle-button" id="knowledge-view-mode-toggle" type="button" aria-pressed="false" aria-controls="knowledge-content">Compact View</button>
+                    </div>
+                </div>
+                <div id="knowledge-content" role="region" aria-live="polite"></div>
+            </section>
+        </main>
 
-        <div id="error-message" class="error hidden"></div> <!-- Initially hidden -->
-        <div id="connection-status">
-            Connection Status: <span id="neo4j-status">Not Connected</span>
-        </div>
+        <footer class="app-footer">
+            <div id="error-message" class="error hidden" role="alert" aria-live="assertive"></div>
+            <div id="connection-status">
+                Connection Status: <span id="neo4j-status">Not Connected</span>
+            </div>
+        </footer>
     </div>
 
     <!-- Neo4j Browser Driver via CDN -->
     <script src="https://unpkg.com/neo4j-driver@5/lib/browser/neo4j-web.min.js"></script>
     
     <!-- 
-        Optional: User can manually provide credentials here if not using prompt
+        Optional: User can manually provide credentials here if not included in prompt
+        These will be overridden by script.js if window.NEO4J_... variables are already set there.
         <script>
-            window.NEO4J_URI = "bolt://localhost:7687";
-            window.NEO4J_USER = "neo4j";
-            window.NEO4J_PASSWORD = "password";
+            // window.NEO4J_URI = "bolt://localhost:7687";
+            // window.NEO4J_USER = "neo4j";
+            // window.NEO4J_PASSWORD = "password2";
         </script> 
     -->
     <script src="script.js"></script>

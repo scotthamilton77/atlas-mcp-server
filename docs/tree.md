@@ -1,6 +1,6 @@
 # atlas-mcp-server - Directory Structure
 
-Generated on: 2025-05-20 05:34:28
+Generated on: 2025-05-21 20:21:54
 
 
 ```
@@ -17,7 +17,8 @@ atlas-mcp-server
     │   ├── covington_community_grant_research.md
     │   └── full-export.json
     ├── .DS_Store
-    └── README.md
+    ├── README.md
+    └── webui-example.png
 ├── scripts
     ├── clean.ts
     ├── db-backup.ts
@@ -117,7 +118,7 @@ atlas-mcp-server
     │   ├── .DS_Store
     │   └── server.ts
     ├── services
-    │   └── neo4j
+    │   ├── neo4j
     │   │   ├── backupRestoreService.ts
     │   │   ├── driver.ts
     │   │   ├── events.ts
@@ -129,6 +130,7 @@ atlas-mcp-server
     │   │   ├── taskService.ts
     │   │   ├── types.ts
     │   │   └── utils.ts
+    │   └── .DS_Store
     ├── types
     │   ├── errors.ts
     │   ├── mcp.ts

@@ -1,166 +1,350 @@
+/* ==========================================================================
+   Global Variables & Theme Setup
+   ========================================================================== */
 :root {
-    /* Light Mode (Default) */
-    --bg-color: #f8f9fa;
-    --text-color: #212529;
-    --primary-color: #007bff;
+    /* Light Mode (Default) - Modern Minimalist */
+    --bg-color: #f4f7f9; /* Lighter, softer background */
+    --text-color: #333; /* Dark grey for text, not pure black */
+    --primary-color: #007bff; /* Standard blue accent */
     --primary-hover-color: #0056b3;
-    --secondary-text-color: #6c757d;
-    --border-color: #dee2e6;
+    --secondary-text-color: #555; /* Slightly darker secondary text */
+    --border-color: #e0e0e0; /* Softer borders */
     --card-bg-color: #ffffff;
-    --shadow-color: rgba(0, 0, 0, 0.1);
-    --error-color: #dc3545;
-    --error-bg-color: #f8d7da;
-    --error-border-color: #f5c6cb;
-    --success-color: #28a745;
-    --warning-color: #ffc107; /* For text */
-    --warning-bg-color: #fff3cd; /* For background */
-    --code-bg-color: #e9ecef;
-    --code-border-color: #e0e0e0;
-    --connection-status-bg: #e9ecef;
-    --data-section-bg: #fdfdfd;
-    --data-item-border-color: #f0f0f0;
+    --shadow-color: rgba(0, 0, 0, 0.05); /* Softer shadow */
+    --error-color: #d9534f;
+    --error-bg-color: #fdf7f7;
+    --error-border-color: #f0c9c8;
+    --success-color: #5cb85c;
+    --warning-color: #f0ad4e;
+    --warning-bg-color: #fcf8e3; /* For backgrounds if needed */
+    --code-bg-color: #f9f9f9; /* Very light grey for code blocks */
+    --code-border-color: #efefef;
+    --connection-status-bg: #efefef;
+    --data-section-bg: var(--card-bg-color); /* Sections same as card for minimalism */
+    --data-item-border-color: #eaeaea; /* Softer item border */
+    --button-text-color: #ffffff;
+    --button-secondary-bg: #6c757d;
+    --button-secondary-hover-bg: #5a6268;
 
-    --font-family-sans-serif: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-family-sans-serif: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     --font-family-monospace: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+    --border-radius-sm: 4px;
+    --border-radius-md: 8px;
+    --border-radius-lg: 12px;
+
+    --spacing-xs: 4px;
+    --spacing-sm: 8px;
+    --spacing-md: 16px;
+    --spacing-lg: 24px;
+    --spacing-xl: 32px;
 }
 
 .dark-mode {
-    --bg-color: #1a1a1a; /* Darker background */
-    --text-color: #e0e0e0; /* Lighter text */
-    --primary-color: #007bff; /* Keep primary or adjust if needed */
-    --primary-hover-color: #0056b3;
-    --secondary-text-color: #adb5bd; /* Lighter secondary text */
-    --border-color: #495057; /* Darker borders */
-    --card-bg-color: #2c2c2c; /* Darker card background */
-    --shadow-color: rgba(255, 255, 255, 0.05); /* Lighter shadow for dark mode */
-    --error-color: #f8d7da; /* Lighter error text for dark bg */
-    --error-bg-color: #58151c; /* Darker error background */
-    --error-border-color: #842029;
-    --success-color: #28a745; /* Keep or adjust */
-    --warning-color: #ffc107;
-    --warning-bg-color: #664d03;
-    --code-bg-color: #343a40; /* Darker code background */
-    --code-border-color: #495057;
-    --connection-status-bg: #343a40;
-    --data-section-bg: #252525;
-    --data-item-border-color: #404040;
+    --bg-color: #121212; /* Very dark background */
+    --text-color: #e0e0e0;
+    /* --primary-color: #007bff; /* Can adjust for dark mode if needed, e.g., a lighter blue */
+    /* --primary-hover-color: #0056b3; */
+    --secondary-text-color: #aaa;
+    --border-color: #333; /* Darker, subtle borders */
+    --card-bg-color: #1e1e1e; /* Dark card background */
+    --shadow-color: rgba(255, 255, 255, 0.03); /* Very subtle light shadow */
+    --error-color: #e77773;
+    --error-bg-color: #3d2727;
+    --error-border-color: #5c4040;
+    --success-color: #7bc77b;
+    --warning-color: #f5c76e;
+    --warning-bg-color: #4a412a; /* For backgrounds if needed */
+    --code-bg-color: #282828;
+    --code-border-color: #383838;
+    --connection-status-bg: #282828;
+    --data-section-bg: var(--card-bg-color);
+    --data-item-border-color: #333;
+    /* --button-text-color: #ffffff; */ /* Usually remains white */
+    --button-secondary-bg: #495057;
+    --button-secondary-hover-bg: #343a40;
 }
 
-
+/* ==========================================================================
+   Base Styles
+   ========================================================================== */
 body {
     font-family: var(--font-family-sans-serif);
     margin: 0;
     background-color: var(--bg-color);
     color: var(--text-color);
-    line-height: 1.6;
-    transition: background-color 0.3s ease, color 0.3s ease; /* Smooth transition */
+    line-height: 1.65;
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    transition: background-color 0.2s ease-out, color 0.2s ease-out;
 }
 
+/* Visually hidden class for accessibility */
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+
+/* ==========================================================================
+   Main Application Layout (#app, header, main, footer)
+   ========================================================================== */
 #app {
-    position: relative; /* For positioning the theme toggle */
-    max-width: 900px;
-    margin: 40px auto;
-    padding: 30px;
+    position: relative; /* For theme toggle positioning */
+    max-width: 1000px;
+    margin: var(--spacing-xl) auto;
+    padding: var(--spacing-lg) var(--spacing-xl);
     background-color: var(--card-bg-color);
-    transition: background-color 0.3s ease;
-    border-radius: 12px;
-    box-shadow: 0 4px 12px var(--shadow-color);
+    border-radius: var(--border-radius-lg);
+    box-shadow: 0 8px 24px var(--shadow-color);
+    transition: background-color 0.2s ease-out;
 }
 
+.app-header {
+    margin-bottom: var(--spacing-xl);
+}
+
+.app-footer {
+    margin-top: var(--spacing-xl);
+    padding-top: var(--spacing-lg);
+    border-top: 1px solid var(--border-color);
+}
+
+/* ==========================================================================
+   Typography
+   ========================================================================== */
 h1, h2, h3 {
-    color: var(--text-color); /* Will inherit from body or .dark-mode */
+    color: var(--text-color);
     margin-top: 0;
+    font-weight: 600; /* Semi-bold for headings */
 }
 
 h1 {
-    font-size: 2rem;
-    margin-bottom: 1.5rem;
+    font-size: 2.25rem; /* 36px */
+    margin-bottom: var(--spacing-lg);
     text-align: center;
-    color: var(--primary-color); /* Primary color for main heading */
+    color: var(--primary-color);
+    font-weight: 700; /* Bold for main title */
 }
 
-h2 {
-    font-size: 1.5rem;
-    margin-bottom: 1rem;
-    border-bottom: 2px solid var(--primary-color); /* Use primary color for accent */
-    padding-bottom: 0.5rem;
+h2 { /* Section titles like "Project Details" */
+    font-size: 1.75rem; /* 28px */
+    margin-bottom: var(--spacing-md);
+    padding-bottom: var(--spacing-sm);
+    border-bottom: 1px solid var(--border-color); /* Softer underline */
 }
 
-h3 {
-    font-size: 1.25rem;
-    margin-bottom: 0.75rem;
-    color: var(--secondary-text-color); /* Uses themed secondary text color */
+h3 { /* Sub-section titles like "Tasks", "Knowledge Items" */
+    font-size: 1.375rem; /* 22px */
+    margin-bottom: var(--spacing-md);
+    color: var(--text-color);
 }
 
 label {
     display: block;
-    margin-bottom: 0.5rem;
-    font-weight: bold;
-    color: var(--secondary-text-color); /* Uses themed secondary text color */
+    margin-bottom: var(--spacing-sm);
+    font-weight: 500; /* Medium weight */
+    color: var(--secondary-text-color);
+    font-size: 0.9rem;
+}
+
+p {
+    margin-bottom: var(--spacing-md);
+}
+
+a {
+    color: var(--primary-color);
+    text-decoration: none;
+    transition: color 0.2s ease-out;
+}
+
+a:hover, a:focus {
+    color: var(--primary-hover-color);
+    text-decoration: underline;
+    outline: none; /* Handled by box-shadow on focus for interactive elements */
+}
+
+pre { /* General preformatted text styling */
+    background-color: var(--code-bg-color);
+    color: var(--text-color);
+    padding: var(--spacing-sm);
+    border-radius: var(--border-radius-sm);
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-family: var(--font-family-monospace);
+    font-size: 0.9rem;
+    border: 1px solid var(--code-border-color);
+    max-height: 250px;
+    overflow-y: auto;
+    margin-top: var(--spacing-xs);
+    transition: background-color 0.2s ease-out, border-color 0.2s ease-out, color 0.2s ease-out;
+}
+
+/* ==========================================================================
+   Controls Section (Project Select, Refresh Button)
+   ========================================================================== */
+.controls-section {
+    margin-bottom: var(--spacing-xl);
+}
+.controls-container {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    flex-wrap: wrap;
+}
+
+.controls-container label {
+    margin-bottom: 0; /* Align with controls */
+    flex-shrink: 0; /* Prevent label from shrinking */
 }
 
 select,
 button {
-    padding: 12px 15px;
-    margin-bottom: 20px;
-    border-radius: 6px;
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-radius: var(--border-radius-md);
     border: 1px solid var(--border-color);
     font-size: 1rem;
-    transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, color 0.2s ease-in-out;
-    background-color: var(--card-bg-color); /* Match card or slightly different */
+    background-color: var(--card-bg-color); /* Match card for consistency */
     color: var(--text-color);
+    transition: background-color 0.15s ease-out, border-color 0.15s ease-out, box-shadow 0.15s ease-out;
 }
 
+select:focus,
+button:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25); /* Standard Bootstrap-like focus ring */
+}
+/* For dark mode, ensure focus ring is visible */
+.dark-mode select:focus,
+.dark-mode button:focus {
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.35);
+}
+
+
 select {
-    width: 100%;
-    max-width: 400px; /* Or adjust as needed */
-    margin-right: 10px; /* Space between select and button if inline */
+    flex-grow: 1;
+    min-width: 200px; /* Ensure select has a minimum width */
 }
 
 button {
     background-color: var(--primary-color);
-    color: var(--card-bg-color); /* Text color for buttons, ensure contrast */
+    color: var(--button-text-color);
     cursor: pointer;
+    font-weight: 500;
     border-color: var(--primary-color);
 }
 
 button:hover {
     background-color: var(--primary-hover-color);
     border-color: var(--primary-hover-color);
-    box-shadow: 0 2px 4px var(--shadow-color); /* Use themed shadow */
 }
 
-.controls-container {
-    display: flex;
-    align-items: center;
-    margin-bottom: 20px;
-    flex-wrap: wrap; /* Allow wrapping on smaller screens */
+button#refresh-button {
+    background-color: var(--button-secondary-bg);
+    border-color: var(--button-secondary-bg);
+    color: var(--button-text-color);
+}
+button#refresh-button:hover {
+    background-color: var(--button-secondary-hover-bg);
+    border-color: var(--button-secondary-hover-bg);
 }
 
-.controls-container label {
-    margin-right: 10px;
-    margin-bottom: 0; /* Adjust if label is on its own line */
-}
-
-.controls-container select {
-    flex-grow: 1; /* Allow select to take available space */
-    margin-bottom: 0; /* If on same line as button */
-}
-
-.data-section { /* Replaces .project-details, .tasks-list, .knowledge-list */
-    margin-top: 25px;
-    padding: 20px;
+/* ==========================================================================
+   Data Sections (Project Details, Tasks, Knowledge)
+   ========================================================================== */
+.data-section {
+    margin-top: var(--spacing-xl);
+    padding: var(--spacing-lg);
     border: 1px solid var(--border-color);
-    border-radius: 8px;
-    background-color: var(--data-section-bg); /* Themed background */
-    transition: background-color 0.3s ease, border-color 0.3s ease;
+    border-radius: var(--border-radius-md);
+    background-color: var(--data-section-bg);
+    transition: background-color 0.2s ease-out, border-color 0.2s ease-out;
 }
 
-.data-item { /* Replaces .project-details div, .task-item, .knowledge-item */
-    margin-bottom: 15px;
-    padding-bottom: 15px;
-    border-bottom: 1px solid var(--data-item-border-color); /* Themed border */
-    transition: border-color 0.3s ease;
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-md);
+    flex-wrap: wrap; /* Allow wrapping for view controls */
+    gap: var(--spacing-md);
+}
+
+.section-header h3 {
+    margin-bottom: 0; /* Remove bottom margin as it's handled by section-header */
+}
+
+.view-controls {
+    display: flex;
+    gap: var(--spacing-sm);
+}
+
+.view-controls .view-toggle-button {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    font-size: 0.85rem;
+    background-color: transparent;
+    color: var(--primary-color);
+    border: 1px solid var(--primary-color);
+}
+.view-controls .view-toggle-button:hover,
+.view-controls .view-toggle-button:focus {
+    background-color: rgba(0, 123, 255, 0.1); /* Use primary color with alpha for hover */
+}
+.dark-mode .view-controls .view-toggle-button:hover,
+.dark-mode .view-controls .view-toggle-button:focus {
+    background-color: rgba(0, 123, 255, 0.2); /* Slightly more opaque for dark mode */
+}
+
+
+/* Project Details Grid Specifics */
+#details-content.details-grid {
+    display: grid;
+    grid-template-columns: auto 1fr; /* Label and value */
+    gap: var(--spacing-sm) var(--spacing-md);
+    align-items: start; /* Align items to the start of their grid cell */
+}
+
+#details-content.details-grid > .data-item {
+    display: contents; /* Allow children (strong, div/pre/ul) to participate in the grid */
+}
+
+#details-content.details-grid > .data-item > strong { /* Label */
+    font-weight: 500;
+    color: var(--secondary-text-color);
+    padding-top: var(--spacing-xs); /* Align with multi-line values better */
+    grid-column: 1;
+}
+#details-content.details-grid > .data-item > div,
+#details-content.details-grid > .data-item > pre,
+#details-content.details-grid > .data-item > ul { /* Value */
+    grid-column: 2;
+    margin-bottom: 0; /* Remove default margin from these elements when in grid */
+}
+#details-content.details-grid > .data-item > ul {
+    list-style-position: outside; /* More standard list appearance */
+    padding-left: var(--spacing-md); /* Indent list items */
+    margin-top: 0;
+}
+#details-content.details-grid > .data-item > ul li {
+    margin-bottom: var(--spacing-xs);
+}
+
+
+/* General Data Items (Used for Tasks, Knowledge in non-grid layout) */
+.data-item {
+    padding-bottom: var(--spacing-md);
+    margin-bottom: var(--spacing-md);
+    border-bottom: 1px solid var(--data-item-border-color);
+    transition: border-color 0.2s ease-out;
 }
 
 .data-item:last-child {
@@ -169,147 +353,209 @@ button:hover {
     padding-bottom: 0;
 }
 
-.data-item strong {
-    color: var(--text-color); /* Stronger emphasis, themed */
-    min-width: 180px; /* Align keys in details view */
-    display: inline-block;
+.data-item strong { /* Used in task/knowledge titles */
+    color: var(--text-color);
+    font-weight: 600;
+    display: block; /* Make title take full width */
+    margin-bottom: var(--spacing-xs);
 }
 
-.data-item div { /* For project details layout */
-    margin-bottom: 8px;
+.data-item div { /* General content div within a data item */
+    margin-bottom: var(--spacing-xs);
 }
 
-pre {
-    background-color: var(--code-bg-color); /* Themed */
-    color: var(--text-color); /* Ensure text in pre is also themed */
-    padding: 12px;
-    border-radius: 6px;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-    font-family: var(--font-family-monospace);
-    font-size: 0.9rem;
-    border: 1px solid var(--code-border-color); /* Themed */
-    max-height: 200px; /* Limit height and make scrollable */
-    overflow-y: auto;
-    transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+
+/* Compact View for Tasks/Knowledge */
+.data-item.compact {
+    padding: var(--spacing-sm) 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.data-item.compact strong {
+    margin-bottom: 0;
+    font-weight: 500;
+}
+.data-item.compact .item-status {
+    font-size: 0.85rem;
+    color: var(--secondary-text-color);
+    background-color: var(--code-bg-color);
+    padding: 2px 6px;
+    border-radius: var(--border-radius-sm);
+}
+/* Hide detailed elements in compact mode */
+.data-item.compact pre, 
+.data-item.compact div:not(:first-child), /* Hides divs other than the one containing the title/status */
+.data-item.compact ul {
+    display: none;
 }
 
-.error {
-    color: var(--error-color); /* Themed text */
-    font-weight: bold;
-    padding: 10px;
-    background-color: var(--error-bg-color); /* Themed background */
-    border: 1px solid var(--error-border-color); /* Themed border */
-    border-radius: 4px;
-    margin-top: 15px;
-    transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+
+/* ==========================================================================
+   Mermaid Diagram Container
+   ========================================================================== */
+.mermaid-container {
+    width: 100%;
+    min-height: 300px; /* Adjust as needed */
+    overflow: auto; /* For larger diagrams */
+    margin-top: var(--spacing-md);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-md);
+    padding: var(--spacing-md);
+    background-color: var(--card-bg-color); /* Match card background for consistency */
+    box-sizing: border-box; /* Ensure padding and border are included in width/height */
+}
+.mermaid-container svg {
+    display: block; /* Remove extra space below SVG */
+    margin: auto; /* Center if smaller than container */
+    max-width: 100%; /* Ensure SVG scales down if too wide */
 }
 
-.loading {
+
+/* ==========================================================================
+   Status, Error, Loading Messages
+   ========================================================================== */
+.error { /* For #error-message div */
+    color: var(--error-color);
+    font-weight: 500;
+    padding: var(--spacing-sm) var(--spacing-md);
+    background-color: var(--error-bg-color);
+    border: 1px solid var(--error-border-color);
+    border-radius: var(--border-radius-sm);
+    margin-top: var(--spacing-md);
+    transition: background-color 0.2s ease-out, border-color 0.2s ease-out, color 0.2s ease-out;
+}
+
+.loading { /* For loading text within containers */
     font-style: italic;
-    color: var(--secondary-text-color); /* Themed */
-    padding: 10px 0;
+    color: var(--secondary-text-color);
+    padding: var(--spacing-md) 0;
+    text-align: center;
 }
 
 #connection-status {
-    margin-top: 25px;
-    padding: 12px;
-    background-color: var(--connection-status-bg); /* Themed */
-    border-radius: 6px;
+    margin-top: var(--spacing-lg); /* Ensure it's below error message if both visible */
+    padding: var(--spacing-sm) var(--spacing-md);
+    background-color: var(--connection-status-bg);
+    border-radius: var(--border-radius-sm);
     text-align: center;
     font-weight: 500;
-    color: var(--text-color); /* Ensure text is themed */
-    transition: background-color 0.3s ease, color 0.3s ease;
+    color: var(--text-color);
+    transition: background-color 0.2s ease-out, color 0.2s ease-out;
+}
+#connection-status span { /* The actual status text, e.g., "Connected" */
+    font-weight: 600;
 }
 
-#connection-status span {
-    font-weight: bold;
-    /* Color for span set in JS based on status */
-}
-
-/* Utility classes */
+/* ==========================================================================
+   Utility Classes
+   ========================================================================== */
 .hidden {
-    display: none !important; /* Ensure it overrides other display properties */
+    display: none !important;
 }
 
-
-/* Theme Toggle Button */
+/* ==========================================================================
+   Theme Toggle Switch
+   ========================================================================== */
 .theme-switch-wrapper {
     display: flex;
     align-items: center;
     position: absolute;
-    top: 20px;
-    right: 20px;
+    top: var(--spacing-md);
+    right: var(--spacing-md);
+    gap: var(--spacing-sm);
 }
-
-.theme-switch {
-    display: inline-block;
-    height: 24px; /* Adjusted height */
-    position: relative;
-    width: 50px; /* Adjusted width */
-}
-
-.theme-switch input {
-    display:none;
-}
-
-.slider {
-    background-color: #ccc;
-    bottom: 0;
+.theme-label {
+    font-size: 0.8rem;
+    color: var(--secondary-text-color);
     cursor: pointer;
-    left: 0;
-    position: absolute;
-    right: 0;
-    top: 0;
-    transition: .4s;
-    border-radius: 24px; /* Fully rounded */
 }
 
-.slider:before {
+.theme-switch { /* The label acting as a container */
+    display: inline-block;
+    height: 20px; /* Smaller toggle */
+    position: relative;
+    width: 40px; /* Smaller toggle */
+}
+.theme-switch input { display:none; } /* Hide actual checkbox */
+
+.slider { /* The visual track of the switch */
+    background-color: #ccc; /* Default off state */
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    transition: .3s;
+    border-radius: 20px; /* Fully rounded ends */
+}
+.slider:before { /* The circular handle */
     background-color: #fff;
-    bottom: 3px; /* Adjusted position */
-    content: "";
-    height: 18px; /* Adjusted size */
-    left: 3px; /* Adjusted position */
     position: absolute;
-    transition: .4s;
-    width: 18px; /* Adjusted size */
-    border-radius: 50%;
+    content: "";
+    height: 14px; /* Smaller handle */
+    width: 14px;  /* Smaller handle */
+    left: 3px;    /* Padding from left edge */
+    bottom: 3px;  /* Padding from bottom edge */
+    transition: .3s;
+    border-radius: 50%; /* Circular */
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
 }
 
-input:checked + .slider {
-    background-color: var(--primary-color);
-}
+input:checked + .slider { background-color: var(--primary-color); } /* "On" state color */
+input:checked + .slider:before { transform: translateX(20px); } /* Move handle to the right */
 
-input:checked + .slider:before {
-    transform: translateX(26px); /* Adjusted translation */
-}
-
-/* Responsive adjustments */
+/* ==========================================================================
+   Responsive Adjustments
+   ========================================================================== */
 @media (max-width: 768px) {
+    body { font-size: 15px; }
     #app {
-        margin: 20px;
-        padding: 20px;
+        margin: var(--spacing-md);
+        padding: var(--spacing-md);
     }
-
-    h1 {
-        font-size: 1.8rem;
-    }
+    h1 { font-size: 1.8rem; }
+    h2 { font-size: 1.5rem; }
+    h3 { font-size: 1.2rem; }
 
     .controls-container {
         flex-direction: column;
-        align-items: stretch;
+        align-items: stretch; /* Make controls full width */
     }
-
     .controls-container select,
     .controls-container button {
         width: 100%;
-        margin-right: 0;
-        margin-bottom: 15px;
+        margin-bottom: var(--spacing-sm); /* Consistent spacing when stacked */
+    }
+    .controls-container button:last-child {
+        margin-bottom: 0;
+    }
+
+    .section-header {
+        flex-direction: column;
+        align-items: flex-start; /* Align header content to the start */
+    }
+    .view-controls {
+        width: 100%;
+        justify-content: flex-start; /* Align toggles to start */
     }
 
     .theme-switch-wrapper {
-        top: 10px;
-        right: 10px;
+        top: var(--spacing-sm);
+        right: var(--spacing-sm);
+    }
+    .theme-label {
+        display: none; /* Hide "Toggle Theme" text on small screens to save space */
+    }
+
+    #details-content.details-grid {
+        grid-template-columns: 1fr; /* Stack labels and values */
+    }
+    #details-content.details-grid > .data-item > strong { /* Label */
+        margin-bottom: var(--spacing-xs); /* Space between label and value when stacked */
+        grid-column: 1; /* Ensure it stays in the first column */
+    }
+    #details-content.details-grid > .data-item > div,
+    #details-content.details-grid > .data-item > pre,
+    #details-content.details-grid > .data-item > ul { /* Value */
+        grid-column: 1; /* Ensure it stays in the first column */
     }
 }
