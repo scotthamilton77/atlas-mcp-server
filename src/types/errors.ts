@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { McpToolResponse, McpContent } from "./mcp.js";
+import { McpContent, McpToolResponse } from "./mcp.js";
 
 // Base error codes that all tools can use
 export enum BaseErrorCode {
@@ -8,7 +8,11 @@ export enum BaseErrorCode {
   VALIDATION_ERROR = "VALIDATION_ERROR",
   INTERNAL_ERROR = "INTERNAL_ERROR",
   NOT_FOUND = "NOT_FOUND",
-  PERMISSION_DENIED = "PERMISSION_DENIED", // Added permission denied error
+  PERMISSION_DENIED = "PERMISSION_DENIED",
+  SERVICE_UNAVAILABLE = "SERVICE_UNAVAILABLE",
+  CONFIGURATION_ERROR = "CONFIGURATION_ERROR",
+  INITIALIZATION_FAILED = "INITIALIZATION_FAILED",
+  FORBIDDEN = "FORBIDDEN",
 }
 
 // Project-specific error codes

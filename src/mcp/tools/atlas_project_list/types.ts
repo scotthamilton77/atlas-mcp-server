@@ -30,9 +30,10 @@ export interface ProjectListRequest {
   status?:
     | "active"
     | "pending"
+    | "in-progress"
     | "completed"
     | "archived"
-    | ("active" | "pending" | "completed" | "archived")[];
+    | ("active" | "pending" | "in-progress" | "completed" | "archived")[];
 }
 
 /**

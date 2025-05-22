@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   ProjectStatus,
   ResponseFormat,
+  createProjectStatusEnum, // Import the enum helper
   createResponseFormatEnum,
   createToolResponse,
 } from "../../../types/mcp.js";
@@ -76,8 +77,8 @@ export function registerAtlasProjectListTool(server: McpServer): void {
         .describe("Filter results by project classification or category type"),
       status: z
         .union([
-          z.enum(["active", "pending", "completed", "archived"]),
-          z.array(z.enum(["active", "pending", "completed", "archived"])),
+          createProjectStatusEnum(), // Use the enum helper
+          z.array(createProjectStatusEnum()), // Use the enum helper for arrays too
         ])
         .optional()
         .describe("Filter results by project status or multiple statuses"),
