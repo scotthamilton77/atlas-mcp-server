@@ -1,14 +1,14 @@
-import { EventEmitter } from 'events';
-import { logger, requestContextService } from '../../utils/index.js'; // Updated import path
+import { EventEmitter } from "events";
+import { logger, requestContextService } from "../../utils/index.js"; // Updated import path
 
 /**
  * Event types for database operations
  */
 export enum DatabaseEventType {
-  WRITE_OPERATION = 'write_operation',
-  READ_OPERATION = 'read_operation',
-  TRANSACTION_COMPLETE = 'transaction_complete',
-  ERROR = 'error'
+  WRITE_OPERATION = "write_operation",
+  READ_OPERATION = "read_operation",
+  TRANSACTION_COMPLETE = "transaction_complete",
+  ERROR = "error",
 }
 
 /**
@@ -23,17 +23,23 @@ class DatabaseEventSystem {
     this.emitter = new EventEmitter();
     // Set a higher limit for listeners to avoid warnings
     this.emitter.setMaxListeners(20);
-    
+
     // Log all events in debug mode
-    if (process.env.NODE_ENV === 'development') {
+    if (process.env.NODE_ENV === "development") {
       this.emitter.on(DatabaseEventType.WRITE_OPERATION, (details) => {
-        const reqContext = requestContextService.createRequestContext({ operation: 'DatabaseEvent.WRITE_OPERATION', eventDetails: details });
-        logger.debug('Database write operation', reqContext);
+        const reqContext = requestContextService.createRequestContext({
+          operation: "DatabaseEvent.WRITE_OPERATION",
+          eventDetails: details,
+        });
+        logger.debug("Database write operation", reqContext);
       });
-      
+
       this.emitter.on(DatabaseEventType.ERROR, (error) => {
-        const reqContext = requestContextService.createRequestContext({ operation: 'DatabaseEvent.ERROR', eventError: error });
-        logger.debug('Database event error', reqContext);
+        const reqContext = requestContextService.createRequestContext({
+          operation: "DatabaseEvent.ERROR",
+          eventError: error,
+        });
+        logger.debug("Database event error", reqContext);
       });
     }
   }
@@ -53,7 +59,10 @@ class DatabaseEventSystem {
    * @param eventType Event type to subscribe to
    * @param listener Function to call when the event occurs
    */
-  public subscribe<T>(eventType: DatabaseEventType, listener: (data: T) => void): void {
+  public subscribe<T>(
+    eventType: DatabaseEventType,
+    listener: (data: T) => void,
+  ): void {
     this.emitter.on(eventType, listener);
   }
 
@@ -62,7 +71,10 @@ class DatabaseEventSystem {
    * @param eventType Event type to unsubscribe from
    * @param listener Function to remove
    */
-  public unsubscribe<T>(eventType: DatabaseEventType, listener: (data: T) => void): void {
+  public unsubscribe<T>(
+    eventType: DatabaseEventType,
+    listener: (data: T) => void,
+  ): void {
     this.emitter.off(eventType, listener);
   }
 
@@ -80,7 +92,10 @@ class DatabaseEventSystem {
    * @param eventType Event type to subscribe to
    * @param listener Function to call when the event occurs
    */
-  public subscribeOnce<T>(eventType: DatabaseEventType, listener: (data: T) => void): void {
+  public subscribeOnce<T>(
+    eventType: DatabaseEventType,
+    listener: (data: T) => void,
+  ): void {
     this.emitter.once(eventType, listener);
   }
 }

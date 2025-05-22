@@ -1,7 +1,7 @@
-import { randomUUID } from 'crypto';
-import neo4j from 'neo4j-driver'; // Import the neo4j driver
-import { NodeLabels } from './types.js'; // Import NodeLabels
-import { Neo4jUtils } from './utils.js'; // Import Neo4jUtils
+import { randomUUID } from "crypto";
+import neo4j from "neo4j-driver"; // Import the neo4j driver
+import { NodeLabels } from "./types.js"; // Import NodeLabels
+import { Neo4jUtils } from "./utils.js"; // Import Neo4jUtils
 
 /**
  * Helper functions for the Neo4j service
@@ -12,7 +12,7 @@ import { Neo4jUtils } from './utils.js'; // Import Neo4jUtils
  * @returns A unique string ID (without hyphens)
  */
 export function generateId(): string {
-  return randomUUID().replace(/-/g, '');
+  return randomUUID().replace(/-/g, "");
 }
 
 /**
@@ -38,25 +38,25 @@ export function generateTimestampedId(prefix?: string): string {
 export function buildUpdateQuery(
   nodeLabel: string, // Keep nodeLabel for potential future use or context
   identifier: string,
-  updates: Record<string, any>
+  updates: Record<string, any>,
 ): { setClauses: string[]; params: Record<string, any> } {
   const params: Record<string, any> = {};
   const setClauses: string[] = [];
-  
+
   // Add update timestamp automatically
   const now = new Date().toISOString();
   params.updatedAt = now;
   setClauses.push(`${identifier}.updatedAt = $updatedAt`);
-  
+
   // Add update clauses for each provided field in the updates object
   for (const [key, value] of Object.entries(updates)) {
     // Ensure we don't try to overwrite the id or createdAt
-    if (key !== 'id' && key !== 'createdAt' && value !== undefined) {
+    if (key !== "id" && key !== "createdAt" && value !== undefined) {
       params[key] = value;
       setClauses.push(`${identifier}.${key} = $${key}`);
     }
   }
-  
+
   return { setClauses, params };
 }
 
@@ -80,7 +80,7 @@ interface ListQueryFilterOptions {
  */
 interface ListQueryPaginationOptions {
   sortBy?: string;
-  sortDirection?: 'asc' | 'desc';
+  sortDirection?: "asc" | "desc";
   page?: number;
   limit?: number;
 }
@@ -96,7 +96,7 @@ interface ListQueryResult {
 
 /**
  * Builds dynamic Cypher queries for listing entities with filtering, sorting, and pagination.
- * 
+ *
  * @param label The primary node label (e.g., NodeLabels.Task, NodeLabels.Knowledge)
  * @param returnProperties An array of properties or expressions to return for the data query (e.g., ['t.id as id', 'u.name as userName'])
  * @param filters Filter options based on ListQueryFilterOptions
@@ -110,17 +110,17 @@ export function buildListQuery(
   returnProperties: string[],
   filters: ListQueryFilterOptions,
   pagination: ListQueryPaginationOptions,
-  nodeAlias: string = 'n',
-  additionalMatchClauses: string = ''
+  nodeAlias: string = "n",
+  additionalMatchClauses: string = "",
 ): ListQueryResult {
   const params: Record<string, any> = {};
   let conditions: string[] = [];
-  
+
   // --- Base MATCH Clause ---
   // projectId is handled directly in the MATCH for Task and Knowledge
-  let projectIdFilter = '';
+  let projectIdFilter = "";
   // Only add projectId filter if it's provided and not the wildcard '*'
-  if (filters.projectId && filters.projectId !== '*') { 
+  if (filters.projectId && filters.projectId !== "*") {
     projectIdFilter = `{projectId: $projectId}`;
     params.projectId = filters.projectId;
   }
@@ -136,31 +136,36 @@ export function buildListQuery(
     if (Array.isArray(filters.status) && filters.status.length > 0) {
       params.statusList = filters.status;
       conditions.push(`${nodeAlias}.status IN $statusList`);
-    } else if (typeof filters.status === 'string') {
+    } else if (typeof filters.status === "string") {
       params.status = filters.status;
       conditions.push(`${nodeAlias}.status = $status`);
     }
   }
   // Priority filter (assuming it applies to the primary node)
   if (filters.priority) {
-     if (Array.isArray(filters.priority) && filters.priority.length > 0) {
-       params.priorityList = filters.priority;
-       conditions.push(`${nodeAlias}.priority IN $priorityList`);
-     } else if (typeof filters.priority === 'string') {
-       params.priority = filters.priority;
-       conditions.push(`${nodeAlias}.priority = $priority`);
-     }
+    if (Array.isArray(filters.priority) && filters.priority.length > 0) {
+      params.priorityList = filters.priority;
+      conditions.push(`${nodeAlias}.priority IN $priorityList`);
+    } else if (typeof filters.priority === "string") {
+      params.priority = filters.priority;
+      conditions.push(`${nodeAlias}.priority = $priority`);
+    }
   }
   // TaskType filter (assuming it applies to the primary node)
-   if (filters.taskType) {
-     params.taskType = filters.taskType;
-     conditions.push(`${nodeAlias}.taskType = $taskType`);
-   }
+  if (filters.taskType) {
+    params.taskType = filters.taskType;
+    conditions.push(`${nodeAlias}.taskType = $taskType`);
+  }
   // Tags filter (using helper)
   if (filters.tags && filters.tags.length > 0) {
     // Ensure Neo4jUtils is accessible or import it if helpers.ts is separate
     // Assuming Neo4jUtils is available in scope or imported
-    const tagQuery = Neo4jUtils.generateArrayInListQuery(nodeAlias, 'tags', 'tagsList', filters.tags);
+    const tagQuery = Neo4jUtils.generateArrayInListQuery(
+      nodeAlias,
+      "tags",
+      "tagsList",
+      filters.tags,
+    );
     if (tagQuery.cypher) {
       conditions.push(tagQuery.cypher);
       Object.assign(params, tagQuery.params);
@@ -169,7 +174,7 @@ export function buildListQuery(
   // Text search filter (Knowledge specific, using regex for now)
   if (label === NodeLabels.Knowledge && filters.search) {
     // Use case-insensitive regex
-    params.search = `(?i).*${filters.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}.*`; 
+    params.search = `(?i).*${filters.search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}.*`;
     conditions.push(`${nodeAlias}.text =~ $search`);
     // TODO: Consider switching to full-text index search for performance:
     // conditions.push(`apoc.index.search('${NodeLabels.Knowledge}_fulltext', $search) YIELD node as ${nodeAlias}`);
@@ -177,11 +182,12 @@ export function buildListQuery(
   }
   // Domain filter is handled via additionalMatchClauses typically
 
-  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const whereClause =
+    conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
   // --- Sorting ---
-  const sortField = pagination.sortBy || 'createdAt'; // Default sort field
-  const sortDirection = pagination.sortDirection || 'desc'; // Default sort direction
+  const sortField = pagination.sortBy || "createdAt"; // Default sort field
+  const sortDirection = pagination.sortDirection || "desc"; // Default sort direction
   const orderByClause = `ORDER BY ${nodeAlias}.${sortField} ${sortDirection.toUpperCase()}`;
 
   // --- Pagination ---
@@ -206,14 +212,14 @@ export function buildListQuery(
   const dataQuery = `
     ${fullMatchClause}
     ${whereClause}
-    WITH DISTINCT ${nodeAlias} ${additionalMatchClauses ? ', ' + additionalMatchClauses.split(' ')[1] : ''} // Pass distinct primary node and potentially relationship aliases
+    WITH DISTINCT ${nodeAlias} ${additionalMatchClauses ? ", " + additionalMatchClauses.split(" ")[1] : ""} // Pass distinct primary node and potentially relationship aliases
     ${orderByClause} // Order before skip/limit
     ${paginationClause}
     // Re-apply OPTIONAL MATCHes if needed after pagination to get related data for the paginated set
     ${additionalMatchClauses} // Re-apply OPTIONAL MATCH here if needed for RETURN
-    RETURN ${returnProperties.join(',\n           ')}
+    RETURN ${returnProperties.join(",\n           ")}
   `;
-  
+
   // Refined Data Query structure (alternative): Apply OPTIONAL MATCH *after* pagination
   // This can be more efficient if relationship data is only needed for the final page results.
   const dataQueryAlternative = `
@@ -224,10 +230,10 @@ export function buildListQuery(
     ${paginationClause}
     // Now apply OPTIONAL MATCHes for related data for the paginated nodes
     ${additionalMatchClauses} 
-    RETURN ${returnProperties.join(',\n           ')}
+    RETURN ${returnProperties.join(",\n           ")}
   `;
   // Choosing dataQueryAlternative as it's generally more performant for pagination
-  
+
   // Remove skip/limit from count params
   const countParams = { ...params };
   delete countParams.skip;
@@ -236,6 +242,6 @@ export function buildListQuery(
   return {
     countQuery: countQuery,
     dataQuery: dataQueryAlternative, // Use the alternative query
-    params: params // Return params including skip/limit for the data query
+    params: params, // Return params including skip/limit for the data query
   };
 }

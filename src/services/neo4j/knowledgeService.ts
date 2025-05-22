@@ -1,15 +1,15 @@
-import { logger, requestContextService } from '../../utils/index.js'; // Updated import path
-import { neo4jDriver } from './driver.js';
-import { generateId } from './helpers.js';
+import { logger, requestContextService } from "../../utils/index.js"; // Updated import path
+import { neo4jDriver } from "./driver.js";
+import { generateId } from "./helpers.js";
 import {
   KnowledgeFilterOptions,
   Neo4jKnowledge, // This type no longer has domain/citations
   NodeLabels,
   PaginatedResult,
-  RelationshipTypes
-} from './types.js';
-import { Neo4jUtils } from './utils.js';
-import { int } from 'neo4j-driver'; // Import 'int' for pagination
+  RelationshipTypes,
+} from "./types.js";
+import { Neo4jUtils } from "./utils.js";
+import { int } from "neo4j-driver"; // Import 'int' for pagination
 
 /**
  * Service for managing Knowledge entities in Neo4j
@@ -20,23 +20,37 @@ export class KnowledgeService {
    * @param knowledge Input data, potentially including domain and citations for relationship creation
    * @returns The created knowledge item, including its domain and citations.
    */
-  static async addKnowledge(knowledge: Omit<Neo4jKnowledge, 'id' | 'createdAt' | 'updatedAt'> & { id?: string; domain?: string; citations?: string[] }): Promise<Neo4jKnowledge & { domain: string | null; citations: string[] }> {
+  static async addKnowledge(
+    knowledge: Omit<Neo4jKnowledge, "id" | "createdAt" | "updatedAt"> & {
+      id?: string;
+      domain?: string;
+      citations?: string[];
+    },
+  ): Promise<Neo4jKnowledge & { domain: string | null; citations: string[] }> {
     const session = await neo4jDriver.getSession();
-    
+
     try {
-      const projectExists = await Neo4jUtils.nodeExists(NodeLabels.Project, 'id', knowledge.projectId);
+      const projectExists = await Neo4jUtils.nodeExists(
+        NodeLabels.Project,
+        "id",
+        knowledge.projectId,
+      );
       if (!projectExists) {
         throw new Error(`Project with ID ${knowledge.projectId} not found`);
       }
-      
+
       const knowledgeId = knowledge.id || `know_${generateId()}`;
       const now = Neo4jUtils.getCurrentTimestamp();
-      
+
       // Input validation for domain
-      if (!knowledge.domain || typeof knowledge.domain !== 'string' || knowledge.domain.trim() === '') {
-        throw new Error('Domain is required to create a knowledge item.');
+      if (
+        !knowledge.domain ||
+        typeof knowledge.domain !== "string" ||
+        knowledge.domain.trim() === ""
+      ) {
+        throw new Error("Domain is required to create a knowledge item.");
       }
-      
+
       // Create knowledge node and relationship to project
       // Removed domain and citations properties from CREATE
       const query = `
@@ -60,7 +74,7 @@ export class KnowledgeService {
         WITH k, d
         RETURN k.id as id, k.projectId as projectId, k.text as text, k.tags as tags, k.createdAt as createdAt, k.updatedAt as updatedAt, d.name as domainName
       `;
-      
+
       const params = {
         id: knowledgeId,
         projectId: knowledge.projectId,
@@ -68,52 +82,71 @@ export class KnowledgeService {
         tags: knowledge.tags || [],
         domain: knowledge.domain, // Domain needed for MERGE Domain node
         createdAt: now,
-        updatedAt: now
+        updatedAt: now,
       };
-      
+
       const result = await session.executeWrite(async (tx) => {
         const result = await tx.run(query, params);
         return result.records;
       });
-      
+
       const createdKnowledgeRecord = result[0];
-      
+
       if (!createdKnowledgeRecord) {
-        throw new Error('Failed to create knowledge item or retrieve its properties');
+        throw new Error(
+          "Failed to create knowledge item or retrieve its properties",
+        );
       }
-      
+
       // Construct the Neo4jKnowledge object from the returned record
       const baseKnowledge: Neo4jKnowledge = {
-        id: createdKnowledgeRecord.get('id'),
-        projectId: createdKnowledgeRecord.get('projectId'),
-        text: createdKnowledgeRecord.get('text'),
-        tags: createdKnowledgeRecord.get('tags') || [],
-        createdAt: createdKnowledgeRecord.get('createdAt'),
-        updatedAt: createdKnowledgeRecord.get('updatedAt')
+        id: createdKnowledgeRecord.get("id"),
+        projectId: createdKnowledgeRecord.get("projectId"),
+        text: createdKnowledgeRecord.get("text"),
+        tags: createdKnowledgeRecord.get("tags") || [],
+        createdAt: createdKnowledgeRecord.get("createdAt"),
+        updatedAt: createdKnowledgeRecord.get("updatedAt"),
       };
-      
-      const domainName = createdKnowledgeRecord.get('domainName') as string | null;
+
+      const domainName = createdKnowledgeRecord.get("domainName") as
+        | string
+        | null;
       let actualCitations: string[] = [];
 
       // Process citations using the input 'knowledge' object
       const inputCitations = knowledge.citations;
-      if (inputCitations && Array.isArray(inputCitations) && inputCitations.length > 0) {
+      if (
+        inputCitations &&
+        Array.isArray(inputCitations) &&
+        inputCitations.length > 0
+      ) {
         await this.addCitations(knowledgeId, inputCitations);
         actualCitations = inputCitations; // Assume these are the citations for the response
       }
-      const reqContext = requestContextService.createRequestContext({ operation: 'addKnowledge', knowledgeId: baseKnowledge.id, projectId: knowledge.projectId });
-      logger.info('Knowledge item created successfully', reqContext);
-      
+      const reqContext = requestContextService.createRequestContext({
+        operation: "addKnowledge",
+        knowledgeId: baseKnowledge.id,
+        projectId: knowledge.projectId,
+      });
+      logger.info("Knowledge item created successfully", reqContext);
+
       // Return the extended object with domain and citations
       return {
         ...baseKnowledge,
         domain: domainName || knowledge.domain || null, // Fallback to input domain if query somehow misses it
-        citations: actualCitations
+        citations: actualCitations,
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const errorContext = requestContextService.createRequestContext({ operation: 'addKnowledge.error', knowledgeInput: knowledge });
-      logger.error('Error creating knowledge item', error as Error, { ...errorContext, detail: errorMessage });
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      const errorContext = requestContextService.createRequestContext({
+        operation: "addKnowledge.error",
+        knowledgeInput: knowledge,
+      });
+      logger.error("Error creating knowledge item", error as Error, {
+        ...errorContext,
+        detail: errorMessage,
+      });
       throw error;
     } finally {
       await session.close();
@@ -127,23 +160,46 @@ export class KnowledgeService {
    * @param relationshipType The type of relationship to create (e.g., 'RELATED_TO', 'IS_SUBTOPIC_OF') - Validation needed
    * @returns True if the link was created successfully, false otherwise
    */
-  static async linkKnowledgeToKnowledge(sourceId: string, targetId: string, relationshipType: string): Promise<boolean> {
+  static async linkKnowledgeToKnowledge(
+    sourceId: string,
+    targetId: string,
+    relationshipType: string,
+  ): Promise<boolean> {
     // TODO: Validate relationshipType against allowed types or RelationshipTypes enum
     const session = await neo4jDriver.getSession();
-    const reqContext = requestContextService.createRequestContext({ operation: 'linkKnowledgeToKnowledge', sourceId, targetId, relationshipType });
-    logger.debug(`Attempting to link knowledge ${sourceId} to ${targetId} with type ${relationshipType}`, reqContext);
+    const reqContext = requestContextService.createRequestContext({
+      operation: "linkKnowledgeToKnowledge",
+      sourceId,
+      targetId,
+      relationshipType,
+    });
+    logger.debug(
+      `Attempting to link knowledge ${sourceId} to ${targetId} with type ${relationshipType}`,
+      reqContext,
+    );
 
     try {
-      const sourceExists = await Neo4jUtils.nodeExists(NodeLabels.Knowledge, 'id', sourceId);
-      const targetExists = await Neo4jUtils.nodeExists(NodeLabels.Knowledge, 'id', targetId);
+      const sourceExists = await Neo4jUtils.nodeExists(
+        NodeLabels.Knowledge,
+        "id",
+        sourceId,
+      );
+      const targetExists = await Neo4jUtils.nodeExists(
+        NodeLabels.Knowledge,
+        "id",
+        targetId,
+      );
 
       if (!sourceExists || !targetExists) {
-        logger.warning(`Cannot link knowledge: Source (${sourceId} exists: ${sourceExists}) or Target (${targetId} exists: ${targetExists}) not found.`, { ...reqContext, sourceExists, targetExists });
+        logger.warning(
+          `Cannot link knowledge: Source (${sourceId} exists: ${sourceExists}) or Target (${targetId} exists: ${targetExists}) not found.`,
+          { ...reqContext, sourceExists, targetExists },
+        );
         return false;
       }
 
       // Escape relationship type for safety
-      const escapedType = `\`${relationshipType.replace(/`/g, '``')}\``;
+      const escapedType = `\`${relationshipType.replace(/`/g, "``")}\``;
 
       const query = `
         MATCH (source:${NodeLabels.Knowledge} {id: $sourceId})
@@ -160,30 +216,43 @@ export class KnowledgeService {
       const linkCreated = result.length > 0;
 
       if (linkCreated) {
-        logger.info(`Successfully linked knowledge ${sourceId} to ${targetId} with type ${relationshipType}`, reqContext);
+        logger.info(
+          `Successfully linked knowledge ${sourceId} to ${targetId} with type ${relationshipType}`,
+          reqContext,
+        );
       } else {
-        logger.warning(`Failed to link knowledge ${sourceId} to ${targetId} (MERGE returned no relationship)`, reqContext);
+        logger.warning(
+          `Failed to link knowledge ${sourceId} to ${targetId} (MERGE returned no relationship)`,
+          reqContext,
+        );
       }
 
       return linkCreated;
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error linking knowledge items', error as Error, { ...reqContext, detail: errorMessage });
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      logger.error("Error linking knowledge items", error as Error, {
+        ...reqContext,
+        detail: errorMessage,
+      });
       throw error;
     } finally {
       await session.close();
     }
   }
 
-
   /**
    * Get a knowledge item by ID, including its domain and citations via relationships.
    * @param id Knowledge ID
    * @returns The knowledge item with domain and citations added, or null if not found.
    */
-  static async getKnowledgeById(id: string): Promise<(Neo4jKnowledge & { domain: string | null; citations: string[] }) | null> {
+  static async getKnowledgeById(
+    id: string,
+  ): Promise<
+    (Neo4jKnowledge & { domain: string | null; citations: string[] }) | null
+  > {
     const session = await neo4jDriver.getSession();
-    
+
     try {
       // Fetch domain and citations via relationships
       const query = `
@@ -199,85 +268,113 @@ export class KnowledgeService {
                k.createdAt as createdAt,
                k.updatedAt as updatedAt
       `;
-      
+
       const result = await session.executeRead(async (tx) => {
         const result = await tx.run(query, { id });
         return result.records;
       });
-      
+
       if (result.length === 0) {
         return null;
       }
       const record = result[0];
-      
+
       // Construct the base Neo4jKnowledge object
       const knowledge: Neo4jKnowledge = {
-        id: record.get('id'),
-        projectId: record.get('projectId'),
-        text: record.get('text'),
-        tags: record.get('tags') || [],
-        createdAt: record.get('createdAt'),
-        updatedAt: record.get('updatedAt')
+        id: record.get("id"),
+        projectId: record.get("projectId"),
+        text: record.get("text"),
+        tags: record.get("tags") || [],
+        createdAt: record.get("createdAt"),
+        updatedAt: record.get("updatedAt"),
       };
-      
+
       // Add domain and citations fetched via relationships
-      const domain = record.get('domainName');
-      const citations = record.get('citationSources').filter((c: string | null): c is string => c !== null); // Filter nulls if no citations found
+      const domain = record.get("domainName");
+      const citations = record
+        .get("citationSources")
+        .filter((c: string | null): c is string => c !== null); // Filter nulls if no citations found
 
       return {
         ...knowledge,
         domain: domain, // Can be null if no domain relationship exists
-        citations: citations
+        citations: citations,
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const reqContext = requestContextService.createRequestContext({ operation: 'getKnowledgeById.error', knowledgeId: id });
-      logger.error('Error getting knowledge by ID', error as Error, { ...reqContext, detail: errorMessage });
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      const reqContext = requestContextService.createRequestContext({
+        operation: "getKnowledgeById.error",
+        knowledgeId: id,
+      });
+      logger.error("Error getting knowledge by ID", error as Error, {
+        ...reqContext,
+        detail: errorMessage,
+      });
       throw error;
     } finally {
       await session.close();
     }
   }
-  
+
   /**
    * Update a knowledge item, including domain and citation relationships.
    * @param id Knowledge ID
    * @param updates Updates including optional domain and citations
    * @returns The updated knowledge item (without domain/citations properties)
    */
-  static async updateKnowledge(id: string, updates: Partial<Omit<Neo4jKnowledge, 'id' | 'projectId' | 'createdAt' | 'updatedAt'>> & { domain?: string; citations?: string[] }): Promise<Neo4jKnowledge> {
+  static async updateKnowledge(
+    id: string,
+    updates: Partial<
+      Omit<Neo4jKnowledge, "id" | "projectId" | "createdAt" | "updatedAt">
+    > & { domain?: string; citations?: string[] },
+  ): Promise<Neo4jKnowledge> {
     const session = await neo4jDriver.getSession();
-    
+
     try {
-      const exists = await Neo4jUtils.nodeExists(NodeLabels.Knowledge, 'id', id);
+      const exists = await Neo4jUtils.nodeExists(
+        NodeLabels.Knowledge,
+        "id",
+        id,
+      );
       if (!exists) {
         throw new Error(`Knowledge with ID ${id} not found`);
       }
-      
+
       const updateParams: Record<string, any> = {
         id,
-        updatedAt: Neo4jUtils.getCurrentTimestamp()
+        updatedAt: Neo4jUtils.getCurrentTimestamp(),
       };
-      
-      let setClauses = ['k.updatedAt = $updatedAt'];
-      const allowedProperties: (keyof Neo4jKnowledge)[] = ['projectId', 'text', 'tags']; // Define properties that can be updated
-      
+
+      let setClauses = ["k.updatedAt = $updatedAt"];
+      const allowedProperties: (keyof Neo4jKnowledge)[] = [
+        "projectId",
+        "text",
+        "tags",
+      ]; // Define properties that can be updated
+
       // Add update clauses for allowed properties defined in Neo4jKnowledge
       for (const [key, value] of Object.entries(updates)) {
         // Check if the key is one of the allowed properties and value is defined
-        if (value !== undefined && allowedProperties.includes(key as keyof Neo4jKnowledge)) { 
+        if (
+          value !== undefined &&
+          allowedProperties.includes(key as keyof Neo4jKnowledge)
+        ) {
           updateParams[key] = value;
           setClauses.push(`k.${key} = $${key}`);
         }
       }
-      
+
       // Handle domain update using relationships
-      let domainUpdateClause = '';
+      let domainUpdateClause = "";
       const domainUpdateValue = updates.domain;
       if (domainUpdateValue) {
-         if (typeof domainUpdateValue !== 'string' || domainUpdateValue.trim() === '') {
-           throw new Error('Domain update value cannot be empty.');
-         }
+        if (
+          typeof domainUpdateValue !== "string" ||
+          domainUpdateValue.trim() === ""
+        ) {
+          throw new Error("Domain update value cannot be empty.");
+        }
         updateParams.domain = domainUpdateValue;
         domainUpdateClause = `
           // Update domain relationship
@@ -289,25 +386,25 @@ export class KnowledgeService {
           CREATE (k)-[:${RelationshipTypes.BELONGS_TO_DOMAIN}]->(newDomain)
         `;
       }
-      
+
       // Construct the main update query
       const query = `
         MATCH (k:${NodeLabels.Knowledge} {id: $id})
-        ${setClauses.length > 0 ? `SET ${setClauses.join(', ')}` : ''}
+        ${setClauses.length > 0 ? `SET ${setClauses.join(", ")}` : ""}
         ${domainUpdateClause} 
         // Return basic properties defined in Neo4jKnowledge
         RETURN k.id as id, k.projectId as projectId, k.text as text, k.tags as tags, k.createdAt as createdAt, k.updatedAt as updatedAt 
       `;
-      
+
       const result = await session.executeWrite(async (tx) => {
         const result = await tx.run(query, updateParams);
         return result.records;
       });
-      
+
       const updatedKnowledgeRecord = result[0];
 
       if (!updatedKnowledgeRecord) {
-        throw new Error('Failed to update knowledge item or retrieve result');
+        throw new Error("Failed to update knowledge item or retrieve result");
       }
 
       // Update citations if provided in the input 'updates' object
@@ -315,12 +412,15 @@ export class KnowledgeService {
       if (inputCitations && Array.isArray(inputCitations)) {
         // Remove existing CITES relationships first
         await session.executeWrite(async (tx) => {
-          await tx.run(`
+          await tx.run(
+            `
             MATCH (k:${NodeLabels.Knowledge} {id: $id})-[r:${RelationshipTypes.CITES}]->(:${NodeLabels.Citation})
             DELETE r
-          `, { id });
+          `,
+            { id },
+          );
         });
-        
+
         // Add new CITES relationships
         if (inputCitations.length > 0) {
           await this.addCitations(id, inputCitations);
@@ -329,26 +429,37 @@ export class KnowledgeService {
 
       // Construct the final return object matching Neo4jKnowledge
       const finalUpdatedKnowledge: Neo4jKnowledge = {
-         id: updatedKnowledgeRecord.get('id'),
-         projectId: updatedKnowledgeRecord.get('projectId'),
-         text: updatedKnowledgeRecord.get('text'),
-         tags: updatedKnowledgeRecord.get('tags') || [],
-         createdAt: updatedKnowledgeRecord.get('createdAt'),
-         updatedAt: updatedKnowledgeRecord.get('updatedAt')
+        id: updatedKnowledgeRecord.get("id"),
+        projectId: updatedKnowledgeRecord.get("projectId"),
+        text: updatedKnowledgeRecord.get("text"),
+        tags: updatedKnowledgeRecord.get("tags") || [],
+        createdAt: updatedKnowledgeRecord.get("createdAt"),
+        updatedAt: updatedKnowledgeRecord.get("updatedAt"),
       };
-      const reqContext_update = requestContextService.createRequestContext({ operation: 'updateKnowledge', knowledgeId: id });
-      logger.info('Knowledge item updated successfully', reqContext_update);
+      const reqContext_update = requestContextService.createRequestContext({
+        operation: "updateKnowledge",
+        knowledgeId: id,
+      });
+      logger.info("Knowledge item updated successfully", reqContext_update);
       return finalUpdatedKnowledge;
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const errorContext = requestContextService.createRequestContext({ operation: 'updateKnowledge.error', knowledgeId: id, updatesApplied: updates });
-      logger.error('Error updating knowledge item', error as Error, { ...errorContext, detail: errorMessage });
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      const errorContext = requestContextService.createRequestContext({
+        operation: "updateKnowledge.error",
+        knowledgeId: id,
+        updatesApplied: updates,
+      });
+      logger.error("Error updating knowledge item", error as Error, {
+        ...errorContext,
+        detail: errorMessage,
+      });
       throw error;
     } finally {
       await session.close();
     }
   }
-  
+
   /**
    * Delete a knowledge item
    * @param id Knowledge ID
@@ -356,54 +467,74 @@ export class KnowledgeService {
    */
   static async deleteKnowledge(id: string): Promise<boolean> {
     const session = await neo4jDriver.getSession();
-    
+
     try {
-      const exists = await Neo4jUtils.nodeExists(NodeLabels.Knowledge, 'id', id);
+      const exists = await Neo4jUtils.nodeExists(
+        NodeLabels.Knowledge,
+        "id",
+        id,
+      );
       if (!exists) {
         return false;
       }
-      
+
       // Use DETACH DELETE to remove the node and all its relationships
       const query = `
         MATCH (k:${NodeLabels.Knowledge} {id: $id})
         DETACH DELETE k
       `;
-      
+
       await session.executeWrite(async (tx) => {
         await tx.run(query, { id });
       });
-      const reqContext_delete = requestContextService.createRequestContext({ operation: 'deleteKnowledge', knowledgeId: id });
-      logger.info('Knowledge item deleted successfully', reqContext_delete);
+      const reqContext_delete = requestContextService.createRequestContext({
+        operation: "deleteKnowledge",
+        knowledgeId: id,
+      });
+      logger.info("Knowledge item deleted successfully", reqContext_delete);
       return true;
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const errorContext = requestContextService.createRequestContext({ operation: 'deleteKnowledge.error', knowledgeId: id });
-      logger.error('Error deleting knowledge item', error as Error, { ...errorContext, detail: errorMessage });
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      const errorContext = requestContextService.createRequestContext({
+        operation: "deleteKnowledge.error",
+        knowledgeId: id,
+      });
+      logger.error("Error deleting knowledge item", error as Error, {
+        ...errorContext,
+        detail: errorMessage,
+      });
       throw error;
     } finally {
       await session.close();
     }
   }
-  
+
   /**
    * Get knowledge items for a project with optional filtering and server-side pagination.
    * Returns domain and citations via relationships.
    * @param options Filter and pagination options
    * @returns Paginated list of knowledge items including domain and citations
    */
-  static async getKnowledge(options: KnowledgeFilterOptions): Promise<PaginatedResult<Neo4jKnowledge & { domain: string | null; citations: string[] }>> {
+  static async getKnowledge(
+    options: KnowledgeFilterOptions,
+  ): Promise<
+    PaginatedResult<
+      Neo4jKnowledge & { domain: string | null; citations: string[] }
+    >
+  > {
     const session = await neo4jDriver.getSession();
-    
+
     try {
-      let conditions: string[] = []; 
+      let conditions: string[] = [];
       const params: Record<string, any> = {}; // Initialize empty params
-      
+
       // Conditionally add projectId to params if it's not '*'
-      if (options.projectId && options.projectId !== '*') {
+      if (options.projectId && options.projectId !== "*") {
         params.projectId = options.projectId;
       }
-      
-      let domainMatchClause = '';
+
+      let domainMatchClause = "";
       if (options.domain) {
         params.domain = options.domain;
         // Match the relationship for filtering
@@ -412,36 +543,45 @@ export class KnowledgeService {
         // Optionally match domain to return it
         domainMatchClause = `OPTIONAL MATCH (k)-[:${RelationshipTypes.BELONGS_TO_DOMAIN}]->(d:${NodeLabels.Domain})`;
       }
-      
+
       // Handle tags filtering
       if (options.tags && options.tags.length > 0) {
-        const tagQuery = Neo4jUtils.generateArrayInListQuery('k', 'tags', 'tagsList', options.tags);
+        const tagQuery = Neo4jUtils.generateArrayInListQuery(
+          "k",
+          "tags",
+          "tagsList",
+          options.tags,
+        );
         if (tagQuery.cypher) {
           conditions.push(tagQuery.cypher);
           Object.assign(params, tagQuery.params);
         }
       }
-      
+
       // Handle text search (using regex - consider full-text index later)
       if (options.search) {
         // Use case-insensitive regex
-        params.search = `(?i).*${options.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}.*`; 
-        conditions.push('k.text =~ $search');
+        params.search = `(?i).*${options.search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}.*`;
+        conditions.push("k.text =~ $search");
       }
-      
-      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-      
+
+      const whereClause =
+        conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
       // Calculate pagination parameters
       const page = Math.max(options.page || 1, 1);
       const limit = Math.min(Math.max(options.limit || 20, 1), 100);
       const skip = (page - 1) * limit;
-      
+
       // Add pagination params using neo4j.int
       params.skip = int(skip);
       params.limit = int(limit);
 
       // Construct the base MATCH clause conditionally
-      const projectIdMatchFilter = (options.projectId && options.projectId !== '*') ? '{projectId: $projectId}' : '';
+      const projectIdMatchFilter =
+        options.projectId && options.projectId !== "*"
+          ? "{projectId: $projectId}"
+          : "";
       const baseMatch = `MATCH (k:${NodeLabels.Knowledge} ${projectIdMatchFilter})`;
 
       // Query for total count matching filters
@@ -482,34 +622,36 @@ export class KnowledgeService {
         delete countParams.limit;
         const result = await tx.run(countQuery, countParams);
         // The driver seems to return a standard number for count(), use ?? 0 for safety
-        return result.records[0]?.get('total') ?? 0; 
+        return result.records[0]?.get("total") ?? 0;
       });
       // totalResult is now the standard number returned by executeRead
-      const total = totalResult; 
+      const total = totalResult;
 
       // Execute data query
       const dataResult = await session.executeRead(async (tx) => {
         const result = await tx.run(dataQuery, params); // Use params with skip/limit
         return result.records;
       });
-      
+
       // Map results including domain and citations
-      const knowledgeItems = dataResult.map(record => {
+      const knowledgeItems = dataResult.map((record) => {
         const baseKnowledge: Neo4jKnowledge = {
-          id: record.get('id'),
-          projectId: record.get('projectId'),
-          text: record.get('text'),
-          tags: record.get('tags') || [],
-          createdAt: record.get('createdAt'),
-          updatedAt: record.get('updatedAt')
+          id: record.get("id"),
+          projectId: record.get("projectId"),
+          text: record.get("text"),
+          tags: record.get("tags") || [],
+          createdAt: record.get("createdAt"),
+          updatedAt: record.get("updatedAt"),
         };
-        const domain = record.get('domainName');
-        const citations = record.get('citationSources').filter((c: string | null): c is string => c !== null);
-        
+        const domain = record.get("domainName");
+        const citations = record
+          .get("citationSources")
+          .filter((c: string | null): c is string => c !== null);
+
         return {
           ...baseKnowledge,
           domain: domain,
-          citations: citations
+          citations: citations,
         };
       });
 
@@ -520,25 +662,32 @@ export class KnowledgeService {
         total,
         page,
         limit,
-        totalPages
+        totalPages,
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const reqContext_get = requestContextService.createRequestContext({ operation: 'getKnowledge.error', filterOptions: options });
-      logger.error('Error getting knowledge items', error as Error, { ...reqContext_get, detail: errorMessage });
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      const reqContext_get = requestContextService.createRequestContext({
+        operation: "getKnowledge.error",
+        filterOptions: options,
+      });
+      logger.error("Error getting knowledge items", error as Error, {
+        ...reqContext_get,
+        detail: errorMessage,
+      });
       throw error;
     } finally {
       await session.close();
     }
   }
-  
+
   /**
    * Get all available domains with item counts
    * @returns Array of domains with counts
    */
   static async getDomains(): Promise<Array<{ name: string; count: number }>> {
     const session = await neo4jDriver.getSession();
-    
+
     try {
       // This query correctly uses the relationship already
       const query = `
@@ -546,43 +695,51 @@ export class KnowledgeService {
         RETURN d.name AS name, count(k) AS count
         ORDER BY count DESC, name
       `;
-      
+
       const result = await session.executeRead(async (tx) => {
         const result = await tx.run(query);
         return result.records;
       });
-      
-      return result.map(record => ({
-        name: record.get('name'),
-        count: record.get('count').toNumber() // Convert Neo4j int
+
+      return result.map((record) => ({
+        name: record.get("name"),
+        count: record.get("count").toNumber(), // Convert Neo4j int
       }));
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const reqContext_domains = requestContextService.createRequestContext({ operation: 'getDomains.error' });
-      logger.error('Error getting domains', error as Error, { ...reqContext_domains, detail: errorMessage });
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      const reqContext_domains = requestContextService.createRequestContext({
+        operation: "getDomains.error",
+      });
+      logger.error("Error getting domains", error as Error, {
+        ...reqContext_domains,
+        detail: errorMessage,
+      });
       throw error;
     } finally {
       await session.close();
     }
   }
-  
+
   /**
    * Get all unique tags used across knowledge items with counts
    * @param projectId Optional project ID to filter tags
    * @returns Array of tags with counts
    */
-  static async getTags(projectId?: string): Promise<Array<{ tag: string; count: number }>> {
+  static async getTags(
+    projectId?: string,
+  ): Promise<Array<{ tag: string; count: number }>> {
     const session = await neo4jDriver.getSession();
-    
+
     try {
-      let whereClause = '';
+      let whereClause = "";
       const params: Record<string, any> = {};
-      
+
       if (projectId) {
-        whereClause = 'WHERE k.projectId = $projectId';
+        whereClause = "WHERE k.projectId = $projectId";
         params.projectId = projectId;
       }
-      
+
       // This query is fine as it only reads the tags property
       const query = `
         MATCH (k:${NodeLabels.Knowledge})
@@ -591,26 +748,33 @@ export class KnowledgeService {
         RETURN tag, count(*) AS count
         ORDER BY count DESC, tag
       `;
-      
+
       const result = await session.executeRead(async (tx) => {
         const result = await tx.run(query, params);
         return result.records;
       });
-      
-      return result.map(record => ({
-        tag: record.get('tag'),
-        count: record.get('count').toNumber() // Convert Neo4j int
+
+      return result.map((record) => ({
+        tag: record.get("tag"),
+        count: record.get("count").toNumber(), // Convert Neo4j int
       }));
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const reqContext_tags = requestContextService.createRequestContext({ operation: 'getTags.error', projectId });
-      logger.error('Error getting tags', error as Error, { ...reqContext_tags, detail: errorMessage });
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      const reqContext_tags = requestContextService.createRequestContext({
+        operation: "getTags.error",
+        projectId,
+      });
+      logger.error("Error getting tags", error as Error, {
+        ...reqContext_tags,
+        detail: errorMessage,
+      });
       throw error;
     } finally {
       await session.close();
     }
   }
-  
+
   /**
    * Add CITES relationships from a knowledge item to new Citation nodes.
    * @param knowledgeId Knowledge ID
@@ -618,19 +782,22 @@ export class KnowledgeService {
    * @returns The IDs of the created Citation nodes
    * @private
    */
-  private static async addCitations(knowledgeId: string, citations: string[]): Promise<string[]> {
+  private static async addCitations(
+    knowledgeId: string,
+    citations: string[],
+  ): Promise<string[]> {
     if (!citations || citations.length === 0) {
       return [];
     }
     const session = await neo4jDriver.getSession();
-    
+
     try {
-      const citationData = citations.map(source => ({
+      const citationData = citations.map((source) => ({
         id: `cite_${generateId()}`,
         source: source,
-        createdAt: Neo4jUtils.getCurrentTimestamp()
+        createdAt: Neo4jUtils.getCurrentTimestamp(),
       }));
-      
+
       const query = `
         MATCH (k:${NodeLabels.Knowledge} {id: $knowledgeId})
         UNWIND $citationData as citationProps
@@ -639,18 +806,33 @@ export class KnowledgeService {
         CREATE (k)-[:${RelationshipTypes.CITES}]->(c)
         RETURN c.id as citationId
       `;
-      
+
       const result = await session.executeWrite(async (tx) => {
         const res = await tx.run(query, { knowledgeId, citationData });
-        return res.records.map(r => r.get('citationId'));
+        return res.records.map((r) => r.get("citationId"));
       });
-      const reqContext_addCite = requestContextService.createRequestContext({ operation: 'addCitations', knowledgeId, citationCount: result.length });
-      logger.debug(`Added ${result.length} citations for knowledge ${knowledgeId}`, reqContext_addCite);
+      const reqContext_addCite = requestContextService.createRequestContext({
+        operation: "addCitations",
+        knowledgeId,
+        citationCount: result.length,
+      });
+      logger.debug(
+        `Added ${result.length} citations for knowledge ${knowledgeId}`,
+        reqContext_addCite,
+      );
       return result;
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const errorContext = requestContextService.createRequestContext({ operation: 'addCitations.error', knowledgeId, citations });
-      logger.error('Error adding citations', error as Error, { ...errorContext, detail: errorMessage });
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      const errorContext = requestContextService.createRequestContext({
+        operation: "addCitations.error",
+        knowledgeId,
+        citations,
+      });
+      logger.error("Error adding citations", error as Error, {
+        ...errorContext,
+        detail: errorMessage,
+      });
       throw error;
     } finally {
       await session.close();

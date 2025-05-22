@@ -20,34 +20,34 @@ export const ProjectStatus = {
   PENDING: "pending",
   IN_PROGRESS: "in-progress",
   COMPLETED: "completed",
-  ARCHIVED: "archived"
+  ARCHIVED: "archived",
 } as const;
 
 export const TaskStatus = {
   BACKLOG: "backlog",
   TODO: "todo",
   IN_PROGRESS: "in-progress",
-  COMPLETED: "completed"
+  COMPLETED: "completed",
 } as const;
 
 export const PriorityLevel = {
   LOW: "low",
   MEDIUM: "medium",
   HIGH: "high",
-  CRITICAL: "critical"
+  CRITICAL: "critical",
 } as const;
 
 export const TaskType = {
   RESEARCH: "research",
   GENERATION: "generation",
   ANALYSIS: "analysis",
-  INTEGRATION: "integration"
+  INTEGRATION: "integration",
 } as const;
 
 export const KnowledgeDomain = {
   TECHNICAL: "technical",
   BUSINESS: "business",
-  SCIENTIFIC: "scientific"
+  SCIENTIFIC: "scientific",
 } as const;
 
 // Atlas Platform response types
@@ -56,7 +56,7 @@ export interface ProjectResponse {
   name: string;
   description: string;
   status: string;
-  urls?: Array<{ title: string, url: string }>;
+  urls?: Array<{ title: string; url: string }>;
   completionRequirements: string;
   dependencies?: string[];
   outputFormat: string;
@@ -73,7 +73,7 @@ export interface TaskResponse {
   priority: string;
   status: string;
   assignedTo?: string;
-  urls?: Array<{ title: string, url: string }>;
+  urls?: Array<{ title: string; url: string }>;
   tags?: string[];
   completionRequirements: string;
   dependencies?: string[];
@@ -128,16 +128,16 @@ export function createResponseFormatEnum() {
 export const ProjectInputSchema = {
   name: z.string().min(1),
   description: z.string().optional(),
-  status: createProjectStatusEnum().default(ProjectStatus.ACTIVE)
+  status: createProjectStatusEnum().default(ProjectStatus.ACTIVE),
 } as const;
 
 export const UpdateProjectInputSchema = {
   id: z.string(),
-  updates: z.object(ProjectInputSchema).partial()
+  updates: z.object(ProjectInputSchema).partial(),
 } as const;
 
 export const ProjectIdInputSchema = {
-  projectId: z.string()
+  projectId: z.string(),
 } as const;
 
 // Resource response types
@@ -174,35 +174,51 @@ export interface PromptResponse {
 }
 
 // Helper functions
-export const createToolResponse = (text: string, isError?: boolean): McpToolResponse => ({
-  content: [{
-    type: "text",
-    text,
-    _type: "text"
-  }],
-  isError,
-  _type: "tool_response"
-});
-
-export const createResourceResponse = (uri: string, text: string, mimeType?: string): ResourceResponse => ({
-  contents: [{
-    uri,
-    text,
-    mimeType,
-    _type: "resource_content"
-  }],
-  _type: "resource_response"
-});
-
-export const createPromptResponse = (text: string, role: "user" | "assistant" = "assistant"): PromptResponse => ({
-  messages: [{
-    role,
-    content: {
+export const createToolResponse = (
+  text: string,
+  isError?: boolean,
+): McpToolResponse => ({
+  content: [
+    {
       type: "text",
       text,
-      _type: "prompt_content"
+      _type: "text",
     },
-    _type: "prompt_message"
-  }],
-  _type: "prompt_response"
+  ],
+  isError,
+  _type: "tool_response",
+});
+
+export const createResourceResponse = (
+  uri: string,
+  text: string,
+  mimeType?: string,
+): ResourceResponse => ({
+  contents: [
+    {
+      uri,
+      text,
+      mimeType,
+      _type: "resource_content",
+    },
+  ],
+  _type: "resource_response",
+});
+
+export const createPromptResponse = (
+  text: string,
+  role: "user" | "assistant" = "assistant",
+): PromptResponse => ({
+  messages: [
+    {
+      role,
+      content: {
+        type: "text",
+        text,
+        _type: "prompt_content",
+      },
+      _type: "prompt_message",
+    },
+  ],
+  _type: "prompt_response",
 });

@@ -5,8 +5,8 @@
  * offers static methods for consistent error processing, logging, and transformation.
  * @module src/utils/internal/errorHandler
  */
-import { 
-  BaseErrorCode, 
+import {
+  BaseErrorCode,
   McpError,
   ProjectErrorCode,
   TaskErrorCode,
@@ -14,7 +14,7 @@ import {
   LinkErrorCode,
   MemberErrorCode,
   SkillErrorCode,
-  DatabaseExportImportErrorCode 
+  DatabaseExportImportErrorCode,
 } from "../../types/errors.js";
 import { generateUUID, sanitizeInputForLogging } from "../index.js";
 import { logger } from "./logger.js";
@@ -158,7 +158,7 @@ const ERROR_TYPE_MAPPINGS: Readonly<Record<string, AnyErrorCode>> = {
 };
 
 // Define a union type for all possible error codes
-export type AnyErrorCode = 
+export type AnyErrorCode =
   | BaseErrorCode
   | ProjectErrorCode
   | TaskErrorCode
@@ -368,7 +368,12 @@ export class ErrorHandler {
     };
     if (
       originalStack &&
-      !(error instanceof McpError && error.details && typeof error.details === 'object' && 'originalStack' in error.details)
+      !(
+        error instanceof McpError &&
+        error.details &&
+        typeof error.details === "object" &&
+        "originalStack" in error.details
+      )
     ) {
       consolidatedDetails.originalStack = originalStack;
     }
@@ -398,7 +403,6 @@ export class ErrorHandler {
       finalError.stack = error.stack;
     }
 
-
     const logRequestId =
       typeof context.requestId === "string" && context.requestId
         ? context.requestId
@@ -425,7 +429,11 @@ export class ErrorHandler {
       ),
     };
 
-    if (finalError instanceof McpError && finalError.details && typeof finalError.details === 'object') {
+    if (
+      finalError instanceof McpError &&
+      finalError.details &&
+      typeof finalError.details === "object"
+    ) {
       logPayload.errorDetails = { ...finalError.details };
     } else {
       // Ensure consolidatedDetails is always an object, even if errorDetailsSeed was empty

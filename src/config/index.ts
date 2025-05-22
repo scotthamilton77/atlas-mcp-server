@@ -2,7 +2,7 @@ import dotenv from "dotenv";
 import { existsSync, mkdirSync, readFileSync, statSync } from "fs";
 import path, { dirname, join } from "path";
 import { fileURLToPath } from "url";
-import { z } from 'zod';
+import { z } from "zod";
 
 dotenv.config(); // Load environment variables from .env file
 
@@ -13,42 +13,52 @@ dotenv.config(); // Load environment variables from .env file
  * @returns The absolute path to the project root, or throws an error if not found.
  */
 const findProjectRoot = (startDir: string): string => {
-    let currentDir = startDir;
-    while (true) {
-        const packageJsonPath = join(currentDir, 'package.json');
-        if (existsSync(packageJsonPath)) {
-            return currentDir;
-        }
-        const parentDir = dirname(currentDir);
-        if (parentDir === currentDir) {
-            throw new Error(`Could not find project root (package.json) starting from ${startDir}`);
-        }
-        currentDir = parentDir;
+  let currentDir = startDir;
+  while (true) {
+    const packageJsonPath = join(currentDir, "package.json");
+    if (existsSync(packageJsonPath)) {
+      return currentDir;
     }
+    const parentDir = dirname(currentDir);
+    if (parentDir === currentDir) {
+      throw new Error(
+        `Could not find project root (package.json) starting from ${startDir}`,
+      );
+    }
+    currentDir = parentDir;
+  }
 };
 
 let projectRoot: string;
 try {
-    const currentModuleDir = dirname(fileURLToPath(import.meta.url));
-    projectRoot = findProjectRoot(currentModuleDir);
+  const currentModuleDir = dirname(fileURLToPath(import.meta.url));
+  projectRoot = findProjectRoot(currentModuleDir);
 } catch (error: any) {
-    console.error(`FATAL: Error determining project root: ${error.message}`);
-    projectRoot = process.cwd(); 
-    console.warn(`Warning: Using process.cwd() (${projectRoot}) as fallback project root.`);
+  console.error(`FATAL: Error determining project root: ${error.message}`);
+  projectRoot = process.cwd();
+  console.warn(
+    `Warning: Using process.cwd() (${projectRoot}) as fallback project root.`,
+  );
 }
 // --- End Determine Project Root ---
 
 // --- Reading package.json ---
-const packageJsonPath = path.resolve(projectRoot, 'package.json');
-let pkg: { name: string; version: string } = { name: 'atlas-mcp-server', version: '0.0.0' }; // Default
+const packageJsonPath = path.resolve(projectRoot, "package.json");
+let pkg: { name: string; version: string } = {
+  name: "atlas-mcp-server",
+  version: "0.0.0",
+}; // Default
 
 try {
   // Basic check to ensure resolved path is within the determined project root
-  if (!packageJsonPath.startsWith(projectRoot + path.sep) && packageJsonPath !== projectRoot) {
+  if (
+    !packageJsonPath.startsWith(projectRoot + path.sep) &&
+    packageJsonPath !== projectRoot
+  ) {
     // This check might be too simplistic if symlinks are involved, but good for basic safety.
     // A more robust check would normalize both paths before comparison.
   }
-  pkg = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
+  pkg = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
 } catch (error: any) {
   if (process.stdout.isTTY) {
     console.error(
@@ -177,13 +187,24 @@ const env = parsedEnv.success ? parsedEnv.data : EnvSchema.parse({}); // Use def
  * @param dirName The name of the directory type for logging (e.g., "backup", "logs").
  * @returns The validated, absolute path to the directory, or null if invalid.
  */
-const ensureDirectory = (dirPath: string, rootDir: string, dirName: string): string | null => {
-  const resolvedDirPath = path.isAbsolute(dirPath) ? dirPath : path.resolve(rootDir, dirPath);
+const ensureDirectory = (
+  dirPath: string,
+  rootDir: string,
+  dirName: string,
+): string | null => {
+  const resolvedDirPath = path.isAbsolute(dirPath)
+    ? dirPath
+    : path.resolve(rootDir, dirPath);
 
   // Ensure the resolved path is within the project root boundary
-  if (!resolvedDirPath.startsWith(rootDir + path.sep) && resolvedDirPath !== rootDir) {
+  if (
+    !resolvedDirPath.startsWith(rootDir + path.sep) &&
+    resolvedDirPath !== rootDir
+  ) {
     if (process.stdout.isTTY) {
-      console.error(`Error: ${dirName} path "${dirPath}" resolves to "${resolvedDirPath}", which is outside the project boundary "${rootDir}".`);
+      console.error(
+        `Error: ${dirName} path "${dirPath}" resolves to "${resolvedDirPath}", which is outside the project boundary "${rootDir}".`,
+      );
     }
     return null;
   }
@@ -197,30 +218,35 @@ const ensureDirectory = (dirPath: string, rootDir: string, dirName: string): str
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       if (process.stdout.isTTY) {
-        console.error(`Error creating ${dirName} directory at ${resolvedDirPath}: ${errorMessage}`);
+        console.error(
+          `Error creating ${dirName} directory at ${resolvedDirPath}: ${errorMessage}`,
+        );
       }
       return null;
     }
   } else {
     try {
-        const stats = statSync(resolvedDirPath);
-        if (!stats.isDirectory()) {
-            if (process.stdout.isTTY) {
-              console.error(`Error: ${dirName} path ${resolvedDirPath} exists but is not a directory.`);
-            }
-            return null;
-        }
-    } catch (statError: any) {
+      const stats = statSync(resolvedDirPath);
+      if (!stats.isDirectory()) {
         if (process.stdout.isTTY) {
-          console.error(`Error accessing ${dirName} path ${resolvedDirPath}: ${statError.message}`);
+          console.error(
+            `Error: ${dirName} path ${resolvedDirPath} exists but is not a directory.`,
+          );
         }
         return null;
+      }
+    } catch (statError: any) {
+      if (process.stdout.isTTY) {
+        console.error(
+          `Error accessing ${dirName} path ${resolvedDirPath}: ${statError.message}`,
+        );
+      }
+      return null;
     }
   }
   return resolvedDirPath;
 };
 // --- End Directory Ensurance Function ---
-
 
 // --- Backup Directory Handling ---
 /**
@@ -229,17 +255,22 @@ const ensureDirectory = (dirPath: string, rootDir: string, dirName: string): str
  * @param rootDir The root directory of the project to contain the backups.
  * @returns The validated, absolute path to the backup directory, or null if invalid.
  */
-const ensureBackupDir = (backupPath: string, rootDir: string): string | null => {
+const ensureBackupDir = (
+  backupPath: string,
+  rootDir: string,
+): string | null => {
   return ensureDirectory(backupPath, rootDir, "backup");
 };
 
 const validatedBackupPath = ensureBackupDir(env.BACKUP_FILE_DIR, projectRoot);
 
 if (!validatedBackupPath) {
-    if (process.stdout.isTTY) {
-      console.error("FATAL: Backup directory configuration is invalid or could not be created. Please check permissions and path. Exiting.");
-    }
-    process.exit(1); 
+  if (process.stdout.isTTY) {
+    console.error(
+      "FATAL: Backup directory configuration is invalid or could not be created. Please check permissions and path. Exiting.",
+    );
+  }
+  process.exit(1);
 }
 // --- End Backup Directory Handling ---
 
@@ -257,10 +288,12 @@ const ensureLogsDir = (logsPath: string, rootDir: string): string | null => {
 const validatedLogsPath = ensureLogsDir(env.LOGS_DIR, projectRoot);
 
 if (!validatedLogsPath) {
-    if (process.stdout.isTTY) {
-      console.error("FATAL: Logs directory configuration is invalid or could not be created. Please check permissions and path. Exiting.");
-    }
-    process.exit(1);
+  if (process.stdout.isTTY) {
+    console.error(
+      "FATAL: Logs directory configuration is invalid or could not be created. Please check permissions and path. Exiting.",
+    );
+  }
+  process.exit(1);
 }
 // --- End Logs Directory Handling ---
 
@@ -279,7 +312,7 @@ export const config = {
   logsPath: validatedLogsPath,
   /** Runtime environment. From `NODE_ENV` env var. Default: "development". */
   environment: env.NODE_ENV,
-  
+
   /** MCP transport type ('stdio' or 'http'). From `MCP_TRANSPORT_TYPE` env var. Default: "stdio". */
   mcpTransportType: env.MCP_TRANSPORT_TYPE,
   /** HTTP server port (if http transport). From `MCP_HTTP_PORT` env var. Default: 3010. */
@@ -287,7 +320,9 @@ export const config = {
   /** HTTP server host (if http transport). From `MCP_HTTP_HOST` env var. Default: "127.0.0.1". */
   mcpHttpHost: env.MCP_HTTP_HOST,
   /** Array of allowed CORS origins (http transport). From `MCP_ALLOWED_ORIGINS` (comma-separated). */
-  mcpAllowedOrigins: env.MCP_ALLOWED_ORIGINS?.split(',').map(origin => origin.trim()).filter(Boolean),
+  mcpAllowedOrigins: env.MCP_ALLOWED_ORIGINS?.split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean),
   /** Auth secret key (JWTs, http transport). From `MCP_AUTH_SECRET_KEY`. CRITICAL. */
   mcpAuthSecretKey: env.MCP_AUTH_SECRET_KEY,
 
@@ -297,13 +332,13 @@ export const config = {
   neo4jUser: env.NEO4J_USER,
   /** Neo4j password. From `NEO4J_PASSWORD`. */
   neo4jPassword: env.NEO4J_PASSWORD,
-  
+
   /** Backup configuration. */
   backup: {
     /** Maximum number of backups to keep. From `BACKUP_MAX_COUNT`. */
     maxBackups: env.BACKUP_MAX_COUNT,
     /** Absolute path to the backup directory. From `BACKUP_FILE_DIR`. */
-    backupPath: validatedBackupPath 
+    backupPath: validatedBackupPath,
   },
 
   /** Security-related configurations. */
@@ -317,7 +352,11 @@ export const config = {
   },
 
   /** OpenRouter App URL. From `OPENROUTER_APP_URL`. Default: "http://localhost:3000" (or MCP server URL if HTTP). */
-  openrouterAppUrl: env.OPENROUTER_APP_URL || (env.MCP_TRANSPORT_TYPE === 'http' ? `http://${env.MCP_HTTP_HOST}:${env.MCP_HTTP_PORT}` : "http://localhost:3000"),
+  openrouterAppUrl:
+    env.OPENROUTER_APP_URL ||
+    (env.MCP_TRANSPORT_TYPE === "http"
+      ? `http://${env.MCP_HTTP_HOST}:${env.MCP_HTTP_PORT}`
+      : "http://localhost:3000"),
   /** OpenRouter App Name. From `OPENROUTER_APP_NAME`. Defaults to `mcpServerName`. */
   openrouterAppName: env.OPENROUTER_APP_NAME || pkg.name,
   /** OpenRouter API Key. From `OPENROUTER_API_KEY`. */

@@ -2,7 +2,6 @@
  * Common type definitions for the Neo4j service
  */
 
-
 /**
  * Neo4j entity base interface
  * Common properties for all Neo4j entities
@@ -93,28 +92,28 @@ export interface Neo4jCitation extends Neo4jEntity {
  * Relationship types used in the Neo4j database
  */
 export enum RelationshipTypes {
-  CONTAINS_TASK = 'CONTAINS_TASK',
-  CONTAINS_KNOWLEDGE = 'CONTAINS_KNOWLEDGE',
-  DEPENDS_ON = 'DEPENDS_ON',
-  ASSIGNED_TO = 'ASSIGNED_TO',
-  CITES = 'CITES',
-  RELATED_TO = 'RELATED_TO',
-  HAS_TYPE = 'HAS_TYPE',
-  BELONGS_TO_DOMAIN = 'BELONGS_TO_DOMAIN',
-  BELONGS_TO_PROJECT = 'BELONGS_TO_PROJECT'
+  CONTAINS_TASK = "CONTAINS_TASK",
+  CONTAINS_KNOWLEDGE = "CONTAINS_KNOWLEDGE",
+  DEPENDS_ON = "DEPENDS_ON",
+  ASSIGNED_TO = "ASSIGNED_TO",
+  CITES = "CITES",
+  RELATED_TO = "RELATED_TO",
+  HAS_TYPE = "HAS_TYPE",
+  BELONGS_TO_DOMAIN = "BELONGS_TO_DOMAIN",
+  BELONGS_TO_PROJECT = "BELONGS_TO_PROJECT",
 }
 
 /**
  * Node labels used in the Neo4j database
  */
 export enum NodeLabels {
-  Project = 'Project',
-  Task = 'Task',
-  Knowledge = 'Knowledge',
-  User = 'User',
-  TaskType = 'TaskType',
-  Domain = 'Domain',
-  Citation = 'Citation'
+  Project = "Project",
+  Task = "Task",
+  Knowledge = "Knowledge",
+  User = "User",
+  TaskType = "TaskType",
+  Domain = "Domain",
+  Citation = "Citation",
 }
 
 /**
@@ -140,7 +139,13 @@ export interface PaginatedResult<T> {
  * Filter options for Project queries
  */
 export interface ProjectFilterOptions extends PaginationOptions {
-  status?: 'active' | 'pending' | 'in-progress' | 'completed' | 'archived' | ('active' | 'pending' | 'in-progress' | 'completed' | 'archived')[];
+  status?:
+    | "active"
+    | "pending"
+    | "in-progress"
+    | "completed"
+    | "archived"
+    | ("active" | "pending" | "in-progress" | "completed" | "archived")[];
   taskType?: string;
   searchTerm?: string;
 }
@@ -150,13 +155,23 @@ export interface ProjectFilterOptions extends PaginationOptions {
  */
 export interface TaskFilterOptions extends PaginationOptions {
   projectId: string;
-  status?: 'backlog' | 'todo' | 'in-progress' | 'completed' | ('backlog' | 'todo' | 'in-progress' | 'completed')[];
-  priority?: 'low' | 'medium' | 'high' | 'critical' | ('low' | 'medium' | 'high' | 'critical')[];
+  status?:
+    | "backlog"
+    | "todo"
+    | "in-progress"
+    | "completed"
+    | ("backlog" | "todo" | "in-progress" | "completed")[];
+  priority?:
+    | "low"
+    | "medium"
+    | "high"
+    | "critical"
+    | ("low" | "medium" | "high" | "critical")[];
   assignedTo?: string; // Filter by user ID (queries relationship)
   tags?: string[];
   taskType?: string;
-  sortBy?: 'priority' | 'createdAt' | 'status';
-  sortDirection?: 'asc' | 'desc';
+  sortBy?: "priority" | "createdAt" | "status";
+  sortDirection?: "asc" | "desc";
 }
 
 /**
@@ -173,10 +188,10 @@ export interface KnowledgeFilterOptions extends PaginationOptions {
  * Specific types for project dependencies stored within the DEPENDS_ON relationship properties.
  */
 export enum ProjectDependencyType {
-  REQUIRES = 'requires',
-  EXTENDS = 'extends',
-  IMPLEMENTS = 'implements',
-  REFERENCES = 'references'
+  REQUIRES = "requires",
+  EXTENDS = "extends",
+  IMPLEMENTS = "implements",
+  REFERENCES = "references",
 }
 
 /**
@@ -195,7 +210,7 @@ export interface ProjectDependency {
 export interface SearchOptions extends PaginationOptions {
   property?: string;
   value: string;
-  entityTypes?: ('project' | 'task' | 'knowledge')[];
+  entityTypes?: ("project" | "task" | "knowledge")[];
   caseInsensitive?: boolean;
   fuzzy?: boolean;
   taskType?: string;

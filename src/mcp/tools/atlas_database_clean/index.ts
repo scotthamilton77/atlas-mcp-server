@@ -1,9 +1,16 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { z } from 'zod';
-import { BaseErrorCode, DatabaseExportImportErrorCode } from '../../../types/errors.js';
-import { createToolExample, createToolMetadata, registerTool } from '../../../types/tool.js';
-import { atlasDatabaseClean } from './cleanDatabase.js';
-import { AtlasDatabaseCleanSchemaShape } from './types.js';
+import { z } from "zod";
+import {
+  BaseErrorCode,
+  DatabaseExportImportErrorCode,
+} from "../../../types/errors.js";
+import {
+  createToolExample,
+  createToolMetadata,
+  registerTool,
+} from "../../../types/tool.js";
+import { atlasDatabaseClean } from "./cleanDatabase.js";
+import { AtlasDatabaseCleanSchemaShape } from "./types.js";
 
 export const registerAtlasDatabaseCleanTool = (server: McpServer) => {
   registerTool(
@@ -24,25 +31,37 @@ export const registerAtlasDatabaseCleanTool = (server: McpServer) => {
               "schemaInitialized": true
             }
           }`,
-          "Reset the entire database and reinitialize the schema"
-        )
+          "Reset the entire database and reinitialize the schema",
+        ),
       ],
       requiredPermission: "database:admin",
       returnSchema: z.object({
         success: z.boolean().describe("Operation success status"),
         message: z.string().describe("Result message"),
         timestamp: z.string().describe("Operation timestamp"),
-        details: z.object({
-          schemaInitialized: z.boolean().optional().describe("Schema reinitialization status"),
-          deletedRelationships: z.number().optional().describe("Number of deleted relationships"),
-          deletedNodes: z.number().optional().describe("Number of deleted nodes")
-        }).optional().describe("Detailed operation statistics")
+        details: z
+          .object({
+            schemaInitialized: z
+              .boolean()
+              .optional()
+              .describe("Schema reinitialization status"),
+            deletedRelationships: z
+              .number()
+              .optional()
+              .describe("Number of deleted relationships"),
+            deletedNodes: z
+              .number()
+              .optional()
+              .describe("Number of deleted nodes"),
+          })
+          .optional()
+          .describe("Detailed operation statistics"),
       }),
       rateLimit: {
         windowMs: 60 * 60 * 1000, // 1 hour
-        maxRequests: 1 // 1 request per hour (since this is a destructive operation)
-      }
+        maxRequests: 1, // 1 request per hour (since this is a destructive operation)
+      },
       // Warning: This operation permanently deletes ALL data from the Atlas database
-    })
+    }),
   );
 };

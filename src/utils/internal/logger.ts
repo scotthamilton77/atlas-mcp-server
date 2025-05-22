@@ -103,9 +103,8 @@ export type McpNotificationSender = (
 ) => void;
 
 // The logsPath from config is already resolved and validated.
-const resolvedLogsDir = config.logsPath; 
+const resolvedLogsDir = config.logsPath;
 const isLogsDirSafe = !!resolvedLogsDir; // If logsPath is set, it's considered safe by config logic.
-
 
 /**
  * Creates the Winston console log format.

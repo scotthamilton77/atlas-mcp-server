@@ -1,30 +1,43 @@
-import { SearchService, SearchResultItem } from '../../../services/neo4j/searchService.js';
-import { PaginatedResult } from '../../../services/neo4j/types.js';
-import { BaseErrorCode, McpError } from '../../../types/errors.js';
-import { ResponseFormat } from '../../../types/mcp.js';
-import { ToolContext } from '../../../types/tool.js';
-import { logger, requestContextService } from '../../../utils/index.js';
-import { formatUnifiedSearchResponse } from './responseFormat.js';
-import { UnifiedSearchRequestInput, UnifiedSearchRequestSchema, UnifiedSearchResponse } from './types.js';
+import {
+  SearchService,
+  SearchResultItem,
+} from "../../../services/neo4j/searchService.js";
+import { PaginatedResult } from "../../../services/neo4j/types.js";
+import { BaseErrorCode, McpError } from "../../../types/errors.js";
+import { ResponseFormat } from "../../../types/mcp.js";
+import { ToolContext } from "../../../types/tool.js";
+import { logger, requestContextService } from "../../../utils/index.js";
+import { formatUnifiedSearchResponse } from "./responseFormat.js";
+import {
+  UnifiedSearchRequestInput,
+  UnifiedSearchRequestSchema,
+  UnifiedSearchResponse,
+} from "./types.js";
 
 export const atlasUnifiedSearch = async (
   input: unknown,
-  context: ToolContext
+  context: ToolContext,
 ): Promise<any> => {
-  const reqContext = context.requestContext ?? requestContextService.createRequestContext({ toolName: 'atlasUnifiedSearch' });
+  const reqContext =
+    context.requestContext ??
+    requestContextService.createRequestContext({
+      toolName: "atlasUnifiedSearch",
+    });
   try {
-    const validatedInput = UnifiedSearchRequestSchema.parse(input) as UnifiedSearchRequestInput & { responseFormat?: ResponseFormat };
+    const validatedInput = UnifiedSearchRequestSchema.parse(
+      input,
+    ) as UnifiedSearchRequestInput & { responseFormat?: ResponseFormat };
 
     logger.info("Performing unified search", {
       ...reqContext,
       input: validatedInput,
     });
 
-    if (!validatedInput.value || validatedInput.value.trim() === '') {
+    if (!validatedInput.value || validatedInput.value.trim() === "") {
       throw new McpError(
         BaseErrorCode.VALIDATION_ERROR,
         "Search value cannot be empty",
-        { param: "value" }
+        { param: "value" },
       );
     }
 
@@ -33,7 +46,10 @@ export const atlasUnifiedSearch = async (
 
     if (propertyForSearch) {
       // Use regex-based search when a specific property is provided
-      logger.info("Using regex-based search for specific property", { ...reqContext, property: propertyForSearch });
+      logger.info("Using regex-based search for specific property", {
+        ...reqContext,
+        property: propertyForSearch,
+      });
       searchResults = await SearchService.search({
         property: propertyForSearch,
         value: validatedInput.value, // Value is used as part of regex by SearchService.search
@@ -47,9 +63,12 @@ export const atlasUnifiedSearch = async (
       });
     } else {
       // Use full-text search when no specific property is provided (searches default indexed fields)
-      logger.info("Using full-text search across default indexed fields", { ...reqContext });
+      logger.info("Using full-text search across default indexed fields", {
+        ...reqContext,
+      });
 
-      const escapeLucene = (str: string) => str.replace(/([+\-!(){}\[\]^"~*?:\\\/"])/g, '\\$1');
+      const escapeLucene = (str: string) =>
+        str.replace(/([+\-!(){}\[\]^"~*?:\\\/"])/g, "\\$1");
       const escapedValue = escapeLucene(validatedInput.value);
       let luceneQuery: string;
 
@@ -58,7 +77,7 @@ export const atlasUnifiedSearch = async (
       } else {
         luceneQuery = escapedValue; // Standard search on default fields
       }
-      
+
       logger.debug("Constructed Lucene query", { ...reqContext, luceneQuery });
 
       searchResults = await SearchService.fullTextSearch(luceneQuery, {
@@ -70,17 +89,21 @@ export const atlasUnifiedSearch = async (
     }
 
     if (!searchResults || !Array.isArray(searchResults.data)) {
-       logger.error("Search service returned invalid data structure.", new Error("Invalid search results structure"), { ...reqContext, searchResultsReceived: searchResults });
-       throw new McpError(
-         BaseErrorCode.INTERNAL_ERROR,
-         "Received invalid data structure from search service."
-       );
+      logger.error(
+        "Search service returned invalid data structure.",
+        new Error("Invalid search results structure"),
+        { ...reqContext, searchResultsReceived: searchResults },
+      );
+      throw new McpError(
+        BaseErrorCode.INTERNAL_ERROR,
+        "Received invalid data structure from search service.",
+      );
     }
 
     logger.info("Unified search completed successfully", {
       ...reqContext,
       resultCount: searchResults.data.length,
-      totalResults: searchResults.total
+      totalResults: searchResults.total,
     });
 
     const responseData: UnifiedSearchResponse = {
@@ -88,7 +111,7 @@ export const atlasUnifiedSearch = async (
       total: searchResults.total,
       page: searchResults.page,
       limit: searchResults.limit,
-      totalPages: searchResults.totalPages
+      totalPages: searchResults.totalPages,
     };
 
     if (validatedInput.responseFormat === ResponseFormat.JSON) {
@@ -96,14 +119,14 @@ export const atlasUnifiedSearch = async (
     } else {
       return formatUnifiedSearchResponse(responseData);
     }
-
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
     // const errorStack = error instanceof Error ? error.stack : undefined; // Already captured by logger
     logger.error("Failed to perform unified search", error as Error, {
       ...reqContext,
       // errorMessage and errorStack are part of the Error object passed to logger
-      inputReceived: input 
+      inputReceived: input,
     });
 
     if (error instanceof McpError) {
@@ -111,7 +134,7 @@ export const atlasUnifiedSearch = async (
     } else {
       throw new McpError(
         BaseErrorCode.INTERNAL_ERROR,
-        `Error performing unified search: ${errorMessage}`
+        `Error performing unified search: ${errorMessage}`,
       );
     }
   }
