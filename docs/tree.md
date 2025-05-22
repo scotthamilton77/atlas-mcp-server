@@ -1,6 +1,6 @@
 # atlas-mcp-server - Directory Structure
 
-Generated on: 2025-05-21 20:21:54
+Generated on: 2025-05-22 09:07:16
 
 
 ```
@@ -16,7 +16,6 @@ atlas-mcp-server
     ├── deep-research-example
     │   ├── covington_community_grant_research.md
     │   └── full-export.json
-    ├── .DS_Store
     ├── README.md
     └── webui-example.png
 ├── scripts
@@ -115,10 +114,9 @@ atlas-mcp-server
     │   │   │   └── authMiddleware.ts
     │   │   ├── httpTransport.ts
     │   │   └── stdioTransport.ts
-    │   ├── .DS_Store
     │   └── server.ts
     ├── services
-    │   ├── neo4j
+    │   └── neo4j
     │   │   ├── backupRestoreService.ts
     │   │   ├── driver.ts
     │   │   ├── events.ts
@@ -130,7 +128,6 @@ atlas-mcp-server
     │   │   ├── taskService.ts
     │   │   ├── types.ts
     │   │   └── utils.ts
-    │   └── .DS_Store
     ├── types
     │   ├── errors.ts
     │   ├── mcp.ts
@@ -158,13 +155,13 @@ atlas-mcp-server
     │   ├── index.html
     │   ├── script.js
     │   └── style.css
-    ├── .DS_Store
     └── index.ts
 ├── .clinerules
 ├── .repomixignore
 ├── CHANGELOG.md
 ├── docker-compose.yml
 ├── LICENSE
+├── mcp.json
 ├── package-lock.json
 ├── package.json
 ├── README.md

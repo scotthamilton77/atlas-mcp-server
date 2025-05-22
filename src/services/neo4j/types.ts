@@ -199,4 +199,5 @@ export interface SearchOptions extends PaginationOptions {
   caseInsensitive?: boolean;
   fuzzy?: boolean;
   taskType?: string;
+  assignedToUserId?: string; // Added for filtering tasks by assignee
 }

@@ -2,8 +2,52 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [2.8.6] - 2025-05-22
+
+### Added
+- **Development Tooling**:
+  - Integrated `prettier` for consistent code formatting.
+  - Added a `format` script to `package.json` for running Prettier.
+  - Included `mcp.json` for MCP client configuration and inspection.
+- **Configuration**:
+  - Introduced `LOGS_DIR` environment variable and configuration to specify the directory for log files, with validation to ensure it's within the project root.
+  - Added new optional environment variables and corresponding configurations in `src/config/index.ts` for:
+    - OpenRouter integration (`OPENROUTER_APP_URL`, `OPENROUTER_APP_NAME`, `OPENROUTER_API_KEY`).
+    - Default LLM parameters (`LLM_DEFAULT_MODEL`, `LLM_DEFAULT_TEMPERATURE`, `LLM_DEFAULT_TOP_P`, `LLM_DEFAULT_MAX_TOKENS`, `LLM_DEFAULT_TOP_K`, `LLM_DEFAULT_MIN_P`).
+    - OAuth Proxy settings (`OAUTH_PROXY_AUTHORIZATION_URL`, `OAUTH_PROXY_TOKEN_URL`, etc.).
+- **Search**:
+  - Added `assignedToUserId` filter to `atlas_unified_search` tool and `SearchService` for targeted task searches when performing property-specific queries.
+
+### Changed
+- **Configuration System (`src/config/index.ts`)**:
+  - Major refactor to use Zod for robust environment variable validation, type safety, default values, and clearer error messages.
+  - Improved `package.json` reading for default server name and version.
+  - Generalized directory creation and validation logic (for `BACKUP_FILE_DIR` and new `LOGS_DIR`) into a reusable `ensureDirectory` function, enhancing security and robustness.
+- **Search Functionality**:
+  - **`atlas_unified_search` Tool**:
+    - Behavior now differentiates:
+      - If `property` is specified: Performs a regex-based search on that specific property. `caseInsensitive` and `fuzzy` (for 'contains' matching) options apply.
+      - If `property` is omitted: Performs a full-text index search across default indexed fields. `fuzzy` option attempts a Lucene fuzzy query (e.g., `term~1`).
+    - Updated input schema (`types.ts`) and implementation (`unifiedSearch.ts`) to reflect this dual-mode logic and new filters.
+  - **`SearchService` (`src/services/neo4j/searchService.ts`)**:
+    - `search()` method (for property-specific search) updated to handle `assignedToUserId` filter for tasks and pass through `caseInsensitive` and `fuzzy` flags.
+    - `fullTextSearch()` method now executes full-text queries for each entity type (project, task, knowledge) sequentially, each within its own Neo4j session, to improve resource management and error isolation.
+    - Updated `SearchOptions` type in `src/services/neo4j/types.ts`.
+- **Logging (`src/utils/internal/logger.ts`)**:
+  - Logger now directly uses the validated `config.logsPath` from the central configuration, ensuring logs are stored in the correctly specified and verified directory.
+- **Build & Packaging (`package.json`, `package-lock.json`)**:
+  - Added `prettier` as a dev dependency.
+  - Updated `package.json` to include an `exports` field for better module resolution.
+  - Added `engines` field specifying Node.js version compatibility (>=16.0.0).
+  - Updated author information format.
+- **Smithery Configuration (`smithery.yaml`)**:
+  - Added `LOGS_DIR` to environment variable definitions.
+- **Documentation**:
+  - Updated `docs/tree.md` with the latest file structure and generation timestamp.
+  - `typedoc.json`: Included `scripts` directory in documentation generation and updated the project name for API docs.
+
+### Fixed
+- **Configuration Robustness**: Enhanced safety in `src/config/index.ts` by ensuring `package.json` path resolution stays within the project root and by providing more context in console messages (e.g., when `package.json` cannot be read, or directories cannot be created), especially when `stdout` is a TTY.
 
 ## [2.8.5] - 2025-05-22
 

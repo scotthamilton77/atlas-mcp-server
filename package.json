@@ -4,6 +4,7 @@
   "description": "ATLAS (Adaptive Task & Logic Automation System): An MCP server enabling LLM agents to manage projects, tasks, and knowledge via a Neo4j-backed, three-tier architecture. Facilitates complex workflow automation and project management through LLM Agents.",
   "type": "module",
   "main": "dist/index.js",
+  "exports": "./dist/index.js",
   "files": [
     "dist"
   ],
@@ -28,6 +29,7 @@
     "docker:up": "docker-compose up -d",
     "docs:generate": "typedoc",
     "fetch-spec": "ts-node --esm scripts/fetch-openapi-spec.ts",
+    "format": "prettier --write \"**/*.{ts,js,json,md,html,css}\"",
     "inspector": "mcp-inspector --config mcp.json --server atlas-mcp",
     "rebuild": "ts-node --esm scripts/clean.ts && npm run build",
     "start": "node dist/index.js",
@@ -63,8 +65,11 @@
     "unified-search",
     "workflow-automation"
   ],
-  "author": "@cyanheads",
+  "author": "cyanheads <casey@caseyjhand.com> (https://github.com/cyanheads/atlas-mcp-server#readme)",
   "license": "Apache-2.0",
+  "engines": {
+    "node": ">=16.0.0"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.11.5",
     "@types/node": "^22.15.21",
@@ -101,6 +106,7 @@
     "@types/validator": "^13.15.1",
     "axios": "^1.9.0",
     "js-yaml": "^4.1.0",
+    "prettier": "^3.5.3",
     "ts-node": "^10.9.2",
     "typedoc": "^0.28.4",
     "typescript": "^5.8.3"

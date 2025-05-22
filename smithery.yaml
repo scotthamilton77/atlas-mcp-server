@@ -69,6 +69,10 @@ startCommand:
         type: string
         description: "Directory where backup files will be stored (relative to project root)"
         default: "./atlas-backups"
+      LOGS_DIR:
+        type: string
+        description: "Directory where log files will be stored (relative to project root)"
+        default: "./logs"
     required: # Define required fields based on README defaults and common usage
       - NEO4J_URI
       - NEO4J_USER
@@ -93,6 +97,7 @@ startCommand:
         MCP_RATE_LIMIT_MAX_REQUESTS: String(config.MCP_RATE_LIMIT_MAX_REQUESTS),
         BACKUP_MAX_COUNT: String(config.BACKUP_MAX_COUNT),
         BACKUP_FILE_DIR: config.BACKUP_FILE_DIR,
+        LOGS_DIR: config.LOGS_DIR,
       };
 
       // Remove undefined or empty string values to avoid passing them as env vars

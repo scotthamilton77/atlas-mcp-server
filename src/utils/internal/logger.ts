@@ -102,24 +102,10 @@ export type McpNotificationSender = (
   loggerName?: string,
 ) => void;
 
-const projectRoot = process.cwd(); // Use current working directory as project root
-const logsDir = path.join(projectRoot, "logs");
+// The logsPath from config is already resolved and validated.
+const resolvedLogsDir = config.logsPath; 
+const isLogsDirSafe = !!resolvedLogsDir; // If logsPath is set, it's considered safe by config logic.
 
-// Security check for the logs directory path
-const resolvedLogsDir = path.resolve(logsDir); // Should be projectRoot/logs
-const isLogsDirSafe =
-  resolvedLogsDir.startsWith(projectRoot + path.sep) &&
-  resolvedLogsDir !== projectRoot;
-
-if (!isLogsDirSafe) {
-  // This case should ideally not be hit if logsDir is simply projectRoot + /logs
-  // But it's a safeguard if path.join or path.resolve behaves unexpectedly or logsDir is manipulated.
-  if (process.stdout.isTTY) {
-    console.error(
-      `FATAL: Resolved logs directory "${resolvedLogsDir}" is not safely within project root "${projectRoot}". File logging will be disabled.`,
-    );
-  }
-}
 
 /**
  * Creates the Winston console log format.

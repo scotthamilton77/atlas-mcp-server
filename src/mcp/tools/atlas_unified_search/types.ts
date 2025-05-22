@@ -5,22 +5,27 @@ import { SearchResultItem } from "../../../services/neo4j/searchService.js";
 // Schema for the tool input
 export const UnifiedSearchRequestSchema = z.object({
   property: z.string().optional().describe(
-    "Optional: Target a specific indexed property using Lucene syntax (e.g., 'name', 'description', 'text'). If omitted, searches across default indexed fields."
+    "Optional: Target a specific property for search. If specified, a regex-based search is performed on this property (e.g., 'name', 'description', 'text', 'tags', 'urls'). If omitted, a full-text index search is performed across default fields for each entity type (typically includes fields like name, title, description, text, tags, but depends on index configuration)."
   ),
   value: z.string().describe(
-    "The search term or phrase. Forms the core of the Lucene query. Special characters should be escaped unless part of intended Lucene syntax (e.g., for fuzzy search)."
+    "The search term or phrase."
   ),
   entityTypes: z.array(
-    z.enum(['project', 'task', 'knowledge']) // Keep as is
+    z.enum(['project', 'task', 'knowledge'])
   ).optional().describe(
     "Array of entity types ('project', 'task', 'knowledge') to include in search (Default: all types if omitted)"
   ),
-  // caseInsensitive removed - handled by index configuration
+  caseInsensitive: z.boolean().optional().default(true).describe(
+    "For regex search (when 'property' is specified): Perform a case-insensitive search (Default: true). Not applicable to full-text index searches (when 'property' is omitted)."
+  ),
   fuzzy: z.boolean().optional().default(false).describe(
-    "Enable fuzzy matching (edit distance 1) by appending '~1' to the search term in the Lucene query (Default: false)"
+    "For regex search (when 'property' is specified): Enables 'contains' matching instead of exact match (Default: false). For full-text search (when 'property' is omitted): Attempts to construct a fuzzy Lucene query (e.g., term~1) (Default: false)."
   ),
   taskType: z.string().optional().describe(
     "Optional filter by project/task classification (applies to project and task types)"
+  ),
+  assignedToUserId: z.string().optional().describe(
+    "Optional: Filter tasks by the ID of the assigned user. Only applicable when 'property' is specified (regex search) and 'entityTypes' includes 'task'."
   ),
   page: z.number().int().positive().optional().default(1).describe(
     "Page number for paginated results (Default: 1)"
