@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.5] - 2025-05-22
+
+### Changed
+- **Logging & Error Handling**:
+  - Integrated `RequestContext` (from `src/utils/internal/requestContext.ts`) throughout the application, including all MCP tools, resources, and Neo4j services. This provides a unique `requestId` and `timestamp` for every operation, significantly improving log tracing and debugging capabilities.
+  - Refactored the `logger.ts` to properly handle `RequestContext` and to ensure that error objects are passed directly to logging methods (e.g., `logger.error("message", errorAsError, context)`).
+  - Updated `errorHandler.ts` to correctly utilize `RequestContext`, improve error detail consolidation, and ensure consistent logging of error metadata.
+  - Modified `idGenerator.ts` to remove internal logging calls that were causing circular dependencies with `requestContextService` during application startup.
+- **Dependencies**: Updated various dependencies to their latest versions, including `@modelcontextprotocol/sdk` (to 1.11.5), `@types/node` (to 22.15.21), `node-cron` (to 4.0.6), `openai` (to 4.102.0), `zod` (to 3.25.20), and `@types/validator` (to 13.15.1).
+- **README.md**: Removed the "Automatic Backups (Note)" section as this functionality was previously deprecated.
+- **Version Bump**: Updated project version to `2.8.5` in `package.json`, `package-lock.json`, and `README.md`.
+
 ## [2.8.4] - 2025-05-21
 
 ### Added
