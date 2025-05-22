@@ -2,9 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.8.7] - 2025-05-22
+
+### Changed
+- **Development Tooling & Code Quality**:
+  - Refactored utility scripts in `scripts/` directory for improved clarity, error handling, and security (e.g., path resolution within project root). This includes `clean.ts`, `db-backup.ts`, `db-import.ts`, `fetch-openapi-spec.ts`, `make-executable.ts`, and `tree.ts`.
+  - Applied Prettier formatting across the entire codebase (`src/`, `examples/`, `scripts/`) for consistent styling.
+- **Build & Configuration**:
+  - Added `tsconfig.typedoc.json` for dedicated TypeDoc generation settings.
+  - Updated `repomix.config.json` to adjust ignore patterns.
+  - Minor formatting adjustment in `tsconfig.json`.
+- **Documentation**:
+  - Regenerated `docs/tree.md` to reflect the current project structure.
+  - Updated version badge in `README.md` to 2.8.7.
+- **Examples**: Minor formatting consistency updates to JSON files in `examples/backup-example/` and `examples/deep-research-example/`.
+
 ## [2.8.6] - 2025-05-22
 
 ### Added
+
 - **Development Tooling**:
   - Integrated `prettier` for consistent code formatting.
   - Added a `format` script to `package.json` for running Prettier.
@@ -19,6 +35,7 @@ All notable changes to this project will be documented in this file.
   - Added `assignedToUserId` filter to `atlas_unified_search` tool and `SearchService` for targeted task searches when performing property-specific queries.
 
 ### Changed
+
 - **Configuration System (`src/config/index.ts`)**:
   - Major refactor to use Zod for robust environment variable validation, type safety, default values, and clearer error messages.
   - Improved `package.json` reading for default server name and version.
@@ -47,11 +64,13 @@ All notable changes to this project will be documented in this file.
   - `typedoc.json`: Included `scripts` directory in documentation generation and updated the project name for API docs.
 
 ### Fixed
+
 - **Configuration Robustness**: Enhanced safety in `src/config/index.ts` by ensuring `package.json` path resolution stays within the project root and by providing more context in console messages (e.g., when `package.json` cannot be read, or directories cannot be created), especially when `stdout` is a TTY.
 
 ## [2.8.5] - 2025-05-22
 
 ### Changed
+
 - **Logging & Error Handling**:
   - Integrated `RequestContext` (from `src/utils/internal/requestContext.ts`) throughout the application, including all MCP tools, resources, and Neo4j services. This provides a unique `requestId` and `timestamp` for every operation, significantly improving log tracing and debugging capabilities.
   - Refactored the `logger.ts` to properly handle `RequestContext` and to ensure that error objects are passed directly to logging methods (e.g., `logger.error("message", errorAsError, context)`).
