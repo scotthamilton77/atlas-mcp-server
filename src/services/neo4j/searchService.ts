@@ -345,41 +345,33 @@ export class SearchService {
 
       const finalMatchQueryPart = matchClauses.join("\n        ");
 
-      let withClauseParts = ["n"];
+      // Corrected logic for withClauseParts:
+      // Only include variables that are defined by `finalMatchQueryPart`
+      // (i.e., 'n' and 'assignee' if applicable).
+      // 'p', 'k_proj', 'd' are defined in `optionalMatches` which comes AFTER this `WITH` clause,
+      // so they are not included here but will be available to the RETURN clause.
+      let baseWithVariables = ["n"];
       if (actualLabel === NodeLabels.Task && assignedToUserIdFilter) {
-        withClauseParts.push("assignee");
+        baseWithVariables.push("assignee");
       }
-      // Add p, k_proj, d to WITH if they are introduced in optionalMatches and used in RETURN
-      if (
-        actualLabel === NodeLabels.Task ||
-        actualLabel === NodeLabels.Project
-      ) {
-        if (returnClause.includes("p.name")) withClauseParts.push("p");
-      }
-      if (actualLabel === NodeLabels.Knowledge) {
-        if (
-          returnClause.includes("k_proj.name") ||
-          returnClause.includes("k_proj.id")
-        )
-          withClauseParts.push("k_proj");
-        if (returnClause.includes("d.name")) withClauseParts.push("d");
-      }
-      // Remove duplicates from withClauseParts just in case
-      withClauseParts = [...new Set(withClauseParts)];
+      // Ensure uniqueness, though it should be unique already
+      baseWithVariables = [...new Set(baseWithVariables)];
 
       const query = `
         ${finalMatchQueryPart}
         ${whereClause}
-        WITH ${withClauseParts.join(", ")}
-        ${optionalMatches}
-        ${returnClause}
+        WITH ${baseWithVariables.join(", ")} // Use only variables defined before this WITH
+        ${optionalMatches} // Defines p, k_proj, d
+        ${returnClause} // Can now use n, assignee (if present), p, k_proj, d
         ORDER BY score DESC, COALESCE(n.updatedAt, n.createdAt) DESC
         LIMIT $limit
       `;
 
-      logger.debug(`Executing search query for label ${actualLabel}`, {
+      logger.debug(`Executing search query for label ${actualLabel}. SearchProperty: '${searchProperty}', SearchValue (Regex): '${params.searchValue}'`, {
         ...reqContext_single,
         actualLabel,
+        searchPropertyUsed: searchProperty, // Log the actual searchProperty being used
+        rawSearchValueParam: params.searchValue, // Log the raw regex pattern
         query,
         params,
       });

@@ -131,6 +131,11 @@ export function buildListQuery(
   const fullMatchClause = `${baseMatch}\n${additionalMatchClauses}`;
 
   // --- WHERE Clause Conditions ---
+  // Add assignedTo to params if it's part of the filters and used in additionalMatchClauses
+  if (filters.assignedTo) {
+    params.assignedTo = filters.assignedTo;
+  }
+
   // Status filter
   if (filters.status) {
     if (Array.isArray(filters.status) && filters.status.length > 0) {
