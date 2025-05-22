@@ -4,7 +4,7 @@ import { TaskService } from "../../../services/neo4j/taskService.js";
 import { TaskFilterOptions } from "../../../services/neo4j/types.js";
 import { BaseErrorCode, McpError, ProjectErrorCode, TaskErrorCode } from "../../../types/errors.js";
 import { PriorityLevel, TaskStatus } from "../../../types/mcp.js";
-import { logger } from "../../../utils/internal/logger.js";
+import { logger, requestContextService } from "../../../utils/index.js"; // Import requestContextService
 import { ResourceTemplates, ResourceURIs, toTaskResource } from "../types.js";
 
 /**
@@ -28,8 +28,9 @@ export function registerTaskResources(server: McpServer) {
       mimeType: "application/json"
     },
     async (uri) => {
+    const reqContext = requestContextService.createRequestContext({ operation: 'listAllTasks', resourceUri: uri.href });
     try {
-      logger.info("Listing all tasks", { uri: uri.href });
+      logger.info("Listing all tasks", { ...reqContext, uri: uri.href });
 
       // Parse query parameters
       const queryParams = new URLSearchParams(uri.search);
@@ -57,7 +58,7 @@ export function registerTaskResources(server: McpServer) {
             filters.status = 'completed';
             break;
           default:
-            logger.warning(`Invalid status value: ${status}, ignoring filter`);
+            logger.warning(`Invalid status value: ${status}, ignoring filter`, { ...reqContext, invalidStatus: status });
         }
       }
 
@@ -78,7 +79,7 @@ export function registerTaskResources(server: McpServer) {
             filters.priority = 'critical';
             break;
           default:
-            logger.warning(`Invalid priority value: ${priority}, ignoring filter`);
+            logger.warning(`Invalid priority value: ${priority}, ignoring filter`, { ...reqContext, invalidPriority: priority });
         }
       }
 
@@ -109,7 +110,7 @@ export function registerTaskResources(server: McpServer) {
         if (validSortByValues.includes(sortBy)) {
           filters.sortBy = sortBy as 'priority' | 'createdAt' | 'status';
         } else {
-          logger.warning(`Invalid sortBy value: ${sortBy}, using default sorting`);
+          logger.warning(`Invalid sortBy value: ${sortBy}, using default sorting`, { ...reqContext, invalidSortBy: sortBy });
         }
       }
 
@@ -120,7 +121,7 @@ export function registerTaskResources(server: McpServer) {
         if (validDirections.includes(sortDirection)) {
           filters.sortDirection = sortDirection as 'asc' | 'desc';
         } else {
-          logger.warning(`Invalid sortDirection value: ${sortDirection}, using default direction`);
+          logger.warning(`Invalid sortDirection value: ${sortDirection}, using default direction`, { ...reqContext, invalidSortDirection: sortDirection });
         }
       }
 
@@ -161,8 +162,9 @@ export function registerTaskResources(server: McpServer) {
         ]
       };
     } catch (error) {
-      logger.error("Error listing tasks", { 
-        error,
+      logger.error("Error listing tasks", error as Error, { 
+        ...reqContext,
+        // error is now part of the Error object passed to logger
         uri: uri.href
       });
 
@@ -183,12 +185,14 @@ export function registerTaskResources(server: McpServer) {
       mimeType: "application/json"
     },
     async (uri, params) => {
+    const reqContext = requestContextService.createRequestContext({ operation: 'getTaskById', resourceUri: uri.href, taskIdParam: params.taskId });
     try {
       const taskId = params.taskId as string;
       
       logger.info("Fetching task by ID", { 
-        taskId,
-        uri: uri.href
+        ...reqContext,
+        taskId, // Already in reqContext
+        uri: uri.href // Already in reqContext
       });
 
       if (!taskId) {
@@ -227,9 +231,10 @@ export function registerTaskResources(server: McpServer) {
         throw error;
       }
 
-      logger.error("Error fetching task by ID", { 
-        error,
-        params
+      logger.error("Error fetching task by ID", error as Error, { 
+        ...reqContext,
+        // error is now part of the Error object passed to logger
+        parameters: params
       });
 
       throw new McpError(
@@ -249,12 +254,14 @@ export function registerTaskResources(server: McpServer) {
       mimeType: "application/json"
     },
     async (uri, params) => {
+    const reqContext = requestContextService.createRequestContext({ operation: 'listTasksByProject', resourceUri: uri.href, projectIdParam: params.projectId });
     try {
       const projectId = params.projectId as string;
       
       logger.info("Listing tasks for project", { 
-        projectId,
-        uri: uri.href
+        ...reqContext,
+        projectId, // Already in reqContext
+        uri: uri.href // Already in reqContext
       });
 
       if (!projectId) {
@@ -297,7 +304,7 @@ export function registerTaskResources(server: McpServer) {
             filters.status = 'completed';
             break;
           default:
-            logger.warning(`Invalid status value: ${status}, ignoring filter`);
+            logger.warning(`Invalid status value: ${status}, ignoring filter`, { ...reqContext, invalidStatus: status });
         }
       }
 
@@ -318,7 +325,7 @@ export function registerTaskResources(server: McpServer) {
             filters.priority = 'critical';
             break;
           default:
-            logger.warning(`Invalid priority value: ${priority}, ignoring filter`);
+            logger.warning(`Invalid priority value: ${priority}, ignoring filter`, { ...reqContext, invalidPriority: priority });
         }
       }
 
@@ -349,7 +356,7 @@ export function registerTaskResources(server: McpServer) {
         if (validSortByValues.includes(sortBy)) {
           filters.sortBy = sortBy as 'priority' | 'createdAt' | 'status';
         } else {
-          logger.warning(`Invalid sortBy value: ${sortBy}, using default sorting`);
+          logger.warning(`Invalid sortBy value: ${sortBy}, using default sorting`, { ...reqContext, invalidSortBy: sortBy });
         }
       }
 
@@ -360,7 +367,7 @@ export function registerTaskResources(server: McpServer) {
         if (validDirections.includes(sortDirection)) {
           filters.sortDirection = sortDirection as 'asc' | 'desc';
         } else {
-          logger.warning(`Invalid sortDirection value: ${sortDirection}, using default direction`);
+          logger.warning(`Invalid sortDirection value: ${sortDirection}, using default direction`, { ...reqContext, invalidSortDirection: sortDirection });
         }
       }
 
@@ -408,9 +415,10 @@ export function registerTaskResources(server: McpServer) {
         throw error;
       }
 
-      logger.error("Error listing tasks for project", { 
-        error,
-        params
+      logger.error("Error listing tasks for project", error as Error, { 
+        ...reqContext,
+        // error is now part of the Error object passed to logger
+        parameters: params
       });
 
       throw new McpError(

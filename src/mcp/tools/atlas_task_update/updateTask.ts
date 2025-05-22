@@ -1,7 +1,7 @@
 import { TaskService } from "../../../services/neo4j/taskService.js";
 import { BaseErrorCode, McpError } from "../../../types/errors.js";
 import { ResponseFormat, createToolResponse } from "../../../types/mcp.js";
-import { logger } from "../../../utils/internal/logger.js";
+import { logger, requestContextService } from "../../../utils/index.js"; // Import requestContextService
 import { ToolContext } from "../../../types/tool.js";
 import { AtlasTaskUpdateInput, AtlasTaskUpdateSchema } from "./types.js";
 import { formatTaskUpdateResponse } from "./responseFormat.js";
@@ -11,6 +11,7 @@ export const atlasUpdateTask = async (
   context: ToolContext
 ) => {
   let validatedInput: AtlasTaskUpdateInput | undefined;
+  const reqContext = context.requestContext ?? requestContextService.createRequestContext({ toolName: 'atlasUpdateTask' });
   
   try {
     // Parse and validate the input against schema
@@ -19,9 +20,9 @@ export const atlasUpdateTask = async (
     // Process according to operation mode (single or bulk)
     if (validatedInput.mode === 'bulk') {
       // Execute bulk update operation
-      logger.info("Applying updates to multiple tasks", { 
-        count: validatedInput.tasks.length,
-        requestId: context.requestContext?.requestId 
+      logger.info("Applying updates to multiple tasks", {
+        ...reqContext,
+        count: validatedInput.tasks.length
       });
 
       const results = {
@@ -70,11 +71,11 @@ export const atlasUpdateTask = async (
         results.message = `Updated ${results.updated.length} of ${validatedInput.tasks.length} tasks with ${results.errors.length} errors`;
       }
       
-      logger.info("Bulk task modification completed", { 
+      logger.info("Bulk task modification completed", {
+        ...reqContext,
         successCount: results.updated.length,
         errorCount: results.errors.length,
-        taskIds: results.updated.map(t => t.id),
-        requestId: context.requestContext?.requestId 
+        taskIds: results.updated.map(t => t.id)
       });
 
       // Conditionally format response
@@ -87,10 +88,10 @@ export const atlasUpdateTask = async (
       // Process single task modification
       const { mode, id, updates } = validatedInput;
       
-      logger.info("Modifying task attributes", { 
+      logger.info("Modifying task attributes", {
+        ...reqContext,
         id, 
-        fields: Object.keys(updates),
-        requestId: context.requestContext?.requestId 
+        fields: Object.keys(updates)
       });
 
       // First check if task exists
@@ -106,9 +107,9 @@ export const atlasUpdateTask = async (
       // Update the task
       const updatedTask = await TaskService.updateTask(id, updates);
       
-      logger.info("Task modifications applied successfully", { 
-        taskId: id,
-        requestId: context.requestContext?.requestId 
+      logger.info("Task modifications applied successfully", {
+        ...reqContext,
+        taskId: id
       });
 
       // Conditionally format response
@@ -124,9 +125,9 @@ export const atlasUpdateTask = async (
       throw error;
     }
 
-    logger.error("Failed to modify task(s)", { 
-      error,
-      requestId: context.requestContext?.requestId 
+    logger.error("Failed to modify task(s)", error as Error, {
+      ...reqContext,
+      inputReceived: validatedInput ?? input
     });
 
     // Handle not found error specifically

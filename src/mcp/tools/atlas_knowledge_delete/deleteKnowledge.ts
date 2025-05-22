@@ -1,7 +1,7 @@
 import { KnowledgeService } from "../../../services/neo4j/knowledgeService.js";
 import { BaseErrorCode, McpError } from "../../../types/errors.js";
 import { ResponseFormat, createToolResponse } from "../../../types/mcp.js";
-import { logger } from "../../../utils/internal/logger.js";
+import { logger, requestContextService } from "../../../utils/index.js"; // Import requestContextService
 import { ToolContext } from "../../../types/tool.js";
 import { AtlasKnowledgeDeleteInput, AtlasKnowledgeDeleteSchema } from "./types.js";
 import { formatKnowledgeDeleteResponse } from "./responseFormat.js";
@@ -11,6 +11,7 @@ export const atlasDeleteKnowledge = async (
   context: ToolContext
 ) => {
   let validatedInput: AtlasKnowledgeDeleteInput | undefined;
+  const reqContext = context.requestContext ?? requestContextService.createRequestContext({ toolName: 'atlasDeleteKnowledge' });
   
   try {
     // Parse and validate input against schema definition
@@ -21,10 +22,10 @@ export const atlasDeleteKnowledge = async (
       // Process bulk removal operation
       const { knowledgeIds } = validatedInput;
       
-      logger.info("Initiating batch knowledge item removal", { 
+      logger.info("Initiating batch knowledge item removal", {
+        ...reqContext,
         count: knowledgeIds.length,
-        knowledgeIds,
-        requestId: context.requestContext?.requestId 
+        knowledgeIds
       });
 
       const results = {
@@ -76,10 +77,10 @@ export const atlasDeleteKnowledge = async (
         results.message = `Removed ${results.deleted.length} of ${knowledgeIds.length} knowledge items with ${results.errors.length} errors`;
       }
       
-      logger.info("Batch knowledge removal operation completed", { 
+      logger.info("Batch knowledge removal operation completed", {
+        ...reqContext,
         successCount: results.deleted.length,
-        errorCount: results.errors.length,
-        requestId: context.requestContext?.requestId 
+        errorCount: results.errors.length
       });
 
       // Conditionally format response
@@ -92,17 +93,17 @@ export const atlasDeleteKnowledge = async (
       // Process single entity removal
       const { id } = validatedInput;
       
-      logger.info("Removing knowledge item", { 
-        knowledgeId: id,
-        requestId: context.requestContext?.requestId 
+      logger.info("Removing knowledge item", {
+        ...reqContext,
+        knowledgeId: id
       });
 
       const deleted = await KnowledgeService.deleteKnowledge(id);
       
       if (!deleted) {
-        logger.warning("Target knowledge item not found for removal operation", { 
-          knowledgeId: id,
-          requestId: context.requestContext?.requestId 
+        logger.warning("Target knowledge item not found for removal operation", {
+          ...reqContext,
+          knowledgeId: id
         });
         
         throw new McpError(
@@ -112,9 +113,9 @@ export const atlasDeleteKnowledge = async (
         );
       }
       
-      logger.info("Knowledge item successfully removed", { 
-        knowledgeId: id,
-        requestId: context.requestContext?.requestId 
+      logger.info("Knowledge item successfully removed", {
+        ...reqContext,
+        knowledgeId: id
       });
 
       const result = {
@@ -136,9 +137,9 @@ export const atlasDeleteKnowledge = async (
       throw error;
     }
 
-    logger.error("Knowledge item removal operation failed", { 
-      error,
-      requestId: context.requestContext?.requestId 
+    logger.error("Knowledge item removal operation failed", error as Error, {
+      ...reqContext,
+      inputReceived: validatedInput ?? input
     });
 
     // Translate unknown errors to structured McpError format

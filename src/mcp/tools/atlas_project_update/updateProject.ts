@@ -1,7 +1,7 @@
 import { ProjectService } from "../../../services/neo4j/projectService.js";
 import { BaseErrorCode, McpError, ProjectErrorCode } from "../../../types/errors.js";
 import { ResponseFormat, createToolResponse } from "../../../types/mcp.js";
-import { logger } from "../../../utils/internal/logger.js";
+import { logger, requestContextService } from "../../../utils/index.js"; // Import requestContextService
 import { ToolContext } from "../../../types/tool.js";
 import { AtlasProjectUpdateInput, AtlasProjectUpdateSchema } from "./types.js";
 import { formatProjectUpdateResponse } from "./responseFormat.js";
@@ -11,6 +11,7 @@ export const atlasUpdateProject = async (
   context: ToolContext
 ) => {
   let validatedInput: AtlasProjectUpdateInput | undefined;
+  const reqContext = context.requestContext ?? requestContextService.createRequestContext({ toolName: 'atlasUpdateProject' });
   
   try {
     // Parse and validate the input against schema
@@ -19,9 +20,9 @@ export const atlasUpdateProject = async (
     // Process according to operation mode (single or bulk)
     if (validatedInput.mode === 'bulk') {
       // Execute bulk update operation
-      logger.info("Applying updates to multiple projects", { 
-        count: validatedInput.projects.length,
-        requestId: context.requestContext?.requestId 
+      logger.info("Applying updates to multiple projects", {
+        ...reqContext,
+        count: validatedInput.projects.length
       });
 
       const results = {
@@ -70,11 +71,11 @@ export const atlasUpdateProject = async (
         results.message = `Updated ${results.updated.length} of ${validatedInput.projects.length} projects with ${results.errors.length} errors`;
       }
       
-      logger.info("Bulk project modification completed", { 
+      logger.info("Bulk project modification completed", {
+        ...reqContext,
         successCount: results.updated.length,
         errorCount: results.errors.length,
-        projectIds: results.updated.map(p => p.id),
-        requestId: context.requestContext?.requestId 
+        projectIds: results.updated.map(p => p.id)
       });
 
       // Conditionally format response
@@ -87,10 +88,10 @@ export const atlasUpdateProject = async (
       // Process single project modification
       const { mode, id, updates } = validatedInput;
       
-      logger.info("Modifying project attributes", { 
+      logger.info("Modifying project attributes", {
+        ...reqContext,
         id, 
-        fields: Object.keys(updates),
-        requestId: context.requestContext?.requestId 
+        fields: Object.keys(updates)
       });
 
       // First check if project exists
@@ -106,9 +107,9 @@ export const atlasUpdateProject = async (
       // Update the project
       const updatedProject = await ProjectService.updateProject(id, updates);
       
-      logger.info("Project modifications applied successfully", { 
-        projectId: id,
-        requestId: context.requestContext?.requestId 
+      logger.info("Project modifications applied successfully", {
+        ...reqContext,
+        projectId: id
       });
 
       // Conditionally format response
@@ -124,9 +125,9 @@ export const atlasUpdateProject = async (
       throw error;
     }
 
-    logger.error("Failed to modify project(s)", { 
-      error,
-      requestId: context.requestContext?.requestId 
+    logger.error("Failed to modify project(s)", error as Error, {
+      ...reqContext,
+      inputReceived: validatedInput ?? input
     });
 
     // Handle not found error specifically

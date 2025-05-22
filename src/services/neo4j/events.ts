@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import { logger } from '../../utils/index.js'; // Updated import path
+import { logger, requestContextService } from '../../utils/index.js'; // Updated import path
 
 /**
  * Event types for database operations
@@ -27,11 +27,13 @@ class DatabaseEventSystem {
     // Log all events in debug mode
     if (process.env.NODE_ENV === 'development') {
       this.emitter.on(DatabaseEventType.WRITE_OPERATION, (details) => {
-        logger.debug('Database write operation', { details });
+        const reqContext = requestContextService.createRequestContext({ operation: 'DatabaseEvent.WRITE_OPERATION', eventDetails: details });
+        logger.debug('Database write operation', reqContext);
       });
       
       this.emitter.on(DatabaseEventType.ERROR, (error) => {
-        logger.debug('Database event error', { error });
+        const reqContext = requestContextService.createRequestContext({ operation: 'DatabaseEvent.ERROR', eventError: error });
+        logger.debug('Database event error', reqContext);
       });
     }
   }

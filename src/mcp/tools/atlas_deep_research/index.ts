@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { BaseErrorCode, McpError } from "../../../types/errors.js";
 import { McpToolResponse, ResponseFormat } from "../../../types/mcp.js";
 import { createToolExample, createToolMetadata, registerTool, ToolContext } from "../../../types/tool.js";
-import { logger } from "../../../utils/internal/logger.js";
+import { logger, requestContextService } from "../../../utils/index.js"; // Import requestContextService
 // ToolContext is now imported from ../../../types/tool.js
 import { deepResearch } from "./deepResearch.js";
 import { formatDeepResearchResponse } from "./responseFormat.js";
@@ -30,15 +30,15 @@ async function handler(
   params: unknown,
   context?: ToolContext
 ): Promise<McpToolResponse> {
-  const requestId = context?.requestContext?.requestId;
-  logger.debug("Received atlas_deep_research request", { params, requestId });
+  const reqContext = context?.requestContext ?? requestContextService.createRequestContext({ toolName: 'atlas_deep_research_handler' });
+  logger.debug("Received atlas_deep_research request", { ...reqContext, params });
 
   // 1. Validate Input
   const validationResult = AtlasDeepResearchInputSchema.safeParse(params);
   if (!validationResult.success) {
-    logger.error("Invalid input for atlas_deep_research", {
-      errors: validationResult.error.errors,
-      requestId,
+    logger.error("Invalid input for atlas_deep_research", validationResult.error, { // Pass error object
+      ...reqContext,
+      // errors: validationResult.error.errors, // This is now part of the error object
     });
     throw new McpError(
       BaseErrorCode.VALIDATION_ERROR,
@@ -53,11 +53,11 @@ async function handler(
 
   try {
     // 2. Call Core Logic
-    logger.info(`Calling deepResearch core logic for request ID: ${requestId}`);
+    logger.info(`Calling deepResearch core logic for request ID: ${reqContext.requestId}`, reqContext);
     const result = await deepResearch(input);
 
     // 3. Format Response
-    logger.debug(`Formatting atlas_deep_research response for request ID: ${requestId}`);
+    logger.debug(`Formatting atlas_deep_research response for request ID: ${reqContext.requestId}`, reqContext);
     if (input.responseFormat === ResponseFormat.JSON) {
       // Return raw JSON output if requested
       return {
@@ -69,22 +69,21 @@ async function handler(
       return formatDeepResearchResponse(result, input);
     }
   } catch (error) {
-    logger.error("Error executing atlas_deep_research", {
-      errorMessage: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
-      requestId,
+    logger.error("Error executing atlas_deep_research", error as Error, {
+      ...reqContext,
+      // errorMessage and stack are now part of the error object
     });
     // Re-throw errors that are already McpError instances
     if (error instanceof McpError) {
       throw error;
     }
     // Wrap unexpected errors in a standard internal error response, including requestId if available
-    const errorMessage = `Atlas deep research tool execution failed (Request ID: ${requestId ?? 'N/A'}): ${
+    const errMessage = `Atlas deep research tool execution failed (Request ID: ${reqContext.requestId ?? 'N/A'}): ${
       error instanceof Error ? error.message : String(error)
     }`;
     throw new McpError(
       BaseErrorCode.INTERNAL_ERROR,
-      errorMessage
+      errMessage
     );
   }
 }
@@ -240,5 +239,6 @@ export function registerAtlasDeepResearchTool(server: McpServer): void {
       // rateLimit: { windowMs: 60 * 1000, maxRequests: 10 }
     })
   );
-  logger.info("Registered atlas_deep_research tool.");
+  const registerContext = requestContextService.createRequestContext({ operation: 'registerAtlasDeepResearchTool' });
+  logger.info("Registered atlas_deep_research tool.", registerContext);
 }

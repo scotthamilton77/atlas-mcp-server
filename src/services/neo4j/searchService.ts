@@ -1,5 +1,5 @@
 import { Session, int } from 'neo4j-driver'; // Import int
-import { logger } from '../../utils/index.js'; // Updated import path
+import { logger, requestContextService } from '../../utils/index.js'; // Updated import path
 import { neo4jDriver } from './driver.js';
 import {
   NodeLabels,
@@ -39,7 +39,7 @@ export class SearchService {
    * @returns Paginated search results
    */
   static async search(options: SearchOptions): Promise<PaginatedResult<SearchResultItem>> {
-    
+    const reqContext = requestContextService.createRequestContext({ operation: 'SearchService.search', searchOptions: options });
     try {
       const {
         property = '', 
@@ -58,7 +58,7 @@ export class SearchService {
       
       const targetLabels = Array.isArray(entityTypes) ? entityTypes : [entityTypes];
       if (targetLabels.length === 0) {
-        logger.warning("Unified search called with empty entityTypes array. Returning empty results.");
+        logger.warning("Unified search called with empty entityTypes array. Returning empty results.", reqContext);
         return Neo4jUtils.paginateResults([], { page, limit });
       }
 
@@ -81,7 +81,7 @@ export class SearchService {
 
       for (const label of targetLabels) {
         if (!label || typeof label !== 'string') {
-          logger.warning(`Skipping invalid label in entityTypes: ${label}`);
+          logger.warning(`Skipping invalid label in entityTypes: ${label}`, { ...reqContext, invalidLabel: label });
           continue;
         }
         
@@ -105,9 +105,9 @@ export class SearchService {
         if (result.status === 'fulfilled' && result.value && Array.isArray(result.value)) { 
           allResults.push(...result.value);
         } else if (result.status === 'rejected') {
-          logger.error(`Search promise rejected for label "${label}":`, { reason: result.reason });
+          logger.error(`Search promise rejected for label "${label}":`, new Error(String(result.reason)), { ...reqContext, label, rejectionReason: result.reason });
         } else if (result.status === 'fulfilled') {
-           logger.warning(`Search promise fulfilled with non-array value for label "${label}":`, { value: result.value });
+           logger.warning(`Search promise fulfilled with non-array value for label "${label}":`, { ...reqContext, label, fulfilledValue: result.value });
         }
       });
       
@@ -124,7 +124,7 @@ export class SearchService {
       
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error performing unified search', { error: errorMessage, options });
+      logger.error('Error performing unified search', error as Error, { ...reqContext, detail: errorMessage, originalOptions: options });
       throw error; 
     } 
   }
@@ -141,7 +141,8 @@ export class SearchService {
     taskTypeFilter?: string,
     limit: number = 50 // Default limit per label search
   ): Promise<SearchResultItem[]> {
-    let session: Session | null = null; 
+    let session: Session | null = null;
+    const reqContext_single = requestContextService.createRequestContext({ operation: 'SearchService.searchSingleLabel', labelInput, cypherSearchValue, normalizedProperty, taskTypeFilter, limit });
     try {
       session = await neo4jDriver.getSession(); 
 
@@ -151,7 +152,7 @@ export class SearchService {
         case 'task': actualLabel = NodeLabels.Task; break;
         case 'knowledge': actualLabel = NodeLabels.Knowledge; break;
         default:
-          logger.warning(`Unsupported label provided to searchSingleLabel: ${labelInput}`);
+          logger.warning(`Unsupported label provided to searchSingleLabel: ${labelInput}`, reqContext_single);
           return []; 
       }
       
@@ -184,7 +185,7 @@ export class SearchService {
       }
 
       if (!searchProperty) {
-         logger.warning(`Could not determine a default search property for label ${actualLabel}. Returning empty results.`);
+         logger.warning(`Could not determine a default search property for label ${actualLabel}. Returning empty results.`, { ...reqContext_single, actualLabel });
          return [];
       }
       
@@ -281,7 +282,7 @@ export class SearchService {
         LIMIT $limit 
       `;
       
-      logger.debug(`Executing search query for label ${actualLabel}`, { query, params }); 
+      logger.debug(`Executing search query for label ${actualLabel}`, { ...reqContext_single, actualLabel, query, params }); 
       const result = await session.executeRead(async (tx: any) => (await tx.run(query, params)).records);
       
       return result.map((record: any) => {
@@ -303,7 +304,7 @@ export class SearchService {
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error(`Error searching label ${labelInput}`, { error: errorMessage, searchValue: cypherSearchValue, normalizedProperty }); 
+      logger.error(`Error searching label ${labelInput}`, error as Error, { ...reqContext_single, detail: errorMessage }); 
       return []; 
     } finally {
        if (session) {
@@ -328,6 +329,7 @@ export class SearchService {
     searchValue: string,
     options: Omit<SearchOptions, 'value' | 'fuzzy' | 'caseInsensitive'> = {}
   ): Promise<PaginatedResult<SearchResultItem>> {
+    const reqContext_fullText = requestContextService.createRequestContext({ operation: 'SearchService.fullTextSearch', searchValue, searchOptions: options });
     // Remove single session acquisition from here
     try {
       const {
@@ -398,7 +400,7 @@ export class SearchService {
             searchResults.push(...items);
           });
         } catch(err) {
-           logger.error('Error during project full-text search query', { error: err, searchValue });
+           logger.error('Error during project full-text search query', err as Error, { ...reqContext_fullText, targetLabel: 'project', detail: (err as Error).message });
            // Optionally re-throw or just log and continue
         } finally {
           if (projectSession) await projectSession.close();
@@ -449,7 +451,7 @@ export class SearchService {
             searchResults.push(...items);
           });
         } catch(err) {
-           logger.error('Error during task full-text search query', { error: err, searchValue });
+           logger.error('Error during task full-text search query', err as Error, { ...reqContext_fullText, targetLabel: 'task', detail: (err as Error).message });
         } finally {
           if (taskSession) await taskSession.close();
         }
@@ -504,7 +506,7 @@ export class SearchService {
             searchResults.push(...items);
           });
         } catch(err) {
-           logger.error('Error during knowledge full-text search query', { error: err, searchValue });
+           logger.error('Error during knowledge full-text search query', err as Error, { ...reqContext_fullText, targetLabel: 'knowledge', detail: (err as Error).message });
         } finally {
           if (knowledgeSession) await knowledgeSession.close();
         }
@@ -524,9 +526,9 @@ export class SearchService {
       return Neo4jUtils.paginateResults(searchResults, { page, limit });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error performing full-text search', { error: errorMessage, searchValue, options });
+      logger.error('Error performing full-text search', error as Error, { ...reqContext_fullText, detail: errorMessage });
       if (errorMessage.includes("Unable to find index")) {
-         logger.warning("Full-text index might not be configured correctly or supported in this Neo4j version.");
+         logger.warning("Full-text index might not be configured correctly or supported in this Neo4j version.", { ...reqContext_fullText, detail: "Index not found warning" });
          throw new Error(`Full-text search failed: Index not found or query error. (${errorMessage})`);
       }
       throw error;

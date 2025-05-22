@@ -2,7 +2,7 @@ import { KnowledgeService } from "../../../services/neo4j/knowledgeService.js";
 import { ProjectService } from "../../../services/neo4j/projectService.js";
 import { BaseErrorCode, McpError, ProjectErrorCode } from "../../../types/errors.js";
 import { ResponseFormat, createToolResponse } from "../../../types/mcp.js";
-import { logger } from "../../../utils/internal/logger.js";
+import { logger, requestContextService } from "../../../utils/index.js"; // Import requestContextService
 import { ToolContext } from "../../../types/tool.js";
 import { AtlasKnowledgeAddInput, AtlasKnowledgeAddSchema } from "./types.js";
 import { formatKnowledgeAddResponse } from "./responseFormat.js";
@@ -12,6 +12,7 @@ export const atlasAddKnowledge = async (
   context: ToolContext
 ) => {
   let validatedInput: AtlasKnowledgeAddInput | undefined;
+  const reqContext = context.requestContext ?? requestContextService.createRequestContext({ toolName: 'atlasAddKnowledge' });
   
   try {
     // Parse and validate input against schema
@@ -20,9 +21,9 @@ export const atlasAddKnowledge = async (
     // Handle single vs bulk knowledge addition based on mode
     if (validatedInput.mode === 'bulk') {
       // Execute bulk addition operation
-      logger.info("Adding multiple knowledge items", { 
-        count: validatedInput.knowledge.length,
-        requestId: context.requestContext?.requestId 
+      logger.info("Adding multiple knowledge items", {
+        ...reqContext,
+        count: validatedInput.knowledge.length
       });
 
       const results = {
@@ -64,11 +65,11 @@ export const atlasAddKnowledge = async (
         results.message = `Added ${results.created.length} of ${validatedInput.knowledge.length} knowledge items with ${results.errors.length} errors`;
       }
       
-      logger.info("Bulk knowledge addition completed", { 
+      logger.info("Bulk knowledge addition completed", {
+        ...reqContext,
         successCount: results.created.length,
         errorCount: results.errors.length,
-        knowledgeIds: results.created.map(k => k.id),
-        requestId: context.requestContext?.requestId 
+        knowledgeIds: results.created.map(k => k.id)
       });
 
       // Conditionally format response
@@ -81,10 +82,10 @@ export const atlasAddKnowledge = async (
       // Process single knowledge item addition
       const { mode, id, projectId, text, tags, domain, citations } = validatedInput;
       
-      logger.info("Adding new knowledge item", { 
+      logger.info("Adding new knowledge item", {
+        ...reqContext,
         projectId, 
-        domain,
-        requestId: context.requestContext?.requestId 
+        domain
       });
 
       const knowledge = await KnowledgeService.addKnowledge({
@@ -96,10 +97,10 @@ export const atlasAddKnowledge = async (
         citations: citations || []
       });
       
-      logger.info("Knowledge item added successfully", { 
+      logger.info("Knowledge item added successfully", {
+        ...reqContext,
         knowledgeId: knowledge.id,
-        projectId,
-        requestId: context.requestContext?.requestId 
+        projectId
       });
 
       // Conditionally format response
@@ -115,9 +116,9 @@ export const atlasAddKnowledge = async (
       throw error;
     }
 
-    logger.error("Failed to add knowledge item(s)", { 
-      error,
-      requestId: context.requestContext?.requestId 
+    logger.error("Failed to add knowledge item(s)", error as Error, {
+      ...reqContext,
+      inputReceived: validatedInput ?? input
     });
 
     // Handle project not found error specifically

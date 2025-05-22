@@ -1,6 +1,6 @@
 import neo4j, { Driver, ManagedTransaction, Session } from 'neo4j-driver';
 import { config } from '../../config/index.js';
-import { logger } from '../../utils/index.js'; // Updated import path
+import { logger, requestContextService } from '../../utils/index.js'; // Updated import path
 import { exportDatabase } from './backupRestoreService.js'; // Import the export function for backup trigger
 import { databaseEvents, DatabaseEventType } from './events.js';
 
@@ -41,8 +41,9 @@ class Neo4jDriver {
       if (!neo4jUri || !neo4jUser || !neo4jPassword) {
         throw new Error('Neo4j connection details are not properly configured');
       }
+      const reqContext = requestContextService.createRequestContext({ operation: 'Neo4jDriver.initDriver' });
 
-      logger.info('Initializing Neo4j driver connection');
+      logger.info('Initializing Neo4j driver connection', reqContext);
       
       this.driver = neo4j.driver(
         neo4jUri,
@@ -58,11 +59,13 @@ class Neo4jDriver {
       // Verify connection
       await this.driver.verifyConnectivity();
       
-      logger.info('Neo4j driver connection established successfully');
+      logger.info('Neo4j driver connection established successfully', reqContext);
       return this.driver;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Failed to initialize Neo4j driver', { error: errorMessage });
+      // reqContext might not be defined if error occurs before its creation, so create one if needed
+      const errorContext = requestContextService.createRequestContext({ operation: 'Neo4jDriver.initDriver.error' });
+      logger.error('Failed to initialize Neo4j driver', error as Error, { ...errorContext, detail: errorMessage });
       throw new Error(`Failed to initialize Neo4j connection: ${errorMessage}`);
     }
   }
@@ -124,12 +127,12 @@ class Neo4jDriver {
       return result as unknown as T[];
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error executing Neo4j query', { 
-        error: errorMessage, 
+      const errorContext = requestContextService.createRequestContext({ 
+        operation: 'Neo4jDriver.executeQuery',
         query: cypher,
-        // Avoid logging potentially sensitive params directly in production
-        // params: JSON.stringify(params) 
+        // params: params // Consider sanitizing or summarizing params
       });
+      logger.error('Error executing Neo4j query', error as Error, { ...errorContext, detail: errorMessage });
       
       // Publish error event
       databaseEvents.publish(DatabaseEventType.ERROR, {
@@ -174,11 +177,12 @@ class Neo4jDriver {
       return result as unknown as T[];
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error executing Neo4j read query', { 
-        error: errorMessage, 
+      const errorContext = requestContextService.createRequestContext({ 
+        operation: 'Neo4jDriver.executeReadQuery',
         query: cypher,
-        // params: JSON.stringify(params)
+        // params: params // Consider sanitizing or summarizing params
       });
+      logger.error('Error executing Neo4j read query', error as Error, { ...errorContext, detail: errorMessage });
       
       // Publish error event
       databaseEvents.publish(DatabaseEventType.ERROR, {
@@ -214,15 +218,16 @@ class Neo4jDriver {
    * @private
    */
   private triggerBackgroundBackup(): void {
-    logger.debug('Triggering background database backup with rotation...');
+    const reqContext = requestContextService.createRequestContext({ operation: 'Neo4jDriver.triggerBackgroundBackup' });
+    logger.debug('Triggering background database backup with rotation...', reqContext);
     // Run backup in the background without awaiting it
     exportDatabase()
       .then(backupPath => {
-        logger.info(`Background database backup successful: ${backupPath}`);
+        logger.info(`Background database backup successful: ${backupPath}`, { ...reqContext, backupPath });
       })
       .catch(error => {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        logger.error('Background database backup failed:', { error: errorMessage });
+        logger.error('Background database backup failed:', error as Error, { ...reqContext, detail: errorMessage });
         // Consider adding more robust error handling/notification if needed
       });
   }
@@ -231,15 +236,16 @@ class Neo4jDriver {
    * Close the Neo4j driver connection
    */
   public async close(): Promise<void> {
+    const reqContext = requestContextService.createRequestContext({ operation: 'Neo4jDriver.close' });
     if (this.driver) {
       try {
         await this.driver.close();
         this.driver = null;
         this.connectionPromise = null;
-        logger.info('Neo4j driver connection closed');
+        logger.info('Neo4j driver connection closed', reqContext);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        logger.error('Error closing Neo4j driver connection', { error: errorMessage });
+        logger.error('Error closing Neo4j driver connection', error as Error, { ...reqContext, detail: errorMessage });
         throw error; // Re-throw the error to propagate it
       }
     }

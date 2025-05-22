@@ -1,6 +1,6 @@
 import { ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { Neo4jKnowledge, Neo4jProject, Neo4jTask } from "../../services/neo4j/types.js";
-import { logger } from "../../utils/internal/logger.js";
+import { logger, requestContextService } from "../../utils/index.js"; // Import requestContextService
 
 /**
  * Resource URIs for the Atlas MCP resources
@@ -140,8 +140,9 @@ export interface KnowledgeResource {
  * Convert Neo4j Project to Project Resource
  */
 export function toProjectResource(project: Neo4jProject): ProjectResource {
+  const reqContext = requestContextService.createRequestContext({ operation: 'toProjectResource', projectId: project.id });
   // Log the incoming project structure for debugging
-  logger.debug('Converting project to resource:', { project });
+  logger.debug('Converting project to resource:', { ...reqContext, projectData: project });
   
   // Ensure all fields are properly extracted
   const resource: ProjectResource = {
@@ -157,7 +158,7 @@ export function toProjectResource(project: Neo4jProject): ProjectResource {
     updatedAt: project.updatedAt
   };
   
-  logger.debug('Created project resource:', { resource });
+  logger.debug('Created project resource:', { ...reqContext, projectResource: resource });
   return resource;
 }
 
@@ -165,8 +166,9 @@ export function toProjectResource(project: Neo4jProject): ProjectResource {
  * Convert Neo4j Task (with added assignedToUserId) to Task Resource
  */
 export function toTaskResource(task: Neo4jTask & { assignedToUserId: string | null }): TaskResource {
+  const reqContext = requestContextService.createRequestContext({ operation: 'toTaskResource', taskId: task.id });
   // Log the incoming task structure for debugging
-  logger.debug('Converting task to resource:', { task });
+  logger.debug('Converting task to resource:', { ...reqContext, taskData: task });
   
   const resource: TaskResource = {
     id: task.id,
@@ -185,7 +187,7 @@ export function toTaskResource(task: Neo4jTask & { assignedToUserId: string | nu
     updatedAt: task.updatedAt
   };
   
-  logger.debug('Created task resource:', { resource });
+  logger.debug('Created task resource:', { ...reqContext, taskResource: resource });
   return resource;
 }
 
@@ -193,8 +195,9 @@ export function toTaskResource(task: Neo4jTask & { assignedToUserId: string | nu
  * Convert Neo4j Knowledge (with added domain/citations) to Knowledge Resource
  */
 export function toKnowledgeResource(knowledge: Neo4jKnowledge & { domain: string | null; citations: string[] }): KnowledgeResource {
+  const reqContext = requestContextService.createRequestContext({ operation: 'toKnowledgeResource', knowledgeId: knowledge.id });
   // Log the incoming knowledge structure for debugging
-  logger.debug('Converting knowledge to resource:', { knowledge });
+  logger.debug('Converting knowledge to resource:', { ...reqContext, knowledgeData: knowledge });
   
   const resource: KnowledgeResource = {
     id: knowledge.id,
@@ -207,6 +210,6 @@ export function toKnowledgeResource(knowledge: Neo4jKnowledge & { domain: string
     updatedAt: knowledge.updatedAt
   };
   
-  logger.debug('Created knowledge resource:', { resource });
+  logger.debug('Created knowledge resource:', { ...reqContext, knowledgeResource: resource });
   return resource;
 }

@@ -1,6 +1,6 @@
 import { McpError } from '../../../types/errors.js';
 import { BaseErrorCode } from '../../../types/errors.js';
-import { logger } from '../../../utils/internal/logger.js';
+import { logger, requestContextService } from '../../../utils/index.js'; // Import requestContextService
 import { 
   KnowledgeService,
   ProjectService
@@ -14,6 +14,7 @@ import { KnowledgeItem, KnowledgeListRequest, KnowledgeListResponse } from './ty
  * @returns Promise resolving to structured knowledge items
  */
 export async function listKnowledge(request: KnowledgeListRequest): Promise<KnowledgeListResponse> {
+  const reqContext = requestContextService.createRequestContext({ operation: 'listKnowledge', requestParams: request });
   try {
     const {
       projectId,
@@ -84,6 +85,7 @@ export async function listKnowledge(request: KnowledgeListRequest): Promise<Know
     };
 
     logger.info('Knowledge query executed successfully', {
+      ...reqContext,
       projectId,
       count: knowledgeItems.length,
       total: knowledgeResult.total,
@@ -94,7 +96,7 @@ export async function listKnowledge(request: KnowledgeListRequest): Promise<Know
 
     return response;
   } catch (error) {
-    logger.error('Knowledge query execution failed', { error });
+    logger.error('Knowledge query execution failed', error as Error, { ...reqContext, detail: (error as Error).message });
     
     if (error instanceof McpError) {
       throw error;

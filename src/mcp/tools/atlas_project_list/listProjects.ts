@@ -4,7 +4,7 @@ import {
   TaskService
 } from '../../../services/neo4j/index.js';
 import { BaseErrorCode, McpError } from '../../../types/errors.js';
-import { logger } from '../../../utils/internal/logger.js';
+import { logger, requestContextService } from '../../../utils/index.js'; // Import requestContextService
 import { Project, ProjectListRequest, ProjectListResponse, Knowledge, Task } from './types.js'; // Import Knowledge and Task
 
 /**
@@ -15,6 +15,7 @@ import { Project, ProjectListRequest, ProjectListResponse, Knowledge, Task } fro
  * @returns Promise resolving to structured project entities with optional related resources
  */
 export async function listProjects(request: ProjectListRequest): Promise<ProjectListResponse> {
+  const reqContext = requestContextService.createRequestContext({ toolName: 'listProjects', requestMode: request.mode });
   try {
     const {
       mode = 'all',
@@ -85,7 +86,8 @@ export async function listProjects(request: ProjectListRequest): Promise<Project
           });
 
           // Add debug logging
-          logger.info('Knowledge items retrieved', { 
+          logger.info('Knowledge items retrieved', {
+            ...reqContext,
             projectId: project.id, // Access directly
             count: knowledgeResult.data.length,
             firstItem: knowledgeResult.data[0] ? JSON.stringify(knowledgeResult.data[0]) : 'none'
@@ -94,7 +96,8 @@ export async function listProjects(request: ProjectListRequest): Promise<Project
           // Map directly, assuming KnowledgeService returns Neo4jKnowledge objects
           project.knowledge = knowledgeResult.data.map(item => {
             // More explicit mapping with debug info
-            logger.debug('Processing knowledge item', { 
+            logger.debug('Processing knowledge item', {
+              ...reqContext,
               id: item.id,
               domain: item.domain,
               textLength: item.text ? item.text.length : 0
@@ -141,7 +144,8 @@ export async function listProjects(request: ProjectListRequest): Promise<Project
           });
 
           // Add debug logging
-          logger.info('Tasks retrieved for project', { 
+          logger.info('Tasks retrieved for project', {
+            ...reqContext,
             projectId: project.id, // Access directly
             count: tasksResult.data.length,
             firstItem: tasksResult.data[0] ? JSON.stringify(tasksResult.data[0]) : 'none'
@@ -150,7 +154,8 @@ export async function listProjects(request: ProjectListRequest): Promise<Project
           // Map directly, assuming TaskService returns Neo4jTask objects
           project.tasks = tasksResult.data.map(item => {
             // Debug info
-            logger.debug('Processing task item', { 
+            logger.debug('Processing task item', {
+              ...reqContext,
               id: item.id,
               title: item.title,
               status: item.status,
@@ -189,6 +194,7 @@ export async function listProjects(request: ProjectListRequest): Promise<Project
     };
 
     logger.info('Project query executed successfully', {
+      ...reqContext,
       mode,
       count: projects.length,
       total,
@@ -198,7 +204,7 @@ export async function listProjects(request: ProjectListRequest): Promise<Project
 
     return response;
   } catch (error) {
-    logger.error('Project query execution failed', { error });
+    logger.error('Project query execution failed', error as Error, reqContext);
     
     if (error instanceof McpError) {
       throw error;

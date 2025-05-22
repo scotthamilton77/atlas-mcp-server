@@ -3,7 +3,7 @@ import { KnowledgeService } from "../../../services/neo4j/knowledgeService.js";
 import { ProjectService } from "../../../services/neo4j/projectService.js";
 import { KnowledgeFilterOptions } from "../../../services/neo4j/types.js";
 import { toKnowledgeResource, ResourceTemplates, ResourceURIs } from "../types.js";
-import { logger } from "../../../utils/internal/logger.js";
+import { logger, requestContextService } from "../../../utils/index.js"; // Import requestContextService
 import { BaseErrorCode, McpError, ProjectErrorCode } from "../../../types/errors.js";
 
 /**
@@ -27,8 +27,9 @@ export function registerKnowledgeResources(server: McpServer) {
       mimeType: "application/json"
     },
     async (uri) => {
+    const reqContext = requestContextService.createRequestContext({ operation: 'listAllKnowledge', resourceUri: uri.href });
     try {
-      logger.info("Listing all knowledge items", { uri: uri.href });
+      logger.info("Listing all knowledge items", { ...reqContext, uri: uri.href });
 
       // Parse query parameters
       const queryParams = new URLSearchParams(uri.search);
@@ -95,8 +96,9 @@ export function registerKnowledgeResources(server: McpServer) {
         ]
       };
     } catch (error) {
-      logger.error("Error listing knowledge items", { 
-        error,
+      logger.error("Error listing knowledge items", error as Error, { 
+        ...reqContext,
+        // error is now part of the Error object passed to logger
         uri: uri.href
       });
 
@@ -117,12 +119,14 @@ export function registerKnowledgeResources(server: McpServer) {
       mimeType: "application/json"
     },
     async (uri, params) => {
+    const reqContext = requestContextService.createRequestContext({ operation: 'getKnowledgeById', resourceUri: uri.href, knowledgeIdParam: params.knowledgeId });
     try {
       const knowledgeId = params.knowledgeId as string;
       
       logger.info("Fetching knowledge by ID", { 
-        knowledgeId,
-        uri: uri.href
+        ...reqContext,
+        knowledgeId, // Already in reqContext but can be explicit for clarity
+        uri: uri.href // Already in reqContext but can be explicit
       });
 
       if (!knowledgeId) {
@@ -161,9 +165,10 @@ export function registerKnowledgeResources(server: McpServer) {
         throw error;
       }
 
-      logger.error("Error fetching knowledge by ID", { 
-        error,
-        params
+      logger.error("Error fetching knowledge by ID", error as Error, { 
+        ...reqContext,
+        // error is now part of the Error object passed to logger
+        parameters: params
       });
 
       throw new McpError(
@@ -183,12 +188,14 @@ export function registerKnowledgeResources(server: McpServer) {
       mimeType: "application/json"
     },
     async (uri, params) => {
+    const reqContext = requestContextService.createRequestContext({ operation: 'listKnowledgeByProject', resourceUri: uri.href, projectIdParam: params.projectId });
     try {
       const projectId = params.projectId as string;
       
       logger.info("Listing knowledge for project", { 
-        projectId,
-        uri: uri.href
+        ...reqContext,
+        projectId, // Already in reqContext but can be explicit
+        uri: uri.href // Already in reqContext
       });
 
       if (!projectId) {
@@ -277,9 +284,10 @@ export function registerKnowledgeResources(server: McpServer) {
         throw error;
       }
 
-      logger.error("Error listing knowledge for project", { 
-        error,
-        params
+      logger.error("Error listing knowledge for project", error as Error, { 
+        ...reqContext,
+        // error is now part of the Error object passed to logger
+        parameters: params
       });
 
       throw new McpError(

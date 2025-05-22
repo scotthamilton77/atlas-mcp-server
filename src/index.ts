@@ -20,11 +20,12 @@ let serverInstance: McpServer | undefined;
  * @param signal - The signal or event name that triggered the shutdown (e.g., "SIGTERM", "uncaughtException").
  */
 const shutdown = async (signal: string) => {
-  const shutdownContext = {
+  // Create a proper RequestContext for shutdown operations
+  const shutdownContext = requestContextService.createRequestContext({
     operation: 'Shutdown',
     signal,
     appName: config.mcpServerName,
-  };
+  });
 
   logger.info(`Received ${signal}. Starting graceful shutdown for ${config.mcpServerName}...`, shutdownContext);
 
@@ -44,10 +45,10 @@ const shutdown = async (signal: string) => {
     logger.info(`Graceful shutdown for ${config.mcpServerName} completed successfully. Exiting.`, shutdownContext);
     process.exit(0);
   } catch (error) {
-    logger.error("Critical error during shutdown", {
+    // Pass the error object directly as the second argument to logger.error
+    logger.error("Critical error during shutdown", error as Error, {
       ...shutdownContext,
-      error: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined
+      // error message and stack are now part of the Error object passed to logger
     });
     process.exit(1);
   }
@@ -77,7 +78,8 @@ const start = async () => {
   // The logger.initialize() method itself logs its status, so no redundant log here.
   // --- End Logger Initialization ---
 
-  logger.debug("Configuration loaded successfully", { config });
+  const configLoadContext = requestContextService.createRequestContext({ operation: 'ConfigLoad' });
+  logger.debug("Configuration loaded successfully", { ...configLoadContext, configValues: config }); // Spread context and add specific data
 
   const transportType = config.mcpTransportType;
   const startupContext = requestContextService.createRequestContext({

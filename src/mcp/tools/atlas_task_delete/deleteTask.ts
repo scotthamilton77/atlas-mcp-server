@@ -1,7 +1,7 @@
 import { TaskService } from "../../../services/neo4j/taskService.js";
 import { BaseErrorCode, McpError } from "../../../types/errors.js";
 import { ResponseFormat, createToolResponse } from "../../../types/mcp.js";
-import { logger } from "../../../utils/internal/logger.js";
+import { logger, requestContextService } from "../../../utils/index.js"; // Import requestContextService
 import { ToolContext } from "../../../types/tool.js";
 import { AtlasTaskDeleteInput, AtlasTaskDeleteSchema } from "./types.js";
 import { formatTaskDeleteResponse } from "./responseFormat.js";
@@ -11,6 +11,7 @@ export const atlasDeleteTask = async (
   context: ToolContext
 ) => {
   let validatedInput: AtlasTaskDeleteInput | undefined;
+  const reqContext = context.requestContext ?? requestContextService.createRequestContext({ toolName: 'atlasDeleteTask' });
   
   try {
     // Parse and validate input against schema definition
@@ -21,10 +22,10 @@ export const atlasDeleteTask = async (
       // Process bulk removal operation
       const { taskIds } = validatedInput;
       
-      logger.info("Initiating batch task removal", { 
+      logger.info("Initiating batch task removal", {
+        ...reqContext,
         count: taskIds.length,
-        taskIds,
-        requestId: context.requestContext?.requestId 
+        taskIds
       });
 
       const results = {
@@ -76,10 +77,10 @@ export const atlasDeleteTask = async (
         results.message = `Removed ${results.deleted.length} of ${taskIds.length} tasks with ${results.errors.length} errors`;
       }
       
-      logger.info("Batch task removal operation completed", { 
+      logger.info("Batch task removal operation completed", {
+        ...reqContext,
         successCount: results.deleted.length,
-        errorCount: results.errors.length,
-        requestId: context.requestContext?.requestId 
+        errorCount: results.errors.length
       });
 
       // Conditionally format response
@@ -92,17 +93,17 @@ export const atlasDeleteTask = async (
       // Process single entity removal
       const { id } = validatedInput;
       
-      logger.info("Removing task entity", { 
-        taskId: id,
-        requestId: context.requestContext?.requestId 
+      logger.info("Removing task entity", {
+        ...reqContext,
+        taskId: id
       });
 
       const deleted = await TaskService.deleteTask(id);
       
       if (!deleted) {
-        logger.warning("Target task not found for removal operation", { 
-          taskId: id,
-          requestId: context.requestContext?.requestId 
+        logger.warning("Target task not found for removal operation", {
+          ...reqContext,
+          taskId: id
         });
         
         throw new McpError(
@@ -112,9 +113,9 @@ export const atlasDeleteTask = async (
         );
       }
       
-      logger.info("Task successfully removed", { 
-        taskId: id,
-        requestId: context.requestContext?.requestId 
+      logger.info("Task successfully removed", {
+        ...reqContext,
+        taskId: id
       });
 
       const result = {
@@ -136,9 +137,9 @@ export const atlasDeleteTask = async (
       throw error;
     }
 
-    logger.error("Task removal operation failed", { 
-      error,
-      requestId: context.requestContext?.requestId 
+    logger.error("Task removal operation failed", error as Error, {
+      ...reqContext,
+      inputReceived: validatedInput ?? input
     });
 
     // Translate unknown errors to structured McpError format

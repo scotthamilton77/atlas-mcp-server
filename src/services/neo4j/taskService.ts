@@ -1,5 +1,5 @@
 import { int } from 'neo4j-driver'; // Import 'int' for pagination
-import { logger } from '../../utils/index.js'; // Updated import path
+import { logger, requestContextService } from '../../utils/index.js'; // Updated import path
 import { neo4jDriver } from './driver.js';
 import { generateId, buildListQuery } from './helpers.js'; // Import buildListQuery
 import {
@@ -129,16 +129,19 @@ export class TaskService {
         assignedToUserId: result.get('assignedToUserId') || null
       };
       
-      logger.info('Task created successfully', { 
-        taskId: createdTaskData.id,
-        projectId: task.projectId,
-        assignedTo: assignedToUserId 
+      const reqContext_create = requestContextService.createRequestContext({ 
+        operation: 'createTask', 
+        taskId: createdTaskData.id, 
+        projectId: task.projectId, 
+        assignedToUserId 
       });
+      logger.info('Task created successfully', reqContext_create);
       
       return createdTaskData; 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error creating task', { error: errorMessage, taskInput: task });
+      const errorContext = requestContextService.createRequestContext({ operation: 'createTask.error', taskInput: task });
+      logger.error('Error creating task', error as Error, { ...errorContext, detail: errorMessage });
       throw error;
     } finally {
       await session.close();
@@ -155,14 +158,15 @@ export class TaskService {
   static async linkTaskToKnowledge(taskId: string, knowledgeId: string, relationshipType: string): Promise<boolean> {
     // TODO: Validate relationshipType against allowed types or RelationshipTypes enum
     const session = await neo4jDriver.getSession();
-    logger.debug(`Attempting to link task ${taskId} to knowledge ${knowledgeId} with type ${relationshipType}`);
+    const reqContext_link = requestContextService.createRequestContext({ operation: 'linkTaskToKnowledge', taskId, knowledgeId, relationshipType });
+    logger.debug(`Attempting to link task ${taskId} to knowledge ${knowledgeId} with type ${relationshipType}`, reqContext_link);
 
     try {
       const taskExists = await Neo4jUtils.nodeExists(NodeLabels.Task, 'id', taskId);
       const knowledgeExists = await Neo4jUtils.nodeExists(NodeLabels.Knowledge, 'id', knowledgeId);
 
       if (!taskExists || !knowledgeExists) {
-        logger.warning(`Cannot link: Task (${taskId} exists: ${taskExists}) or Knowledge (${knowledgeId} exists: ${knowledgeExists}) not found.`);
+        logger.warning(`Cannot link: Task (${taskId} exists: ${taskExists}) or Knowledge (${knowledgeId} exists: ${knowledgeExists}) not found.`, { ...reqContext_link, taskExists, knowledgeExists });
         return false;
       }
 
@@ -183,15 +187,15 @@ export class TaskService {
       const linkCreated = result.length > 0;
 
       if (linkCreated) {
-        logger.info(`Successfully linked task ${taskId} to knowledge ${knowledgeId} with type ${relationshipType}`);
+        logger.info(`Successfully linked task ${taskId} to knowledge ${knowledgeId} with type ${relationshipType}`, reqContext_link);
       } else {
-        logger.warning(`Failed to link task ${taskId} to knowledge ${knowledgeId} (MERGE returned no relationship)`);
+        logger.warning(`Failed to link task ${taskId} to knowledge ${knowledgeId} (MERGE returned no relationship)`, reqContext_link);
       }
 
       return linkCreated;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error linking task to knowledge item', { error: errorMessage, taskId, knowledgeId, relationshipType });
+      logger.error('Error linking task to knowledge item', error as Error, { ...reqContext_link, detail: errorMessage });
       throw error;
     } finally {
       await session.close();
@@ -264,7 +268,8 @@ export class TaskService {
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error getting task by ID', { error: errorMessage, id });
+      const errorContext = requestContextService.createRequestContext({ operation: 'getTaskById.error', taskId: id });
+      logger.error('Error getting task by ID', error as Error, { ...errorContext, detail: errorMessage });
       throw error;
     } finally {
       await session.close();
@@ -295,7 +300,8 @@ export class TaskService {
       return result === 0;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error checking task dependencies completion status', { error: errorMessage, taskId });
+      const errorContext = requestContextService.createRequestContext({ operation: 'areAllDependenciesCompleted.error', taskId });
+      logger.error('Error checking task dependencies completion status', error as Error, { ...errorContext, detail: errorMessage });
       throw error;
     } finally {
       await session.close();
@@ -413,12 +419,13 @@ export class TaskService {
         createdAt: result.get('createdAt'),
         updatedAt: result.get('updatedAt')
       };
-
-      logger.info('Task updated successfully', { taskId: id });
+      const reqContext_update = requestContextService.createRequestContext({ operation: 'updateTask', taskId: id });
+      logger.info('Task updated successfully', reqContext_update);
       return updatedTaskData; 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error updating task', { error: errorMessage, id, updates });
+      const errorContext = requestContextService.createRequestContext({ operation: 'updateTask.error', taskId: id, updatesApplied: updates });
+      logger.error('Error updating task', error as Error, { ...errorContext, detail: errorMessage });
       throw error;
     } finally {
       await session.close();
@@ -447,12 +454,13 @@ export class TaskService {
       await session.executeWrite(async (tx) => {
         await tx.run(query, { id });
       });
-      
-      logger.info('Task deleted successfully', { taskId: id });
+      const reqContext_delete = requestContextService.createRequestContext({ operation: 'deleteTask', taskId: id });
+      logger.info('Task deleted successfully', reqContext_delete);
       return true;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error deleting task', { error: errorMessage, id });
+      const errorContext = requestContextService.createRequestContext({ operation: 'deleteTask.error', taskId: id });
+      logger.error('Error deleting task', error as Error, { ...errorContext, detail: errorMessage });
       throw error;
     } finally {
       await session.close();
@@ -519,13 +527,14 @@ export class TaskService {
         assignmentMatchClause // Additional MATCH clause for assignment
       );
       
+      const reqContext_list = requestContextService.createRequestContext({ operation: 'getTasks', filterOptions: options });
       // Execute count query
       const totalResult = await session.executeRead(async (tx) => {
         // buildListQuery returns params including skip/limit, remove them for count
         const countParams = { ...params };
         delete countParams.skip;
         delete countParams.limit;
-        logger.debug('Executing Task Count Query (using buildListQuery):', { query: countQuery, params: countParams });
+        logger.debug('Executing Task Count Query (using buildListQuery):', { ...reqContext_list, query: countQuery, params: countParams });
         const result = await tx.run(countQuery, countParams);
         return result.records[0]?.get('total') ?? 0;
       });
@@ -533,7 +542,7 @@ export class TaskService {
       
       // Execute data query
       const dataResult = await session.executeRead(async (tx) => {
-        logger.debug('Executing Task Data Query (using buildListQuery):', { query: dataQuery, params: params });
+        logger.debug('Executing Task Data Query (using buildListQuery):', { ...reqContext_list, query: dataQuery, params: params });
         const result = await tx.run(dataQuery, params);
         return result.records;
       });
@@ -578,7 +587,8 @@ export class TaskService {
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error getting tasks', { error: errorMessage, options });
+      const errorContext = requestContextService.createRequestContext({ operation: 'getTasks.error', filterOptions: options });
+      logger.error('Error getting tasks', error as Error, { ...errorContext, detail: errorMessage });
       throw error;
     } finally {
       await session.close();
@@ -662,12 +672,13 @@ export class TaskService {
         sourceTaskId: record.get('sourceTaskId'),
         targetTaskId: record.get('targetTaskId')
       };
-      
-      logger.info('Task dependency added successfully', { sourceTaskId, targetTaskId });
+      const reqContext_addDep = requestContextService.createRequestContext({ operation: 'addTaskDependency', sourceTaskId, targetTaskId });
+      logger.info('Task dependency added successfully', reqContext_addDep);
       return dependency;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error adding task dependency', { error: errorMessage, sourceTaskId, targetTaskId });
+      const errorContext = requestContextService.createRequestContext({ operation: 'addTaskDependency.error', sourceTaskId, targetTaskId });
+      logger.error('Error adding task dependency', error as Error, { ...errorContext, detail: errorMessage });
       throw error;
     } finally {
       await session.close();
@@ -692,17 +703,19 @@ export class TaskService {
         const res = await tx.run(query, { dependencyId });
         return res.summary.counters.updates().relationshipsDeleted > 0; 
       });
-            
+      
+      const reqContext_removeDep = requestContextService.createRequestContext({ operation: 'removeTaskDependency', dependencyId });
       if (result) {
-        logger.info('Task dependency removed successfully', { dependencyId });
+        logger.info('Task dependency removed successfully', reqContext_removeDep);
       } else {
-        logger.warning('Task dependency not found or not removed', { dependencyId });
+        logger.warning('Task dependency not found or not removed', reqContext_removeDep);
       }
       
       return result;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error removing task dependency', { error: errorMessage, dependencyId });
+      const errorContext = requestContextService.createRequestContext({ operation: 'removeTaskDependency.error', dependencyId });
+      logger.error('Error removing task dependency', error as Error, { ...errorContext, detail: errorMessage });
       throw error;
     } finally {
       await session.close();
@@ -783,7 +796,8 @@ export class TaskService {
       return { dependencies, dependents };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error getting task dependencies', { error: errorMessage, taskId });
+      const errorContext = requestContextService.createRequestContext({ operation: 'getTaskDependencies.error', taskId });
+      logger.error('Error getting task dependencies', error as Error, { ...errorContext, detail: errorMessage });
       throw error;
     } finally {
       await session.close();
@@ -866,12 +880,13 @@ export class TaskService {
         createdAt: result.get('createdAt'),
         updatedAt: result.get('updatedAt')
       };
-      
-      logger.info('Task assigned successfully', { taskId, userId });
+      const reqContext_assign = requestContextService.createRequestContext({ operation: 'assignTask', taskId, userId });
+      logger.info('Task assigned successfully', reqContext_assign);
       return updatedTaskData; 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error assigning task', { error: errorMessage, taskId, userId });
+      const errorContext = requestContextService.createRequestContext({ operation: 'assignTask.error', taskId, userId });
+      logger.error('Error assigning task', error as Error, { ...errorContext, detail: errorMessage });
       throw error;
     } finally {
       await session.close();
@@ -947,12 +962,13 @@ export class TaskService {
         createdAt: result.get('createdAt'),
         updatedAt: result.get('updatedAt')
       };
-      
-      logger.info('Task unassigned successfully', { taskId });
+      const reqContext_unassign = requestContextService.createRequestContext({ operation: 'unassignTask', taskId });
+      logger.info('Task unassigned successfully', reqContext_unassign);
       return updatedTaskData; 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error unassigning task', { error: errorMessage, taskId });
+      const errorContext = requestContextService.createRequestContext({ operation: 'unassignTask.error', taskId });
+      logger.error('Error unassigning task', error as Error, { ...errorContext, detail: errorMessage });
       throw error;
     } finally {
       await session.close();

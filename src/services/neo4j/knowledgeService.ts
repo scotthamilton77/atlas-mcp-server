@@ -1,4 +1,4 @@
-import { logger } from '../../utils/index.js'; // Updated import path
+import { logger, requestContextService } from '../../utils/index.js'; // Updated import path
 import { neo4jDriver } from './driver.js';
 import { generateId } from './helpers.js';
 import {
@@ -101,11 +101,8 @@ export class KnowledgeService {
         await this.addCitations(knowledgeId, inputCitations);
         actualCitations = inputCitations; // Assume these are the citations for the response
       }
-      
-      logger.info('Knowledge item created successfully', { 
-        knowledgeId: baseKnowledge.id,
-        projectId: knowledge.projectId
-      });
+      const reqContext = requestContextService.createRequestContext({ operation: 'addKnowledge', knowledgeId: baseKnowledge.id, projectId: knowledge.projectId });
+      logger.info('Knowledge item created successfully', reqContext);
       
       // Return the extended object with domain and citations
       return {
@@ -115,7 +112,8 @@ export class KnowledgeService {
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error creating knowledge item', { error: errorMessage, knowledgeInput: knowledge }); // Log input separately
+      const errorContext = requestContextService.createRequestContext({ operation: 'addKnowledge.error', knowledgeInput: knowledge });
+      logger.error('Error creating knowledge item', error as Error, { ...errorContext, detail: errorMessage });
       throw error;
     } finally {
       await session.close();
@@ -132,14 +130,15 @@ export class KnowledgeService {
   static async linkKnowledgeToKnowledge(sourceId: string, targetId: string, relationshipType: string): Promise<boolean> {
     // TODO: Validate relationshipType against allowed types or RelationshipTypes enum
     const session = await neo4jDriver.getSession();
-    logger.debug(`Attempting to link knowledge ${sourceId} to ${targetId} with type ${relationshipType}`);
+    const reqContext = requestContextService.createRequestContext({ operation: 'linkKnowledgeToKnowledge', sourceId, targetId, relationshipType });
+    logger.debug(`Attempting to link knowledge ${sourceId} to ${targetId} with type ${relationshipType}`, reqContext);
 
     try {
       const sourceExists = await Neo4jUtils.nodeExists(NodeLabels.Knowledge, 'id', sourceId);
       const targetExists = await Neo4jUtils.nodeExists(NodeLabels.Knowledge, 'id', targetId);
 
       if (!sourceExists || !targetExists) {
-        logger.warning(`Cannot link knowledge: Source (${sourceId} exists: ${sourceExists}) or Target (${targetId} exists: ${targetExists}) not found.`);
+        logger.warning(`Cannot link knowledge: Source (${sourceId} exists: ${sourceExists}) or Target (${targetId} exists: ${targetExists}) not found.`, { ...reqContext, sourceExists, targetExists });
         return false;
       }
 
@@ -161,15 +160,15 @@ export class KnowledgeService {
       const linkCreated = result.length > 0;
 
       if (linkCreated) {
-        logger.info(`Successfully linked knowledge ${sourceId} to ${targetId} with type ${relationshipType}`);
+        logger.info(`Successfully linked knowledge ${sourceId} to ${targetId} with type ${relationshipType}`, reqContext);
       } else {
-        logger.warning(`Failed to link knowledge ${sourceId} to ${targetId} (MERGE returned no relationship)`);
+        logger.warning(`Failed to link knowledge ${sourceId} to ${targetId} (MERGE returned no relationship)`, reqContext);
       }
 
       return linkCreated;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error linking knowledge items', { error: errorMessage, sourceId, targetId, relationshipType });
+      logger.error('Error linking knowledge items', error as Error, { ...reqContext, detail: errorMessage });
       throw error;
     } finally {
       await session.close();
@@ -232,7 +231,8 @@ export class KnowledgeService {
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error getting knowledge by ID', { error: errorMessage, id });
+      const reqContext = requestContextService.createRequestContext({ operation: 'getKnowledgeById.error', knowledgeId: id });
+      logger.error('Error getting knowledge by ID', error as Error, { ...reqContext, detail: errorMessage });
       throw error;
     } finally {
       await session.close();
@@ -336,12 +336,13 @@ export class KnowledgeService {
          createdAt: updatedKnowledgeRecord.get('createdAt'),
          updatedAt: updatedKnowledgeRecord.get('updatedAt')
       };
-      
-      logger.info('Knowledge item updated successfully', { knowledgeId: id });
+      const reqContext_update = requestContextService.createRequestContext({ operation: 'updateKnowledge', knowledgeId: id });
+      logger.info('Knowledge item updated successfully', reqContext_update);
       return finalUpdatedKnowledge;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error updating knowledge item', { error: errorMessage, id, updates });
+      const errorContext = requestContextService.createRequestContext({ operation: 'updateKnowledge.error', knowledgeId: id, updatesApplied: updates });
+      logger.error('Error updating knowledge item', error as Error, { ...errorContext, detail: errorMessage });
       throw error;
     } finally {
       await session.close();
@@ -371,12 +372,13 @@ export class KnowledgeService {
       await session.executeWrite(async (tx) => {
         await tx.run(query, { id });
       });
-      
-      logger.info('Knowledge item deleted successfully', { knowledgeId: id });
+      const reqContext_delete = requestContextService.createRequestContext({ operation: 'deleteKnowledge', knowledgeId: id });
+      logger.info('Knowledge item deleted successfully', reqContext_delete);
       return true;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error deleting knowledge item', { error: errorMessage, id });
+      const errorContext = requestContextService.createRequestContext({ operation: 'deleteKnowledge.error', knowledgeId: id });
+      logger.error('Error deleting knowledge item', error as Error, { ...errorContext, detail: errorMessage });
       throw error;
     } finally {
       await session.close();
@@ -522,7 +524,8 @@ export class KnowledgeService {
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error getting knowledge items', { error: errorMessage, options });
+      const reqContext_get = requestContextService.createRequestContext({ operation: 'getKnowledge.error', filterOptions: options });
+      logger.error('Error getting knowledge items', error as Error, { ...reqContext_get, detail: errorMessage });
       throw error;
     } finally {
       await session.close();
@@ -555,7 +558,8 @@ export class KnowledgeService {
       }));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error getting domains', { error: errorMessage });
+      const reqContext_domains = requestContextService.createRequestContext({ operation: 'getDomains.error' });
+      logger.error('Error getting domains', error as Error, { ...reqContext_domains, detail: errorMessage });
       throw error;
     } finally {
       await session.close();
@@ -599,7 +603,8 @@ export class KnowledgeService {
       }));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error getting tags', { error: errorMessage, projectId });
+      const reqContext_tags = requestContextService.createRequestContext({ operation: 'getTags.error', projectId });
+      logger.error('Error getting tags', error as Error, { ...reqContext_tags, detail: errorMessage });
       throw error;
     } finally {
       await session.close();
@@ -639,12 +644,13 @@ export class KnowledgeService {
         const res = await tx.run(query, { knowledgeId, citationData });
         return res.records.map(r => r.get('citationId'));
       });
-      
-      logger.debug(`Added ${result.length} citations for knowledge ${knowledgeId}`);
+      const reqContext_addCite = requestContextService.createRequestContext({ operation: 'addCitations', knowledgeId, citationCount: result.length });
+      logger.debug(`Added ${result.length} citations for knowledge ${knowledgeId}`, reqContext_addCite);
       return result;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error adding citations', { error: errorMessage, knowledgeId, citations });
+      const errorContext = requestContextService.createRequestContext({ operation: 'addCitations.error', knowledgeId, citations });
+      logger.error('Error adding citations', error as Error, { ...errorContext, detail: errorMessage });
       throw error;
     } finally {
       await session.close();

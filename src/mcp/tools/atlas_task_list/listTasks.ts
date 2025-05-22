@@ -1,7 +1,7 @@
 import { TaskService } from '../../../services/neo4j/taskService.js';
 import { ProjectService } from '../../../services/neo4j/projectService.js';
 import { BaseErrorCode, McpError, ProjectErrorCode } from '../../../types/errors.js';
-import { logger } from '../../../utils/internal/logger.js';
+import { logger, requestContextService } from '../../../utils/index.js'; // Import requestContextService
 import { ToolContext } from '../../../types/tool.js';
 import { TaskListRequestInput, TaskListRequestSchema } from './types.js';
 import { formatTaskListResponse } from './responseFormat.js';
@@ -10,14 +10,15 @@ export const atlasListTasks = async (
   input: unknown,
   context: ToolContext
 ) => {
+  const reqContext = context.requestContext ?? requestContextService.createRequestContext({ toolName: 'atlasListTasks' });
   try {
     // Parse and validate input against schema
     const validatedInput = TaskListRequestSchema.parse(input);
     
     // Log operation
-    logger.info("Listing tasks for project", { 
-      projectId: validatedInput.projectId,
-      requestId: context.requestContext?.requestId 
+    logger.info("Listing tasks for project", {
+      ...reqContext,
+      projectId: validatedInput.projectId
     });
 
     // First check if the project exists
@@ -45,11 +46,11 @@ export const atlasListTasks = async (
       limit: validatedInput.limit
     });
     
-    logger.info("Tasks retrieved successfully", { 
+    logger.info("Tasks retrieved successfully", {
+      ...reqContext,
       projectId: validatedInput.projectId,
       taskCount: tasksResult.data.length,
-      totalTasks: tasksResult.total,
-      requestId: context.requestContext?.requestId 
+      totalTasks: tasksResult.total
     });
 
     // Create the response object with task data
@@ -69,9 +70,9 @@ export const atlasListTasks = async (
       throw error;
     }
 
-    logger.error("Failed to list tasks", { 
-      error,
-      requestId: context.requestContext?.requestId 
+    logger.error("Failed to list tasks", error as Error, {
+      ...reqContext,
+      inputReceived: input // validatedInput might not be defined here
     });
 
     // Convert other errors to McpError

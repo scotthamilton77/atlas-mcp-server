@@ -2,7 +2,7 @@ import { ProjectService } from '../../../services/neo4j/projectService.js';
 import { ProjectDependencyType } from '../../../services/neo4j/types.js'; // Import the enum
 import { BaseErrorCode, McpError, ProjectErrorCode } from "../../../types/errors.js";
 import { ResponseFormat, createToolResponse } from "../../../types/mcp.js";
-import { logger } from "../../../utils/internal/logger.js";
+import { logger, requestContextService } from "../../../utils/index.js"; // Import requestContextService
 import { ToolContext } from "../../../types/tool.js";
 import { AtlasProjectCreateInput, AtlasProjectCreateSchema } from "./types.js";
 import { formatProjectCreateResponse } from "./responseFormat.js";
@@ -12,6 +12,7 @@ export const atlasCreateProject = async (
   context: ToolContext
 ) => {
   let validatedInput: AtlasProjectCreateInput | undefined;
+  const reqContext = context.requestContext ?? requestContextService.createRequestContext({ toolName: 'atlasCreateProject' });
   
   try {
     // Parse and validate input against schema
@@ -21,8 +22,8 @@ export const atlasCreateProject = async (
     if (validatedInput.mode === 'bulk') {
       // Execute bulk creation operation
       logger.info("Initializing multiple projects", { 
-        count: validatedInput.projects.length,
-        requestId: context.requestContext?.requestId 
+        ...reqContext,
+        count: validatedInput.projects.length
       });
 
       const results = {
@@ -60,11 +61,14 @@ export const atlasCreateProject = async (
                   'Dependency created during project creation'
                 );
               } catch (error) {
-                logger.warning(`Failed to create dependency for project ${createdProject.id} to ${dependencyId}`, {
-                  error,
+                const depErrorContext = requestContextService.createRequestContext({
+                  ...reqContext,
+                  originalErrorMessage: error instanceof Error ? error.message : String(error),
+                  originalErrorStack: error instanceof Error ? error.stack : undefined,
                   projectId: createdProject.id,
-                  dependencyId
+                  dependencyIdAttempted: dependencyId
                 });
+                logger.warning(`Failed to create dependency for project ${createdProject.id} to ${dependencyId}`, depErrorContext);
               }
             }
           }
@@ -87,10 +91,10 @@ export const atlasCreateProject = async (
       }
       
       logger.info("Bulk project initialization completed", { 
+        ...reqContext,
         successCount: results.created.length,
         errorCount: results.errors.length,
-        projectIds: results.created.map(p => p.id),
-        requestId: context.requestContext?.requestId 
+        projectIds: results.created.map(p => p.id)
       });
 
       // Conditionally format response
@@ -103,10 +107,10 @@ export const atlasCreateProject = async (
       // Process single project creation
       const { mode, id, name, description, status, urls, completionRequirements, dependencies, outputFormat, taskType } = validatedInput;
       
-      logger.info("Initializing new project", { 
+      logger.info("Initializing new project", {
+        ...reqContext,
         name, 
-        status,
-        requestId: context.requestContext?.requestId 
+        status
       });
 
       const project = await ProjectService.createProject({
@@ -126,23 +130,26 @@ export const atlasCreateProject = async (
           try {
             await ProjectService.addProjectDependency(
               project.id,
-              dependencyId,
-              ProjectDependencyType.REQUIRES, // Use enum member
-              'Dependency created during project creation'
-            );
-          } catch (error) {
-            logger.warning(`Failed to create dependency for project ${project.id} to ${dependencyId}`, {
-              error,
-              projectId: project.id,
-              dependencyId
-            });
+                  dependencyId,
+                  ProjectDependencyType.REQUIRES, // Use enum member
+                  'Dependency created during project creation'
+                );
+              } catch (error) {
+                const depErrorContext = requestContextService.createRequestContext({
+                  ...reqContext,
+                  originalErrorMessage: error instanceof Error ? error.message : String(error),
+                  originalErrorStack: error instanceof Error ? error.stack : undefined,
+                  projectId: project.id,
+                  dependencyIdAttempted: dependencyId
+                });
+                logger.warning(`Failed to create dependency for project ${project.id} to ${dependencyId}`, depErrorContext);
+              }
+            }
           }
-        }
-      }
       
-      logger.info("Project initialized successfully", { 
-        projectId: project.id,
-        requestId: context.requestContext?.requestId
+      logger.info("Project initialized successfully", {
+        ...reqContext,
+        projectId: project.id
       });
 
       // Conditionally format response
@@ -158,9 +165,9 @@ export const atlasCreateProject = async (
       throw error;
     }
 
-    logger.error("Failed to initialize project(s)", { 
-      error,
-      requestId: context.requestContext?.requestId 
+    logger.error("Failed to initialize project(s)", error as Error, {
+      ...reqContext,
+      inputReceived: validatedInput ?? input // Log validated or raw input
     });
 
     // Handle duplicate name error specifically

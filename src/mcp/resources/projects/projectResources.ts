@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ProjectService } from "../../../services/neo4j/projectService.js";
 import { BaseErrorCode, McpError, ProjectErrorCode } from "../../../types/errors.js";
-import { logger } from "../../../utils/internal/logger.js";
+import { logger, requestContextService } from "../../../utils/index.js"; // Import requestContextService
 import { ResourceTemplates, ResourceURIs, toProjectResource } from "../types.js";
 
 /**
@@ -24,8 +24,9 @@ export function registerProjectResources(server: McpServer) {
       mimeType: "application/json"
     },
     async (uri) => {
+    const reqContext = requestContextService.createRequestContext({ operation: 'listAllProjects', resourceUri: uri.href });
     try {
-      logger.info("Listing projects", { uri: uri.href });
+      logger.info("Listing projects", { ...reqContext, uri: uri.href });
 
       // Parse query parameters
       const queryParams = new URLSearchParams(uri.search);
@@ -70,7 +71,7 @@ export function registerProjectResources(server: McpServer) {
         totalPages: result.totalPages
       };
       
-      logger.info(`Found ${result.total} projects, returning page ${result.page} with ${projectResources.length} items`);
+      logger.info(`Found ${result.total} projects, returning page ${result.page} with ${projectResources.length} items`, { ...reqContext, totalProjects: result.total, returnedCount: projectResources.length, page: result.page });
       
       return {
         contents: [
@@ -85,8 +86,9 @@ export function registerProjectResources(server: McpServer) {
         ]
       };
     } catch (error) {
-      logger.error("Error listing projects", { 
-        error,
+      logger.error("Error listing projects", error as Error, { 
+        ...reqContext,
+        // error is now part of the Error object passed to logger
         uri: uri.href
       });
 
@@ -107,12 +109,14 @@ export function registerProjectResources(server: McpServer) {
       mimeType: "application/json"
     },
     async (uri, params) => {
+    const reqContext = requestContextService.createRequestContext({ operation: 'getProjectById', resourceUri: uri.href, projectIdParam: params.projectId });
     try {
       const projectId = params.projectId as string;
       
       logger.info("Fetching project by ID", { 
-        projectId,
-        uri: uri.href
+        ...reqContext,
+        projectId, // Already in reqContext
+        uri: uri.href // Already in reqContext
       });
 
       if (!projectId) {
@@ -137,7 +141,8 @@ export function registerProjectResources(server: McpServer) {
       const projectResource = toProjectResource(project);
       
       logger.info("Retrieved project successfully", { 
-        projectId: project.id 
+        ...reqContext,
+        projectId: project.id // Already in reqContext
       });
       
       return {
@@ -155,9 +160,10 @@ export function registerProjectResources(server: McpServer) {
         throw error;
       }
 
-      logger.error("Error fetching project by ID", { 
-        error,
-        params
+      logger.error("Error fetching project by ID", error as Error, { 
+        ...reqContext,
+        // error is now part of the Error object passed to logger
+        parameters: params
       });
 
       throw new McpError(

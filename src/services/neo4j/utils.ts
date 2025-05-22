@@ -1,4 +1,4 @@
-import { logger } from '../../utils/index.js'; // Updated import path
+import { logger, requestContextService } from '../../utils/index.js'; // Updated import path
 import { neo4jDriver } from './driver.js';
 import { NodeLabels, PaginatedResult, PaginationOptions, RelationshipTypes } from './types.js';
 import { Record as Neo4jRecord } from 'neo4j-driver'; // Import Record type
@@ -13,8 +13,9 @@ export class Neo4jUtils {
    */
   static async initializeSchema(): Promise<void> {
     const session = await neo4jDriver.getSession();
+    const reqContext = requestContextService.createRequestContext({ operation: 'Neo4jUtils.initializeSchema' });
     try {
-      logger.info('Initializing Neo4j database schema');
+      logger.info('Initializing Neo4j database schema', reqContext);
       
       const constraints = [
         `CREATE CONSTRAINT project_id_unique IF NOT EXISTS FOR (p:${NodeLabels.Project}) REQUIRE p.id IS UNIQUE`,
@@ -54,9 +55,9 @@ export class Neo4jUtils {
             // Especially full-text might not be supported/enabled
             const errorMessage = error instanceof Error ? error.message : String(error);
             if (query.includes("FULLTEXT")) {
-              logger.warning(`Could not create full-text index (potentially unsupported): ${errorMessage}. Query: ${query}`);
+              logger.warning(`Could not create full-text index (potentially unsupported): ${errorMessage}. Query: ${query}`, { ...reqContext, queryFailed: query });
             } else {
-              logger.error(`Failed to execute schema query: ${errorMessage}. Query: ${query}`);
+              logger.error(`Failed to execute schema query: ${errorMessage}. Query: ${query}`, error as Error, { ...reqContext, queryFailed: query });
               // Rethrow for critical constraints/indexes
               if (!query.includes("FULLTEXT")) throw error; 
             }
@@ -64,10 +65,10 @@ export class Neo4jUtils {
         }
       });
       
-      logger.info('Neo4j database schema initialization attempted');
+      logger.info('Neo4j database schema initialization attempted', reqContext);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Failed to initialize Neo4j database schema', { error: errorMessage });
+      logger.error('Failed to initialize Neo4j database schema', error as Error, { ...reqContext, detail: errorMessage });
       throw error;
     } finally {
       await session.close();
@@ -80,8 +81,9 @@ export class Neo4jUtils {
    */
   static async clearDatabase(): Promise<void> {
     const session = await neo4jDriver.getSession();
+    const reqContext = requestContextService.createRequestContext({ operation: 'Neo4jUtils.clearDatabase' });
     try {
-      logger.warning('Clearing all data from Neo4j database');
+      logger.warning('Clearing all data from Neo4j database', reqContext);
       
       // Delete all nodes and relationships
       await session.executeWrite(async tx => {
@@ -91,10 +93,10 @@ export class Neo4jUtils {
       // Recreate schema
       await this.initializeSchema();
       
-      logger.info('Neo4j database cleared successfully');
+      logger.info('Neo4j database cleared successfully', reqContext);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Failed to clear Neo4j database', { error: errorMessage });
+      logger.error('Failed to clear Neo4j database', error as Error, { ...reqContext, detail: errorMessage });
       throw error;
     } finally {
       await session.close();
@@ -186,7 +188,8 @@ export class Neo4jUtils {
       return result === true;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error(`Error checking node existence for ${label} {${property}: ${value}}`, { error: errorMessage });
+      const errorContext = requestContextService.createRequestContext({ operation: 'Neo4jUtils.nodeExists', label, property, value });
+      logger.error(`Error checking node existence for ${label} {${property}: ${value}}`, error as Error, { ...errorContext, detail: errorMessage });
       throw error; // Re-throw error after logging
     } finally {
       await session.close();
@@ -230,7 +233,13 @@ export class Neo4jUtils {
       return result === true;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error(`Error checking relationship existence: (${startLabel})-[:${relationshipType}]->(${endLabel})`, { error: errorMessage });
+      const errorContext = requestContextService.createRequestContext({ 
+        operation: 'Neo4jUtils.relationshipExists', 
+        startLabel, startProperty, startValue, 
+        endLabel, endProperty, endValue, 
+        relationshipType 
+      });
+      logger.error(`Error checking relationship existence: (${startLabel})-[:${relationshipType}]->(${endLabel})`, error as Error, { ...errorContext, detail: errorMessage });
       throw error;
     } finally {
       await session.close();
@@ -303,7 +312,8 @@ export class Neo4jUtils {
       return result;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error checking if database is empty', { error: errorMessage });
+      const errorContext = requestContextService.createRequestContext({ operation: 'Neo4jUtils.isDatabaseEmpty.error' });
+      logger.error('Error checking if database is empty', error as Error, { ...errorContext, detail: errorMessage });
       // If we can't check, assume it's not empty to be safe
       return false;
     } finally {

@@ -2,7 +2,7 @@ import { TaskService } from "../../../services/neo4j/taskService.js";
 import { ProjectService } from "../../../services/neo4j/projectService.js";
 import { BaseErrorCode, McpError, ProjectErrorCode } from "../../../types/errors.js";
 import { ResponseFormat, createToolResponse } from "../../../types/mcp.js";
-import { logger } from "../../../utils/internal/logger.js";
+import { logger, requestContextService } from "../../../utils/index.js"; // Import requestContextService
 import { ToolContext } from "../../../types/tool.js";
 import { AtlasTaskCreateInput, AtlasTaskCreateSchema } from "./types.js";
 import { formatTaskCreateResponse } from "./responseFormat.js";
@@ -12,6 +12,7 @@ export const atlasCreateTask = async (
   context: ToolContext
 ) => {
   let validatedInput: AtlasTaskCreateInput | undefined;
+  const reqContext = context.requestContext ?? requestContextService.createRequestContext({ toolName: 'atlasCreateTask' });
   
   try {
     // Parse and validate input against schema
@@ -20,9 +21,9 @@ export const atlasCreateTask = async (
     // Handle single vs bulk task creation based on mode
     if (validatedInput.mode === 'bulk') {
       // Execute bulk creation operation
-      logger.info("Initializing multiple tasks", { 
-        count: validatedInput.tasks.length,
-        requestId: context.requestContext?.requestId 
+      logger.info("Initializing multiple tasks", {
+        ...reqContext,
+        count: validatedInput.tasks.length
       });
 
       const results = {
@@ -72,11 +73,14 @@ export const atlasCreateTask = async (
                   dependencyId
                 );
               } catch (error) {
-                logger.warning(`Failed to create dependency for task ${createdTask.id} to ${dependencyId}`, {
-                  error,
+                const depErrorContext = requestContextService.createRequestContext({
+                  ...reqContext,
+                  originalErrorMessage: error instanceof Error ? error.message : String(error),
+                  originalErrorStack: error instanceof Error ? error.stack : undefined,
                   taskId: createdTask.id,
-                  dependencyId
+                  dependencyIdAttempted: dependencyId
                 });
+                logger.warning(`Failed to create dependency for task ${createdTask.id} to ${dependencyId}`, depErrorContext);
               }
             }
           }
@@ -98,11 +102,11 @@ export const atlasCreateTask = async (
         results.message = `Created ${results.created.length} of ${validatedInput.tasks.length} tasks with ${results.errors.length} errors`;
       }
       
-      logger.info("Bulk task initialization completed", { 
+      logger.info("Bulk task initialization completed", {
+        ...reqContext,
         successCount: results.created.length,
         errorCount: results.errors.length,
-        taskIds: results.created.map(t => t.id),
-        requestId: context.requestContext?.requestId 
+        taskIds: results.created.map(t => t.id)
       });
 
       // Conditionally format response
@@ -132,10 +136,10 @@ export const atlasCreateTask = async (
       // Process single task creation
       const { mode, id, projectId, title, description, priority, status, assignedTo, urls, tags, completionRequirements, dependencies, outputFormat, taskType } = validatedInput;
       
-      logger.info("Initializing new task", { 
+      logger.info("Initializing new task", {
+        ...reqContext,
         title, 
-        projectId,
-        requestId: context.requestContext?.requestId 
+        projectId
       });
 
       // Verify project exists
@@ -169,22 +173,25 @@ export const atlasCreateTask = async (
           try {
             await TaskService.addTaskDependency(
               task.id,
-              dependencyId
-            );
-          } catch (error) {
-            logger.warning(`Failed to create dependency for task ${task.id} to ${dependencyId}`, {
-              error,
-              taskId: task.id,
-              dependencyId
-            });
+                  dependencyId
+                );
+              } catch (error) {
+                const depErrorContext = requestContextService.createRequestContext({
+                  ...reqContext,
+                  originalErrorMessage: error instanceof Error ? error.message : String(error),
+                  originalErrorStack: error instanceof Error ? error.stack : undefined,
+                  taskId: task.id,
+                  dependencyIdAttempted: dependencyId
+                });
+                logger.warning(`Failed to create dependency for task ${task.id} to ${dependencyId}`, depErrorContext);
+              }
+            }
           }
-        }
-      }
       
-      logger.info("Task initialized successfully", { 
+      logger.info("Task initialized successfully", {
+        ...reqContext,
         taskId: task.id,
-        projectId,
-        requestId: context.requestContext?.requestId 
+        projectId
       });
 
       // Conditionally format response
@@ -210,9 +217,9 @@ export const atlasCreateTask = async (
       throw error;
     }
 
-    logger.error("Failed to initialize task(s)", { 
-      error,
-      requestId: context.requestContext?.requestId 
+    logger.error("Failed to initialize task(s)", error as Error, {
+      ...reqContext,
+      inputReceived: validatedInput ?? input
     });
 
     // Handle duplicate name error specifically

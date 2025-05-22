@@ -4,7 +4,7 @@ import { stat } from "fs/promises"; // Use async stat
 import { Session } from "neo4j-driver";
 import path from "path";
 import { config } from "../../config/index.js";
-import { logger } from "../../utils/index.js"; // Updated import path
+import { logger, requestContextService } from "../../utils/index.js"; // Updated import path
 import { neo4jDriver } from "./driver.js";
 
 // Helper function to escape relationship types for Cypher queries
@@ -27,7 +27,13 @@ const secureResolve = (basePath: string, targetPath: string): string | null => {
     if (resolvedTarget.startsWith(basePath + path.sep) || resolvedTarget === basePath) {
         return resolvedTarget;
     }
-    logger.error(`Security Violation: Path "${targetPath}" resolves to "${resolvedTarget}", which is outside the allowed base directory "${basePath}".`);
+    const errorContext = requestContextService.createRequestContext({
+      operation: 'secureResolve.PathViolation',
+      targetPath,
+      resolvedTarget,
+      basePath
+    });
+    logger.error(`Security Violation: Path "${targetPath}" resolves to "${resolvedTarget}", which is outside the allowed base directory "${basePath}".`, new Error("Path security violation"), errorContext);
     return null;
 };
 
@@ -38,14 +44,17 @@ const secureResolve = (basePath: string, targetPath: string): string | null => {
 const manageBackupRotation = async (): Promise<void> => {
   const maxBackups = config.backup.maxBackups;
 
+  const operationName = "manageBackupRotation";
+  const baseContext = requestContextService.createRequestContext({ operation: operationName });
+
   // Use the validated backup root path
   if (!existsSync(validatedBackupRoot)) {
-    logger.warning(`Backup root directory does not exist: ${validatedBackupRoot}. Skipping rotation.`);
+    logger.warning(`Backup root directory does not exist: ${validatedBackupRoot}. Skipping rotation.`, { ...baseContext, pathChecked: validatedBackupRoot });
     return;
   }
 
   try {
-    logger.debug(`Checking backup rotation in ${validatedBackupRoot}. Max backups: ${maxBackups}`);
+    logger.debug(`Checking backup rotation in ${validatedBackupRoot}. Max backups: ${maxBackups}`, baseContext);
 
     const dirNames = readdirSync(validatedBackupRoot);
 
@@ -65,7 +74,7 @@ const manageBackupRotation = async (): Promise<void> => {
         } catch (statError: any) {
           // Log specific error if stat fails (e.g., permission denied) but ignore ENOENT (Not Found)
           if (statError.code !== 'ENOENT') {
-            logger.warning(`Could not stat potential backup directory ${potentialDirPath}: ${statError.message}. Skipping.`);
+            logger.warning(`Could not stat potential backup directory ${potentialDirPath}: ${statError.message}. Skipping.`, { ...baseContext, path: potentialDirPath, errorCode: statError.code });
           }
         }
         return null;
@@ -80,29 +89,29 @@ const manageBackupRotation = async (): Promise<void> => {
     const backupsToDeleteCount = validBackupDirs.length - maxBackups;
 
     if (backupsToDeleteCount > 0) {
-      logger.info(`Found ${validBackupDirs.length} valid backups. Deleting ${backupsToDeleteCount} oldest backups to maintain limit of ${maxBackups}.`);
+      logger.info(`Found ${validBackupDirs.length} valid backups. Deleting ${backupsToDeleteCount} oldest backups to maintain limit of ${maxBackups}.`, baseContext);
       for (let i = 0; i < backupsToDeleteCount; i++) {
         const dirToDelete = validBackupDirs[i].path; // Path is already validated absolute path
         // Double check before deleting (redundant but safe)
         if (!dirToDelete.startsWith(validatedBackupRoot + path.sep)) {
-            logger.error(`Security Error: Attempting to delete directory outside backup root: ${dirToDelete}. Aborting deletion.`);
+            logger.error(`Security Error: Attempting to delete directory outside backup root: ${dirToDelete}. Aborting deletion.`, new Error("Backup deletion security violation"), { ...baseContext, dirToDelete });
             continue; // Skip this deletion
         }
         try {
           rmSync(dirToDelete, { recursive: true, force: true });
-          logger.info(`Deleted old backup directory: ${dirToDelete}`);
+          logger.info(`Deleted old backup directory: ${dirToDelete}`, { ...baseContext, deletedPath: dirToDelete });
         } catch (rmError) {
           const errorMsg = rmError instanceof Error ? rmError.message : String(rmError);
-          logger.error(`Failed to delete old backup directory ${dirToDelete}: ${errorMsg}`);
+          logger.error(`Failed to delete old backup directory ${dirToDelete}: ${errorMsg}`, rmError as Error, { ...baseContext, dirToDelete });
           // Continue trying to delete others even if one fails
         }
       }
     } else {
-      logger.debug(`Backup count (${validBackupDirs.length}) is within the limit (${maxBackups}). No rotation needed.`);
+      logger.debug(`Backup count (${validBackupDirs.length}) is within the limit (${maxBackups}). No rotation needed.`, baseContext);
     }
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    logger.error(`Error during backup rotation management: ${errorMsg}`, { error });
+    logger.error(`Error during backup rotation management: ${errorMsg}`, error as Error, baseContext);
     // Don't throw, allow backup process to continue if possible
   }
 };
@@ -129,6 +138,9 @@ interface FullExport {
  * @throws Error if the export step fails. Rotation errors are logged but don't throw.
  */
 export const exportDatabase = async (): Promise<string> => {
+  const operationName = "exportDatabase";
+  const baseContext = requestContextService.createRequestContext({ operation: operationName });
+
   // First, manage rotation before creating the new backup
   await manageBackupRotation();
 
@@ -150,23 +162,23 @@ export const exportDatabase = async (): Promise<string> => {
 
   try {
     session = await neo4jDriver.getSession(); // Get session from singleton
-    logger.info(`Starting database export to ${backupDir}...`);
+    logger.info(`Starting database export to ${backupDir}...`, baseContext);
     
     // Create the validated backup directory
     if (!existsSync(backupDir)) {
       mkdirSync(backupDir, { recursive: true });
-      logger.debug(`Created backup directory: ${backupDir}`);
+      logger.debug(`Created backup directory: ${backupDir}`, baseContext);
     }
 
     // Fetch all distinct node labels from the database
-    logger.debug("Fetching all node labels from database...");
+    logger.debug("Fetching all node labels from database...", baseContext);
     const labelsResult = await session.run("CALL db.labels() YIELD label RETURN label");
     const nodeLabels: string[] = labelsResult.records.map(record => record.get("label"));
-    logger.info(`Found labels: ${nodeLabels.join(', ')}`);
+    logger.info(`Found labels: ${nodeLabels.join(', ')}`, { ...baseContext, labels: nodeLabels });
 
     // Export nodes for each label
     for (const label of nodeLabels) {
-      logger.debug(`Exporting nodes with label: ${label}`);
+      logger.debug(`Exporting nodes with label: ${label}`, { ...baseContext, currentLabel: label });
       const escapedLabel = `\`${label.replace(/`/g, '``')}\``;
       const nodeResult = await session.run(`MATCH (n:${escapedLabel}) RETURN n`);
       const nodes = nodeResult.records.map(record => record.get("n").properties);
@@ -174,17 +186,17 @@ export const exportDatabase = async (): Promise<string> => {
       const fileName = `${label.toLowerCase()}s.json`;
       const filePath = secureResolve(backupDir, fileName); // Securely resolve file path
       if (!filePath) {
-          logger.error(`Skipping export for label ${label}: Could not create secure path for ${fileName} in ${backupDir}`);
+          logger.error(`Skipping export for label ${label}: Could not create secure path for ${fileName} in ${backupDir}`, new Error("Secure path resolution failed"), { ...baseContext, label, fileName, targetDir: backupDir });
           continue; // Skip this label if path is insecure
       }
 
       writeFileSync(filePath, JSON.stringify(nodes, null, 2));
-      logger.info(`Successfully exported ${nodes.length} ${label} nodes to ${filePath}`);
+      logger.info(`Successfully exported ${nodes.length} ${label} nodes to ${filePath}`, { ...baseContext, label, count: nodes.length, filePath });
       fullExport.nodes[label] = nodes;
     }
 
     // Export Relationships
-    logger.debug("Exporting relationships...");
+    logger.debug("Exporting relationships...", baseContext);
     const relResult = await session.run(`
       MATCH (start)-[r]->(end)
       WHERE start.id IS NOT NULL AND end.id IS NOT NULL
@@ -207,7 +219,7 @@ export const exportDatabase = async (): Promise<string> => {
         throw new Error(`Failed to create secure path for ${relFileName} in ${backupDir}`);
     }
     writeFileSync(relFilePath, JSON.stringify(relationships, null, 2));
-    logger.info(`Successfully exported ${relationships.length} relationships to ${relFilePath}`);
+    logger.info(`Successfully exported ${relationships.length} relationships to ${relFilePath}`, { ...baseContext, count: relationships.length, filePath: relFilePath });
     fullExport.relationships = relationships;
     
     // Write full export to file
@@ -217,25 +229,25 @@ export const exportDatabase = async (): Promise<string> => {
         throw new Error(`Failed to create secure path for ${fullExportFileName} in ${backupDir}`);
     }
     writeFileSync(fullExportPath, JSON.stringify(fullExport, null, 2));
-    logger.info(`Successfully created full database export to ${fullExportPath}`);
+    logger.info(`Successfully created full database export to ${fullExportPath}`, { ...baseContext, filePath: fullExportPath });
 
-    logger.info(`Database export completed successfully to ${backupDir}`);
+    logger.info(`Database export completed successfully to ${backupDir}`, baseContext);
     return backupDir; // Return the validated, absolute path
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    logger.error(`Database export failed: ${errorMessage}`, { error });
+    logger.error(`Database export failed: ${errorMessage}`, error as Error, baseContext);
     // Clean up partially created backup directory on failure (use validated path)
     if (backupDir && existsSync(backupDir)) { // Check if backupDir was successfully resolved
       // Double check before deleting
       if (!backupDir.startsWith(validatedBackupRoot + path.sep)) {
-          logger.error(`Security Error: Attempting cleanup of directory outside backup root: ${backupDir}. Aborting cleanup.`);
+          logger.error(`Security Error: Attempting cleanup of directory outside backup root: ${backupDir}. Aborting cleanup.`, new Error("Cleanup security violation"), { ...baseContext, cleanupDir: backupDir });
       } else {
           try {
             rmSync(backupDir, { recursive: true, force: true });
-            logger.warning(`Removed partially created backup directory due to export failure: ${backupDir}`);
+            logger.warning(`Removed partially created backup directory due to export failure: ${backupDir}`, { ...baseContext, cleanupDir: backupDir });
           } catch (rmError) {
             const rmErrorMsg = rmError instanceof Error ? rmError.message : String(rmError);
-            logger.error(`Failed to remove partial backup directory ${backupDir}: ${rmErrorMsg}`);
+            logger.error(`Failed to remove partial backup directory ${backupDir}: ${rmErrorMsg}`, rmError as Error, { ...baseContext, cleanupDir: backupDir });
           }
       }
     }
@@ -273,20 +285,22 @@ export const importDatabase = async (backupDirInput: string): Promise<void> => {
       throw new Error(`Failed to access backup directory "${backupDir}": ${error.message}`);
   }
   // --- End Validation ---
+  const operationName = "importDatabase";
+  const baseContext = requestContextService.createRequestContext({ operation: operationName, importDir: backupDir });
 
   let session: Session | null = null; // Initialize session variable
-  logger.warning(`Starting database import from validated directory ${backupDir}. THIS WILL OVERWRITE ALL EXISTING DATA.`);
+  logger.warning(`Starting database import from validated directory ${backupDir}. THIS WILL OVERWRITE ALL EXISTING DATA.`, baseContext);
 
   try {
     session = await neo4jDriver.getSession(); // Get session from singleton
     // 1. Clear the database within a transaction
-    logger.info("Clearing existing database...");
+    logger.info("Clearing existing database...", baseContext);
     await session.executeWrite(async tx => {
-      logger.debug("Executing clear database transaction...");
+      logger.debug("Executing clear database transaction...", baseContext);
       await tx.run("MATCH (n) DETACH DELETE n");
-      logger.debug("Clear database transaction executed.");
+      logger.debug("Clear database transaction executed.", baseContext);
     });
-    logger.info("Existing database cleared.");
+    logger.info("Existing database cleared.", baseContext);
 
     // Variables to store relationships to import
     let relationships: Array<{ startNodeId: string; endNodeId: string; type: string; properties: Record<string, any> }> = [];
@@ -295,7 +309,7 @@ export const importDatabase = async (backupDirInput: string): Promise<void> => {
     const fullExportPath = secureResolve(backupDir, 'full-export.json');
     
     if (fullExportPath && existsSync(fullExportPath)) {
-      logger.info(`Found full-export.json at ${fullExportPath}. Using consolidated import.`);
+      logger.info(`Found full-export.json at ${fullExportPath}. Using consolidated import.`, { ...baseContext, filePath: fullExportPath });
       
       // Import from full export file
       const fullExportContent = readFileSync(fullExportPath, 'utf-8'); // Safe to read validated path
@@ -306,31 +320,31 @@ export const importDatabase = async (backupDirInput: string): Promise<void> => {
         if (Object.prototype.hasOwnProperty.call(fullExport.nodes, label)) {
           const nodesToImport = fullExport.nodes[label];
           if (!nodesToImport || nodesToImport.length === 0) {
-            logger.info(`No ${label} nodes to import from full-export.json.`);
+            logger.info(`No ${label} nodes to import from full-export.json.`, { ...baseContext, label });
             continue;
           }
-          logger.debug(`Importing ${nodesToImport.length} ${label} nodes from full-export.json`);
+          logger.debug(`Importing ${nodesToImport.length} ${label} nodes from full-export.json`, { ...baseContext, label, count: nodesToImport.length });
           const escapedLabel = `\`${label.replace(/`/g, '``')}\``; 
           const query = `UNWIND $nodes as nodeProps CREATE (n:${escapedLabel}) SET n = nodeProps`;
           // Wrap node creation in executeWrite
           await session.executeWrite(async tx => {
-            logger.debug(`Executing node creation transaction for label ${label} (full-export)...`);
+            logger.debug(`Executing node creation transaction for label ${label} (full-export)...`, { ...baseContext, label });
             await tx.run(query, { nodes: nodesToImport });
-            logger.debug(`Node creation transaction for label ${label} (full-export) executed.`);
+            logger.debug(`Node creation transaction for label ${label} (full-export) executed.`, { ...baseContext, label });
           });
-          logger.info(`Successfully imported ${nodesToImport.length} ${label} nodes from full-export.json`);
+          logger.info(`Successfully imported ${nodesToImport.length} ${label} nodes from full-export.json`, { ...baseContext, label, count: nodesToImport.length });
         }
       }
 
       // 3a. Import relationships from full export
       if (fullExport.relationships && fullExport.relationships.length > 0) {
-        logger.info(`Found ${fullExport.relationships.length} relationships in full-export.json.`);
+        logger.info(`Found ${fullExport.relationships.length} relationships in full-export.json.`, { ...baseContext, count: fullExport.relationships.length });
         relationships = fullExport.relationships;
       } else {
-        logger.info(`No relationships found in full-export.json.`);
+        logger.info(`No relationships found in full-export.json.`, baseContext);
       }
     } else {
-      logger.info(`No full-export.json found or path invalid. Using individual entity files from ${backupDir}.`);
+      logger.info(`No full-export.json found or path invalid. Using individual entity files from ${backupDir}.`, baseContext);
 
       // 2b. Import nodes from individual files
       const filesInBackupDir = readdirSync(backupDir); // Read from validated dir
@@ -343,7 +357,7 @@ export const importDatabase = async (backupDirInput: string): Promise<void> => {
       for (const nodeFile of nodeFiles) {
         const filePath = secureResolve(backupDir, nodeFile); // Securely resolve path
         if (!filePath) {
-            logger.warning(`Skipping potentially insecure node file path: ${nodeFile} in ${backupDir}`);
+            logger.warning(`Skipping potentially insecure node file path: ${nodeFile} in ${backupDir}`, { ...baseContext, nodeFile });
             continue;
         }
         
@@ -354,16 +368,16 @@ export const importDatabase = async (backupDirInput: string): Promise<void> => {
           : inferredLabelFromFile.charAt(0).toUpperCase() + inferredLabelFromFile.slice(1);
 
         if (!existsSync(filePath)) { // Check validated path
-          logger.warning(`Node file ${nodeFile} (inferred label ${label}) not found at ${filePath}. Skipping.`);
+          logger.warning(`Node file ${nodeFile} (inferred label ${label}) not found at ${filePath}. Skipping.`, { ...baseContext, nodeFile, label, filePath });
           continue;
         }
 
-        logger.debug(`Importing nodes with inferred label: ${label} from ${filePath}`);
+        logger.debug(`Importing nodes with inferred label: ${label} from ${filePath}`, { ...baseContext, label, filePath });
         const fileContent = readFileSync(filePath, 'utf-8'); // Read validated path
         const nodesToImport: Record<string, any>[] = JSON.parse(fileContent);
 
         if (nodesToImport.length === 0) {
-          logger.info(`No ${label} nodes to import from ${filePath}.`);
+          logger.info(`No ${label} nodes to import from ${filePath}.`, { ...baseContext, label, filePath });
           continue;
         }
 
@@ -371,44 +385,44 @@ export const importDatabase = async (backupDirInput: string): Promise<void> => {
         const query = `UNWIND $nodes as nodeProps CREATE (n:${escapedLabel}) SET n = nodeProps`;
         // Wrap node creation in executeWrite
         await session.executeWrite(async tx => {
-           logger.debug(`Executing node creation transaction for label ${label} (individual file)...`);
+           logger.debug(`Executing node creation transaction for label ${label} (individual file)...`, { ...baseContext, label });
            await tx.run(query, { nodes: nodesToImport });
-           logger.debug(`Node creation transaction for label ${label} (individual file) executed.`);
+           logger.debug(`Node creation transaction for label ${label} (individual file) executed.`, { ...baseContext, label });
         });
-        logger.info(`Successfully imported ${nodesToImport.length} ${label} nodes from ${filePath}`);
+        logger.info(`Successfully imported ${nodesToImport.length} ${label} nodes from ${filePath}`, { ...baseContext, label, count: nodesToImport.length, filePath });
       }
 
       // 3b. Import Relationships from relationships.json
       const relFilePath = secureResolve(backupDir, 'relationships.json'); // Securely resolve path
       if (relFilePath && existsSync(relFilePath)) { // Check validated path
-        logger.info(`Importing relationships from ${relFilePath}...`);
+        logger.info(`Importing relationships from ${relFilePath}...`, { ...baseContext, filePath: relFilePath });
         const relFileContent = readFileSync(relFilePath, 'utf-8'); // Read validated path
         relationships = JSON.parse(relFileContent);
         
         if (relationships.length === 0) {
-          logger.info(`No relationships found to import in ${relFilePath}.`);
+          logger.info(`No relationships found to import in ${relFilePath}.`, { ...baseContext, filePath: relFilePath });
         }
       } else {
-        logger.warning(`Relationships file not found or path invalid: ${relFilePath}. Skipping relationship import.`);
+        logger.warning(`Relationships file not found or path invalid: ${relFilePath}. Skipping relationship import.`, { ...baseContext, filePath: relFilePath });
       }
     }
 
     // Process relationships (common code)
     if (relationships.length > 0) {
-      logger.info(`Attempting to import ${relationships.length} relationships individually...`);
+      logger.info(`Attempting to import ${relationships.length} relationships individually...`, { ...baseContext, count: relationships.length });
       let importedCount = 0;
       let failedCount = 0;
       const batchSize = 500; 
       
       for (let i = 0; i < relationships.length; i += batchSize) {
         const batch = relationships.slice(i, i + batchSize);
-        logger.debug(`Processing relationship batch ${i / batchSize + 1}...`);
+        logger.debug(`Processing relationship batch ${i / batchSize + 1}...`, { ...baseContext, batchNumber: i / batchSize + 1, batchSize: batch.length });
         try {
           await session.executeWrite(async tx => {
-            logger.debug(`Executing relationship creation transaction batch ${i / batchSize + 1}...`);
+            logger.debug(`Executing relationship creation transaction batch ${i / batchSize + 1}...`, { ...baseContext, batchNumber: i / batchSize + 1 });
             for (const rel of batch) {
               if (!rel.startNodeId || !rel.endNodeId || !rel.type) {
-                logger.warning(`Skipping relationship due to missing data: ${JSON.stringify(rel)}`);
+                logger.warning(`Skipping relationship due to missing data: ${JSON.stringify(rel)}`, { ...baseContext, relationshipData: rel });
                 failedCount++;
                 continue;
               }
@@ -420,38 +434,38 @@ export const importDatabase = async (backupDirInput: string): Promise<void> => {
                 SET r = $properties
               `;
               try {
-                logger.debug(`Running query for relationship: ${rel.type} from ${rel.startNodeId} to ${rel.endNodeId}`);
+                logger.debug(`Running query for relationship: ${rel.type} from ${rel.startNodeId} to ${rel.endNodeId}`, { ...baseContext, relType: rel.type, startNode: rel.startNodeId, endNode: rel.endNodeId });
                 await tx.run(relQuery, {
                   startNodeId: rel.startNodeId,
                   endNodeId: rel.endNodeId,
                   properties: rel.properties || {}
                 });
-                logger.debug(`Query executed for relationship: ${rel.type}`);
+                logger.debug(`Query executed for relationship: ${rel.type}`, { ...baseContext, relType: rel.type });
                 importedCount++;
               } catch (relError) {
                 const errorMsg = relError instanceof Error ? relError.message : String(relError);
-                logger.error(`Failed to create relationship ${rel.type} from ${rel.startNodeId} to ${rel.endNodeId}: ${errorMsg}`, { relationship: rel });
+                logger.error(`Failed to create relationship ${rel.type} from ${rel.startNodeId} to ${rel.endNodeId}: ${errorMsg}`, relError as Error, { ...baseContext, relationship: rel });
                 failedCount++;
               }
             }
-            logger.debug(`Relationship creation transaction batch ${i / batchSize + 1} finished.`);
+            logger.debug(`Relationship creation transaction batch ${i / batchSize + 1} finished.`, { ...baseContext, batchNumber: i / batchSize + 1 });
           });
-          logger.debug(`Completed relationship batch ${i / batchSize + 1}.`);
+          logger.debug(`Completed relationship batch ${i / batchSize + 1}.`, { ...baseContext, batchNumber: i / batchSize + 1 });
         } catch (batchError) {
           const errorMsg = batchError instanceof Error ? batchError.message : String(batchError);
-          logger.error(`Failed to process relationship batch starting at index ${i}: ${errorMsg}`);
+          logger.error(`Failed to process relationship batch starting at index ${i}: ${errorMsg}`, batchError as Error, { ...baseContext, batchStartIndex: i });
           failedCount += batch.length - (batch.filter(rel => !rel.startNodeId || !rel.endNodeId || !rel.type).length); 
         }
       }
-      logger.info(`Relationship import summary: Attempted=${relationships.length}, Succeeded=${importedCount}, Failed=${failedCount}`);
+      logger.info(`Relationship import summary: Attempted=${relationships.length}, Succeeded=${importedCount}, Failed=${failedCount}`, { ...baseContext, attempted: relationships.length, succeeded: importedCount, failed: failedCount });
     } else {
-      logger.info(`No relationships to import.`);
+      logger.info(`No relationships to import.`, baseContext);
     }
 
-    logger.info("Database import completed successfully.");
+    logger.info("Database import completed successfully.", baseContext);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    logger.error(`Database import failed: ${errorMessage}`, { error });
+    logger.error(`Database import failed: ${errorMessage}`, error as Error, baseContext);
     throw new Error(`Database import failed: ${errorMessage}`);
   } finally {
     if (session) {

@@ -1,4 +1,4 @@
-import { logger } from '../../utils/index.js'; // Updated import path
+import { logger, requestContextService } from '../../utils/index.js'; // Updated import path
 import { neo4jDriver } from './driver.js';
 import { buildListQuery, generateId } from './helpers.js'; // Import buildListQuery
 import {
@@ -93,11 +93,13 @@ export class ProjectService {
       };
       
       // Now createdProjectData has the correct type before this line
-      logger.info('Project created successfully', { projectId: createdProjectData.id }); 
+      const reqContext_create = requestContextService.createRequestContext({ operation: 'createProject', projectId: createdProjectData.id });
+      logger.info('Project created successfully', reqContext_create); 
       return createdProjectData; // No need for 'as Neo4jProject' here anymore
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error creating project', { error: errorMessage, project });
+      const errorContext = requestContextService.createRequestContext({ operation: 'createProject.error', projectInput: project });
+      logger.error('Error creating project', error as Error, { ...errorContext, detail: errorMessage });
       throw error;
     } finally {
       await session.close();
@@ -155,7 +157,8 @@ export class ProjectService {
       return projectData;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error getting project by ID', { error: errorMessage, id });
+      const errorContext = requestContextService.createRequestContext({ operation: 'getProjectById.error', projectId: id });
+      logger.error('Error getting project by ID', error as Error, { ...errorContext, detail: errorMessage });
       throw error;
     } finally {
       await session.close();
@@ -192,7 +195,8 @@ export class ProjectService {
       return result === 0;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error checking project dependencies completion status', { error: errorMessage, projectId });
+      const errorContext = requestContextService.createRequestContext({ operation: 'areAllDependenciesCompleted.error', projectId });
+      logger.error('Error checking project dependencies completion status', error as Error, { ...errorContext, detail: errorMessage });
       throw error;
     } finally {
       await session.close();
@@ -275,12 +279,13 @@ export class ProjectService {
         createdAt: result.get('createdAt'),
         updatedAt: result.get('updatedAt')
       };
-
-      logger.info('Project updated successfully', { projectId: id });
+      const reqContext_update = requestContextService.createRequestContext({ operation: 'updateProject', projectId: id });
+      logger.info('Project updated successfully', reqContext_update);
       return updatedProjectData;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error updating project', { error: errorMessage, id, updates });
+      const errorContext = requestContextService.createRequestContext({ operation: 'updateProject.error', projectId: id, updatesApplied: updates });
+      logger.error('Error updating project', error as Error, { ...errorContext, detail: errorMessage });
       throw error;
     } finally {
       await session.close();
@@ -310,12 +315,13 @@ export class ProjectService {
       await session.executeWrite(async (tx) => {
         await tx.run(query, { id });
       });
-      
-      logger.info('Project deleted successfully', { projectId: id });
+      const reqContext_delete = requestContextService.createRequestContext({ operation: 'deleteProject', projectId: id });
+      logger.info('Project deleted successfully', reqContext_delete);
       return true; 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error deleting project', { error: errorMessage, id });
+      const errorContext = requestContextService.createRequestContext({ operation: 'deleteProject.error', projectId: id });
+      logger.error('Error deleting project', error as Error, { ...errorContext, detail: errorMessage });
       throw error;
     } finally {
       await session.close();
@@ -372,21 +378,22 @@ export class ProjectService {
       );
       
       // Execute count query
+      const reqContext_list = requestContextService.createRequestContext({ operation: 'getProjects', filterOptions: options });
       const totalResult = await session.executeRead(async (tx) => { 
         const countParams = { ...params }; 
         delete countParams.skip; 
         delete countParams.limit;
-        logger.debug('Executing Project Count Query (using buildListQuery):', { query: countQuery, params: countParams }); 
+        logger.debug('Executing Project Count Query (using buildListQuery):', { ...reqContext_list, query: countQuery, params: countParams }); 
         const result = await tx.run(countQuery, countParams);
         return result.records[0]?.get('total') ?? 0; 
       });
       const total = totalResult; 
       
-      logger.debug('Calculated total projects', { total });
+      logger.debug('Calculated total projects', { ...reqContext_list, total });
       
       // Execute data query
       const dataResult = await session.executeRead(async (tx) => {
-        logger.debug('Executing Project Data Query (using buildListQuery):', { query: dataQuery, params: params });
+        logger.debug('Executing Project Data Query (using buildListQuery):', { ...reqContext_list, query: dataQuery, params: params });
         const result = await tx.run(dataQuery, params); 
         return result.records;
       });
@@ -422,7 +429,8 @@ export class ProjectService {
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error getting projects', { error: errorMessage, options });
+      const errorContext = requestContextService.createRequestContext({ operation: 'getProjects.error', filterOptions: options });
+      logger.error('Error getting projects', error as Error, { ...errorContext, detail: errorMessage });
       throw error;
     } finally {
       await session.close();
@@ -516,22 +524,19 @@ export class ProjectService {
         type: record.get('type'),
         description: record.get('description')
       };
-      
-      logger.info('Project dependency added successfully', { 
-        sourceProjectId, 
-        targetProjectId, 
-        type 
-      });
+      const reqContext_addDep = requestContextService.createRequestContext({ operation: 'addProjectDependency', sourceProjectId, targetProjectId, dependencyType: type });
+      logger.info('Project dependency added successfully', reqContext_addDep);
       
       return dependency;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error adding project dependency', { 
-        error: errorMessage, 
+      const errorContext = requestContextService.createRequestContext({ 
+        operation: 'addProjectDependency.error', 
         sourceProjectId, 
         targetProjectId, 
-        type 
+        dependencyType: type 
       });
+      logger.error('Error adding project dependency', error as Error, { ...errorContext, detail: errorMessage });
       throw error;
     } finally {
       await session.close();
@@ -557,17 +562,19 @@ export class ProjectService {
         const res = await tx.run(query, { dependencyId });
         return res.summary.counters.updates().relationshipsDeleted > 0;
       });
-            
+      
+      const reqContext_removeDep = requestContextService.createRequestContext({ operation: 'removeProjectDependency', dependencyId });
       if (result) {
-        logger.info('Project dependency removed successfully', { dependencyId });
+        logger.info('Project dependency removed successfully', reqContext_removeDep);
       } else {
-        logger.warning('Dependency not found or not removed', { dependencyId });
+        logger.warning('Dependency not found or not removed', reqContext_removeDep);
       }
       
       return result;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error removing project dependency', { error: errorMessage, dependencyId });
+      const errorContext = requestContextService.createRequestContext({ operation: 'removeProjectDependency.error', dependencyId });
+      logger.error('Error removing project dependency', error as Error, { ...errorContext, detail: errorMessage });
       throw error;
     } finally {
       await session.close();
@@ -672,7 +679,8 @@ export class ProjectService {
       return { dependencies, dependents };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error getting project dependencies', { error: errorMessage, projectId });
+      const errorContext = requestContextService.createRequestContext({ operation: 'getProjectDependencies.error', projectId });
+      logger.error('Error getting project dependencies', error as Error, { ...errorContext, detail: errorMessage });
       throw error;
     } finally {
       await session.close();

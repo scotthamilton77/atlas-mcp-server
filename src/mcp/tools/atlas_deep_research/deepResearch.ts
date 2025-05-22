@@ -3,7 +3,7 @@ import { KnowledgeService } from '../../../services/neo4j/knowledgeService.js';
 import { ProjectService } from '../../../services/neo4j/projectService.js';
 import { TaskService } from '../../../services/neo4j/taskService.js'; // Import TaskService
 import { BaseErrorCode, McpError } from '../../../types/errors.js';
-import { logger } from '../../../utils/internal/logger.js';
+import { logger, requestContextService } from '../../../utils/index.js'; // Import requestContextService
 import { sanitization } from '../../../utils/security/sanitization.js';
 import {
   AtlasDeepResearchInput,
@@ -36,8 +36,10 @@ function generateKnowledgeId(prefix: string = "knw"): string {
 export async function deepResearch(
   input: AtlasDeepResearchInput
 ): Promise<DeepResearchResult> {
+  const reqContext = requestContextService.createRequestContext({ operation: 'deepResearch', projectId: input.projectId, researchTopic: input.researchTopic });
   logger.info(
-    `Initiating deep research plan creation for project ID: ${input.projectId}, Topic: "${input.researchTopic}"`
+    `Initiating deep research plan creation for project ID: ${input.projectId}, Topic: "${input.researchTopic}"`,
+    reqContext
   );
 
   try {
@@ -50,7 +52,7 @@ export async function deepResearch(
         `Project with ID "${input.projectId}" not found. Cannot create research plan.`
       );
     }
-    logger.debug(`Project validation successful for ID: ${input.projectId}`);
+    logger.debug(`Project validation successful for ID: ${input.projectId}`, reqContext);
 
     // 2. Prepare Root Research Plan Node Data
     const planNodeId = input.planNodeId || generateKnowledgeId('plan');
@@ -83,7 +85,7 @@ export async function deepResearch(
     // or we might need a specific method like addKnowledgeAndLinkToProject.
     // For now, assume addKnowledge creates the node and links it via projectId.
     // A more robust approach might involve explicit relationship creation.
-    logger.debug(`Attempting to create root research plan node with ID: ${planNodeId}`);
+    logger.debug(`Attempting to create root research plan node with ID: ${planNodeId}`, { ...reqContext, planNodeId });
     await KnowledgeService.addKnowledge({
       id: planNodeId,
       projectId: input.projectId,
@@ -94,7 +96,7 @@ export async function deepResearch(
     });
     // If explicit linking is needed:
     // await KnowledgeService.linkKnowledgeToProject(planNodeId, input.projectId, 'CONTAINS_PLAN');
-    logger.info(`Root research plan node ${planNodeId} created and associated with project.`);
+    logger.info(`Root research plan node ${planNodeId} created and associated with project.`, { ...reqContext, planNodeId });
 
     // 4. Create Knowledge Nodes and Optional Tasks for Each Sub-Topic
     const createdSubTopicNodes: DeepResearchSubTopicNodeResult[] = [];
@@ -102,7 +104,8 @@ export async function deepResearch(
     logger.debug(
       `Processing ${input.subTopics.length} sub-topics to create knowledge nodes ${
         tasksToCreate ? 'and tasks' : ''
-      }.`
+      }.`,
+      { ...reqContext, subTopicCount: input.subTopics.length, willCreateTasks: tasksToCreate }
     );
 
     for (const subTopic of input.subTopics) {
@@ -134,7 +137,8 @@ export async function deepResearch(
       ];
 
       logger.debug(
-        `Attempting to create sub-topic node with ID: ${subTopicNodeId} for question: "${subTopic.question}"`
+        `Attempting to create sub-topic node with ID: ${subTopicNodeId} for question: "${subTopic.question}"`,
+        { ...reqContext, subTopicNodeId, question: subTopic.question }
       );
       // Create the sub-topic knowledge node and link it to the parent plan node
       // Assuming addKnowledge links to project, now link to parent knowledge node
@@ -152,11 +156,11 @@ export async function deepResearch(
           planNodeId,
           'IS_SUBTOPIC_OF' // Relationship type from child to parent
       );
-      logger.info(`Sub-topic node ${subTopicNodeId} created and linked to plan ${planNodeId}.`);
+      logger.info(`Sub-topic node ${subTopicNodeId} created and linked to plan ${planNodeId}.`, { ...reqContext, subTopicNodeId, parentPlanNodeId: planNodeId });
 
       // Create Task if requested
       if (tasksToCreate) {
-        logger.debug(`Creating task for sub-topic node ${subTopicNodeId}`);
+        logger.debug(`Creating task for sub-topic node ${subTopicNodeId}`, { ...reqContext, subTopicNodeId });
         const taskTitle = `Research: ${sanitization.sanitizeString(
           subTopic.question
         )}`;
@@ -182,7 +186,8 @@ export async function deepResearch(
 
         createdTaskId = taskResult.id;
         logger.info(
-          `Task ${createdTaskId} created for sub-topic ${subTopicNodeId}.`
+          `Task ${createdTaskId} created for sub-topic ${subTopicNodeId}.`,
+          { ...reqContext, createdTaskId, subTopicNodeId }
         );
 
         // Link Task to the Sub-Topic Knowledge Node
@@ -192,7 +197,8 @@ export async function deepResearch(
           'ADDRESSES' // Relationship: Task ADDRESSES Knowledge Node
         );
         logger.debug(
-          `Linked task ${createdTaskId} to knowledge node ${subTopicNodeId} with ADDRESSES relationship.`
+          `Linked task ${createdTaskId} to knowledge node ${subTopicNodeId} with ADDRESSES relationship.`,
+          { ...reqContext, createdTaskId, subTopicNodeId }
         );
       }
 
@@ -210,7 +216,7 @@ export async function deepResearch(
       ? `and ${createdSubTopicNodes.length} associated tasks`
       : '';
     const successMessage = `Successfully created deep research plan "${input.researchTopic}" with root research plan node ${planNodeId}, ${createdSubTopicNodes.length} sub-topic nodes ${taskMessage}.`;
-    logger.info(successMessage);
+    logger.info(successMessage, { ...reqContext, planNodeId, subTopicNodeCount: createdSubTopicNodes.length, tasksCreatedCount: tasksToCreate ? createdSubTopicNodes.length : 0 });
 
     return {
       success: true,
@@ -223,12 +229,13 @@ export async function deepResearch(
 
   } catch (error) {
     // Log the error with context
-    logger.error("Error occurred during deep research plan creation", {
-      errorMessage: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
-      projectId: input.projectId,
-      researchTopic: input.researchTopic,
-    });
+    const errorContextDetails = {
+      // errorMessage is part of the error object passed to logger.error
+      // stack is part of the error object passed to logger.error
+      projectId: input.projectId, // Already in reqContext
+      researchTopic: input.researchTopic, // Already in reqContext
+    };
+    logger.error("Error occurred during deep research plan creation", error as Error, { ...reqContext, ...errorContextDetails });
 
     // Re-throw McpError instances directly
     if (error instanceof McpError) {

@@ -1,7 +1,7 @@
 import { ProjectService } from "../../../services/neo4j/projectService.js";
 import { BaseErrorCode, McpError, ProjectErrorCode } from "../../../types/errors.js";
 import { ResponseFormat, createToolResponse } from "../../../types/mcp.js";
-import { logger } from "../../../utils/internal/logger.js";
+import { logger, requestContextService } from "../../../utils/index.js"; // Import requestContextService
 import { ToolContext } from "../../../types/tool.js";
 import { AtlasProjectDeleteInput, AtlasProjectDeleteSchema } from "./types.js";
 import { formatProjectDeleteResponse } from "./responseFormat.js";
@@ -11,6 +11,7 @@ export const atlasDeleteProject = async (
   context: ToolContext
 ) => {
   let validatedInput: AtlasProjectDeleteInput | undefined;
+  const reqContext = context.requestContext ?? requestContextService.createRequestContext({ toolName: 'atlasDeleteProject' });
   
   try {
     // Parse and validate input against schema definition
@@ -21,10 +22,10 @@ export const atlasDeleteProject = async (
       // Process bulk removal operation
       const { projectIds } = validatedInput;
       
-      logger.info("Initiating batch project removal", { 
+      logger.info("Initiating batch project removal", {
+        ...reqContext,
         count: projectIds.length,
-        projectIds,
-        requestId: context.requestContext?.requestId 
+        projectIds
       });
 
       const results = {
@@ -76,10 +77,10 @@ export const atlasDeleteProject = async (
         results.message = `Removed ${results.deleted.length} of ${projectIds.length} projects with ${results.errors.length} errors`;
       }
       
-      logger.info("Batch removal operation completed", { 
+      logger.info("Batch removal operation completed", {
+        ...reqContext,
         successCount: results.deleted.length,
-        errorCount: results.errors.length,
-        requestId: context.requestContext?.requestId 
+        errorCount: results.errors.length
       });
 
       // Conditionally format response
@@ -92,17 +93,17 @@ export const atlasDeleteProject = async (
       // Process single entity removal
       const { id } = validatedInput;
       
-      logger.info("Removing project entity", { 
-        projectId: id,
-        requestId: context.requestContext?.requestId 
+      logger.info("Removing project entity", {
+        ...reqContext,
+        projectId: id
       });
 
       const deleted = await ProjectService.deleteProject(id);
       
       if (!deleted) {
-        logger.warning("Target project not found for removal operation", { 
-          projectId: id,
-          requestId: context.requestContext?.requestId 
+        logger.warning("Target project not found for removal operation", {
+          ...reqContext,
+          projectId: id
         });
         
         throw new McpError(
@@ -112,9 +113,9 @@ export const atlasDeleteProject = async (
         );
       }
       
-      logger.info("Project successfully removed", { 
-        projectId: id,
-        requestId: context.requestContext?.requestId 
+      logger.info("Project successfully removed", {
+        ...reqContext,
+        projectId: id
       });
 
       const result = {
@@ -136,9 +137,9 @@ export const atlasDeleteProject = async (
       throw error;
     }
 
-    logger.error("Project removal operation failed", { 
-      error,
-      requestId: context.requestContext?.requestId 
+    logger.error("Project removal operation failed", error as Error, {
+      ...reqContext,
+      inputReceived: validatedInput ?? input
     });
 
     // Translate unknown errors to structured McpError format

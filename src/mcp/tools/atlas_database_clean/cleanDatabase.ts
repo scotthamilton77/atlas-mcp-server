@@ -1,6 +1,6 @@
 import { BaseErrorCode, McpError } from "../../../types/errors.js";
 import { ResponseFormat, createToolResponse } from "../../../types/mcp.js";
-import { logger } from "../../../utils/internal/logger.js";
+import { logger, requestContextService } from "../../../utils/index.js"; // Import requestContextService
 import { ToolContext } from "../../../types/tool.js";
 import { formatDatabaseCleanResponse } from "./responseFormat.js";
 import { AtlasDatabaseCleanInput, AtlasDatabaseCleanSchema } from "./types.js";
@@ -18,14 +18,13 @@ export const atlasDatabaseClean = async (
   input: unknown,
   context: ToolContext
 ) => {
+  const reqContext = context.requestContext ?? requestContextService.createRequestContext({ toolName: 'atlasDatabaseClean' });
   try {
     // Parse and validate input against schema (should be empty object)
     const validatedInput: AtlasDatabaseCleanInput = AtlasDatabaseCleanSchema.parse(input);
     
     // Log the operation start
-    logger.warning("Executing complete database reset operation", {
-      requestId: context.requestContext?.requestId
-    });
+    logger.warning("Executing complete database reset operation", reqContext);
     
     // Track execution metrics
     const startTime = Date.now();
@@ -39,7 +38,7 @@ export const atlasDatabaseClean = async (
       
       // Log successful operation
       logger.warning("Database reset completed successfully", {
-        requestId: context.requestContext?.requestId,
+        ...reqContext,
         executionTime: `${executionTime}ms`,
       });
 
@@ -60,9 +59,9 @@ export const atlasDatabaseClean = async (
     }
   } catch (error) {
     // Log error
-    logger.error("Failed to reset database", {
-      error,
-      requestId: context.requestContext?.requestId
+    logger.error("Failed to reset database", error as Error, {
+      ...reqContext,
+      inputReceived: input
     });
     
     // Handle specific error cases
