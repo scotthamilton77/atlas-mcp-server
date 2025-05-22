@@ -90,10 +90,10 @@ function isOriginAllowed(req: Request, res: Response): boolean {
   // Determine if allowed based on config or localhost binding
   const allowed =
     (origin && allowedOrigins.includes(origin)) ||
-    (isLocalhostBinding && (!origin || origin === "null"));
+    (isLocalhostBinding && origin && origin !== "null");
 
-  if (allowed && origin) {
-    // Origin is allowed and present, set specific CORS headers.
+  if (allowed && origin && allowedOrigins.includes(origin)) {
+    // Origin is explicitly allowed, set specific CORS headers.
     res.setHeader("Access-Control-Allow-Origin", origin);
     // MCP Spec: Streamable HTTP uses POST, GET, DELETE. OPTIONS is for preflight.
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
