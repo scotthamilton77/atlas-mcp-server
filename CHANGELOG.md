@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.8.8] - 2025-05-22
+
+### Added
+- **LLM Integration**: Introduced a new service for LLM provider integrations, starting with OpenRouter support (`src/services/llm-providers/`).
+- **Project Status**: Added "in-progress" as a valid status for projects in `atlas_project_list` tool types.
+- **Error Codes**: Expanded `BaseErrorCode` enum in `src/types/errors.ts` with `SERVICE_UNAVAILABLE`, `CONFIGURATION_ERROR`, `INITIALIZATION_FAILED`, and `FORBIDDEN` for more granular error reporting.
+
+### Changed
+- **HTTP Transport**:
+    - Standardized error responses (404, 500) to JSON RPC format for better client interoperability.
+    - Improved origin checking logic for CORS requests, enhancing security and flexibility.
+    - Enhanced server address logging for production environments to correctly reflect HTTPS usage behind a reverse proxy.
+- **Logging**:
+    - Refactored console transport configuration in `Logger` into a dedicated `_configureConsoleTransport` method for improved clarity and dynamic adjustment based on log level and TTY status.
+    - Stack traces included in MCP error notifications (debug mode) are now truncated to a maximum of 1024 characters.
+- **Search Service**:
+    - Improved debug logging in `SearchService` to include `searchPropertyUsed` and `rawSearchValueParam` for better query traceability.
+- **Project List Tool**:
+    - Refactored `atlas_project_list` tool's Zod schema to use `createProjectStatusEnum` for defining project status filters, promoting consistency.
+
+### Fixed
+- **Search Service**: Corrected Cypher query construction in `SearchService` by refining the `WITH` clause logic to ensure only previously defined variables are included.
+- **Neo4j Helpers**: Ensured `assignedTo` filter parameter is correctly added to query parameters in `buildListQuery` helper function.
+
+### Documentation
+- Updated `docs/tree.md` to reflect the new `src/services/llm-providers/` directory and current generation timestamp.
+- Updated `README.md` project structure diagram to include the new `llm-providers` service directory.
+
 ## [2.8.7] - 2025-05-22
 
 ### Changed
