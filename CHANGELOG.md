@@ -15,6 +15,8 @@ All notable changes to this project will be documented in this file.
 - **Documentation**:
   - Regenerated `docs/tree.md` to reflect the current project structure.
   - Updated version badge in `README.md` to 2.8.7.
+- **Search Service**:
+  - Refined tag-based search logic in `SearchService` to more robustly extract the core tag value from various regex patterns, improving search reliability.
 - **Examples**: Minor formatting consistency updates to JSON files in `examples/backup-example/` and `examples/deep-research-example/`.
 
 ## [2.8.6] - 2025-05-22

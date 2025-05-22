@@ -250,9 +250,20 @@ export class SearchService {
       let searchPart: string;
 
       if (searchProperty === "tags") {
-        params.exactTagValueLower = params.searchValue
-          .replace(/^\(\?i\)\.\*(.*)\.\*$/, "$1")
-          .toLowerCase();
+        let tagSearchTerm = params.searchValue; // Original regex pattern, e.g., "(?i)^Computer-Vision$" or "(?i).*Computer-Vision.*"
+        if (tagSearchTerm.startsWith("(?i)")) {
+          tagSearchTerm = tagSearchTerm.substring(4); // Remove case flag --> "^Computer-Vision$" or ".*Computer-Vision.*"
+        }
+
+        let coreValue = tagSearchTerm;
+        if (tagSearchTerm.startsWith("^") && tagSearchTerm.endsWith("$")) {
+          coreValue = tagSearchTerm.substring(1, tagSearchTerm.length - 1); // Extracts "Computer-Vision"
+        } else if (tagSearchTerm.startsWith(".*") && tagSearchTerm.endsWith(".*")) {
+          coreValue = tagSearchTerm.substring(2, tagSearchTerm.length - 2); // Extracts "Computer-Vision"
+        }
+        // Fallback if no specific pattern matched, use the term as is (after case flag removal)
+        
+        params.exactTagValueLower = coreValue.toLowerCase();
         searchPart = `ANY(tag IN n.\`${searchProperty}\` WHERE toLower(tag) = $exactTagValueLower)`;
       } else if (
         searchProperty === "urls" &&
