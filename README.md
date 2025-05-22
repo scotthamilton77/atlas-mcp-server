@@ -2,7 +2,7 @@
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8.3-blue.svg)](https://www.typescriptlang.org/)
 [![Model Context Protocol](https://img.shields.io/badge/MCP-1.11.5-green.svg)](https://modelcontextprotocol.io/)
-[![Version](https://img.shields.io/badge/Version-2.8.7-blue.svg)](https://github.com/cyanheads/atlas-mcp-server/releases)
+[![Version](https://img.shields.io/badge/Version-2.8.8-blue.svg)](https://github.com/cyanheads/atlas-mcp-server/releases)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Status](https://img.shields.io/badge/Status-Stable-green.svg)]()
 [![GitHub](https://img.shields.io/github/stars/cyanheads/atlas-mcp-server?style=social)](https://github.com/cyanheads/atlas-mcp-server)
@@ -288,6 +288,7 @@ src/
 │   ├── resources/   # MCP resource handlers (index.ts, types.ts, knowledge/, projects/, tasks/)
 │   └── tools/       # MCP tool handlers (individual tool directories)
 ├── services/        # Core application services
+│   ├── llm-providers/ # LLM provider integrations (e.g., OpenRouter)
 │   └── neo4j/       # Neo4j database services (index.ts, driver.ts, backupRestoreService.ts, etc.)
 ├── types/           # Shared TypeScript type definitions (errors.ts, mcp.ts, tool.ts)
 └── utils/           # Utility functions and internal services (e.g., logger, errorHandler, sanitization)
