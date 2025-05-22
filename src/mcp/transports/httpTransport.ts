@@ -10,20 +10,20 @@
  * @module src/mcp/transports/httpTransport
  */
 
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js'; // SDK type guard for InitializeRequest
-import express, { NextFunction, Request, Response } from 'express';
-import http from 'http';
-import { randomUUID } from 'node:crypto';
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js"; // SDK type guard for InitializeRequest
+import express, { NextFunction, Request, Response } from "express";
+import http from "http";
+import { randomUUID } from "node:crypto";
 // Import config and utils
-import { config } from '../../config/index.js'; // Import the validated config object
+import { config } from "../../config/index.js"; // Import the validated config object
 import {
   logger,
   RequestContext,
   requestContextService,
-} from '../../utils/index.js';
-import { mcpAuthMiddleware } from './authentication/authMiddleware.js'; // Import the auth middleware
+} from "../../utils/index.js";
+import { mcpAuthMiddleware } from "./authentication/authMiddleware.js"; // Import the auth middleware
 
 // --- Configuration Constants (Derived from imported config) ---
 
@@ -47,7 +47,7 @@ const HTTP_HOST = config.mcpHttpHost;
  * Supports POST, GET, DELETE, OPTIONS methods.
  * @constant {string} MCP_ENDPOINT_PATH
  */
-const MCP_ENDPOINT_PATH = '/mcp';
+const MCP_ENDPOINT_PATH = "/mcp";
 
 /**
  * Maximum number of attempts to find an available port if the initial HTTP_PORT is in use.
@@ -76,33 +76,33 @@ const httpTransports: Record<string, StreamableHTTPServerTransport> = {};
 function isOriginAllowed(req: Request, res: Response): boolean {
   const origin = req.headers.origin;
   const host = req.hostname; // Considers Host header
-  const isLocalhostBinding = ['127.0.0.1', '::1', 'localhost'].includes(host);
+  const isLocalhostBinding = ["127.0.0.1", "::1", "localhost"].includes(host);
   const allowedOrigins = config.mcpAllowedOrigins || []; // Use parsed array from config
   const context = requestContextService.createRequestContext({
-    operation: 'isOriginAllowed',
+    operation: "isOriginAllowed",
     origin,
     host,
     isLocalhostBinding,
     allowedOrigins,
   });
-  logger.debug('Checking origin allowance', context);
+  logger.debug("Checking origin allowance", context);
 
   // Determine if allowed based on config or localhost binding
   const allowed =
     (origin && allowedOrigins.includes(origin)) ||
-    (isLocalhostBinding && (!origin || origin === 'null'));
+    (isLocalhostBinding && origin && origin !== "null");
 
-  if (allowed && origin) {
-    // Origin is allowed and present, set specific CORS headers.
-    res.setHeader('Access-Control-Allow-Origin', origin);
+  if (allowed && origin && allowedOrigins.includes(origin)) {
+    // Origin is explicitly allowed, set specific CORS headers.
+    res.setHeader("Access-Control-Allow-Origin", origin);
     // MCP Spec: Streamable HTTP uses POST, GET, DELETE. OPTIONS is for preflight.
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
     // MCP Spec: Requires Mcp-Session-Id. Last-Event-ID for SSE resumption. Content-Type is standard. Authorization for security.
     res.setHeader(
-      'Access-Control-Allow-Headers',
-      'Content-Type, Mcp-Session-Id, Last-Event-ID, Authorization',
+      "Access-Control-Allow-Headers",
+      "Content-Type, Mcp-Session-Id, Last-Event-ID, Authorization",
     );
-    res.setHeader('Access-Control-Allow-Credentials', 'true'); // Set based on whether auth/cookies are used
+    res.setHeader("Access-Control-Allow-Credentials", "true"); // Set based on whether auth/cookies are used
   } else if (!allowed && origin) {
     // Origin provided but not in allowed list. Log warning.
     logger.warning(`Origin denied: ${origin}`, context);
@@ -125,7 +125,7 @@ async function isPortInUse(
 ): Promise<boolean> {
   const checkContext = requestContextService.createRequestContext({
     ...parentContext,
-    operation: 'isPortInUse',
+    operation: "isPortInUse",
     port,
     host,
   });
@@ -133,8 +133,8 @@ async function isPortInUse(
   return new Promise((resolve) => {
     const tempServer = http.createServer();
     tempServer
-      .once('error', (err: NodeJS.ErrnoException) => {
-        if (err.code === 'EADDRINUSE') {
+      .once("error", (err: NodeJS.ErrnoException) => {
+        if (err.code === "EADDRINUSE") {
           logger.debug(
             `Proactive check: Port confirmed in use (EADDRINUSE).`,
             checkContext,
@@ -148,7 +148,7 @@ async function isPortInUse(
           resolve(false); // Other error, let main listen attempt handle it
         }
       })
-      .once('listening', () => {
+      .once("listening", () => {
         logger.debug(`Proactive check: Port is available.`, checkContext);
         tempServer.close(() => resolve(false)); // Port is free
       })
@@ -177,7 +177,7 @@ function startHttpServerWithRetry(
 ): Promise<number> {
   const startContext = requestContextService.createRequestContext({
     ...parentContext,
-    operation: 'startHttpServerWithRetry',
+    operation: "startHttpServerWithRetry",
     initialPort,
     host,
     maxRetries,
@@ -223,7 +223,7 @@ function startHttpServerWithRetry(
               );
               listenResolve(); // Success
             })
-            .on('error', (err: NodeJS.ErrnoException) => {
+            .on("error", (err: NodeJS.ErrnoException) => {
               listenReject(err); // Forward error
             });
         });
@@ -235,7 +235,7 @@ function startHttpServerWithRetry(
           `Listen error on port ${currentPort}: Code=${err.code}, Message=${err.message}`,
           { ...attemptContext, errorCode: err.code, errorMessage: err.message },
         );
-        if (err.code === 'EADDRINUSE') {
+        if (err.code === "EADDRINUSE") {
           logger.warning(
             `Port ${currentPort} already in use (EADDRINUSE), retrying...`,
             attemptContext,
@@ -258,7 +258,7 @@ function startHttpServerWithRetry(
     );
     reject(
       lastError ||
-        new Error('Failed to bind to any port after multiple retries.'),
+        new Error("Failed to bind to any port after multiple retries."),
     );
   });
 }
@@ -281,11 +281,11 @@ export async function startHttpTransport(
   const app = express();
   const transportContext = requestContextService.createRequestContext({
     ...parentContext,
-    transportType: 'HTTP',
-    component: 'HttpTransportSetup',
+    transportType: "HTTP",
+    component: "HttpTransportSetup",
   });
   logger.debug(
-    'Setting up Express app for HTTP transport...',
+    "Setting up Express app for HTTP transport...",
     transportContext,
   );
 
@@ -298,7 +298,7 @@ export async function startHttpTransport(
   app.options(MCP_ENDPOINT_PATH, (req, res) => {
     const optionsContext = requestContextService.createRequestContext({
       ...transportContext,
-      operation: 'handleOptions',
+      operation: "handleOptions",
       origin: req.headers.origin,
       method: req.method,
       path: req.path,
@@ -309,16 +309,16 @@ export async function startHttpTransport(
     );
     if (isOriginAllowed(req, res)) {
       logger.debug(
-        'OPTIONS request origin allowed, sending 204.',
+        "OPTIONS request origin allowed, sending 204.",
         optionsContext,
       );
       res.sendStatus(204);
     } else {
       logger.debug(
-        'OPTIONS request origin denied, sending 403.',
+        "OPTIONS request origin denied, sending 403.",
         optionsContext,
       );
-      res.status(403).send('Forbidden: Invalid Origin');
+      res.status(403).send("Forbidden: Invalid Origin");
     }
   });
 
@@ -326,7 +326,7 @@ export async function startHttpTransport(
   app.use((req: Request, res: Response, next: NextFunction) => {
     const securityContext = requestContextService.createRequestContext({
       ...transportContext,
-      operation: 'securityMiddleware',
+      operation: "securityMiddleware",
       path: req.path,
       method: req.method,
       origin: req.headers.origin,
@@ -334,18 +334,18 @@ export async function startHttpTransport(
     logger.debug(`Applying security middleware...`, securityContext);
 
     if (!isOriginAllowed(req, res)) {
-      logger.debug('Origin check failed, sending 403.', securityContext);
-      res.status(403).send('Forbidden: Invalid Origin');
+      logger.debug("Origin check failed, sending 403.", securityContext);
+      res.status(403).send("Forbidden: Invalid Origin");
       return;
     }
 
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
     res.setHeader(
-      'Content-Security-Policy',
+      "Content-Security-Policy",
       "default-src 'self'; script-src 'self'; object-src 'none'; style-src 'self'; img-src 'self'; media-src 'self'; frame-src 'none'; font-src 'self'; connect-src 'self'",
     );
-    logger.debug('Security middleware passed.', securityContext);
+    logger.debug("Security middleware passed.", securityContext);
     next();
   });
 
@@ -356,8 +356,8 @@ export async function startHttpTransport(
   app.post(MCP_ENDPOINT_PATH, async (req, res) => {
     const basePostContext = requestContextService.createRequestContext({
       ...transportContext,
-      operation: 'handlePost',
-      method: 'POST',
+      operation: "handlePost",
+      method: "POST",
       path: req.path,
       origin: req.headers.origin,
     });
@@ -367,7 +367,7 @@ export async function startHttpTransport(
       bodyPreview: JSON.stringify(req.body).substring(0, 100),
     });
 
-    const sessionId = req.headers['mcp-session-id'] as string | undefined;
+    const sessionId = req.headers["mcp-session-id"] as string | undefined;
     logger.debug(`Extracted session ID: ${sessionId}`, {
       ...basePostContext,
       sessionId,
@@ -390,13 +390,13 @@ export async function startHttpTransport(
       if (isInitReq) {
         if (transport) {
           logger.warning(
-            'Received InitializeRequest on an existing session ID. Closing old session and creating new.',
+            "Received InitializeRequest on an existing session ID. Closing old session and creating new.",
             { ...basePostContext, sessionId },
           );
           await transport.close();
           delete httpTransports[sessionId!];
         }
-        logger.info('Handling Initialize Request: Creating new session...', {
+        logger.info("Handling Initialize Request: Creating new session...", {
           ...basePostContext,
           sessionId,
         });
@@ -434,31 +434,31 @@ export async function startHttpTransport(
             });
           } else {
             logger.debug(
-              'onclose handler triggered for transport without session ID (likely init failure).',
+              "onclose handler triggered for transport without session ID (likely init failure).",
               basePostContext,
             );
           }
         };
 
         logger.debug(
-          'Creating McpServer instance for new session...',
+          "Creating McpServer instance for new session...",
           basePostContext,
         );
         const server = await createServerInstanceFn();
         logger.debug(
-          'Connecting McpServer to new transport...',
+          "Connecting McpServer to new transport...",
           basePostContext,
         );
         await server.connect(transport);
-        logger.debug('McpServer connected to transport.', basePostContext);
+        logger.debug("McpServer connected to transport.", basePostContext);
       } else if (!transport) {
         logger.warning(
-          'Invalid or missing session ID for non-initialize POST request.',
+          "Invalid or missing session ID for non-initialize POST request.",
           { ...basePostContext, sessionId },
         );
         res.status(404).json({
-          jsonrpc: '2.0',
-          error: { code: -32004, message: 'Invalid or expired session ID' },
+          jsonrpc: "2.0",
+          error: { code: -32004, message: "Invalid or expired session ID" },
           id: requestId,
         });
         return;
@@ -476,7 +476,7 @@ export async function startHttpTransport(
       );
     } catch (err) {
       const errorSessionId = transport?.sessionId || sessionId;
-      logger.error('Error handling POST request', {
+      logger.error("Error handling POST request", {
         ...basePostContext,
         sessionId: errorSessionId,
         isInitReq,
@@ -485,21 +485,21 @@ export async function startHttpTransport(
       });
       if (!res.headersSent) {
         res.status(500).json({
-          jsonrpc: '2.0',
+          jsonrpc: "2.0",
           error: {
             code: -32603,
-            message: 'Internal server error during POST handling',
+            message: "Internal server error during POST handling",
           },
           id: requestId,
         });
       }
       if (isInitReq && transport && !transport.sessionId) {
-        logger.debug('Cleaning up transport after initialization failure.', {
+        logger.debug("Cleaning up transport after initialization failure.", {
           ...basePostContext,
           sessionId: errorSessionId,
         });
         await transport.close().catch((closeErr) =>
-          logger.error('Error closing transport after init failure', {
+          logger.error("Error closing transport after init failure", {
             ...basePostContext,
             sessionId: errorSessionId,
             closeError: closeErr,
@@ -523,7 +523,7 @@ export async function startHttpTransport(
       headers: req.headers,
     });
 
-    const sessionId = req.headers['mcp-session-id'] as string | undefined;
+    const sessionId = req.headers["mcp-session-id"] as string | undefined;
     logger.debug(`Extracted session ID: ${sessionId}`, {
       ...baseSessionReqContext,
       sessionId,
@@ -540,7 +540,7 @@ export async function startHttpTransport(
         ...baseSessionReqContext,
         sessionId,
       });
-      res.status(404).send('Session not found or expired');
+      res.status(404).send("Session not found or expired");
       return;
     }
 
@@ -565,18 +565,18 @@ export async function startHttpTransport(
         },
       );
       if (!res.headersSent) {
-        res.status(500).send('Internal Server Error');
+        res.status(500).send("Internal Server Error");
       }
     }
   };
   app.get(MCP_ENDPOINT_PATH, handleSessionReq);
   app.delete(MCP_ENDPOINT_PATH, handleSessionReq);
 
-  logger.debug('Creating HTTP server instance...', transportContext);
+  logger.debug("Creating HTTP server instance...", transportContext);
   const serverInstance = http.createServer(app);
   try {
     logger.debug(
-      'Attempting to start HTTP server with retry logic...',
+      "Attempting to start HTTP server with retry logic...",
       transportContext,
     );
     const actualPort = await startHttpServerWithRetry(
@@ -586,7 +586,7 @@ export async function startHttpTransport(
       MAX_PORT_RETRIES,
       transportContext,
     );
-    const protocol = config.environment === 'production' ? 'https' : 'http';
+    const protocol = config.environment === "production" ? "https" : "http";
     const serverAddress = `${protocol}://${config.mcpHttpHost}:${actualPort}${MCP_ENDPOINT_PATH}`;
     if (process.stdout.isTTY) {
       console.log(
@@ -594,7 +594,7 @@ export async function startHttpTransport(
       );
     }
   } catch (err) {
-    logger.fatal('HTTP server failed to start after multiple port retries.', {
+    logger.fatal("HTTP server failed to start after multiple port retries.", {
       ...transportContext,
       error: err instanceof Error ? err.message : String(err),
     });

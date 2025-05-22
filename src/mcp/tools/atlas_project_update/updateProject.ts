@@ -1,34 +1,43 @@
 import { ProjectService } from "../../../services/neo4j/projectService.js";
-import { BaseErrorCode, McpError, ProjectErrorCode } from "../../../types/errors.js";
+import {
+  BaseErrorCode,
+  McpError,
+  ProjectErrorCode,
+} from "../../../types/errors.js";
 import { ResponseFormat, createToolResponse } from "../../../types/mcp.js";
-import { logger } from "../../../utils/internal/logger.js";
+import { logger, requestContextService } from "../../../utils/index.js"; // Import requestContextService
 import { ToolContext } from "../../../types/tool.js";
 import { AtlasProjectUpdateInput, AtlasProjectUpdateSchema } from "./types.js";
 import { formatProjectUpdateResponse } from "./responseFormat.js";
 
 export const atlasUpdateProject = async (
   input: unknown,
-  context: ToolContext
+  context: ToolContext,
 ) => {
   let validatedInput: AtlasProjectUpdateInput | undefined;
-  
+  const reqContext =
+    context.requestContext ??
+    requestContextService.createRequestContext({
+      toolName: "atlasUpdateProject",
+    });
+
   try {
     // Parse and validate the input against schema
     validatedInput = AtlasProjectUpdateSchema.parse(input);
-    
+
     // Process according to operation mode (single or bulk)
-    if (validatedInput.mode === 'bulk') {
+    if (validatedInput.mode === "bulk") {
       // Execute bulk update operation
-      logger.info("Applying updates to multiple projects", { 
+      logger.info("Applying updates to multiple projects", {
+        ...reqContext,
         count: validatedInput.projects.length,
-        requestId: context.requestContext?.requestId 
       });
 
       const results = {
         success: true,
         message: `Successfully updated ${validatedInput.projects.length} projects`,
         updated: [] as any[],
-        errors: [] as any[]
+        errors: [] as any[],
       };
 
       // Process each project update sequentially to maintain data consistency
@@ -36,21 +45,23 @@ export const atlasUpdateProject = async (
         const projectUpdate = validatedInput.projects[i];
         try {
           // First check if project exists
-          const projectExists = await ProjectService.getProjectById(projectUpdate.id);
-          
+          const projectExists = await ProjectService.getProjectById(
+            projectUpdate.id,
+          );
+
           if (!projectExists) {
             throw new McpError(
               ProjectErrorCode.PROJECT_NOT_FOUND,
-              `Project with ID ${projectUpdate.id} not found`
+              `Project with ID ${projectUpdate.id} not found`,
             );
           }
-          
+
           // Update the project
           const updatedProject = await ProjectService.updateProject(
             projectUpdate.id,
-            projectUpdate.updates
+            projectUpdate.updates,
           );
-          
+
           results.updated.push(updatedProject);
         } catch (error) {
           results.success = false;
@@ -58,23 +69,26 @@ export const atlasUpdateProject = async (
             index: i,
             project: projectUpdate,
             error: {
-              code: error instanceof McpError ? error.code : BaseErrorCode.INTERNAL_ERROR,
-              message: error instanceof Error ? error.message : 'Unknown error',
-              details: error instanceof McpError ? error.details : undefined
-            }
+              code:
+                error instanceof McpError
+                  ? error.code
+                  : BaseErrorCode.INTERNAL_ERROR,
+              message: error instanceof Error ? error.message : "Unknown error",
+              details: error instanceof McpError ? error.details : undefined,
+            },
           });
         }
       }
-      
+
       if (results.errors.length > 0) {
         results.message = `Updated ${results.updated.length} of ${validatedInput.projects.length} projects with ${results.errors.length} errors`;
       }
-      
-      logger.info("Bulk project modification completed", { 
+
+      logger.info("Bulk project modification completed", {
+        ...reqContext,
         successCount: results.updated.length,
         errorCount: results.errors.length,
-        projectIds: results.updated.map(p => p.id),
-        requestId: context.requestContext?.requestId 
+        projectIds: results.updated.map((p) => p.id),
       });
 
       // Conditionally format response
@@ -86,29 +100,29 @@ export const atlasUpdateProject = async (
     } else {
       // Process single project modification
       const { mode, id, updates } = validatedInput;
-      
-      logger.info("Modifying project attributes", { 
-        id, 
+
+      logger.info("Modifying project attributes", {
+        ...reqContext,
+        id,
         fields: Object.keys(updates),
-        requestId: context.requestContext?.requestId 
       });
 
       // First check if project exists
       const projectExists = await ProjectService.getProjectById(id);
-      
+
       if (!projectExists) {
         throw new McpError(
           ProjectErrorCode.PROJECT_NOT_FOUND,
-          `Project with ID ${id} not found`
+          `Project with ID ${id} not found`,
         );
       }
-      
+
       // Update the project
       const updatedProject = await ProjectService.updateProject(id, updates);
-      
-      logger.info("Project modifications applied successfully", { 
+
+      logger.info("Project modifications applied successfully", {
+        ...reqContext,
         projectId: id,
-        requestId: context.requestContext?.requestId 
       });
 
       // Conditionally format response
@@ -124,23 +138,23 @@ export const atlasUpdateProject = async (
       throw error;
     }
 
-    logger.error("Failed to modify project(s)", { 
-      error,
-      requestId: context.requestContext?.requestId 
+    logger.error("Failed to modify project(s)", error as Error, {
+      ...reqContext,
+      inputReceived: validatedInput ?? input,
     });
 
     // Handle not found error specifically
-    if (error instanceof Error && error.message.includes('not found')) {
+    if (error instanceof Error && error.message.includes("not found")) {
       throw new McpError(
         ProjectErrorCode.PROJECT_NOT_FOUND,
-        `Project not found: ${error.message}`
+        `Project not found: ${error.message}`,
       );
     }
 
     // Convert generic errors to properly formatted McpError
     throw new McpError(
       BaseErrorCode.INTERNAL_ERROR,
-      `Failed to modify project(s): ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Failed to modify project(s): ${error instanceof Error ? error.message : "Unknown error"}`,
     );
   }
 };

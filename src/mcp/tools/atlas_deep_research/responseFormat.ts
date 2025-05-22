@@ -16,44 +16,47 @@ interface ResponseFormatter<T> {
  * It's designed to be used within `formatDeepResearchResponse` which adds
  * contextual information from the original tool input.
  */
-export const DeepResearchBaseFormatter: ResponseFormatter<DeepResearchResult> = {
-  format: (data: DeepResearchResult): string => {
-    // This base format method only uses the 'data' part of the result.
-    // Context from the 'input' is added by the calling function below.
-    if (!data.success) {
-      // Basic error formatting if the operation failed
-      return `Error initiating deep research: ${data.message}`;
-    }
+export const DeepResearchBaseFormatter: ResponseFormatter<DeepResearchResult> =
+  {
+    format: (data: DeepResearchResult): string => {
+      // This base format method only uses the 'data' part of the result.
+      // Context from the 'input' is added by the calling function below.
+      if (!data.success) {
+        // Basic error formatting if the operation failed
+        return `Error initiating deep research: ${data.message}`;
+      }
 
-    // Start building the Markdown output
-    const lines: string[] = [
-      `## Deep Research Plan Initiated`,
-      `**Status:** ${data.message}`, // Display the success message from the core logic
-      `**Plan Node ID:** \`${data.planNodeId}\``, // Show the ID of the created root node
-    ];
+      // Start building the Markdown output
+      const lines: string[] = [
+        `## Deep Research Plan Initiated`,
+        `**Status:** ${data.message}`, // Display the success message from the core logic
+        `**Plan Node ID:** \`${data.planNodeId}\``, // Show the ID of the created root node
+      ];
 
-    // Add details about the created sub-topic nodes
-    if (data.subTopicNodes && data.subTopicNodes.length > 0) {
-      lines.push(
-        `\n### Sub-Topics Created (${data.subTopicNodes.length})${
-          data.tasksCreated ? ' (with Tasks)' : ''
-        }:`
-      );
-      data.subTopicNodes.forEach((node) => {
-        const taskInfo = node.taskId ? `\n  - **Task ID:** \`${node.taskId}\`` : '';
-        // Basic info available directly from the result data
+      // Add details about the created sub-topic nodes
+      if (data.subTopicNodes && data.subTopicNodes.length > 0) {
         lines.push(
-          `- **Question:** ${node.question}\n  - **Node ID:** \`${node.nodeId}\`${taskInfo}`
-          // Note: Initial Search Queries are added by the contextual formatter below
+          `\n### Sub-Topics Created (${data.subTopicNodes.length})${
+            data.tasksCreated ? " (with Tasks)" : ""
+          }:`,
         );
-      });
-    } else {
-      lines.push("\nNo sub-topics were specified or created.");
-    }
+        data.subTopicNodes.forEach((node) => {
+          const taskInfo = node.taskId
+            ? `\n  - **Task ID:** \`${node.taskId}\``
+            : "";
+          // Basic info available directly from the result data
+          lines.push(
+            `- **Question:** ${node.question}\n  - **Node ID:** \`${node.nodeId}\`${taskInfo}`,
+            // Note: Initial Search Queries are added by the contextual formatter below
+          );
+        });
+      } else {
+        lines.push("\nNo sub-topics were specified or created.");
+      }
 
-    return lines.join("\n"); // Combine lines into a single Markdown string
-  },
-};
+      return lines.join("\n"); // Combine lines into a single Markdown string
+    },
+  };
 
 /**
  * Creates the final formatted `McpToolResponse` for the `atlas_deep_research` tool.
@@ -68,7 +71,7 @@ export const DeepResearchBaseFormatter: ResponseFormatter<DeepResearchResult> = 
  */
 export function formatDeepResearchResponse(
   rawData: DeepResearchResult,
-  input: AtlasDeepResearchInput
+  input: AtlasDeepResearchInput,
 ): McpToolResponse {
   // Define a contextual formatter *inside* this function.
   // This allows the formatter's `format` method to access the `input` variable via closure.
@@ -83,7 +86,7 @@ export function formatDeepResearchResponse(
       const lines: string[] = [
         `## Deep Research Plan Initiated`,
         `**Topic:** ${input.researchTopic}`, // Include Topic from input
-        `**Goal:** ${input.researchGoal}`,   // Include Goal from input
+        `**Goal:** ${input.researchGoal}`, // Include Goal from input
       ];
       if (input.scopeDefinition) {
         lines.push(`**Scope:** ${input.scopeDefinition}`); // Include Scope if provided
@@ -95,7 +98,7 @@ export function formatDeepResearchResponse(
       lines.push(`**Status:** ${data.message}`); // Status message from result
       lines.push(`**Plan Node ID:** \`${data.planNodeId}\``); // Root node ID from result
       if (input.initialTags && input.initialTags.length > 0) {
-        lines.push(`**Initial Tags:** ${input.initialTags.join(', ')}`); // Include initial tags
+        lines.push(`**Initial Tags:** ${input.initialTags.join(", ")}`); // Include initial tags
       }
 
       // Add details about sub-topic nodes, including search queries from input
@@ -105,26 +108,33 @@ export function formatDeepResearchResponse(
           // Find the corresponding sub-topic in the input to retrieve initial search queries
           // Find the corresponding sub-topic in the input to retrieve initial search queries and task details
           const inputSubTopic = input.subTopics.find(
-            (st) => st.question === node.question
+            (st) => st.question === node.question,
           );
           const searchQueries =
-            inputSubTopic?.initialSearchQueries?.join(', ') || 'N/A'; // Format queries or show N/A
-          const taskInfo = node.taskId ? `\n  - **Task ID:** \`${node.taskId}\`` : ''; // Add Task ID if present
-          const priorityInfo = inputSubTopic?.priority ? `\n  - **Task Priority:** ${inputSubTopic.priority}` : '';
-          const assigneeInfo = inputSubTopic?.assignedTo ? `\n  - **Task Assignee:** ${inputSubTopic.assignedTo}` : '';
-          const statusInfo = inputSubTopic?.initialStatus ? `\n  - **Task Status:** ${inputSubTopic.initialStatus}` : '';
-
+            inputSubTopic?.initialSearchQueries?.join(", ") || "N/A"; // Format queries or show N/A
+          const taskInfo = node.taskId
+            ? `\n  - **Task ID:** \`${node.taskId}\``
+            : ""; // Add Task ID if present
+          const priorityInfo = inputSubTopic?.priority
+            ? `\n  - **Task Priority:** ${inputSubTopic.priority}`
+            : "";
+          const assigneeInfo = inputSubTopic?.assignedTo
+            ? `\n  - **Task Assignee:** ${inputSubTopic.assignedTo}`
+            : "";
+          const statusInfo = inputSubTopic?.initialStatus
+            ? `\n  - **Task Status:** ${inputSubTopic.initialStatus}`
+            : "";
 
           lines.push(
-            `- **Question:** ${node.question}\n  - **Node ID:** \`${node.nodeId}\`${taskInfo}${priorityInfo}${assigneeInfo}${statusInfo}\n  - **Initial Search Queries:** ${searchQueries}` // Add search queries and task details
+            `- **Question:** ${node.question}\n  - **Node ID:** \`${node.nodeId}\`${taskInfo}${priorityInfo}${assigneeInfo}${statusInfo}\n  - **Initial Search Queries:** ${searchQueries}`, // Add search queries and task details
           );
         });
       } else {
-        lines.push('\nNo sub-topics were specified or created.');
+        lines.push("\nNo sub-topics were specified or created.");
       }
 
       return lines.join("\n"); // Combine all lines into the final Markdown string
-    }
+    },
   };
 
   const formattedText = contextualFormatter.format(rawData);

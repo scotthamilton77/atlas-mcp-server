@@ -16,22 +16,32 @@ export interface ToolExample {
 }
 
 // Entity types for Atlas Platform
-export type EntityType = 'project' | 'task' | 'knowledge';
+export type EntityType = "project" | "task" | "knowledge";
 
 // Task types supported in Atlas Platform
-export type TaskType = 'research' | 'generation' | 'analysis' | 'integration' | string;
+export type TaskType =
+  | "research"
+  | "generation"
+  | "analysis"
+  | "integration"
+  | string;
 
 // Project status states
-export type ProjectStatus = 'active' | 'pending' | 'in-progress' | 'completed' | 'archived';
+export type ProjectStatus =
+  | "active"
+  | "pending"
+  | "in-progress"
+  | "completed"
+  | "archived";
 
 // Task status states
-export type TaskStatus = 'backlog' | 'todo' | 'in-progress' | 'completed';
+export type TaskStatus = "backlog" | "todo" | "in-progress" | "completed";
 
 // Priority levels for tasks
-export type PriorityLevel = 'low' | 'medium' | 'high' | 'critical';
+export type PriorityLevel = "low" | "medium" | "high" | "critical";
 
 // Domain types for knowledge categorization
-export type KnowledgeDomain = 'technical' | 'business' | 'scientific' | string;
+export type KnowledgeDomain = "technical" | "business" | "scientific" | string;
 
 // Tool metadata
 export interface ToolMetadata {
@@ -49,7 +59,7 @@ export interface ToolMetadata {
 // Base handler type that matches SDK expectations
 type BaseToolHandler = (
   input: unknown,
-  context: ToolContext
+  context: ToolContext,
 ) => Promise<McpToolResponse>;
 
 // Enhanced tool registration function
@@ -59,11 +69,11 @@ export const registerTool = (
   description: string,
   schema: z.ZodRawShape,
   handler: BaseToolHandler,
-  metadata?: ToolMetadata
+  metadata?: ToolMetadata,
 ) => {
   const wrappedHandler = async (
     args: Record<string, unknown>,
-    extra: Record<string, unknown>
+    extra: Record<string, unknown>,
   ): Promise<McpToolResponse> => {
     try {
       // Check permissions if required
@@ -80,15 +90,19 @@ export const registerTool = (
       // Create middleware with custom rate limit if specified
       // const middleware = createToolMiddleware(name); // Placeholder for missing createToolMiddleware
       // const result = await middleware(handler, validatedInput, extra as ToolContext);
-      
+
       // Directly call handler if middleware is missing
       const result = await handler(validatedInput, extra as ToolContext);
-      
+
       // Ensure result matches expected format
-      if (typeof result === 'object' && result !== null && 'content' in result) {
+      if (
+        typeof result === "object" &&
+        result !== null &&
+        "content" in result
+      ) {
         return result as McpToolResponse;
       }
-      
+
       // Convert unexpected result format to standard response
       return createToolResponse(JSON.stringify(result));
     } catch (error) {
@@ -97,20 +111,20 @@ export const registerTool = (
       }
       if (error instanceof z.ZodError) {
         return createToolResponse(
-          `Validation error: ${error.errors.map(e => e.message).join(", ")}`,
-          true
+          `Validation error: ${error.errors.map((e) => e.message).join(", ")}`,
+          true,
         );
       }
       return createToolResponse(
-        `Error: ${error instanceof Error ? error.message : 'An unknown error occurred'}`,
-        true
+        `Error: ${error instanceof Error ? error.message : "An unknown error occurred"}`,
+        true,
       );
     }
   };
 
   // Keep description concise and focused on tool purpose only
   const fullDescription = description;
-  
+
   // Register tool with server
   // Examples are handled separately through the metadata but not passed directly to server.tool
   server.tool(name, fullDescription, schema, wrappedHandler);
@@ -120,15 +134,16 @@ export const registerTool = (
 export const createToolExample = (
   input: Record<string, unknown>,
   output: string,
-  description?: string
+  description?: string,
 ): ToolExample => ({
   input,
   output,
-  description
+  description,
 });
 
 // Helper to create tool metadata
-export const createToolMetadata = (metadata: ToolMetadata): ToolMetadata => metadata;
+export const createToolMetadata = (metadata: ToolMetadata): ToolMetadata =>
+  metadata;
 
 /**
  * Atlas Platform specific interfaces to represent the core data model
@@ -138,34 +153,34 @@ export const createToolMetadata = (metadata: ToolMetadata): ToolMetadata => meta
 export interface Project {
   /** Optional client-generated ID; system will generate if not provided */
   id?: string;
-  
+
   /** Descriptive project name (1-100 characters) */
   name: string;
-  
+
   /** Comprehensive project overview explaining purpose and scope */
   description: string;
-  
+
   /** Current project state */
   status: ProjectStatus;
-  
+
   /** Relevant URLs with descriptive titles for reference materials */
-  urls?: Array<{ title: string, url: string }>;
-  
+  urls?: Array<{ title: string; url: string }>;
+
   /** Specific, measurable criteria that indicate project completion */
   completionRequirements: string;
-  
+
   /** Array of existing project IDs that must be completed before this project can begin */
   dependencies?: string[];
-  
+
   /** Required format specification for final project deliverables */
   outputFormat: string;
-  
+
   /** Classification of project purpose */
   taskType: TaskType;
-  
+
   /** Timestamp when the project was created */
   createdAt: string;
-  
+
   /** Timestamp when the project was last updated */
   updatedAt: string;
 }
@@ -173,46 +188,46 @@ export interface Project {
 export interface Task {
   /** Optional client-generated ID; system will generate if not provided */
   id?: string;
-  
+
   /** ID of the parent project this task belongs to */
   projectId: string;
-  
+
   /** Concise task title clearly describing the objective (5-150 characters) */
   title: string;
-  
+
   /** Detailed explanation of the task requirements and context */
   description: string;
-  
+
   /** Importance level */
   priority: PriorityLevel;
-  
+
   /** Current task state */
   status: TaskStatus;
-  
+
   /** ID of entity responsible for task completion */
   assignedTo?: string;
-  
+
   /** Relevant URLs with descriptive titles for reference materials */
-  urls?: Array<{ title: string, url: string }>;
-  
+  urls?: Array<{ title: string; url: string }>;
+
   /** Categorical labels for organization and filtering */
   tags?: string[];
-  
+
   /** Specific, measurable criteria that indicate task completion */
   completionRequirements: string;
-  
+
   /** Array of existing task IDs that must be completed before this task can begin */
   dependencies?: string[];
-  
+
   /** Required format specification for task deliverables */
   outputFormat: string;
-  
+
   /** Classification of task purpose */
   taskType: TaskType;
-  
+
   /** Timestamp when the task was created */
   createdAt: string;
-  
+
   /** Timestamp when the task was last updated */
   updatedAt: string;
 }
@@ -220,25 +235,25 @@ export interface Task {
 export interface Knowledge {
   /** Optional client-generated ID; system will generate if not provided */
   id?: string;
-  
+
   /** ID of the parent project this knowledge belongs to */
   projectId: string;
-  
+
   /** Main content of the knowledge item (can be structured or unstructured) */
   text: string;
-  
+
   /** Categorical labels for organization and filtering */
   tags?: string[];
-  
+
   /** Primary knowledge area or discipline */
   domain: KnowledgeDomain;
-  
+
   /** Array of reference sources supporting this knowledge (URLs, DOIs, etc.) */
   citations?: string[];
-  
+
   /** Timestamp when the knowledge item was created */
   createdAt: string;
-  
+
   /** Timestamp when the knowledge item was last updated */
   updatedAt: string;
 }
@@ -250,108 +265,108 @@ export interface Knowledge {
 
 export interface ProjectCreateRequest {
   /** Operation mode - 'single' for one project, 'bulk' for multiple projects */
-  mode?: 'single' | 'bulk';
-  
+  mode?: "single" | "bulk";
+
   /** Optional client-generated project ID (required for mode='single') */
   id?: string;
-  
+
   /** Descriptive project name (1-100 characters) (required for mode='single') */
   name?: string;
-  
+
   /** Comprehensive project overview explaining purpose and scope (required for mode='single') */
   description?: string;
-  
+
   /** Current project state (Default: active) */
   status?: ProjectStatus;
-  
+
   /** Array of relevant URLs with descriptive titles for reference materials */
-  urls?: Array<{ title: string, url: string }>;
-  
+  urls?: Array<{ title: string; url: string }>;
+
   /** Specific, measurable criteria that indicate project completion (required for mode='single') */
   completionRequirements?: string;
-  
+
   /** Array of existing project IDs that must be completed before this project can begin */
   dependencies?: string[];
-  
+
   /** Required format specification for final project deliverables (required for mode='single') */
   outputFormat?: string;
-  
+
   /** Classification of project purpose (required for mode='single') */
   taskType?: TaskType;
-  
+
   /** Array of project objects with the above fields (required for mode='bulk') */
   projects?: Partial<Project>[];
 }
 
 export interface TaskCreateRequest {
   /** Operation mode - 'single' for one task, 'bulk' for multiple tasks */
-  mode?: 'single' | 'bulk';
-  
+  mode?: "single" | "bulk";
+
   /** Optional client-generated task ID */
   id?: string;
-  
+
   /** ID of the parent project this task belongs to (required for mode='single') */
   projectId?: string;
-  
+
   /** Concise task title clearly describing the objective (5-150 characters) (required for mode='single') */
   title?: string;
-  
+
   /** Detailed explanation of the task requirements and context (required for mode='single') */
   description?: string;
-  
+
   /** Importance level (Default: medium) */
   priority?: PriorityLevel;
-  
+
   /** Current task state (Default: todo) */
   status?: TaskStatus;
-  
+
   /** ID of entity responsible for task completion */
   assignedTo?: string;
-  
+
   /** Array of relevant URLs with descriptive titles for reference materials */
-  urls?: Array<{ title: string, url: string }>;
-  
+  urls?: Array<{ title: string; url: string }>;
+
   /** Array of categorical labels for organization and filtering */
   tags?: string[];
-  
+
   /** Specific, measurable criteria that indicate task completion (required for mode='single') */
   completionRequirements?: string;
-  
+
   /** Array of existing task IDs that must be completed before this task can begin */
   dependencies?: string[];
-  
+
   /** Required format specification for task deliverables (required for mode='single') */
   outputFormat?: string;
-  
+
   /** Classification of task purpose (required for mode='single') */
   taskType?: TaskType;
-  
+
   /** Array of task objects with the above fields (required for mode='bulk') */
   tasks?: Partial<Task>[];
 }
 
 export interface KnowledgeAddRequest {
   /** Operation mode - 'single' for one knowledge item, 'bulk' for multiple items */
-  mode?: 'single' | 'bulk';
-  
+  mode?: "single" | "bulk";
+
   /** Optional client-generated knowledge ID */
   id?: string;
-  
+
   /** ID of the parent project this knowledge belongs to (required for mode='single') */
   projectId?: string;
-  
+
   /** Main content of the knowledge item (can be structured or unstructured) (required for mode='single') */
   text?: string;
-  
+
   /** Array of categorical labels for organization and filtering */
   tags?: string[];
-  
+
   /** Primary knowledge area or discipline (required for mode='single') */
   domain?: KnowledgeDomain;
-  
+
   /** Array of reference sources supporting this knowledge (URLs, DOIs, etc.) */
   citations?: string[];
-  
+
   /** Array of knowledge objects with the above fields (required for mode='bulk') */
   knowledge?: Partial<Knowledge>[];
 }

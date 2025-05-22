@@ -72,13 +72,7 @@
     "id": "know_5894c5e7cd674206b82470c4d46265e7",
     "text": "# About Cyanheads: Development Philosophy and Personal Approach\n\n## Development Philosophy\n\nAs a software developer, I approach each project with a blend of pragmatism and innovation. I believe that great software strikes a balance between elegant technical solutions and genuine user needs. My development philosophy centers around these core principles:\n\n### User-Centered Design\nTechnology should serve people, not the other way around. I start every project by deeply understanding the end users and their needs, then work backward to create solutions that feel intuitive and empowering.\n\n### Sustainable Code\nI write code that's meant to last. This means emphasizing readability, thorough documentation, comprehensive testing, and thoughtful architecture that can evolve over time without accumulating technical debt.\n\n### Continuous Learning\nThe tech landscape evolves rapidly, and I embrace this by dedicating time each week to learning new tools, languages, and approaches. I believe that being a great developer means being a perpetual student.\n\n### Ethical Technology\nI'm committed to building technology that respects user privacy, promotes accessibility, and considers potential social impacts. I believe that ethical considerations should be built into the development process from day one.\n\n## Personal Interests\n\nBeyond coding, I'm passionate about several interests that inform my work and keep me balanced:\n\n### Open Source Contribution\nI'm an active contributor to several open source projects, particularly in the data visualization and accessibility spaces. I believe in giving back to the community that has provided so many tools and opportunities.\n\n### Hiking and Outdoor Photography\nLiving in Seattle provides amazing access to nature. I frequently explore the hiking trails around the Pacific Northwest, capturing landscape photography that helps me maintain perspective and creativity.\n\n### Electronic Music Production\nAs a hobby producer, I create ambient and electronic music that exercises the creative parts of my brain in different ways than coding. The logical patterns of music production have surprising parallels to software architecture.\n\n### Tech Mentorship\nI regularly mentor coding bootcamp graduates and early-career developers. Helping others navigate their tech journey is incredibly rewarding and helps me continually reassess and articulate my own understanding.\n\n### Language Learning\nI'm currently learning Japanese and have intermediate proficiency in Spanish. I find that understanding different languages improves my ability to think systematically and approach problems from multiple angles.\n\n## Work-Life Integration\n\nRather than pursuing traditional work-life balance, I prefer work-life integration where my professional skills, personal interests, and values form a cohesive whole. This approach keeps me energized, prevents burnout, and allows me to bring my authentic self to both my personal projects and professional work.",
     "projectId": "portfolio-main",
-    "tags": [
-      "personal",
-      "philosophy",
-      "interests",
-      "values",
-      "approach"
-    ],
+    "tags": ["personal", "philosophy", "interests", "values", "approach"],
     "updatedAt": "2025-03-26T18:43:13.677Z"
   },
   {
@@ -88,12 +82,7 @@
     "id": "know_c9ebf9d01d0841b28fbdfc508a3754ef",
     "text": "# Professional Background for cyanheads\n\nCyanheads (Alex Chen) is a full-stack software developer based in Seattle, WA with 7 years of professional experience in the tech industry. They specialize in building scalable web applications and cloud-native solutions with a focus on excellent user experience and performance.\n\n## Career History\n\n### Senior Software Engineer at Nimbus Cloud Solutions (2023-Present)\n- Lead developer for the company's flagship cloud management platform\n- Architected and implemented microservices infrastructure using Kubernetes and Docker\n- Mentored junior developers and established coding standards and best practices\n- Technologies: TypeScript, React, Node.js, PostgreSQL, Kubernetes, AWS\n\n### Software Engineer at TechForward (2020-2023)\n- Developed and maintained multiple client-facing web applications\n- Implemented CI/CD pipelines that reduced deployment time by 70%\n- Collaborated with design and product teams to create intuitive user interfaces\n- Technologies: JavaScript, React, Express, MongoDB, GitHub Actions, Azure\n\n### Frontend Developer at InnovateSoft (2018-2020)\n- Created responsive web interfaces for enterprise clients\n- Refactored legacy codebase to modern standards, improving performance by 40%\n- Implemented comprehensive unit and integration test suites\n- Technologies: JavaScript, Vue.js, CSS/SCSS, Jest\n\n## Education\n\n- Bachelor of Science in Computer Science, University of Washington (2014-2018)\n- AWS Certified Solutions Architect - Associate\n- MongoDB Certified Developer",
     "projectId": "portfolio-main",
-    "tags": [
-      "bio",
-      "professional background",
-      "career",
-      "education"
-    ],
+    "tags": ["bio", "professional background", "career", "education"],
     "updatedAt": "2025-03-26T18:41:29.437Z"
   },
   {

@@ -1,6 +1,10 @@
 import { ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { Neo4jKnowledge, Neo4jProject, Neo4jTask } from "../../services/neo4j/types.js";
-import { logger } from "../../utils/internal/logger.js";
+import {
+  Neo4jKnowledge,
+  Neo4jProject,
+  Neo4jTask,
+} from "../../services/neo4j/types.js";
+import { logger, requestContextService } from "../../utils/index.js"; // Import requestContextService
 
 /**
  * Resource URIs for the Atlas MCP resources
@@ -9,16 +13,16 @@ export const ResourceURIs = {
   // Project resources
   PROJECTS: "atlas://projects",
   PROJECT_TEMPLATE: "atlas://projects/{projectId}",
-  
+
   // Task resources
   TASKS: "atlas://tasks",
   TASKS_BY_PROJECT: "atlas://projects/{projectId}/tasks",
   TASK_TEMPLATE: "atlas://tasks/{taskId}",
-  
+
   // Knowledge resources
   KNOWLEDGE: "atlas://knowledge",
   KNOWLEDGE_BY_PROJECT: "atlas://projects/{projectId}/knowledge",
-  KNOWLEDGE_TEMPLATE: "atlas://knowledge/{knowledgeId}"
+  KNOWLEDGE_TEMPLATE: "atlas://knowledge/{knowledgeId}",
 };
 
 /**
@@ -26,64 +30,52 @@ export const ResourceURIs = {
  */
 export const ResourceTemplates = {
   // Project resource templates
-  PROJECT: new ResourceTemplate(
-    ResourceURIs.PROJECT_TEMPLATE, 
-    { 
-      list: () => ({
-        resources: [
-          { 
-            uri: ResourceURIs.PROJECTS, 
-            name: "All Projects",
-            description: "List of all projects in the Atlas platform"
-          }
-        ]
-      })
-    }
-  ),
-  
+  PROJECT: new ResourceTemplate(ResourceURIs.PROJECT_TEMPLATE, {
+    list: () => ({
+      resources: [
+        {
+          uri: ResourceURIs.PROJECTS,
+          name: "All Projects",
+          description: "List of all projects in the Atlas platform",
+        },
+      ],
+    }),
+  }),
+
   // Task resource templates
-  TASK: new ResourceTemplate(
-    ResourceURIs.TASK_TEMPLATE,
-    { 
-      list: () => ({
-        resources: [
-          { 
-            uri: ResourceURIs.TASKS, 
-            name: "All Tasks",
-            description: "List of all tasks in the Atlas platform"
-          }
-        ]
-      })
-    }
-  ),
-  TASKS_BY_PROJECT: new ResourceTemplate(
-    ResourceURIs.TASKS_BY_PROJECT,
-    {
-      list: undefined
-    }
-  ),
-  
+  TASK: new ResourceTemplate(ResourceURIs.TASK_TEMPLATE, {
+    list: () => ({
+      resources: [
+        {
+          uri: ResourceURIs.TASKS,
+          name: "All Tasks",
+          description: "List of all tasks in the Atlas platform",
+        },
+      ],
+    }),
+  }),
+  TASKS_BY_PROJECT: new ResourceTemplate(ResourceURIs.TASKS_BY_PROJECT, {
+    list: undefined,
+  }),
+
   // Knowledge resource templates
-  KNOWLEDGE: new ResourceTemplate(
-    ResourceURIs.KNOWLEDGE_TEMPLATE,
-    { 
-      list: () => ({
-        resources: [
-          { 
-            uri: ResourceURIs.KNOWLEDGE, 
-            name: "All Knowledge",
-            description: "List of all knowledge items in the Atlas platform"
-          }
-        ]
-      })
-    }
-  ),
+  KNOWLEDGE: new ResourceTemplate(ResourceURIs.KNOWLEDGE_TEMPLATE, {
+    list: () => ({
+      resources: [
+        {
+          uri: ResourceURIs.KNOWLEDGE,
+          name: "All Knowledge",
+          description: "List of all knowledge items in the Atlas platform",
+        },
+      ],
+    }),
+  }),
   KNOWLEDGE_BY_PROJECT: new ResourceTemplate(
     ResourceURIs.KNOWLEDGE_BY_PROJECT,
     {
-      list: undefined
-    }
-  )
+      list: undefined,
+    },
+  ),
 };
 
 /**
@@ -140,9 +132,16 @@ export interface KnowledgeResource {
  * Convert Neo4j Project to Project Resource
  */
 export function toProjectResource(project: Neo4jProject): ProjectResource {
+  const reqContext = requestContextService.createRequestContext({
+    operation: "toProjectResource",
+    projectId: project.id,
+  });
   // Log the incoming project structure for debugging
-  logger.debug('Converting project to resource:', { project });
-  
+  logger.debug("Converting project to resource:", {
+    ...reqContext,
+    projectData: project,
+  });
+
   // Ensure all fields are properly extracted
   const resource: ProjectResource = {
     id: project.id,
@@ -154,20 +153,32 @@ export function toProjectResource(project: Neo4jProject): ProjectResource {
     outputFormat: project.outputFormat,
     taskType: project.taskType,
     createdAt: project.createdAt,
-    updatedAt: project.updatedAt
+    updatedAt: project.updatedAt,
   };
-  
-  logger.debug('Created project resource:', { resource });
+
+  logger.debug("Created project resource:", {
+    ...reqContext,
+    projectResource: resource,
+  });
   return resource;
 }
 
 /**
  * Convert Neo4j Task (with added assignedToUserId) to Task Resource
  */
-export function toTaskResource(task: Neo4jTask & { assignedToUserId: string | null }): TaskResource {
+export function toTaskResource(
+  task: Neo4jTask & { assignedToUserId: string | null },
+): TaskResource {
+  const reqContext = requestContextService.createRequestContext({
+    operation: "toTaskResource",
+    taskId: task.id,
+  });
   // Log the incoming task structure for debugging
-  logger.debug('Converting task to resource:', { task });
-  
+  logger.debug("Converting task to resource:", {
+    ...reqContext,
+    taskData: task,
+  });
+
   const resource: TaskResource = {
     id: task.id,
     projectId: task.projectId,
@@ -182,31 +193,46 @@ export function toTaskResource(task: Neo4jTask & { assignedToUserId: string | nu
     outputFormat: task.outputFormat,
     taskType: task.taskType,
     createdAt: task.createdAt,
-    updatedAt: task.updatedAt
+    updatedAt: task.updatedAt,
   };
-  
-  logger.debug('Created task resource:', { resource });
+
+  logger.debug("Created task resource:", {
+    ...reqContext,
+    taskResource: resource,
+  });
   return resource;
 }
 
 /**
  * Convert Neo4j Knowledge (with added domain/citations) to Knowledge Resource
  */
-export function toKnowledgeResource(knowledge: Neo4jKnowledge & { domain: string | null; citations: string[] }): KnowledgeResource {
+export function toKnowledgeResource(
+  knowledge: Neo4jKnowledge & { domain: string | null; citations: string[] },
+): KnowledgeResource {
+  const reqContext = requestContextService.createRequestContext({
+    operation: "toKnowledgeResource",
+    knowledgeId: knowledge.id,
+  });
   // Log the incoming knowledge structure for debugging
-  logger.debug('Converting knowledge to resource:', { knowledge });
-  
+  logger.debug("Converting knowledge to resource:", {
+    ...reqContext,
+    knowledgeData: knowledge,
+  });
+
   const resource: KnowledgeResource = {
     id: knowledge.id,
     projectId: knowledge.projectId,
     text: knowledge.text,
     tags: knowledge.tags || [],
-    domain: knowledge.domain || '', // Use domain from the input object, default to empty string if null
+    domain: knowledge.domain || "", // Use domain from the input object, default to empty string if null
     citations: knowledge.citations || [], // Use citations from the input object
     createdAt: knowledge.createdAt,
-    updatedAt: knowledge.updatedAt
+    updatedAt: knowledge.updatedAt,
   };
-  
-  logger.debug('Created knowledge resource:', { resource });
+
+  logger.debug("Created knowledge resource:", {
+    ...reqContext,
+    knowledgeResource: resource,
+  });
   return resource;
 }

@@ -1,23 +1,29 @@
-import * as chrono from 'chrono-node';
-// Import utils from the main barrel file (logger, ErrorHandler, RequestContext from ../internal/*)
-import { logger, ErrorHandler, RequestContext } from '../index.js';
-import { McpError, BaseErrorCode } from '../../types/errors.js'; // Corrected path
+/**
+ * @fileoverview Provides utility functions for parsing natural language date strings
+ * into Date objects or detailed parsing results using the `chrono-node` library.
+ * @module src/utils/parsing/dateParser
+ */
+import * as chrono from "chrono-node";
+import { BaseErrorCode, McpError } from "../../types/errors.js";
+import { ErrorHandler, logger, RequestContext } from "../index.js";
 
 /**
- * Parses a natural language date string into a Date object.
+ * Parses a natural language date string into a JavaScript Date object.
+ * Uses `chrono.parseDate` for lenient parsing of various date formats.
  *
- * @param text The natural language date string (e.g., "tomorrow", "in 5 days", "2024-01-15").
- * @param context The request context for logging and error tracking.
- * @param refDate Optional reference date for parsing relative dates. Defaults to now.
- * @returns A Date object representing the parsed date, or null if parsing fails.
- * @throws McpError if parsing fails unexpectedly.
+ * @param text - The natural language date string to parse.
+ * @param context - The request context for logging and error tracking.
+ * @param refDate - Optional reference date for parsing relative dates. Defaults to current date/time.
+ * @returns A promise resolving with a Date object or `null` if parsing fails.
+ * @throws {McpError} If an unexpected error occurs during parsing.
+ * @private
  */
 async function parseDateString(
   text: string,
   context: RequestContext,
-  refDate?: Date
+  refDate?: Date,
 ): Promise<Date | null> {
-  const operation = 'parseDateString';
+  const operation = "parseDateString";
   const logContext = { ...context, operation, inputText: text, refDate };
   logger.debug(`Attempting to parse date string: "${text}"`, logContext);
 
@@ -25,7 +31,10 @@ async function parseDateString(
     async () => {
       const parsedDate = chrono.parseDate(text, refDate, { forwardDate: true });
       if (parsedDate) {
-        logger.debug(`Successfully parsed "${text}" to ${parsedDate.toISOString()}`, logContext);
+        logger.debug(
+          `Successfully parsed "${text}" to ${parsedDate.toISOString()}`,
+          logContext,
+        );
         return parsedDate;
       } else {
         logger.warning(`Failed to parse date string: "${text}"`, logContext);
@@ -36,45 +45,92 @@ async function parseDateString(
       operation,
       context: logContext,
       input: { text, refDate },
-      errorCode: BaseErrorCode.VALIDATION_ERROR,
-    }
+      // errorCode: BaseErrorCode.PARSING_ERROR, // PARSING_ERROR is not in BaseErrorCode
+      errorCode: BaseErrorCode.VALIDATION_ERROR, // Using VALIDATION_ERROR as a substitute
+    },
   );
 }
 
 /**
  * Parses a natural language date string and returns detailed parsing results.
+ * Provides more information than just the Date object, including matched text and components.
  *
- * @param text The natural language date string.
- * @param context The request context for logging and error tracking.
- * @param refDate Optional reference date for parsing relative dates. Defaults to now.
- * @returns An array of chrono.ParsedResult objects, or an empty array if parsing fails.
- * @throws McpError if parsing fails unexpectedly.
+ * @param text - The natural language date string to parse.
+ * @param context - The request context for logging and error tracking.
+ * @param refDate - Optional reference date for parsing relative dates. Defaults to current date/time.
+ * @returns A promise resolving with an array of `chrono.ParsedResult` objects. Empty if no dates found.
+ * @throws {McpError} If an unexpected error occurs during parsing.
+ * @private
  */
 async function parseDateStringDetailed(
   text: string,
   context: RequestContext,
-  refDate?: Date
+  refDate?: Date,
 ): Promise<chrono.ParsedResult[]> {
-  const operation = 'parseDateStringDetailed';
+  const operation = "parseDateStringDetailed";
   const logContext = { ...context, operation, inputText: text, refDate };
-  logger.debug(`Attempting detailed parse of date string: "${text}"`, logContext);
+  logger.debug(
+    `Attempting detailed parse of date string: "${text}"`,
+    logContext,
+  );
 
   return await ErrorHandler.tryCatch(
     async () => {
       const results = chrono.parse(text, refDate, { forwardDate: true });
-      logger.debug(`Detailed parse of "${text}" resulted in ${results.length} result(s)`, logContext);
+      logger.debug(
+        `Detailed parse of "${text}" resulted in ${results.length} result(s)`,
+        logContext,
+      );
       return results;
     },
     {
       operation,
       context: logContext,
       input: { text, refDate },
-      errorCode: BaseErrorCode.VALIDATION_ERROR,
-    }
+      // errorCode: BaseErrorCode.PARSING_ERROR, // PARSING_ERROR is not in BaseErrorCode
+      errorCode: BaseErrorCode.VALIDATION_ERROR, // Using VALIDATION_ERROR as a substitute
+    },
   );
 }
 
+/**
+ * An object providing date parsing functionalities.
+ *
+ * @example
+ * ```typescript
+ * import { dateParser, requestContextService } from './utils'; // Assuming utils/index.js exports these
+ * const context = requestContextService.createRequestContext({ operation: 'TestDateParsing' });
+ *
+ * async function testParsing() {
+ *   const dateObj = await dateParser.parseDate("next Friday at 3pm", context);
+ *   if (dateObj) {
+ *     console.log("Parsed Date:", dateObj.toISOString());
+ *   }
+ *
+ *   const detailedResults = await dateParser.parse("Meeting on 2024-12-25 and another one tomorrow", context);
+ *   detailedResults.forEach(result => {
+ *     console.log("Detailed Result:", result.text, result.start.date());
+ *   });
+ * }
+ * testParsing();
+ * ```
+ */
 export const dateParser = {
+  /**
+   * Parses a natural language date string and returns detailed parsing results
+   * from `chrono-node`.
+   * @param text - The natural language date string to parse.
+   * @param context - The request context for logging and error tracking.
+   * @param refDate - Optional reference date for parsing relative dates.
+   * @returns A promise resolving with an array of `chrono.ParsedResult` objects.
+   */
   parse: parseDateStringDetailed,
+  /**
+   * Parses a natural language date string into a single JavaScript Date object.
+   * @param text - The natural language date string to parse.
+   * @param context - The request context for logging and error tracking.
+   * @param refDate - Optional reference date for parsing relative dates.
+   * @returns A promise resolving with a Date object or `null`.
+   */
   parseDate: parseDateString,
 };

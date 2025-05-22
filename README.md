@@ -1,8 +1,8 @@
 # ATLAS: Task Management System
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8.3-blue.svg)](https://www.typescriptlang.org/)
-[![Model Context Protocol](https://img.shields.io/badge/MCP-1.11.4-green.svg)](https://modelcontextprotocol.io/)
-[![Version](https://img.shields.io/badge/Version-2.8.4-blue.svg)](https://github.com/cyanheads/atlas-mcp-server/releases)
+[![Model Context Protocol](https://img.shields.io/badge/MCP-1.11.5-green.svg)](https://modelcontextprotocol.io/)
+[![Version](https://img.shields.io/badge/Version-2.8.7-blue.svg)](https://github.com/cyanheads/atlas-mcp-server/releases)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Status](https://img.shields.io/badge/Status-Stable-green.svg)]()
 [![GitHub](https://img.shields.io/github/stars/cyanheads/atlas-mcp-server?style=social)](https://github.com/cyanheads/atlas-mcp-server)
@@ -198,33 +198,37 @@ NEO4J_USER=neo4j
 NEO4J_PASSWORD=password2
 
 # Application Configuration
-LOG_LEVEL=info # Log level for the server (corresponds to MCP_LOG_LEVEL). Options: emerg, alert, crit, error, warning, notice, info, debug.
-NODE_ENV=development # 'development' or 'production'.
+MCP_LOG_LEVEL=debug # Minimum logging level. Options: emerg, alert, crit, error, warning, notice, info, debug. Default: "debug".
+LOGS_DIR=./logs # Directory for log files. Default: "./logs" in project root.
+NODE_ENV=development # 'development' or 'production'. Default: "development".
 
 # MCP Transport Configuration
-MCP_TRANSPORT_TYPE=stdio # 'stdio' or 'http'. Default: stdio.
-MCP_HTTP_HOST=127.0.0.1 # Host for HTTP transport. Default: 127.0.0.1.
+MCP_TRANSPORT_TYPE=stdio # 'stdio' or 'http'. Default: "stdio".
+MCP_HTTP_HOST=127.0.0.1 # Host for HTTP transport. Default: "127.0.0.1".
 MCP_HTTP_PORT=3010 # Port for HTTP transport. Default: 3010.
 # MCP_ALLOWED_ORIGINS=http://localhost:someport,https://your-client.com # Optional: Comma-separated list of allowed origins for HTTP CORS.
 
 # MCP Security Configuration
-# MCP_AUTH_SECRET_KEY=your_very_long_and_secure_secret_key_min_32_chars # Optional: Secret key for JWT authentication if HTTP transport is used.
+# MCP_AUTH_SECRET_KEY=your_very_long_and_secure_secret_key_min_32_chars # Optional: Secret key (min 32 chars) for JWT authentication if HTTP transport is used. CRITICAL for production. *Note: Production environment use has not been tested yet.*
 MCP_RATE_LIMIT_WINDOW_MS=60000 # Rate limit window in milliseconds. Default: 60000 (1 minute).
 MCP_RATE_LIMIT_MAX_REQUESTS=100 # Max requests per window per IP for HTTP transport. Default: 100.
 
 # Database Backup Configuration
 BACKUP_MAX_COUNT=10 # Maximum number of backup sets to keep. Default: 10.
-BACKUP_FILE_DIR=./atlas-backups # Directory where backup files will be stored (relative to project root). Default: ./backups.
+BACKUP_FILE_DIR=./atlas-backups # Directory where backup files will be stored (relative to project root). Default: "./atlas-backups".
+
+# OpenRouter LLM Configuration (Optional - additional parameters present in `src/config/index.ts`)
+# OPENROUTER_API_KEY=your_openrouter_api_key # API key for OpenRouter services.
+LLM_DEFAULT_MODEL="google/gemini-2.5-flash-preview:thinking" # Default LLM model.
 ```
 
-Refer to `src/config/index.ts` for all available environment variables and their default values.
+Refer to `src/config/index.ts` for all available environment variables, their descriptions, and default values.
 
 ### MCP Client Settings
 
-How you configure your MCP client depends on the client itself and the chosen transport type.
+How you configure your MCP client depends on the client itself and the chosen transport type. An `mcp.json` file in the project root can be used by some clients (like `mcp-inspector`) to define server configurations; update as needed.
 
-**For Stdio Transport:**
-Typically, you'll configure the client to execute the server's start script.
+**For Stdio Transport (Example Configuration):**
 
 ```json
 {
@@ -236,7 +240,7 @@ Typically, you'll configure the client to execute the server's start script.
         "NEO4J_URI": "bolt://localhost:7687",
         "NEO4J_USER": "neo4j",
         "NEO4J_PASSWORD": "password2",
-        "LOG_LEVEL": "info",
+        "MCP_LOG_LEVEL": "info",
         "NODE_ENV": "production",
         "MCP_TRANSPORT_TYPE": "stdio"
       }
@@ -245,10 +249,8 @@ Typically, you'll configure the client to execute the server's start script.
 }
 ```
 
-**For HTTP Transport:**
-If your client supports connecting to an MCP server via an HTTP URL, you would typically provide the server's endpoint (e.g., `http://localhost:3010/mcp`).
-
-If your client launches the server for HTTP mode:
+**For Streamable HTTP (Example Configuration):**
+If your client supports connecting to an MCP server via Streamable HTTP, you provide the server's endpoint (e.g., `http://localhost:3010/mcp`) in your client configuration.
 
 ```json
 {
@@ -260,7 +262,7 @@ If your client launches the server for HTTP mode:
         "NEO4J_URI": "bolt://localhost:7687",
         "NEO4J_USER": "neo4j",
         "NEO4J_PASSWORD": "password2",
-        "LOG_LEVEL": "info",
+        "MCP_LOG_LEVEL": "info",
         "NODE_ENV": "production",
         "MCP_TRANSPORT_TYPE": "http",
         "MCP_HTTP_PORT": "3010",
@@ -323,9 +325,9 @@ ATLAS provides a comprehensive suite of tools for project, task, and knowledge m
 
 ### Search Operations
 
-| Tool Name              | Description                              | Key Arguments                                                                                                                                                                                                                                                            |
-| :--------------------- | :--------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `atlas_unified_search` | Performs unified search across entities. | `value` (search term, required), `property` (optional), filters (`entityTypes`, `taskType`), options (`caseInsensitive` (default: true), `fuzzy` (default: false)), pagination (`page`, `limit`), `responseFormat` ('formatted'/'json', optional, default: 'formatted'). |
+| Tool Name              | Description                              | Key Arguments                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| :--------------------- | :--------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `atlas_unified_search` | Performs unified search across entities. | `value` (search term, required), `property` (optional: if specified, performs regex search on this property; if omitted, performs full-text search), filters (`entityTypes`, `taskType`, `assignedToUserId`), options (`caseInsensitive` (default: true, for regex), `fuzzy` (default: false, for regex 'contains' or full-text Lucene fuzzy)), pagination (`page`, `limit`), `responseFormat` ('formatted'/'json', optional, default: 'formatted'). |
 
 ### Research Operations
 
@@ -365,14 +367,10 @@ ATLAS exposes project, task, and knowledge data through standard MCP resource en
 
 ATLAS provides functionality to back up and restore the Neo4j database content. The core logic resides in `src/services/neo4j/backupRestoreService.ts`.
 
-### Automatic Backups (Note)
-
-**Important:** The automatic backup functionality has been removed due to inefficiency. Please use the manual backup process described below to protect your data.
-
 ### Backup Process
 
-- **Mechanism**: The backup process exports all `Project`, `Task`, and `Knowledge` nodes, along with their relationships, into separate JSON files.
-- **Output**: Each backup creates a timestamped directory (e.g., `atlas-backup-YYYYMMDDHHMMSS`) within the configured backup path (default: `./backups/`). This directory contains `projects.json`, `tasks.json`, `knowledge.json`, and `relationships.json`.
+- **Mechanism**: The backup process exports all `Project`, `Task`, and `Knowledge` nodes, along with their relationships, into separate JSON files. A `full-export.json` containing all data is also created.
+- **Output**: Each backup creates a timestamped directory (e.g., `atlas-backup-YYYYMMDDHHMMSS`) within the configured backup path (default: `./atlas-backups/`). This directory contains `projects.json`, `tasks.json`, `knowledge.json`, `relationships.json`, and `full-export.json`.
 - **Manual Backup**: You can trigger a manual backup using the provided script:
   ```bash
   npm run db:backup
@@ -381,13 +379,13 @@ ATLAS provides functionality to back up and restore the Neo4j database content. 
 
 ### Restore Process
 
-- **Mechanism**: The restore process first completely clears the existing Neo4j database. Then, it imports nodes and relationships from the JSON files located in the specified backup directory.
+- **Mechanism**: The restore process first completely clears the existing Neo4j database. Then, it imports nodes and relationships from the JSON files located in the specified backup directory. It prioritizes `full-export.json` if available.
 - **Warning**: Restoring from a backup is a destructive operation. **It will overwrite all current data in your Neo4j database.**
 - **Manual Restore**: To restore the database from a backup directory, use the import script:
   ```bash
   npm run db:import <path_to_backup_directory>
   ```
-  Replace `<path_to_backup_directory>` with the actual path to the backup folder (e.g., `./backups/atlas-backup-20250326120000`). This command executes `scripts/db-import.ts`, which calls the `importDatabase` function.
+  Replace `<path_to_backup_directory>` with the actual path to the backup folder (e.g., `./atlas-backups/atlas-backup-20250326120000`). This command executes `scripts/db-import.ts`, which calls the `importDatabase` function.
 - **Relationship Handling**: The import process attempts to recreate relationships based on the `id` properties stored within the nodes during export. Ensure your nodes have consistent `id` properties for relationships to be restored correctly.
 
 ## Examples
