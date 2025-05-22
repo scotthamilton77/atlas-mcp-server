@@ -74,26 +74,39 @@ const httpTransports: Record<string, StreamableHTTPServerTransport> = {};
  * @returns {boolean} True if the origin is allowed, false otherwise.
  */
 function isOriginAllowed(req: Request, res: Response): boolean {
-  const origin = req.headers.origin;
-  const host = req.hostname; // Considers Host header
+  const origin = req.headers.origin; // string | undefined
+  const host = req.hostname; // string (Express normalizes this)
   const isLocalhostBinding = ["127.0.0.1", "::1", "localhost"].includes(host);
-  const allowedOrigins = config.mcpAllowedOrigins || []; // Use parsed array from config
+  const configuredAllowedOrigins = config.mcpAllowedOrigins || []; // string[]
+
   const context = requestContextService.createRequestContext({
     operation: "isOriginAllowed",
     origin,
     host,
     isLocalhostBinding,
-    allowedOrigins,
+    allowedOrigins: configuredAllowedOrigins,
   });
   logger.debug("Checking origin allowance", context);
 
-  // Determine if allowed based on config or localhost binding
-  const allowed =
-    (origin && allowedOrigins.includes(origin)) ||
-    (isLocalhostBinding && origin && origin !== "null");
+  let finalIsAllowed = false; // Default to not allowed
+  let originMatchesConfig = false;
 
-  if (allowed && origin && allowedOrigins.includes(origin)) {
-    // Origin is explicitly allowed, set specific CORS headers.
+  if (origin) { // An origin must be present to be considered.
+    // Check if origin is in the configured list
+    if (configuredAllowedOrigins.includes(origin)) {
+      finalIsAllowed = true;
+      originMatchesConfig = true;
+    }
+
+    // If not allowed by config, check localhost binding condition
+    // Ensure origin is not the string "null" as per original logic.
+    if (!finalIsAllowed && isLocalhostBinding && origin !== "null") {
+      finalIsAllowed = true;
+    }
+  }
+
+  // Set CORS headers if the origin is allowed and was provided
+  if (finalIsAllowed && origin) { // Check finalIsAllowed instead of originMatchesConfig
     res.setHeader("Access-Control-Allow-Origin", origin);
     // MCP Spec: Streamable HTTP uses POST, GET, DELETE. OPTIONS is for preflight.
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
@@ -103,12 +116,13 @@ function isOriginAllowed(req: Request, res: Response): boolean {
       "Content-Type, Mcp-Session-Id, Last-Event-ID, Authorization",
     );
     res.setHeader("Access-Control-Allow-Credentials", "true"); // Set based on whether auth/cookies are used
-  } else if (!allowed && origin) {
-    // Origin provided but not in allowed list. Log warning.
+  } else if (!finalIsAllowed && origin) {
+    // Log a warning if an origin was provided but was not allowed by any rule
     logger.warning(`Origin denied: ${origin}`, context);
   }
-  logger.debug(`Origin check result: ${allowed}`, { ...context, allowed });
-  return allowed;
+
+  logger.debug(`Origin check result: ${finalIsAllowed}`, { ...context, allowed: finalIsAllowed });
+  return finalIsAllowed;
 }
 
 /**
@@ -540,7 +554,11 @@ export async function startHttpTransport(
         ...baseSessionReqContext,
         sessionId,
       });
-      res.status(404).send("Session not found or expired");
+      res.status(404).json({
+        jsonrpc: "2.0",
+        error: { code: -32004, message: "Session not found or expired" },
+        id: null
+      });
       return;
     }
 
@@ -565,7 +583,11 @@ export async function startHttpTransport(
         },
       );
       if (!res.headersSent) {
-        res.status(500).send("Internal Server Error");
+        res.status(500).json({
+            jsonrpc: "2.0",
+            error: { code: -32603, message: "Internal Server Error" },
+            id: null
+        });
       }
     }
   };
@@ -586,11 +608,19 @@ export async function startHttpTransport(
       MAX_PORT_RETRIES,
       transportContext,
     );
-    const protocol = config.environment === "production" ? "https" : "http";
-    const serverAddress = `${protocol}://${config.mcpHttpHost}:${actualPort}${MCP_ENDPOINT_PATH}`;
+    
+    let serverAddressLog = `http://${config.mcpHttpHost}:${actualPort}${MCP_ENDPOINT_PATH}`;
+    let productionNote = "";
+    if (config.environment === "production") {
+      // The server itself runs HTTP, but it's expected to be behind an HTTPS proxy in production.
+      // The log reflects the effective public-facing URL.
+      serverAddressLog = `https://${config.mcpHttpHost}:${actualPort}${MCP_ENDPOINT_PATH}`;
+      productionNote = ` (via HTTPS, ensure reverse proxy is configured)`;
+    }
+
     if (process.stdout.isTTY) {
       console.log(
-        `\n🚀 MCP Server running in HTTP mode at: ${serverAddress}\n   (MCP Spec: 2025-03-26 Streamable HTTP Transport)\n`,
+        `\n🚀 MCP Server running in HTTP mode at: ${serverAddressLog}${productionNote}\n   (MCP Spec: 2025-03-26 Streamable HTTP Transport)\n`,
       );
     }
   } catch (err) {

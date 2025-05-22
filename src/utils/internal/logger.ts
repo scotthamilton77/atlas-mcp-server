@@ -158,6 +158,7 @@ export class Logger {
   private currentMcpLevel: McpLogLevel = "info";
   private currentWinstonLevel: "debug" | "info" | "warn" | "error" = "info";
 
+  private readonly MCP_NOTIFICATION_STACK_TRACE_MAX_LENGTH = 1024;
   private readonly LOG_FILE_MAX_SIZE = 5 * 1024 * 1024; // 5MB
   private readonly LOG_MAX_FILES = 5;
 
@@ -250,29 +251,14 @@ export class Logger {
       }
     }
 
-    let consoleLoggingEnabledMessage: string | null = null;
-    let consoleLoggingSkippedMessage: string | null = null;
-
-    if (this.currentMcpLevel === "debug" && process.stdout.isTTY) {
-      const consoleFormat = createWinstonConsoleFormat();
-      transports.push(
-        new winston.transports.Console({
-          level: "debug",
-          format: consoleFormat,
-        }),
-      );
-      consoleLoggingEnabledMessage =
-        "Console logging enabled at level: debug (stdout is TTY)";
-    } else if (this.currentMcpLevel === "debug" && !process.stdout.isTTY) {
-      consoleLoggingSkippedMessage =
-        "Console logging skipped: Level is debug, but stdout is not a TTY (likely stdio transport).";
-    }
-
     this.winstonLogger = winston.createLogger({
       level: this.currentWinstonLevel,
       transports,
       exitOnError: false,
     });
+
+    // Configure console transport after Winston logger is created
+    const consoleStatus = this._configureConsoleTransport();
 
     const initialContext: RequestContext = {
       loggerSetup: true,
@@ -282,16 +268,13 @@ export class Logger {
     if (logsDirCreatedMessage) {
       this.info(logsDirCreatedMessage, initialContext);
     }
-    if (consoleLoggingEnabledMessage) {
-      this.info(consoleLoggingEnabledMessage, initialContext);
-    }
-    if (consoleLoggingSkippedMessage) {
-      this.info(consoleLoggingSkippedMessage, initialContext);
+    if (consoleStatus.message) {
+      this.info(consoleStatus.message, initialContext);
     }
 
     this.initialized = true;
     this.info(
-      `Logger initialized. File logging level: ${this.currentWinstonLevel}. MCP logging level: ${this.currentMcpLevel}. Console logging: ${process.stdout.isTTY && this.currentMcpLevel === "debug" ? "enabled" : "disabled"}`,
+      `Logger initialized. File logging level: ${this.currentWinstonLevel}. MCP logging level: ${this.currentMcpLevel}. Console logging: ${consoleStatus.enabled ? "enabled" : "disabled"}`,
       {
         loggerSetup: true,
         requestId: "logger-post-init",
@@ -343,33 +326,56 @@ export class Logger {
     const oldLevel = this.currentMcpLevel;
     this.currentMcpLevel = newLevel;
     this.currentWinstonLevel = mcpToWinstonLevel[newLevel];
-    this.winstonLogger!.level = this.currentWinstonLevel;
-
-    const consoleTransport = this.winstonLogger!.transports.find(
-      (t) => t instanceof winston.transports.Console,
-    );
-    const shouldHaveConsole = newLevel === "debug" && process.stdout.isTTY;
-
-    if (shouldHaveConsole && !consoleTransport) {
-      const consoleFormat = createWinstonConsoleFormat();
-      this.winstonLogger!.add(
-        new winston.transports.Console({
-          level: "debug",
-          format: consoleFormat,
-        }),
-      );
-      this.info("Console logging dynamically enabled.", setLevelContext);
-    } else if (!shouldHaveConsole && consoleTransport) {
-      this.winstonLogger!.remove(consoleTransport);
-      this.info("Console logging dynamically disabled.", setLevelContext);
+    if (this.winstonLogger) { // Ensure winstonLogger is defined
+        this.winstonLogger.level = this.currentWinstonLevel;
     }
+
+    const consoleStatus = this._configureConsoleTransport();
 
     if (oldLevel !== newLevel) {
       this.info(
-        `Log level changed. File logging level: ${this.currentWinstonLevel}. MCP logging level: ${this.currentMcpLevel}. Console logging: ${shouldHaveConsole ? "enabled" : "disabled"}`,
+        `Log level changed. File logging level: ${this.currentWinstonLevel}. MCP logging level: ${this.currentMcpLevel}. Console logging: ${consoleStatus.enabled ? "enabled" : "disabled"}`,
         setLevelContext,
       );
+      if (consoleStatus.message && consoleStatus.message !== "Console logging status unchanged.") {
+        this.info(consoleStatus.message, setLevelContext);
+      }
     }
+  }
+
+  /**
+   * Configures the console transport based on the current log level and TTY status.
+   * Adds or removes the console transport as needed.
+   * @returns {{ enabled: boolean, message: string | null }} Status of console logging.
+   * @private
+   */
+  private _configureConsoleTransport(): { enabled: boolean; message: string | null } {
+    if (!this.winstonLogger) {
+      return { enabled: false, message: "Cannot configure console: Winston logger not initialized." };
+    }
+
+    const consoleTransport = this.winstonLogger.transports.find(
+      (t) => t instanceof winston.transports.Console,
+    );
+    const shouldHaveConsole = this.currentMcpLevel === "debug" && process.stdout.isTTY;
+    let message: string | null = null;
+
+    if (shouldHaveConsole && !consoleTransport) {
+      const consoleFormat = createWinstonConsoleFormat();
+      this.winstonLogger.add(
+        new winston.transports.Console({
+          level: "debug", // Console always logs debug if enabled
+          format: consoleFormat,
+        }),
+      );
+      message = "Console logging enabled (level: debug, stdout is TTY).";
+    } else if (!shouldHaveConsole && consoleTransport) {
+      this.winstonLogger.remove(consoleTransport);
+      message = "Console logging disabled (level not debug or stdout not TTY).";
+    } else {
+      message = "Console logging status unchanged.";
+    }
+    return { enabled: shouldHaveConsole, message };
   }
 
   /**
@@ -434,7 +440,7 @@ export class Logger {
         mcpDataPayload.error = { message: error.message };
         // Include stack trace in debug mode for MCP notifications, truncated for brevity
         if (this.currentMcpLevel === "debug" && error.stack) {
-          mcpDataPayload.error.stack = error.stack.substring(0, 500);
+          mcpDataPayload.error.stack = error.stack.substring(0, this.MCP_NOTIFICATION_STACK_TRACE_MAX_LENGTH);
         }
       }
       try {
