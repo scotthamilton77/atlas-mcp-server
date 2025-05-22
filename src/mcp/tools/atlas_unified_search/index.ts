@@ -56,6 +56,12 @@ export const registerAtlasUnifiedSearchTool = (server: McpServer) => {
       taskType: z.string().optional().describe(
         "Optional filter by project/task classification type for more targeted results (applies only if searching Project or Task types)", // Clarified description
       ),
+      assignedToUserId: z
+        .string()
+        .optional()
+        .describe(
+          "Optional: Filter tasks by the ID of the assigned user. Only applicable when 'property' is specified (regex search) and 'entityTypes' includes 'task'.",
+        ),
       page: z
         .number()
         .optional()
