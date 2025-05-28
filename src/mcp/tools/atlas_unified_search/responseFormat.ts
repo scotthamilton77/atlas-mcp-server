@@ -1,4 +1,4 @@
-import { SearchResultItem } from "../../../services/neo4j/searchService.js";
+import { SearchResultItem } from "../../../services/neo4j/index.js";
 import { McpToolResponse, createToolResponse } from "../../../types/mcp.js";
 import { UnifiedSearchResponse } from "./types.js";
 

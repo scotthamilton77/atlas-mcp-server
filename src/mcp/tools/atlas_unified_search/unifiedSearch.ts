@@ -1,7 +1,7 @@
 import {
   SearchResultItem,
   SearchService,
-} from "../../../services/neo4j/searchService.js";
+} from "../../../services/neo4j/index.js";
 import { PaginatedResult } from "../../../services/neo4j/types.js";
 import { BaseErrorCode, McpError } from "../../../types/errors.js";
 import { ResponseFormat } from "../../../types/mcp.js";

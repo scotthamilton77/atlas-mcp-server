@@ -17,9 +17,14 @@ export { Neo4jUtils } from "./utils.js";
 // Removed backup_services exports
 export { KnowledgeService } from "./knowledgeService.js";
 export { ProjectService } from "./projectService.js";
-export { SearchService } from "./searchService.js";
-export type { SearchResultItem } from "./searchService.js";
+export { SearchService } from "./searchService/index.js";
+export type { SearchResultItem } from "./searchService/index.js";
 export { TaskService } from "./taskService.js";
+export {
+  exportDatabase,
+  importDatabase,
+} from "./backupRestoreService/index.js";
+export type { FullExport } from "./backupRestoreService/index.js";
 
 // Export common types
 export * from "./types.js";

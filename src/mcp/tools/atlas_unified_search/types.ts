@@ -1,6 +1,5 @@
 import { z } from "zod";
-import { McpToolResponse } from "../../../types/mcp.js";
-import { SearchResultItem } from "../../../services/neo4j/searchService.js";
+import { SearchResultItem } from "../../../services/neo4j/index.js";
 
 // Schema for the tool input
 export const UnifiedSearchRequestSchema = z.object({
