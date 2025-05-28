@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.8.11] - 2025-05-28
+
+### Changed
+
+- **Neo4j Services Refactoring**:
+  - Moved `backupRestoreService.ts` into its own directory `src/services/neo4j/backupRestoreService/`.
+  - Moved `searchService.ts` into its own directory `src/services/neo4j/searchService/`.
+  - Updated all relevant import paths across the codebase to reflect these changes.
+- **Database Scripts**:
+  - Relocated `db-backup.ts` and `db-import.ts` from the root `scripts/` directory to `src/services/neo4j/backupRestoreService/scripts/`.
+  - Updated `package.json` script paths for `db:backup` and `db:import` accordingly.
+- **Documentation**:
+  - Updated `README.md` to reflect the new paths for database backup and restore scripts.
+  - Updated `docs/tree.md` to reflect the new file structure and generation timestamp.
+- **Dependencies**: Updated `package-lock.json` due to changes in `package.json` (script paths).
+
+### Added
+
+- Added `CLAUDE.md`.
+- Added `automated-tests/AGENT_TEST_05282025.md`.
+
 ## [2.8.10] - 2025-05-28
 
 ### Fixed

@@ -2,7 +2,7 @@
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8.3-blue.svg)](https://www.typescriptlang.org/)
 [![Model Context Protocol](https://img.shields.io/badge/MCP-1.12.0-green.svg)](https://modelcontextprotocol.io/)
-[![Version](https://img.shields.io/badge/Version-2.8.10-blue.svg)](https://github.com/cyanheads/atlas-mcp-server/releases)
+[![Version](https://img.shields.io/badge/Version-2.8.11-blue.svg)](https://github.com/cyanheads/atlas-mcp-server/releases)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Status](https://img.shields.io/badge/Status-Stable-green.svg)]()
 [![GitHub](https://img.shields.io/github/stars/cyanheads/atlas-mcp-server?style=social)](https://github.com/cyanheads/atlas-mcp-server)
@@ -376,7 +376,7 @@ ATLAS provides functionality to back up and restore the Neo4j database content. 
   ```bash
   npm run db:backup
   ```
-  This command executes `scripts/db-backup.ts`, which calls the `exportDatabase` function.
+  This command executes `src/services/neo4j/backupRestoreService/scripts/db-backup.ts`, which calls the `exportDatabase` function.
 
 ### Restore Process
 
@@ -386,7 +386,7 @@ ATLAS provides functionality to back up and restore the Neo4j database content. 
   ```bash
   npm run db:import <path_to_backup_directory>
   ```
-  Replace `<path_to_backup_directory>` with the actual path to the backup folder (e.g., `./atlas-backups/atlas-backup-20250326120000`). This command executes `scripts/db-import.ts`, which calls the `importDatabase` function.
+  Replace `<path_to_backup_directory>` with the actual path to the backup folder (e.g., `./atlas-backups/atlas-backup-20250326120000`). This command executes `src/services/neo4j/backupRestoreService/scripts/db-import.ts`, which calls the `importDatabase` function.
 - **Relationship Handling**: The import process attempts to recreate relationships based on the `id` properties stored within the nodes during export. Ensure your nodes have consistent `id` properties for relationships to be restored correctly.
 
 ## Examples

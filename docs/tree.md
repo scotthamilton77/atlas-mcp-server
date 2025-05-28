@@ -1,12 +1,14 @@
 # atlas-mcp-server - Directory Structure
 
-Generated on: 2025-05-28 12:31:07
+Generated on: 2025-05-28 20:28:36
 
 ```
 atlas-mcp-server
 ├── .github
 │   └── workflows
 │       └── publish.yml
+├── automated-tests
+│   └── AGENT_TEST_05282025.md
 ├── docs
 │   └── tree.md
 ├── examples
@@ -22,8 +24,6 @@ atlas-mcp-server
 │   └── webui-example.png
 ├── scripts
 │   ├── clean.ts
-│   ├── db-backup.ts
-│   ├── db-import.ts
 │   ├── fetch-openapi-spec.ts
 │   ├── make-executable.ts
 │   └── tree.ts
@@ -122,14 +122,26 @@ atlas-mcp-server
 │   │   │   ├── index.ts
 │   │   │   └── openRouterProvider.ts
 │   │   └── neo4j
-│   │       ├── backupRestoreService.ts
+│   │       ├── backupRestoreService
+│   │       │   ├── scripts
+│   │       │   │   ├── db-backup.ts
+│   │       │   │   └── db-import.ts
+│   │       │   ├── backupRestoreTypes.ts
+│   │       │   ├── backupUtils.ts
+│   │       │   ├── exportLogic.ts
+│   │       │   ├── importLogic.ts
+│   │       │   └── index.ts
+│   │       ├── searchService
+│   │       │   ├── fullTextSearchLogic.ts
+│   │       │   ├── index.ts
+│   │       │   ├── searchTypes.ts
+│   │       │   └── unifiedSearchLogic.ts
 │   │       ├── driver.ts
 │   │       ├── events.ts
 │   │       ├── helpers.ts
 │   │       ├── index.ts
 │   │       ├── knowledgeService.ts
 │   │       ├── projectService.ts
-│   │       ├── searchService.ts
 │   │       ├── taskService.ts
 │   │       ├── types.ts
 │   │       └── utils.ts
@@ -166,6 +178,7 @@ atlas-mcp-server
 ├── .gitignore
 ├── .repomixignore
 ├── CHANGELOG.md
+├── CLAUDE.md
 ├── docker-compose.yml
 ├── LICENSE
 ├── mcp.json
