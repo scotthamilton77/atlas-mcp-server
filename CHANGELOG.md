@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
-- **Unified Search System**: 
+- **Unified Search System**:
   - Changed default fuzzy search behavior from `false` to `true` for more intuitive "contains" matching on specific properties
   - Enhanced search routing logic to automatically choose between full-text and regex search based on property type and entity combination
   - Improved property handling with separate parameters for Cypher queries vs internal logic checks for better maintainability
