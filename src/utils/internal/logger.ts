@@ -326,8 +326,9 @@ export class Logger {
     const oldLevel = this.currentMcpLevel;
     this.currentMcpLevel = newLevel;
     this.currentWinstonLevel = mcpToWinstonLevel[newLevel];
-    if (this.winstonLogger) { // Ensure winstonLogger is defined
-        this.winstonLogger.level = this.currentWinstonLevel;
+    if (this.winstonLogger) {
+      // Ensure winstonLogger is defined
+      this.winstonLogger.level = this.currentWinstonLevel;
     }
 
     const consoleStatus = this._configureConsoleTransport();
@@ -337,7 +338,10 @@ export class Logger {
         `Log level changed. File logging level: ${this.currentWinstonLevel}. MCP logging level: ${this.currentMcpLevel}. Console logging: ${consoleStatus.enabled ? "enabled" : "disabled"}`,
         setLevelContext,
       );
-      if (consoleStatus.message && consoleStatus.message !== "Console logging status unchanged.") {
+      if (
+        consoleStatus.message &&
+        consoleStatus.message !== "Console logging status unchanged."
+      ) {
         this.info(consoleStatus.message, setLevelContext);
       }
     }
@@ -349,15 +353,22 @@ export class Logger {
    * @returns {{ enabled: boolean, message: string | null }} Status of console logging.
    * @private
    */
-  private _configureConsoleTransport(): { enabled: boolean; message: string | null } {
+  private _configureConsoleTransport(): {
+    enabled: boolean;
+    message: string | null;
+  } {
     if (!this.winstonLogger) {
-      return { enabled: false, message: "Cannot configure console: Winston logger not initialized." };
+      return {
+        enabled: false,
+        message: "Cannot configure console: Winston logger not initialized.",
+      };
     }
 
     const consoleTransport = this.winstonLogger.transports.find(
       (t) => t instanceof winston.transports.Console,
     );
-    const shouldHaveConsole = this.currentMcpLevel === "debug" && process.stdout.isTTY;
+    const shouldHaveConsole =
+      this.currentMcpLevel === "debug" && process.stdout.isTTY;
     let message: string | null = null;
 
     if (shouldHaveConsole && !consoleTransport) {
@@ -440,7 +451,10 @@ export class Logger {
         mcpDataPayload.error = { message: error.message };
         // Include stack trace in debug mode for MCP notifications, truncated for brevity
         if (this.currentMcpLevel === "debug" && error.stack) {
-          mcpDataPayload.error.stack = error.stack.substring(0, this.MCP_NOTIFICATION_STACK_TRACE_MAX_LENGTH);
+          mcpDataPayload.error.stack = error.stack.substring(
+            0,
+            this.MCP_NOTIFICATION_STACK_TRACE_MAX_LENGTH,
+          );
         }
       }
       try {

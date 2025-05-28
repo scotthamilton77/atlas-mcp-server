@@ -91,7 +91,8 @@ function isOriginAllowed(req: Request, res: Response): boolean {
   let finalIsAllowed = false; // Default to not allowed
   let originMatchesConfig = false;
 
-  if (origin) { // An origin must be present to be considered.
+  if (origin) {
+    // An origin must be present to be considered.
     // Check if origin is in the configured list
     if (configuredAllowedOrigins.includes(origin)) {
       finalIsAllowed = true;
@@ -106,7 +107,8 @@ function isOriginAllowed(req: Request, res: Response): boolean {
   }
 
   // Set CORS headers if the origin is allowed and was provided
-  if (finalIsAllowed && origin) { // Check finalIsAllowed instead of originMatchesConfig
+  if (finalIsAllowed && origin) {
+    // Check finalIsAllowed instead of originMatchesConfig
     res.setHeader("Access-Control-Allow-Origin", origin);
     // MCP Spec: Streamable HTTP uses POST, GET, DELETE. OPTIONS is for preflight.
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
@@ -121,7 +123,10 @@ function isOriginAllowed(req: Request, res: Response): boolean {
     logger.warning(`Origin denied: ${origin}`, context);
   }
 
-  logger.debug(`Origin check result: ${finalIsAllowed}`, { ...context, allowed: finalIsAllowed });
+  logger.debug(`Origin check result: ${finalIsAllowed}`, {
+    ...context,
+    allowed: finalIsAllowed,
+  });
   return finalIsAllowed;
 }
 
@@ -557,7 +562,7 @@ export async function startHttpTransport(
       res.status(404).json({
         jsonrpc: "2.0",
         error: { code: -32004, message: "Session not found or expired" },
-        id: null
+        id: null,
       });
       return;
     }
@@ -584,9 +589,9 @@ export async function startHttpTransport(
       );
       if (!res.headersSent) {
         res.status(500).json({
-            jsonrpc: "2.0",
-            error: { code: -32603, message: "Internal Server Error" },
-            id: null
+          jsonrpc: "2.0",
+          error: { code: -32603, message: "Internal Server Error" },
+          id: null,
         });
       }
     }
@@ -608,7 +613,7 @@ export async function startHttpTransport(
       MAX_PORT_RETRIES,
       transportContext,
     );
-    
+
     let serverAddressLog = `http://${config.mcpHttpHost}:${actualPort}${MCP_ENDPOINT_PATH}`;
     let productionNote = "";
     if (config.environment === "production") {
