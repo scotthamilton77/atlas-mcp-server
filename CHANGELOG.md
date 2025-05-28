@@ -2,37 +2,62 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.8.9] - 2025-05-28
+
+### Changed
+
+- **Unified Search System**: 
+  - Changed default fuzzy search behavior from `false` to `true` for more intuitive "contains" matching on specific properties
+  - Enhanced search routing logic to automatically choose between full-text and regex search based on property type and entity combination
+  - Improved property handling with separate parameters for Cypher queries vs internal logic checks for better maintainability
+- **Database Performance**:
+  - Optimized relationship import performance in backup/restore service using UNWIND batch operations instead of individual queries (500 relationships per batch)
+  - Removed unused `knowledge_domain` index to reduce database overhead
+- **Code Quality**:
+  - Extracted `escapeRelationshipType` helper function to shared `helpers.ts` for better code reuse
+  - Applied consistent formatting across multiple files (import organization, quote style, spacing)
+
+### Documentation
+
+- Updated `docs/tree.md` generation timestamp to reflect current state
+- Applied consistent markdown formatting to CHANGELOG for better readability
+
 ## [2.8.8] - 2025-05-22
 
 ### Added
+
 - **LLM Integration**: Introduced a new service for LLM provider integrations, starting with OpenRouter support (`src/services/llm-providers/`).
 - **Project Status**: Added "in-progress" as a valid status for projects in `atlas_project_list` tool types.
 - **Error Codes**: Expanded `BaseErrorCode` enum in `src/types/errors.ts` with `SERVICE_UNAVAILABLE`, `CONFIGURATION_ERROR`, `INITIALIZATION_FAILED`, and `FORBIDDEN` for more granular error reporting.
 
 ### Changed
+
 - **HTTP Transport**:
-    - Standardized error responses (404, 500) to JSON RPC format for better client interoperability.
-    - Improved origin checking logic for CORS requests, enhancing security and flexibility.
-    - Enhanced server address logging for production environments to correctly reflect HTTPS usage behind a reverse proxy.
+  - Standardized error responses (404, 500) to JSON RPC format for better client interoperability.
+  - Improved origin checking logic for CORS requests, enhancing security and flexibility.
+  - Enhanced server address logging for production environments to correctly reflect HTTPS usage behind a reverse proxy.
 - **Logging**:
-    - Refactored console transport configuration in `Logger` into a dedicated `_configureConsoleTransport` method for improved clarity and dynamic adjustment based on log level and TTY status.
-    - Stack traces included in MCP error notifications (debug mode) are now truncated to a maximum of 1024 characters.
+  - Refactored console transport configuration in `Logger` into a dedicated `_configureConsoleTransport` method for improved clarity and dynamic adjustment based on log level and TTY status.
+  - Stack traces included in MCP error notifications (debug mode) are now truncated to a maximum of 1024 characters.
 - **Search Service**:
-    - Improved debug logging in `SearchService` to include `searchPropertyUsed` and `rawSearchValueParam` for better query traceability.
+  - Improved debug logging in `SearchService` to include `searchPropertyUsed` and `rawSearchValueParam` for better query traceability.
 - **Project List Tool**:
-    - Refactored `atlas_project_list` tool's Zod schema to use `createProjectStatusEnum` for defining project status filters, promoting consistency.
+  - Refactored `atlas_project_list` tool's Zod schema to use `createProjectStatusEnum` for defining project status filters, promoting consistency.
 
 ### Fixed
+
 - **Search Service**: Corrected Cypher query construction in `SearchService` by refining the `WITH` clause logic to ensure only previously defined variables are included.
 - **Neo4j Helpers**: Ensured `assignedTo` filter parameter is correctly added to query parameters in `buildListQuery` helper function.
 
 ### Documentation
+
 - Updated `docs/tree.md` to reflect the new `src/services/llm-providers/` directory and current generation timestamp.
 - Updated `README.md` project structure diagram to include the new `llm-providers` service directory.
 
 ## [2.8.7] - 2025-05-22
 
 ### Changed
+
 - **Development Tooling & Code Quality**:
   - Refactored utility scripts in `scripts/` directory for improved clarity, error handling, and security (e.g., path resolution within project root). This includes `clean.ts`, `db-backup.ts`, `db-import.ts`, `fetch-openapi-spec.ts`, `make-executable.ts`, and `tree.ts`.
   - Applied Prettier formatting across the entire codebase (`src/`, `examples/`, `scripts/`) for consistent styling.
