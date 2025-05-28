@@ -1,6 +1,6 @@
 # atlas-mcp-server - Directory Structure
 
-Generated on: 2025-05-28 20:28:36
+Generated on: 2025-05-28 21:15:47
 
 ```
 atlas-mcp-server
@@ -169,9 +169,19 @@ atlas-mcp-server
 │   │   │   └── sanitization.ts
 │   │   └── index.ts
 │   ├── webui
-│   │   ├── index.html
-│   │   ├── script.js
-│   │   └── style.css
+│   │   ├── logic
+│   │   │   ├── api-service.js
+│   │   │   ├── app-state.js
+│   │   │   ├── config.js
+│   │   │   ├── dom-elements.js
+│   │   │   ├── main.js
+│   │   │   └── ui-service.js
+│   │   ├── styling
+│   │   │   ├── base.css
+│   │   │   ├── components.css
+│   │   │   ├── layout.css
+│   │   │   └── theme.css
+│   │   └── index.html
 │   └── index.ts
 ├── .clinerules
 ├── .env.example
