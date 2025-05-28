@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.8.12] - 2025-05-28
+
+### Changed
+
+- **Web UI**:
+  - Major refactor of the Web UI, modularizing JavaScript into `src/webui/logic/` and CSS into `src/webui/styling/`.
+  - Updated `src/webui/index.html` to link to new modularized assets.
+  - Modified `package.json` `webui` script to use `npx serve src/webui -l 8000` for a local development server.
+- **Neo4j Services Refactoring**:
+  - Moved `backupRestoreService.ts` into its own directory `src/services/neo4j/backupRestoreService/`.
+  - Moved `searchService.ts` into its own directory `src/services/neo4j/searchService/`.
+  - Updated all relevant import paths across the codebase to reflect these changes.
+- **Database Scripts**:
+  - Relocated `db-backup.ts` and `db-import.ts` from the root `scripts/` directory to `src/services/neo4j/backupRestoreService/scripts/`.
+  - Updated `package.json` script paths for `db:backup` and `db:import` accordingly.
+- **Documentation**:
+  - Updated `README.md` to reflect the new paths for database backup and restore scripts, and version bump to 2.8.12.
+  - Updated `docs/tree.md` to reflect the new file structure and generation timestamp.
+- **Dependencies**: Updated `package-lock.json` and `package.json` (version bump to 2.8.12, script paths).
+
+### Added
+
+- **Web UI Features**:
+  - Added "Project Task Board" to `src/webui/index.html`.
+  - Added "Data Explorer" to `src/webui/index.html`.
+- Added `CLAUDE.md`.
+- Added `automated-tests/AGENT_TEST_05282025.md`.
+
 ## [2.8.11] - 2025-05-28
 
 ### Changed

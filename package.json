@@ -1,6 +1,6 @@
 {
   "name": "atlas-mcp-server",
-  "version": "2.8.11",
+  "version": "2.8.12",
   "description": "ATLAS (Adaptive Task & Logic Automation System): An MCP server enabling LLM agents to manage projects, tasks, and knowledge via a Neo4j-backed, three-tier architecture. Facilitates complex workflow automation and project management through LLM Agents.",
   "type": "module",
   "main": "dist/index.js",
@@ -36,7 +36,7 @@
     "start:http": "MCP_LOG_LEVEL=debug MCP_TRANSPORT_TYPE=http node dist/index.js",
     "start:stdio": "MCP_LOG_LEVEL=debug MCP_TRANSPORT_TYPE=stdio node dist/index.js",
     "tree": "ts-node --esm scripts/tree.ts",
-    "webui": "open src/webui/index.html"
+    "webui": "npx serve src/webui -l 8000"
   },
   "keywords": [
     "ai-integration",
