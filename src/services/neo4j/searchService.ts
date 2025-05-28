@@ -165,7 +165,7 @@ export class SearchService {
     normalizedLogicProperty: string, // Used for internal logic (lowercase)
     taskTypeFilter?: string,
     limit: number = 50,
-    assignedToUserIdFilter?: string, 
+    assignedToUserIdFilter?: string,
   ): Promise<SearchResultItem[]> {
     let session: Session | null = null;
     const reqContext_single = requestContextService.createRequestContext({
@@ -245,17 +245,20 @@ export class SearchService {
             propertyForLogic = "text";
             break;
           default: // Should not happen due to earlier check
-             logger.error("Unreachable code: default property determination failed.", reqContext_single);
-             return [];
+            logger.error(
+              "Unreachable code: default property determination failed.",
+              reqContext_single,
+            );
+            return [];
         }
       }
-      
+
       // Ensure propertyForLogic is lowercase for consistent logic checks
       // (it should be already if originalPropertyName was passed, but good to be sure for defaults)
       propertyForLogic = propertyForLogic.toLowerCase();
 
-
-      if (!propertyForCypher) { // Should always be set by logic above
+      if (!propertyForCypher) {
+        // Should always be set by logic above
         logger.warning(
           `Could not determine a search property for Cypher for label ${actualLabel}. Returning empty results.`,
           { ...reqContext_single, actualLabel },
@@ -268,14 +271,17 @@ export class SearchService {
 
       // Use propertyForLogic for these conditional checks
       if (propertyForLogic === "tags") {
-        let tagSearchTerm = params.searchValue; 
+        let tagSearchTerm = params.searchValue;
         if (tagSearchTerm.startsWith("(?i)")) {
-          tagSearchTerm = tagSearchTerm.substring(4); 
+          tagSearchTerm = tagSearchTerm.substring(4);
         }
         let coreValue = tagSearchTerm;
         if (tagSearchTerm.startsWith("^") && tagSearchTerm.endsWith("$")) {
           coreValue = tagSearchTerm.substring(1, tagSearchTerm.length - 1);
-        } else if (tagSearchTerm.startsWith(".*") && tagSearchTerm.endsWith(".*")) {
+        } else if (
+          tagSearchTerm.startsWith(".*") &&
+          tagSearchTerm.endsWith(".*")
+        ) {
           coreValue = tagSearchTerm.substring(2, tagSearchTerm.length - 2);
         }
         params.exactTagValueLower = coreValue.toLowerCase();

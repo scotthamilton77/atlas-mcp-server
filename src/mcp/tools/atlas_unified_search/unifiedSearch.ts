@@ -43,7 +43,11 @@ export const atlasUnifiedSearch = async (
 
     let searchResults: PaginatedResult<SearchResultItem>;
     const propertyForSearch = validatedInput.property?.trim();
-    const entityTypesForSearch = validatedInput.entityTypes || ["project", "task", "knowledge"]; // Default if not provided
+    const entityTypesForSearch = validatedInput.entityTypes || [
+      "project",
+      "task",
+      "knowledge",
+    ]; // Default if not provided
 
     // Determine if we should use full-text for the given property and entity type
     let shouldUseFullText = false;
@@ -52,9 +56,15 @@ export const atlasUnifiedSearch = async (
       // Check for specific entityType + property combinations that have dedicated full-text indexes
       if (entityTypesForSearch.includes("knowledge") && lowerProp === "text") {
         shouldUseFullText = true;
-      } else if (entityTypesForSearch.includes("project") && (lowerProp === "name" || lowerProp === "description")) {
+      } else if (
+        entityTypesForSearch.includes("project") &&
+        (lowerProp === "name" || lowerProp === "description")
+      ) {
         shouldUseFullText = true;
-      } else if (entityTypesForSearch.includes("task") && (lowerProp === "title" || lowerProp === "description")) {
+      } else if (
+        entityTypesForSearch.includes("task") &&
+        (lowerProp === "title" || lowerProp === "description")
+      ) {
         shouldUseFullText = true;
       }
       // Add other specific full-text indexed fields here if any
@@ -64,19 +74,23 @@ export const atlasUnifiedSearch = async (
     }
 
     if (shouldUseFullText) {
-      logger.info(`Using full-text search. Property: '${propertyForSearch || "default fields"}'`, {
+      logger.info(
+        `Using full-text search. Property: '${propertyForSearch || "default fields"}'`,
+        {
           ...reqContext,
           property: propertyForSearch,
           targetEntityTypes: entityTypesForSearch,
           effectiveFuzzy: validatedInput.fuzzy === true,
-      });
+        },
+      );
 
-      const escapeLucene = (str: string) => str.replace(/([+\-!(){}\[\]^"~*?:\\\/"])/g, "\\$1");
+      const escapeLucene = (str: string) =>
+        str.replace(/([+\-!(){}\[\]^"~*?:\\\/"])/g, "\\$1");
       let luceneQueryValue = escapeLucene(validatedInput.value);
 
       // If fuzzy is requested for the tool, apply it to the Lucene query
       if (validatedInput.fuzzy === true) {
-          luceneQueryValue = `${luceneQueryValue}~1`;
+        luceneQueryValue = `${luceneQueryValue}~1`;
       }
       // Note: If propertyForSearch is set (e.g., "text" for "knowledge"),
       // SearchService.fullTextSearch will use the appropriate index (e.g., "knowledge_fulltext").
@@ -84,7 +98,10 @@ export const atlasUnifiedSearch = async (
       // but our SearchService.fullTextSearch is already structured to call specific indexes.
       // So, just passing the term (and fuzzy if needed) is correct here.
 
-      logger.debug("Constructed Lucene query value for full-text search", { ...reqContext, luceneQueryValue });
+      logger.debug("Constructed Lucene query value for full-text search", {
+        ...reqContext,
+        luceneQueryValue,
+      });
 
       searchResults = await SearchService.fullTextSearch(luceneQueryValue, {
         entityTypes: entityTypesForSearch,
@@ -92,29 +109,32 @@ export const atlasUnifiedSearch = async (
         page: validatedInput.page,
         limit: validatedInput.limit,
       });
-
-    } else { // propertyForSearch is specified, and it's not one we've decided to use full-text for
+    } else {
+      // propertyForSearch is specified, and it's not one we've decided to use full-text for
       // This path implies a regex-based search on a specific, non-full-text-optimized property.
       // We want "contains" (fuzzy: true for SearchService.search) by default for this path,
       // unless the user explicitly passed fuzzy: false in the tool input.
       let finalFuzzyForRegexPath: boolean;
-      if ((input as any)?.fuzzy === false) { 
+      if ((input as any)?.fuzzy === false) {
         // User explicitly requested an exact match for the regex search
         finalFuzzyForRegexPath = false;
       } else {
-        // User either passed fuzzy: true, or didn't pass fuzzy (in which case Zod default is true, 
+        // User either passed fuzzy: true, or didn't pass fuzzy (in which case Zod default is true,
         // and we also want "contains" as the intelligent default for this path).
         finalFuzzyForRegexPath = true;
       }
-      
-      logger.info(`Using regex-based search for specific property: '${propertyForSearch}'. Effective fuzzy for SearchService.search (true means contains): ${finalFuzzyForRegexPath}`, {
+
+      logger.info(
+        `Using regex-based search for specific property: '${propertyForSearch}'. Effective fuzzy for SearchService.search (true means contains): ${finalFuzzyForRegexPath}`,
+        {
           ...reqContext,
           property: propertyForSearch,
           targetEntityTypes: entityTypesForSearch,
           userInputFuzzy: (input as any)?.fuzzy, // Log what user actually passed, if anything
           zodParsedFuzzy: validatedInput.fuzzy, // Log what Zod parsed (with default)
           finalFuzzyForRegexPath,
-      });
+        },
+      );
 
       searchResults = await SearchService.search({
         property: propertyForSearch, // Already trimmed
