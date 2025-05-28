@@ -98,7 +98,8 @@ export class SearchService {
           this.searchSingleLabel(
             label,
             cypherSearchValue,
-            normalizedProperty,
+            property, // Pass original property name for Cypher
+            normalizedProperty, // Pass normalized for logic checks
             label.toLowerCase() === "project" || label.toLowerCase() === "task"
               ? taskType
               : undefined,
@@ -160,19 +161,21 @@ export class SearchService {
   private static async searchSingleLabel(
     labelInput: string,
     cypherSearchValue: string,
-    normalizedProperty: string,
+    originalPropertyName: string, // Used for Cypher query (case-sensitive)
+    normalizedLogicProperty: string, // Used for internal logic (lowercase)
     taskTypeFilter?: string,
     limit: number = 50,
-    assignedToUserIdFilter?: string, // Added assignedToUserIdFilter
+    assignedToUserIdFilter?: string, 
   ): Promise<SearchResultItem[]> {
     let session: Session | null = null;
     const reqContext_single = requestContextService.createRequestContext({
       operation: "SearchService.searchSingleLabel",
       labelInput,
       cypherSearchValue,
-      normalizedProperty,
+      originalPropertyName,
+      normalizedLogicProperty,
       taskTypeFilter,
-      assignedToUserIdFilter, // Log this new filter
+      assignedToUserIdFilter,
       limit,
     });
     try {
@@ -220,59 +223,71 @@ export class SearchService {
         params.assignedToUserIdFilter = assignedToUserIdFilter;
       }
 
-      let searchProperty: string | null = null;
-      if (normalizedProperty) {
-        searchProperty = normalizedProperty;
+      let propertyForCypher: string; // This will be original case, or default
+      let propertyForLogic: string; // This will be lowercase, or default
+
+      if (originalPropertyName) {
+        propertyForCypher = originalPropertyName;
+        propertyForLogic = normalizedLogicProperty; // Already lowercase from SearchService.search
       } else {
         // Default property based on label if none specified
         switch (actualLabel) {
           case NodeLabels.Project:
-            searchProperty = "name";
+            propertyForCypher = "name"; // Default is original case
+            propertyForLogic = "name";
             break;
           case NodeLabels.Task:
-            searchProperty = "title";
+            propertyForCypher = "title";
+            propertyForLogic = "title";
             break;
           case NodeLabels.Knowledge:
-            searchProperty = "text";
+            propertyForCypher = "text";
+            propertyForLogic = "text";
             break;
+          default: // Should not happen due to earlier check
+             logger.error("Unreachable code: default property determination failed.", reqContext_single);
+             return [];
         }
       }
+      
+      // Ensure propertyForLogic is lowercase for consistent logic checks
+      // (it should be already if originalPropertyName was passed, but good to be sure for defaults)
+      propertyForLogic = propertyForLogic.toLowerCase();
 
-      if (!searchProperty) {
+
+      if (!propertyForCypher) { // Should always be set by logic above
         logger.warning(
-          `Could not determine a default search property for label ${actualLabel}. Returning empty results.`,
+          `Could not determine a search property for Cypher for label ${actualLabel}. Returning empty results.`,
           { ...reqContext_single, actualLabel },
         );
         return [];
       }
 
-      const propExistsCheck = `n.\`${searchProperty}\` IS NOT NULL`;
+      const propExistsCheck = `n.\`${propertyForCypher}\` IS NOT NULL`;
       let searchPart: string;
 
-      if (searchProperty === "tags") {
-        let tagSearchTerm = params.searchValue; // Original regex pattern, e.g., "(?i)^Computer-Vision$" or "(?i).*Computer-Vision.*"
+      // Use propertyForLogic for these conditional checks
+      if (propertyForLogic === "tags") {
+        let tagSearchTerm = params.searchValue; 
         if (tagSearchTerm.startsWith("(?i)")) {
-          tagSearchTerm = tagSearchTerm.substring(4); // Remove case flag --> "^Computer-Vision$" or ".*Computer-Vision.*"
+          tagSearchTerm = tagSearchTerm.substring(4); 
         }
-
         let coreValue = tagSearchTerm;
         if (tagSearchTerm.startsWith("^") && tagSearchTerm.endsWith("$")) {
-          coreValue = tagSearchTerm.substring(1, tagSearchTerm.length - 1); // Extracts "Computer-Vision"
+          coreValue = tagSearchTerm.substring(1, tagSearchTerm.length - 1);
         } else if (tagSearchTerm.startsWith(".*") && tagSearchTerm.endsWith(".*")) {
-          coreValue = tagSearchTerm.substring(2, tagSearchTerm.length - 2); // Extracts "Computer-Vision"
+          coreValue = tagSearchTerm.substring(2, tagSearchTerm.length - 2);
         }
-        // Fallback if no specific pattern matched, use the term as is (after case flag removal)
-        
         params.exactTagValueLower = coreValue.toLowerCase();
-        searchPart = `ANY(tag IN n.\`${searchProperty}\` WHERE toLower(tag) = $exactTagValueLower)`;
+        // Use propertyForCypher for the actual Cypher query part
+        searchPart = `ANY(tag IN n.\`${propertyForCypher}\` WHERE toLower(tag) = $exactTagValueLower)`;
       } else if (
-        searchProperty === "urls" &&
+        propertyForLogic === "urls" &&
         (actualLabel === NodeLabels.Project || actualLabel === NodeLabels.Task)
       ) {
-        // Search raw JSON string for 'urls' property
-        searchPart = `toString(n.\`${searchProperty}\`) =~ $searchValue`;
+        searchPart = `toString(n.\`${propertyForCypher}\`) =~ $searchValue`;
       } else {
-        searchPart = `n.\`${searchProperty}\` =~ $searchValue`;
+        searchPart = `n.\`${propertyForCypher}\` =~ $searchValue`;
       }
 
       whereConditions.push(`(${propExistsCheck} AND ${searchPart})`);
@@ -285,10 +300,10 @@ export class SearchService {
       const scoreExactTagValueLowerParam = "$exactTagValueLower";
       const scoringLogic = `
         CASE
-          WHEN n.\`${searchProperty}\` IS NOT NULL THEN
+          WHEN n.\`${propertyForCypher}\` IS NOT NULL THEN
             CASE
-              WHEN '${searchProperty}' = 'tags' AND ANY(tag IN n.\`${searchProperty}\` WHERE toLower(tag) = ${scoreExactTagValueLowerParam}) THEN 8
-              WHEN n.\`${searchProperty}\` =~ ${scoreValueParam} THEN 8
+              WHEN '${propertyForLogic}' = 'tags' AND ANY(tag IN n.\`${propertyForCypher}\` WHERE toLower(tag) = ${scoreExactTagValueLowerParam}) THEN 8
+              WHEN n.\`${propertyForCypher}\` =~ ${scoreValueParam} THEN 8
               ELSE 5
             END
           ELSE 5
@@ -300,24 +315,27 @@ export class SearchService {
         RETURN
           n.id AS id,
           $label AS type,
-          CASE $label WHEN '${NodeLabels.Knowledge}' THEN d.name ELSE COALESCE(n.taskType, '') END AS entityType,
+          CASE $label
+            WHEN '${NodeLabels.Knowledge}' THEN (CASE WHEN d IS NOT NULL THEN d.name ELSE null END)
+            ELSE n.taskType 
+          END AS entityType,
           COALESCE(n.name, n.title, CASE WHEN n.text IS NOT NULL AND size(toString(n.text)) > 50 THEN left(toString(n.text), 50) + '...' ELSE toString(n.text) END, n.id) AS title,
-          COALESCE(n.description, n.text, CASE WHEN '${searchProperty}' = 'urls' THEN toString(n.urls) ELSE NULL END) AS description,
-          '${searchProperty}' AS matchedProperty,
+          COALESCE(n.description, n.text, CASE WHEN '${propertyForLogic}' = 'urls' THEN toString(n.urls) ELSE NULL END) AS description,
+          '${propertyForCypher}' AS matchedProperty, // Report original property name
           CASE
-            WHEN n.\`${searchProperty}\` IS NOT NULL THEN
+            WHEN n.\`${propertyForCypher}\` IS NOT NULL THEN
               CASE
-                WHEN '${searchProperty}' = 'tags' AND ANY(t IN n.\`${searchProperty}\` WHERE toLower(t) = ${scoreExactTagValueLowerParam}) THEN
-                  HEAD([tag IN n.\`${searchProperty}\` WHERE toLower(tag) = ${scoreExactTagValueLowerParam}])
-                WHEN '${searchProperty}' = 'urls' AND toString(n.\`${searchProperty}\`) =~ ${valueParam} THEN
+                WHEN '${propertyForLogic}' = 'tags' AND ANY(t IN n.\`${propertyForCypher}\` WHERE toLower(t) = ${scoreExactTagValueLowerParam}) THEN
+                  HEAD([tag IN n.\`${propertyForCypher}\` WHERE toLower(tag) = ${scoreExactTagValueLowerParam}])
+                WHEN '${propertyForLogic}' = 'urls' AND toString(n.\`${propertyForCypher}\`) =~ ${valueParam} THEN
                   CASE
-                    WHEN size(toString(n.\`${searchProperty}\`)) > 100 THEN left(toString(n.\`${searchProperty}\`), 100) + '...'
-                    ELSE toString(n.\`${searchProperty}\`)
+                    WHEN size(toString(n.\`${propertyForCypher}\`)) > 100 THEN left(toString(n.\`${propertyForCypher}\`), 100) + '...'
+                    ELSE toString(n.\`${propertyForCypher}\`)
                   END
-                WHEN n.\`${searchProperty}\` =~ ${valueParam} THEN
+                WHEN n.\`${propertyForCypher}\` =~ ${valueParam} THEN
                   CASE
-                    WHEN size(toString(n.\`${searchProperty}\`)) > 100 THEN left(toString(n.\`${searchProperty}\`), 100) + '...'
-                    ELSE toString(n.\`${searchProperty}\`)
+                    WHEN size(toString(n.\`${propertyForCypher}\`)) > 100 THEN left(toString(n.\`${propertyForCypher}\`), 100) + '...'
+                    ELSE toString(n.\`${propertyForCypher}\`)
                   END
                 ELSE ''
               END
@@ -325,18 +343,25 @@ export class SearchService {
           END AS matchedValue,
           n.createdAt AS createdAt,
           n.updatedAt AS updatedAt,
-          COALESCE(n.projectId, k_proj.id) AS projectId,
-          COALESCE(p.name, k_proj.name) AS projectName,
+          CASE $label
+            WHEN '${NodeLabels.Project}' THEN n.id
+            ELSE n.projectId
+          END AS projectId,
+          CASE $label
+            WHEN '${NodeLabels.Project}' THEN n.name
+            WHEN '${NodeLabels.Task}' THEN (CASE WHEN p IS NOT NULL THEN p.name ELSE null END)
+            WHEN '${NodeLabels.Knowledge}' THEN (CASE WHEN k_proj IS NOT NULL THEN k_proj.name ELSE null END)
+            ELSE null
+          END AS projectName,
           ${scoringLogic}
       `;
 
       let optionalMatches = "";
-      if (
-        actualLabel === NodeLabels.Task ||
-        actualLabel === NodeLabels.Project
-      ) {
+      if (actualLabel === NodeLabels.Task) {
+        // For Task, get its parent Project 'p'
         optionalMatches = `OPTIONAL MATCH (p:${NodeLabels.Project} {id: n.projectId})`;
       } else if (actualLabel === NodeLabels.Knowledge) {
+        // For Knowledge, get its parent Project 'k_proj' and its Domain 'd'
         optionalMatches = `
           OPTIONAL MATCH (k_proj:${NodeLabels.Project} {id: n.projectId})
           OPTIONAL MATCH (n)-[:${RelationshipTypes.BELONGS_TO_DOMAIN}]->(d:${NodeLabels.Domain})
@@ -367,14 +392,18 @@ export class SearchService {
         LIMIT $limit
       `;
 
-      logger.debug(`Executing search query for label ${actualLabel}. SearchProperty: '${searchProperty}', SearchValue (Regex): '${params.searchValue}'`, {
-        ...reqContext_single,
-        actualLabel,
-        searchPropertyUsed: searchProperty, // Log the actual searchProperty being used
-        rawSearchValueParam: params.searchValue, // Log the raw regex pattern
-        query,
-        params,
-      });
+      logger.debug(
+        `Executing search query for label ${actualLabel}. Property for Cypher: '${propertyForCypher}', Property for Logic: '${propertyForLogic}', SearchValue (Regex): '${params.searchValue}'`,
+        {
+          ...reqContext_single,
+          actualLabel,
+          propertyForCypher,
+          propertyForLogic,
+          rawSearchValueParam: params.searchValue,
+          query,
+          params,
+        },
+      );
       const result = await session.executeRead(
         async (tx: any) => (await tx.run(query, params)).records,
       );
