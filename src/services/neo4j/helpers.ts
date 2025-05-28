@@ -16,6 +16,17 @@ export function generateId(): string {
 }
 
 /**
+ * Escapes a relationship type string for safe use in Cypher queries.
+ * It wraps the type in backticks and escapes any existing backticks within the type string.
+ * @param type The relationship type string to escape.
+ * @returns The escaped relationship type string.
+ */
+export const escapeRelationshipType = (type: string): string => {
+  // Backtick the type name and escape any backticks within the name itself.
+  return `\`${type.replace(/`/g, "``")}\``;
+};
+
+/**
  * Generate a timestamped ID with an optional prefix
  * @param prefix Optional prefix for the ID
  * @returns A unique ID with timestamp and random component

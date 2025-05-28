@@ -41,7 +41,6 @@ export class Neo4jUtils {
         `CREATE INDEX task_priority IF NOT EXISTS FOR (t:${NodeLabels.Task}) ON (t.priority)`,
         `CREATE INDEX task_projectId IF NOT EXISTS FOR (t:${NodeLabels.Task}) ON (t.projectId)`,
         `CREATE INDEX knowledge_projectId IF NOT EXISTS FOR (k:${NodeLabels.Knowledge}) ON (k.projectId)`,
-        `CREATE INDEX knowledge_domain IF NOT EXISTS FOR (k:${NodeLabels.Knowledge}) ON (k.domain)`,
       ];
 
       // Full-text indexes (check compatibility with Community Edition version)

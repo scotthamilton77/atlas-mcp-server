@@ -13,12 +13,7 @@ import path from "path";
 import { config } from "../../config/index.js";
 import { logger, requestContextService } from "../../utils/index.js"; // Updated import path
 import { neo4jDriver } from "./driver.js";
-
-// Helper function to escape relationship types for Cypher queries
-const escapeRelationshipType = (type: string): string => {
-  // Backtick the type name and escape any backticks within the name itself.
-  return `\`${type.replace(/`/g, "``")}\``;
-};
+import { escapeRelationshipType } from "./helpers.js";
 
 // Define the validated root backup path from config
 const validatedBackupRoot = config.backup.backupPath; // This path is already validated in config/index.ts
@@ -598,101 +593,109 @@ export const importDatabase = async (backupDirInput: string): Promise<void> => {
     // Process relationships (common code)
     if (relationships.length > 0) {
       logger.info(
-        `Attempting to import ${relationships.length} relationships individually...`,
-        { ...baseContext, count: relationships.length },
+        `Attempting to import ${relationships.length} relationships...`,
+        { ...baseContext, totalRelationships: relationships.length },
       );
       let importedCount = 0;
       let failedCount = 0;
-      const batchSize = 500;
 
-      for (let i = 0; i < relationships.length; i += batchSize) {
-        const batch = relationships.slice(i, i + batchSize);
-        logger.debug(`Processing relationship batch ${i / batchSize + 1}...`, {
-          ...baseContext,
-          batchNumber: i / batchSize + 1,
-          batchSize: batch.length,
-        });
-        try {
-          await session.executeWrite(async (tx) => {
-            logger.debug(
-              `Executing relationship creation transaction batch ${i / batchSize + 1}...`,
-              { ...baseContext, batchNumber: i / batchSize + 1 },
-            );
-            for (const rel of batch) {
-              if (!rel.startNodeId || !rel.endNodeId || !rel.type) {
-                logger.warning(
-                  `Skipping relationship due to missing data: ${JSON.stringify(rel)}`,
-                  { ...baseContext, relationshipData: rel },
-                );
-                failedCount++;
-                continue;
-              }
-              const escapedType = escapeRelationshipType(rel.type);
-              const relQuery = `
-                MATCH (start {id: $startNodeId})
-                MATCH (end {id: $endNodeId})
-                CREATE (start)-[r:${escapedType}]->(end)
-                SET r = $properties
-              `;
-              try {
-                logger.debug(
-                  `Running query for relationship: ${rel.type} from ${rel.startNodeId} to ${rel.endNodeId}`,
-                  {
-                    ...baseContext,
-                    relType: rel.type,
-                    startNode: rel.startNodeId,
-                    endNode: rel.endNodeId,
-                  },
-                );
-                await tx.run(relQuery, {
-                  startNodeId: rel.startNodeId,
-                  endNodeId: rel.endNodeId,
-                  properties: rel.properties || {},
-                });
-                logger.debug(`Query executed for relationship: ${rel.type}`, {
-                  ...baseContext,
-                  relType: rel.type,
-                });
-                importedCount++;
-              } catch (relError) {
-                const errorMsg =
-                  relError instanceof Error
-                    ? relError.message
-                    : String(relError);
-                logger.error(
-                  `Failed to create relationship ${rel.type} from ${rel.startNodeId} to ${rel.endNodeId}: ${errorMsg}`,
-                  relError as Error,
-                  { ...baseContext, relationship: rel },
-                );
-                failedCount++;
-              }
-            }
-            logger.debug(
-              `Relationship creation transaction batch ${i / batchSize + 1} finished.`,
-              { ...baseContext, batchNumber: i / batchSize + 1 },
-            );
-          });
-          logger.debug(`Completed relationship batch ${i / batchSize + 1}.`, {
-            ...baseContext,
-            batchNumber: i / batchSize + 1,
-          });
-        } catch (batchError) {
-          const errorMsg =
-            batchError instanceof Error
-              ? batchError.message
-              : String(batchError);
-          logger.error(
-            `Failed to process relationship batch starting at index ${i}: ${errorMsg}`,
-            batchError as Error,
-            { ...baseContext, batchStartIndex: i },
+      // Group relationships by type
+      const relationshipsByType: Record<
+        string,
+        Array<{
+          startNodeId: string;
+          endNodeId: string;
+          properties: Record<string, any>;
+        }>
+      > = {};
+
+      for (const rel of relationships) {
+        if (!rel.startNodeId || !rel.endNodeId || !rel.type) {
+          logger.warning(
+            `Skipping relationship due to missing critical data (startNodeId, endNodeId, or type): ${JSON.stringify(rel)}`,
+            { ...baseContext, relationshipData: rel },
           );
-          failedCount +=
-            batch.length -
-            batch.filter(
-              (rel) => !rel.startNodeId || !rel.endNodeId || !rel.type,
-            ).length;
+          failedCount++;
+          continue;
+        }
+        if (!relationshipsByType[rel.type]) {
+          relationshipsByType[rel.type] = [];
+        }
+        relationshipsByType[rel.type].push({
+          startNodeId: rel.startNodeId,
+          endNodeId: rel.endNodeId,
+          properties: rel.properties || {},
+        });
+      }
+
+      // Process each relationship type in batches
+      const batchSize = 500; // Configurable batch size for UNWIND
+
+      for (const relType in relationshipsByType) {
+        if (
+          Object.prototype.hasOwnProperty.call(relationshipsByType, relType)
+        ) {
+          const relsOfType = relationshipsByType[relType];
+          const escapedType = escapeRelationshipType(relType);
+          logger.debug(
+            `Processing ${relsOfType.length} relationships of type ${relType} (escaped: ${escapedType})`,
+            { ...baseContext, relType, count: relsOfType.length },
+          );
+
+          for (let i = 0; i < relsOfType.length; i += batchSize) {
+            const batch = relsOfType.slice(i, i + batchSize);
+            const batchNumber = i / batchSize + 1;
+            logger.debug(
+              `Processing batch ${batchNumber} for type ${relType} (size: ${batch.length})`,
+              { ...baseContext, relType, batchNumber, batchSize: batch.length },
+            );
+
+            const relQuery = `
+              UNWIND $rels AS relData
+              MATCH (start {id: relData.startNodeId})
+              MATCH (end {id: relData.endNodeId})
+              CREATE (start)-[r:${escapedType}]->(end)
+              SET r = relData.properties
+              RETURN count(r) as createdCount
+            `;
+
+            try {
+              const result = await session.executeWrite(async (tx) => {
+                logger.debug(
+                  `Executing UNWIND transaction for type ${relType}, batch ${batchNumber}`,
+                  { ...baseContext, relType, batchNumber },
+                );
+                const txResult = await tx.run(relQuery, { rels: batch });
+                logger.debug(
+                  `UNWIND transaction executed for type ${relType}, batch ${batchNumber}`,
+                  { ...baseContext, relType, batchNumber },
+                );
+                return txResult.records[0]?.get("createdCount").toNumber() || 0;
+              });
+              importedCount += result;
+              logger.debug(
+                `Successfully created ${result} relationships of type ${relType} in batch ${batchNumber}`,
+                { ...baseContext, relType, batchNumber, count: result },
+              );
+            } catch (error) {
+              const errorMsg =
+                error instanceof Error ? error.message : String(error);
+              logger.error(
+                `Failed to create relationships of type ${relType} in batch ${batchNumber}: ${errorMsg}`,
+                error as Error,
+                {
+                  ...baseContext,
+                  relType,
+                  batchNumber,
+                  batchDataSample: batch.slice(0, 5), // Log a sample of the failing batch
+                },
+              );
+              failedCount += batch.length; // Assume all in batch failed if transaction fails
+            }
+          }
         }
       }
+
       logger.info(
         `Relationship import summary: Attempted=${relationships.length}, Succeeded=${importedCount}, Failed=${failedCount}`,
         {
@@ -703,7 +706,7 @@ export const importDatabase = async (backupDirInput: string): Promise<void> => {
         },
       );
     } else {
-      logger.info(`No relationships to import.`, baseContext);
+      logger.info("No relationships to import.", baseContext);
     }
 
     logger.info("Database import completed successfully.", baseContext);

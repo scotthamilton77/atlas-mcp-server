@@ -1,6 +1,6 @@
 import { logger, requestContextService } from "../../utils/index.js"; // Updated import path
 import { neo4jDriver } from "./driver.js";
-import { generateId } from "./helpers.js";
+import { generateId, escapeRelationshipType } from "./helpers.js";
 import {
   KnowledgeFilterOptions,
   Neo4jKnowledge, // This type no longer has domain/citations
@@ -199,7 +199,7 @@ export class KnowledgeService {
       }
 
       // Escape relationship type for safety
-      const escapedType = `\`${relationshipType.replace(/`/g, "``")}\``;
+      const escapedType = escapeRelationshipType(relationshipType);
 
       const query = `
         MATCH (source:${NodeLabels.Knowledge} {id: $sourceId})
