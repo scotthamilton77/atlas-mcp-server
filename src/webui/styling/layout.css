@@ -1,0 +1,218 @@
+/* ==========================================================================
+   Main Application Layout (#app, header, main, footer)
+   ========================================================================== */
+#app {
+  position: relative; /* For theme toggle positioning */
+  max-width: 1000px;
+  margin: var(--spacing-xl) auto;
+  padding: var(--spacing-lg) var(--spacing-xl);
+  background-color: var(--card-bg-color);
+  border-radius: var(--border-radius-lg);
+  box-shadow: 0 8px 24px var(--shadow-color);
+  transition: background-color 0.2s ease-out;
+}
+
+.app-header {
+  margin-bottom: var(--spacing-xl);
+}
+
+.app-footer {
+  margin-top: var(--spacing-xl);
+  padding-top: var(--spacing-lg);
+  border-top: 1px solid var(--border-color);
+}
+
+/* ==========================================================================
+   Controls Section (Project Select, Refresh Button)
+   ========================================================================== */
+.controls-section {
+  margin-bottom: var(--spacing-xl);
+}
+.controls-container {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+}
+
+.controls-container label {
+  margin-bottom: 0; /* Align with controls */
+  flex-shrink: 0; /* Prevent label from shrinking */
+}
+
+/* ==========================================================================
+   Data Sections (Project Details, Tasks, Knowledge)
+   ========================================================================== */
+.data-section {
+  margin-top: var(--spacing-xl);
+  padding: var(--spacing-lg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  background-color: var(--data-section-bg);
+  transition:
+    background-color 0.2s ease-out,
+    border-color 0.2s ease-out;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-md);
+  flex-wrap: wrap; /* Allow wrapping for view controls */
+  gap: var(--spacing-md);
+}
+
+.section-header h3 {
+  margin-bottom: 0; /* Remove bottom margin as it's handled by section-header */
+}
+
+/* Project Details Grid Specifics */
+#details-content.details-grid {
+  display: grid;
+  grid-template-columns: auto 1fr; /* Label and value */
+  gap: var(--spacing-sm) var(--spacing-md);
+  align-items: start; /* Align items to the start of their grid cell */
+}
+
+#details-content.details-grid > .data-item {
+  display: contents; /* Allow children (strong, div/pre/ul) to participate in the grid */
+}
+
+#details-content.details-grid > .data-item > strong {
+  /* Label */
+  font-weight: 500;
+  color: var(--secondary-text-color);
+  padding-top: var(--spacing-xs); /* Align with multi-line values better */
+  grid-column: 1;
+}
+#details-content.details-grid > .data-item > div,
+#details-content.details-grid > .data-item > pre,
+#details-content.details-grid > .data-item > ul {
+  /* Value */
+  grid-column: 2;
+  margin-bottom: 0; /* Remove default margin from these elements when in grid */
+}
+#details-content.details-grid > .data-item > ul {
+  list-style-position: outside; /* More standard list appearance */
+  padding-left: var(--spacing-md); /* Indent list items */
+  margin-top: 0;
+}
+#details-content.details-grid > .data-item > ul li {
+  margin-bottom: var(--spacing-xs);
+}
+
+/* General Data Items (Used for Tasks, Knowledge in non-grid layout) */
+.data-item {
+  padding-bottom: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+  border-bottom: 1px solid var(--data-item-border-color);
+  transition: border-color 0.2s ease-out;
+}
+
+.data-item:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.data-item strong {
+  /* Used in task/knowledge titles */
+  color: var(--text-color);
+  font-weight: 600;
+  display: block; /* Make title take full width */
+  margin-bottom: var(--spacing-xs);
+}
+
+.data-item div {
+  /* General content div within a data item */
+  margin-bottom: var(--spacing-xs);
+}
+
+/* ==========================================================================
+   Mermaid Diagram Container
+   ========================================================================== */
+.mermaid-container {
+  width: 100%;
+  min-height: 300px; /* Adjust as needed */
+  overflow: auto; /* For larger diagrams */
+  margin-top: var(--spacing-md);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  padding: var(--spacing-md);
+  background-color: var(
+    --card-bg-color
+  ); /* Match card background for consistency */
+  box-sizing: border-box; /* Ensure padding and border are included in width/height */
+}
+.mermaid-container svg {
+  display: block; /* Remove extra space below SVG */
+  margin: auto; /* Center if smaller than container */
+  max-width: 100%; /* Ensure SVG scales down if too wide */
+}
+
+/* ==========================================================================
+   Task Board Styles
+   ========================================================================== */
+.task-board-grid {
+  display: flex;
+  gap: var(--spacing-md);
+  overflow-x: auto; /* Allow horizontal scrolling for columns */
+  padding-bottom: var(--spacing-md); /* Space for scrollbar */
+  min-height: 300px; /* Ensure columns have some height */
+}
+
+.task-board-column {
+  flex: 0 0 280px; /* Fixed width for columns, adjust as needed */
+  max-width: 280px;
+  background-color: var(
+    --bg-color
+  ); /* Slightly different from card for distinction */
+  border-radius: var(--border-radius-md);
+  padding: var(--spacing-md);
+  border: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  transition: background-color 0.2s ease-out;
+}
+
+.task-board-column h4 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: var(--spacing-md);
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 1px solid var(--border-color);
+  text-align: center;
+}
+
+.task-board-column-content {
+  flex-grow: 1;
+  overflow-y: auto; /* Allow scrolling within a column if many tasks */
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+/* ==========================================================================
+   Data Explorer Styles
+   ========================================================================== */
+#data-explorer-container .controls-container {
+  margin-bottom: var(--spacing-lg); /* Space between controls and content */
+}
+
+.explorer-node-list {
+  max-height: 400px; /* Limit height and allow scrolling */
+  overflow-y: auto;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  padding: var(--spacing-sm);
+  margin-bottom: var(--spacing-lg); /* Space before details section */
+}
+
+#data-explorer-details {
+  /* Uses .details-grid, so existing styles apply. 
+     Can add specific overrides if needed */
+  margin-top: var(--spacing-lg);
+  padding-top: var(--spacing-lg);
+  border-top: 1px solid var(--border-color);
+}

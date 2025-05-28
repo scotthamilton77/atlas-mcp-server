@@ -4,7 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Atlas Projects Live View</title>
-    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="styling/theme.css" />
+    <link rel="stylesheet" href="styling/base.css" />
+    <link rel="stylesheet" href="styling/layout.css" />
+    <link rel="stylesheet" href="styling/components.css" />
     <!-- Mermaid JS CDN -->
     <script src="https://cdn.jsdelivr.net/npm/mermaid@latest/dist/mermaid.min.js"></script>
   </head>
@@ -91,6 +94,17 @@
         </section>
 
         <section
+          id="project-task-board-container"
+          class="data-section hidden"
+          aria-labelledby="project-task-board-heading"
+        >
+          <h2 id="project-task-board-heading">Project Task Board</h2>
+          <div id="project-task-board-content" class="task-board-grid" role="region" aria-live="polite">
+            <!-- Task board columns will be rendered here -->
+          </div>
+        </section>
+
+        <section
           id="knowledge-container"
           class="data-section hidden"
           aria-labelledby="knowledge-heading"
@@ -110,6 +124,27 @@
             </div>
           </div>
           <div id="knowledge-content" role="region" aria-live="polite"></div>
+        </section>
+
+        <section 
+          id="data-explorer-container" 
+          class="data-section hidden" 
+          aria-labelledby="data-explorer-heading"
+        >
+          <h2 id="data-explorer-heading">Data Explorer</h2>
+          <div class="controls-container">
+            <label for="node-label-select">Select Node Type:</label>
+            <select id="node-label-select" aria-label="Select a node type to explore">
+              <option value="">Loading node types...</option>
+            </select>
+            <button id="refresh-node-types-button" type="button">Refresh Types</button>
+          </div>
+          <div id="data-explorer-content" role="region" aria-live="polite">
+            <!-- Nodes of selected type will be rendered here -->
+          </div>
+          <div id="data-explorer-details" class="details-grid" role="region" aria-live="polite">
+            <!-- Details of a selected node will be rendered here -->
+          </div>
         </section>
       </main>
 
@@ -138,6 +173,6 @@
             // window.NEO4J_PASSWORD = "password2";
         </script> 
     -->
-    <script src="script.js"></script>
+    <script type="module" src="logic/main.js"></script>
   </body>
 </html>

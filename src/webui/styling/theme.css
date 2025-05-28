@@ -1,0 +1,72 @@
+/* ==========================================================================
+   Global Variables & Theme Setup
+   ========================================================================== */
+:root {
+  /* Light Mode (Default) - Modern Minimalist */
+  --bg-color: #f4f7f9; /* Lighter, softer background */
+  --text-color: #333; /* Dark grey for text, not pure black */
+  --primary-color: #007bff; /* Standard blue accent */
+  --primary-hover-color: #0056b3;
+  --secondary-text-color: #555; /* Slightly darker secondary text */
+  --border-color: #e0e0e0; /* Softer borders */
+  --card-bg-color: #ffffff;
+  --shadow-color: rgba(0, 0, 0, 0.05); /* Softer shadow */
+  --error-color: #d9534f;
+  --error-bg-color: #fdf7f7;
+  --error-border-color: #f0c9c8;
+  --success-color: #5cb85c;
+  --warning-color: #f0ad4e;
+  --warning-bg-color: #fcf8e3; /* For backgrounds if needed */
+  --code-bg-color: #f9f9f9; /* Very light grey for code blocks */
+  --code-border-color: #efefef;
+  --connection-status-bg: #efefef;
+  --data-section-bg: var(
+    --card-bg-color
+  ); /* Sections same as card for minimalism */
+  --data-item-border-color: #eaeaea; /* Softer item border */
+  --button-text-color: #ffffff;
+  --button-secondary-bg: #6c757d;
+  --button-secondary-hover-bg: #5a6268;
+
+  --font-family-sans-serif:
+    "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-family-monospace:
+    SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
+
+  --border-radius-sm: 4px;
+  --border-radius-md: 8px;
+  --border-radius-lg: 12px;
+
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+}
+
+.dark-mode {
+  --bg-color: #121212; /* Very dark background */
+  --text-color: #e0e0e0;
+  /* --primary-color: #007bff; /* Can adjust for dark mode if needed, e.g., a lighter blue */
+  /* --primary-hover-color: #0056b3; */
+  --secondary-text-color: #aaa;
+  --border-color: #333; /* Darker, subtle borders */
+  --card-bg-color: #1e1e1e; /* Dark card background */
+  --shadow-color: rgba(255, 255, 255, 0.03); /* Very subtle light shadow */
+  --error-color: #e77773;
+  --error-bg-color: #3d2727;
+  --error-border-color: #5c4040;
+  --success-color: #7bc77b;
+  --warning-color: #f5c76e;
+  --warning-bg-color: #4a412a; /* For backgrounds if needed */
+  --code-bg-color: #282828;
+  --code-border-color: #383838;
+  --connection-status-bg: #282828;
+  --data-section-bg: var(--card-bg-color);
+  --data-item-border-color: #333;
+  /* --button-text-color: #ffffff; */ /* Usually remains white */
+  --button-secondary-bg: #495057;
+  --button-secondary-hover-bg: #343a40;
+}

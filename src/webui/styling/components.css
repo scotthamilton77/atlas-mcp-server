@@ -1,0 +1,349 @@
+/* ==========================================================================
+   Component Styles: Buttons, Selects, Cards, Toggles etc.
+   ========================================================================== */
+select,
+button {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--border-radius-md);
+  border: 1px solid var(--border-color);
+  font-size: 1rem;
+  background-color: var(--card-bg-color); /* Match card for consistency */
+  color: var(--text-color);
+  transition:
+    background-color 0.15s ease-out,
+    border-color 0.15s ease-out,
+    box-shadow 0.15s ease-out;
+}
+
+select:focus,
+button:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25); /* Standard Bootstrap-like focus ring */
+}
+/* For dark mode, ensure focus ring is visible */
+.dark-mode select:focus,
+.dark-mode button:focus {
+  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.35);
+}
+
+select {
+  flex-grow: 1;
+  min-width: 200px; /* Ensure select has a minimum width */
+}
+
+button {
+  background-color: var(--primary-color);
+  color: var(--button-text-color);
+  cursor: pointer;
+  font-weight: 500;
+  border-color: var(--primary-color);
+}
+
+button:hover {
+  background-color: var(--primary-hover-color);
+  border-color: var(--primary-hover-color);
+}
+
+button#refresh-button {
+  background-color: var(--button-secondary-bg);
+  border-color: var(--button-secondary-bg);
+  color: var(--button-text-color);
+}
+button#refresh-button:hover {
+  background-color: var(--button-secondary-hover-bg);
+  border-color: var(--button-secondary-hover-bg);
+}
+
+.view-controls {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.view-controls .view-toggle-button {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-size: 0.85rem;
+  background-color: transparent;
+  color: var(--primary-color);
+  border: 1px solid var(--primary-color);
+}
+.view-controls .view-toggle-button:hover,
+.view-controls .view-toggle-button:focus {
+  background-color: rgba(
+    0,
+    123,
+    255,
+    0.1
+  ); /* Use primary color with alpha for hover */
+}
+.dark-mode .view-controls .view-toggle-button:hover,
+.dark-mode .view-controls .view-toggle-button:focus {
+  background-color: rgba(
+    0,
+    123,
+    255,
+    0.2
+  ); /* Slightly more opaque for dark mode */
+}
+
+/* Compact View for Tasks/Knowledge */
+.data-item.compact {
+  padding: var(--spacing-sm) 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.data-item.compact strong {
+  margin-bottom: 0;
+  font-weight: 500;
+}
+.data-item.compact .item-status {
+  font-size: 0.85rem;
+  color: var(--secondary-text-color);
+  background-color: var(--code-bg-color);
+  padding: 2px 6px;
+  border-radius: var(--border-radius-sm);
+}
+/* Hide detailed elements in compact mode */
+.data-item.compact pre, 
+.data-item.compact div:not(:first-child), /* Hides divs other than the one containing the title/status */
+.data-item.compact ul {
+  display: none;
+}
+
+.task-card {
+  background-color: var(--card-bg-color);
+  padding: var(--spacing-sm);
+  border-radius: var(--border-radius-sm);
+  border: 1px solid var(--data-item-border-color);
+  box-shadow: 0 2px 4px var(--shadow-color);
+  cursor: pointer; /* If tasks are clickable for details */
+  transition:
+    box-shadow 0.15s ease-out,
+    transform 0.15s ease-out;
+}
+
+.task-card:hover {
+  box-shadow: 0 4px 8px var(--shadow-color);
+  transform: translateY(-2px);
+}
+
+.task-card-title {
+  font-weight: 600;
+  margin-bottom: var(--spacing-xs);
+  color: var(--text-color);
+}
+
+.task-card-priority,
+.task-card-assignee {
+  font-size: 0.8rem;
+  color: var(--secondary-text-color);
+  margin-top: var(--spacing-xs);
+}
+
+.empty-column {
+  text-align: center;
+  color: var(--secondary-text-color);
+  font-style: italic;
+  padding: var(--spacing-md) 0;
+}
+
+.explorer-node-item {
+  padding: var(--spacing-sm);
+  border-bottom: 1px solid var(--data-item-border-color);
+  cursor: pointer;
+  transition: background-color 0.15s ease-out;
+}
+
+.explorer-node-item:last-child {
+  border-bottom: none;
+}
+
+.explorer-node-item:hover {
+  background-color: var(--bg-color); /* Subtle hover effect */
+}
+.dark-mode .explorer-node-item:hover {
+  background-color: var(--border-color); /* Darker hover for dark mode */
+}
+
+/* ==========================================================================
+   Status, Error, Loading Messages
+   ========================================================================== */
+.error {
+  /* For #error-message div */
+  color: var(--error-color);
+  font-weight: 500;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: var(--error-bg-color);
+  border: 1px solid var(--error-border-color);
+  border-radius: var(--border-radius-sm);
+  margin-top: var(--spacing-md);
+  transition:
+    background-color 0.2s ease-out,
+    border-color 0.2s ease-out,
+    color 0.2s ease-out;
+}
+
+.loading {
+  /* For loading text within containers */
+  font-style: italic;
+  color: var(--secondary-text-color);
+  padding: var(--spacing-md) 0;
+  text-align: center;
+}
+
+#connection-status {
+  margin-top: var(
+    --spacing-lg
+  ); /* Ensure it's below error message if both visible */
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: var(--connection-status-bg);
+  border-radius: var(--border-radius-sm);
+  text-align: center;
+  font-weight: 500;
+  color: var(--text-color);
+  transition:
+    background-color 0.2s ease-out,
+    color 0.2s ease-out;
+}
+#connection-status span {
+  /* The actual status text, e.g., "Connected" */
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   Utility Classes
+   ========================================================================== */
+.hidden {
+  display: none !important;
+}
+
+/* ==========================================================================
+   Theme Toggle Switch
+   ========================================================================== */
+.theme-switch-wrapper {
+  display: flex;
+  align-items: center;
+  position: absolute;
+  top: var(--spacing-md);
+  right: var(--spacing-md);
+  gap: var(--spacing-sm);
+}
+.theme-label {
+  font-size: 0.8rem;
+  color: var(--secondary-text-color);
+  cursor: pointer;
+}
+
+.theme-switch {
+  /* The label acting as a container */
+  display: inline-block;
+  height: 20px; /* Smaller toggle */
+  position: relative;
+  width: 40px; /* Smaller toggle */
+}
+.theme-switch input {
+  display: none;
+} /* Hide actual checkbox */
+
+.slider {
+  /* The visual track of the switch */
+  background-color: #ccc; /* Default off state */
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  transition: 0.3s;
+  border-radius: 20px; /* Fully rounded ends */
+}
+.slider:before {
+  /* The circular handle */
+  background-color: #fff;
+  position: absolute;
+  content: "";
+  height: 14px; /* Smaller handle */
+  width: 14px; /* Smaller handle */
+  left: 3px; /* Padding from left edge */
+  bottom: 3px; /* Padding from bottom edge */
+  transition: 0.3s;
+  border-radius: 50%; /* Circular */
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+input:checked + .slider {
+  background-color: var(--primary-color);
+} /* "On" state color */
+input:checked + .slider:before {
+  transform: translateX(20px);
+} /* Move handle to the right */
+
+/* ==========================================================================
+   Responsive Adjustments
+   ========================================================================== */
+@media (max-width: 768px) {
+  body {
+    font-size: 15px;
+  }
+  #app {
+    margin: var(--spacing-md);
+    padding: var(--spacing-md);
+  }
+  h1 {
+    font-size: 1.8rem;
+  }
+  h2 {
+    font-size: 1.5rem;
+  }
+  h3 {
+    font-size: 1.2rem;
+  }
+
+  .controls-container {
+    flex-direction: column;
+    align-items: stretch; /* Make controls full width */
+  }
+  .controls-container select,
+  .controls-container button {
+    width: 100%;
+    margin-bottom: var(--spacing-sm); /* Consistent spacing when stacked */
+  }
+  .controls-container button:last-child {
+    margin-bottom: 0;
+  }
+
+  .section-header {
+    flex-direction: column;
+    align-items: flex-start; /* Align header content to the start */
+  }
+  .view-controls {
+    width: 100%;
+    justify-content: flex-start; /* Align toggles to start */
+  }
+
+  .theme-switch-wrapper {
+    top: var(--spacing-sm);
+    right: var(--spacing-sm);
+  }
+  .theme-label {
+    display: none; /* Hide "Toggle Theme" text on small screens to save space */
+  }
+
+  #details-content.details-grid {
+    grid-template-columns: 1fr; /* Stack labels and values */
+  }
+  #details-content.details-grid > .data-item > strong {
+    /* Label */
+    margin-bottom: var(
+      --spacing-xs
+    ); /* Space between label and value when stacked */
+    grid-column: 1; /* Ensure it stays in the first column */
+  }
+  #details-content.details-grid > .data-item > div,
+  #details-content.details-grid > .data-item > pre,
+  #details-content.details-grid > .data-item > ul {
+    /* Value */
+    grid-column: 1; /* Ensure it stays in the first column */
+  }
+}
