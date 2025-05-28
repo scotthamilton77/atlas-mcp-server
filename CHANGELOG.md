@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.8.10] - 2025-05-28
+
+### Fixed
+
+- **Dependency**: Downgraded `chrono-node` from `^2.8.1` to `2.8.0` to resolve an issue.
+
+### Changed
+
+- **CLI**: Updated the binary command name from `atlas-mcp` to `atlas-mcp-server` in `package.json`.
+- **Scripts**: Modified the `inspector` script in `package.json` to use the new `atlas-mcp-server` binary name.
+
+### Documentation
+
+- Updated MCP version badge in `README.md` to `1.12.0`.
+- Updated application version to `2.8.10` in `README.md`.
+
 ## [2.8.9] - 2025-05-28
 
 ### Changed
