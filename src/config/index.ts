@@ -120,6 +120,8 @@ const EnvSchema = z.object({
   OPENROUTER_APP_NAME: z.string().optional(),
   /** Optional. API key for OpenRouter services. */
   OPENROUTER_API_KEY: z.string().optional(),
+  /** Optional. API key for Gemini services. */
+  GEMINI_API_KEY: z.string().optional(),
   /** Default LLM model. Default: "google/gemini-2.5-flash-preview:thinking". */
   LLM_DEFAULT_MODEL: z
     .string()
@@ -361,6 +363,8 @@ export const config = {
   openrouterAppName: env.OPENROUTER_APP_NAME || pkg.name,
   /** OpenRouter API Key. From `OPENROUTER_API_KEY`. */
   openrouterApiKey: env.OPENROUTER_API_KEY,
+  /** Gemini API Key. From `GEMINI_API_KEY`. */
+  geminiApiKey: env.GEMINI_API_KEY,
   /** Default LLM model. From `LLM_DEFAULT_MODEL`. */
   llmDefaultModel: env.LLM_DEFAULT_MODEL,
   /** Default LLM temperature. From `LLM_DEFAULT_TEMPERATURE`. */

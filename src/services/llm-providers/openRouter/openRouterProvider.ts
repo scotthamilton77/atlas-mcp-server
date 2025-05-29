@@ -3,9 +3,10 @@
  * OpenRouter API, using the OpenAI SDK for chat completions. It handles API key
  * configuration, default parameters, rate limiting, model-specific parameter adjustments,
  * and error handling.
- * @module src/services/openRouterProvider
+ * @module src/services/llm-providers/openRouter/openRouterProvider
  */
-import OpenAI from "openai";
+import OpenAI from "openai"; // This will be the type, actual instance from factory
+import { llmFactory, OpenRouterClientOptions } from "../llmFactory.js"; // Import factory
 import {
   ChatCompletion,
   ChatCompletionChunk,
@@ -13,20 +14,21 @@ import {
   ChatCompletionCreateParamsStreaming,
 } from "openai/resources/chat/completions";
 import { Stream } from "openai/streaming";
-import { config } from "../../config/index.js";
-import { BaseErrorCode, McpError } from "../../types/errors.js";
-import { ErrorHandler } from "../../utils/internal/errorHandler.js";
-import { logger } from "../../utils/internal/logger.js";
+import { config } from "../../../config/index.js";
+import { BaseErrorCode, McpError } from "../../../types/errors.js";
+import { ErrorHandler } from "../../../utils/internal/errorHandler.js";
+import { logger } from "../../../utils/internal/logger.js";
 import {
   OperationContext,
   RequestContext,
   requestContextService,
-} from "../../utils/internal/requestContext.js";
-import { rateLimiter } from "../../utils/security/rateLimiter.js";
-import { sanitization } from "../../utils/security/sanitization.js";
+} from "../../../utils/internal/requestContext.js";
+import { rateLimiter } from "../../../utils/security/rateLimiter.js";
+import { sanitization } from "../../../utils/security/sanitization.js";
 
-const YOUR_SITE_URL = config.openrouterAppUrl;
-const YOUR_SITE_NAME = config.openrouterAppName;
+// Note: OpenRouter recommends setting HTTP-Referer (e.g., config.openrouterAppUrl)
+// and X-Title (e.g., config.openrouterAppName) headers.
+// The llmFactory.ts already handles this for OpenRouter client creation.
 
 /**
  * Defines the parameters for an OpenRouter chat completion request.
@@ -65,7 +67,7 @@ class OpenRouterProvider {
    * The OpenAI SDK client instance configured for OpenRouter.
    * @private
    */
-  private client?: OpenAI;
+  private client?: OpenAI; // Stays as OpenAI type
   /**
    * Current status of the OpenRouter service.
    * - `unconfigured`: API key is missing.
@@ -73,7 +75,7 @@ class OpenRouterProvider {
    * - `ready`: Client initialized successfully and service is usable.
    * - `error`: An error occurred during initialization.
    */
-  public readonly status: "unconfigured" | "initializing" | "ready" | "error";
+  public status: "unconfigured" | "initializing" | "ready" | "error";
   /**
    * Stores any error that occurred during client initialization.
    * @private
@@ -87,7 +89,10 @@ class OpenRouterProvider {
    * @param apiKey - The OpenRouter API key. If undefined, the service remains 'unconfigured'.
    * @param parentOpContext - Optional parent operation context for linked logging.
    */
-  constructor(apiKey: string | undefined, parentOpContext?: OperationContext) {
+  constructor(
+    options?: OpenRouterClientOptions,
+    parentOpContext?: OperationContext,
+  ) {
     const operationName = parentOpContext?.operation
       ? `${parentOpContext.operation}.OpenRouterProvider.constructor`
       : "OpenRouterProvider.constructor";
@@ -97,39 +102,42 @@ class OpenRouterProvider {
     });
     this.status = "initializing";
 
-    if (!apiKey) {
+    // The factory will use config.openrouterApiKey if options.apiKey is not provided.
+    // If neither is available, the factory will throw a CONFIGURATION_ERROR.
+    // The 'unconfigured' status here might become less relevant if factory handles all key checks.
+    // However, we can keep it for cases where the service is instantiated without attempting client creation immediately.
+    if (!options?.apiKey && !config.openrouterApiKey) {
       this.status = "unconfigured";
       logger.warning(
-        "OPENROUTER_API_KEY is not set. OpenRouter service is not configured.",
+        "OpenRouter API key not provided in options or global config. Service is unconfigured.",
         { ...opContext, service: "OpenRouterProvider" },
       );
-      return;
+      // Early return if no key is available at all, factory would fail anyway.
+      // Or, let the factory attempt and catch the error. For now, let's try to initialize.
     }
 
-    try {
-      this.client = new OpenAI({
-        baseURL: "https://openrouter.ai/api/v1",
-        apiKey: apiKey,
-        defaultHeaders: {
-          "HTTP-Referer": YOUR_SITE_URL,
-          "X-Title": YOUR_SITE_NAME,
-        },
+    llmFactory
+      .getLlmClient("openrouter", opContext, options)
+      .then((client) => {
+        this.client = client as OpenAI; // Factory returns OpenAI for 'openrouter'
+        this.status = "ready";
+        logger.info("OpenRouter Service Initialized and Ready via LlmFactory", {
+          ...opContext,
+          service: "OpenRouterProvider",
+        });
+      })
+      .catch((error) => {
+        this.status = "error";
+        this.initializationError =
+          error instanceof Error
+            ? error
+            : new McpError(BaseErrorCode.INITIALIZATION_FAILED, String(error));
+        logger.error("Failed to initialize OpenRouter client via LlmFactory", {
+          ...opContext,
+          service: "OpenRouterProvider",
+          error: this.initializationError.message,
+        });
       });
-      this.status = "ready";
-      logger.info("OpenRouter Service Initialized and Ready", {
-        ...opContext,
-        service: "OpenRouterProvider",
-      });
-    } catch (error: any) {
-      this.status = "error";
-      this.initializationError =
-        error instanceof Error ? error : new Error(String(error));
-      logger.error("Failed to initialize OpenRouter client", {
-        ...opContext,
-        service: "OpenRouterProvider",
-        error: this.initializationError.message,
-      });
-    }
   }
 
   /**
@@ -455,8 +463,13 @@ class OpenRouterProvider {
  * Singleton instance of the `OpenRouterProvider`.
  * Initialized with the OpenRouter API key from application configuration.
  */
+// Update instantiation to pass options if needed, or rely on factory's use of global config.
+// For a singleton, it usually relies on global config.
+// If the constructor now takes OpenRouterClientOptions, and we want the singleton
+// to use global config, we'd pass undefined or an empty object for options.
 const openRouterProviderInstance = new OpenRouterProvider(
-  config.openrouterApiKey,
+  undefined, // Or { apiKey: config.openrouterApiKey } if we want to be explicit
+  // but factory already checks config.openrouterApiKey
 );
 
 export { openRouterProviderInstance as openRouterProvider };
