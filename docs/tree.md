@@ -1,6 +1,6 @@
 # atlas-mcp-server - Directory Structure
 
-Generated on: 2025-05-28 21:15:47
+Generated on: 2025-05-29 07:44:17
 
 ```
 atlas-mcp-server
@@ -119,8 +119,11 @@ atlas-mcp-server
 │   │   └── server.ts
 │   ├── services
 │   │   ├── llm-providers
+│   │   │   ├── openRouter
+│   │   │   │   ├── index.ts
+│   │   │   │   └── openRouterProvider.ts
 │   │   │   ├── index.ts
-│   │   │   └── openRouterProvider.ts
+│   │   │   └── llmFactory.ts
 │   │   └── neo4j
 │   │       ├── backupRestoreService
 │   │       │   ├── scripts
@@ -186,6 +189,7 @@ atlas-mcp-server
 ├── .clinerules
 ├── .env.example
 ├── .gitignore
+├── .ncurc.json
 ├── .repomixignore
 ├── CHANGELOG.md
 ├── CLAUDE.md
