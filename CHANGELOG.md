@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.8.15] - 2025-06-05
+
+- **Documentation**:
+
+  - Updated `README.md` formatting.
+  - Updated .gitignore
+  - Updated .dockerignore
+
+- New version to fix NPM publish issues.
+
 ## [2.8.14] - 2025-06-05
 
 ### Changed
@@ -34,7 +44,6 @@ All notable changes to this project will be documented in this file.
   - Removed the LLM provider integration, including `llmFactory.ts`, `openRouterProvider.ts`, and the `src/services/llm-providers/` directory.
   - Removed related LLM configuration options from `src/config/index.ts` (e.g., `OPENROUTER_API_KEY`, `GEMINI_API_KEY`, `LLM_DEFAULT_MODEL`).
   - Removed `@google/genai` dependency.
-
 
 ## [2.8.13] - 2025-05-29
 
