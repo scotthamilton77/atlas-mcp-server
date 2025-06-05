@@ -218,7 +218,7 @@ How you configure your MCP client depends on the client itself and the chosen tr
         "NEO4J_USER": "neo4j",
         "NEO4J_PASSWORD": "password2",
         "MCP_LOG_LEVEL": "info",
-        "NODE_ENV": "production",
+        "NODE_ENV": "development",
         "MCP_TRANSPORT_TYPE": "stdio"
       }
     }
@@ -240,7 +240,7 @@ If your client supports connecting to an MCP server via Streamable HTTP, you pro
         "NEO4J_USER": "neo4j",
         "NEO4J_PASSWORD": "password2",
         "MCP_LOG_LEVEL": "info",
-        "NODE_ENV": "production",
+        "NODE_ENV": "development",
         "MCP_TRANSPORT_TYPE": "http",
         "MCP_HTTP_PORT": "3010",
         "MCP_HTTP_HOST": "127.0.0.1"
