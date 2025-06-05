@@ -93,32 +93,13 @@ The Atlas Platform integrates these components into a cohesive system:
 
 ## Features
 
-### Project Management
-
-- **Comprehensive Tracking:** Manage project metadata, statuses, and rich content (notes, links, etc.) with built-in support for bulk operations.
-- **Dependency & Relationship Handling:** Automatically validate and track inter-project dependencies.
-
-### Task Management
-
-- **Task Lifecycle Management:** Create, track, and update tasks through their entire lifecycle.
-- **Prioritization & Categorization:** Assign priority levels and categorize tasks with tags for better organization.
-- **Dependency Tracking:** Establish task dependencies to create structured workflows.
-
-### Knowledge Management
-
-- **Structured Knowledge Repository:** Maintain a searchable repository of project-related information.
-- **Domain Categorization:** Organize knowledge by domain and tags for easy retrieval.
-- **Citation Support:** Track sources and references for knowledge items.
-
-### Graph Database Integration
-
-- **Native Relationship Management:** Leverage Neo4j's ACID-compliant transactions and optimized queries for robust data integrity.
-- **Advanced Search & Scalability:** Perform property-based searches with fuzzy matching and wildcards while maintaining high performance.
-
-### Unified Search
-
-- **Cross-Entity Search:** Find relevant projects, tasks, or knowledge based on content, metadata, or relationships.
-- **Flexible Query Options:** Support for case-insensitive, fuzzy, and advanced filtering options.
+| Feature Area                   | Key Capabilities                                                                                                                                                                                                                                                                                            |
+| :----------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Project Management**         | - Comprehensive Tracking: Manage project metadata, statuses, and rich content (notes, links, etc.) with built-in support for bulk operations.<br />- Dependency & Relationship Handling: Automatically validate and track inter-project dependencies.                                                       |
+| **Task Management**            | - Task Lifecycle Management: Create, track, and update tasks through their entire lifecycle.<br />- Prioritization & Categorization: Assign priority levels and categorize tasks with tags for better organization.<br />- Dependency Tracking: Establish task dependencies to create structured workflows. |
+| **Knowledge Management**       | - Structured Knowledge Repository: Maintain a searchable repository of project-related information.<br />- Domain Categorization: Organize knowledge by domain and tags for easy retrieval.<br />- Citation Support: Track sources and references for knowledge items.                                      |
+| **Graph Database Integration** | - Native Relationship Management: Leverage Neo4j's ACID-compliant transactions and optimized queries for robust data integrity.<br />- Advanced Search & Scalability: Perform property-based searches with fuzzy matching and wildcards while maintaining high performance.                                 |
+| **Unified Search**             | - Cross-Entity Search: Find relevant projects, tasks, or knowledge based on content, metadata, or relationships.<br />- Flexible Query Options: Support for case-insensitive, fuzzy, and advanced filtering options.                                                                                        |
 
 ## Installation
 
