@@ -111,32 +111,6 @@ const EnvSchema = z.object({
   /** Directory for log files. Defaults to "logs" in project root. */
   LOGS_DIR: z.string().default(path.join(projectRoot, "logs")),
 
-  /** Optional. Application URL for OpenRouter integration. */
-  OPENROUTER_APP_URL: z
-    .string()
-    .url("OPENROUTER_APP_URL must be a valid URL (e.g., http://localhost:3000)")
-    .optional(),
-  /** Optional. Application name for OpenRouter. Defaults to MCP_SERVER_NAME or package name. */
-  OPENROUTER_APP_NAME: z.string().optional(),
-  /** Optional. API key for OpenRouter services. */
-  OPENROUTER_API_KEY: z.string().optional(),
-  /** Optional. API key for Gemini services. */
-  GEMINI_API_KEY: z.string().optional(),
-  /** Default LLM model. Default: "google/gemini-2.5-flash-preview:thinking". */
-  LLM_DEFAULT_MODEL: z
-    .string()
-    .default("google/gemini-2.5-flash-preview:thinking"),
-  /** Optional. Default LLM temperature (0.0-2.0). */
-  LLM_DEFAULT_TEMPERATURE: z.coerce.number().min(0).max(2).optional(),
-  /** Optional. Default LLM top_p (0.0-1.0). */
-  LLM_DEFAULT_TOP_P: z.coerce.number().min(0).max(1).optional(),
-  /** Optional. Default LLM max tokens (positive integer). */
-  LLM_DEFAULT_MAX_TOKENS: z.coerce.number().int().positive().optional(),
-  /** Optional. Default LLM top_k (non-negative integer). */
-  LLM_DEFAULT_TOP_K: z.coerce.number().int().nonnegative().optional(),
-  /** Optional. Default LLM min_p (0.0-1.0). */
-  LLM_DEFAULT_MIN_P: z.coerce.number().min(0).max(1).optional(),
-
   /** Optional. OAuth provider authorization endpoint URL. */
   OAUTH_PROXY_AUTHORIZATION_URL: z
     .string()
@@ -352,31 +326,6 @@ export const config = {
     /** Maximum number of requests allowed per window. From `MCP_RATE_LIMIT_MAX_REQUESTS`. */
     rateLimitMaxRequests: env.MCP_RATE_LIMIT_MAX_REQUESTS,
   },
-
-  /** OpenRouter App URL. From `OPENROUTER_APP_URL`. Default: "http://localhost:3000" (or MCP server URL if HTTP). */
-  openrouterAppUrl:
-    env.OPENROUTER_APP_URL ||
-    (env.MCP_TRANSPORT_TYPE === "http"
-      ? `http://${env.MCP_HTTP_HOST}:${env.MCP_HTTP_PORT}`
-      : "http://localhost:3000"),
-  /** OpenRouter App Name. From `OPENROUTER_APP_NAME`. Defaults to `mcpServerName`. */
-  openrouterAppName: env.OPENROUTER_APP_NAME || pkg.name,
-  /** OpenRouter API Key. From `OPENROUTER_API_KEY`. */
-  openrouterApiKey: env.OPENROUTER_API_KEY,
-  /** Gemini API Key. From `GEMINI_API_KEY`. */
-  geminiApiKey: env.GEMINI_API_KEY,
-  /** Default LLM model. From `LLM_DEFAULT_MODEL`. */
-  llmDefaultModel: env.LLM_DEFAULT_MODEL,
-  /** Default LLM temperature. From `LLM_DEFAULT_TEMPERATURE`. */
-  llmDefaultTemperature: env.LLM_DEFAULT_TEMPERATURE,
-  /** Default LLM top_p. From `LLM_DEFAULT_TOP_P`. */
-  llmDefaultTopP: env.LLM_DEFAULT_TOP_P,
-  /** Default LLM max tokens. From `LLM_DEFAULT_MAX_TOKENS`. */
-  llmDefaultMaxTokens: env.LLM_DEFAULT_MAX_TOKENS,
-  /** Default LLM top_k. From `LLM_DEFAULT_TOP_K`. */
-  llmDefaultTopK: env.LLM_DEFAULT_TOP_K,
-  /** Default LLM min_p. From `LLM_DEFAULT_MIN_P`. */
-  llmDefaultMinP: env.LLM_DEFAULT_MIN_P,
 
   /** OAuth Proxy configurations. Undefined if no related env vars are set. */
   oauthProxy:

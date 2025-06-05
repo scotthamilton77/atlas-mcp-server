@@ -3,10 +3,10 @@
  * @module src/webui/logic/main
  */
 
-import { dom } from './dom-elements.js';
-import { state } from './app-state.js'; // utils is also exported from app-state but not directly used here
-import { uiHelpers, renderHelpers } from './ui-service.js';
-import { api } from './api-service.js';
+import { dom } from "./dom-elements.js";
+import { state } from "./app-state.js"; // utils is also exported from app-state but not directly used here
+import { uiHelpers, renderHelpers } from "./ui-service.js";
+import { api } from "./api-service.js";
 
 /**
  * Manages application event handling.
@@ -21,7 +21,7 @@ const eventHandlers = {
     if (event.target && event.target.value) {
       const projectId = event.target.value;
       api.fetchProjectDetails(projectId);
-      localStorage.setItem('lastSelectedProjectId', projectId);
+      localStorage.setItem("lastSelectedProjectId", projectId);
     }
   },
 
@@ -51,12 +51,13 @@ const eventHandlers = {
       "Detailed View",
       "Compact View",
     );
-    if (dom.tasksContent) { // Ensure element exists
-        renderHelpers.tasks(
-            state.currentTasks,
-            dom.tasksContent,
-            state.tasksViewMode,
-        );
+    if (dom.tasksContent) {
+      // Ensure element exists
+      renderHelpers.tasks(
+        state.currentTasks,
+        dom.tasksContent,
+        state.tasksViewMode,
+      );
     }
   },
 
@@ -72,12 +73,13 @@ const eventHandlers = {
       "Detailed View",
       "Compact View",
     );
-    if (dom.knowledgeContent) { // Ensure element exists
-        renderHelpers.knowledgeItems(
-            state.currentKnowledgeItems,
-            dom.knowledgeContent,
-            state.knowledgeViewMode,
-        );
+    if (dom.knowledgeContent) {
+      // Ensure element exists
+      renderHelpers.knowledgeItems(
+        state.currentKnowledgeItems,
+        dom.knowledgeContent,
+        state.knowledgeViewMode,
+      );
     }
   },
 
@@ -94,7 +96,8 @@ const eventHandlers = {
       "View Task List",
       "View Task Flow",
     );
-    if (state.showingTaskFlow && dom.taskFlowContainer) { // Ensure element exists
+    if (state.showingTaskFlow && dom.taskFlowContainer) {
+      // Ensure element exists
       renderHelpers.taskFlow(state.currentTasks, dom.taskFlowContainer);
     }
   },
@@ -157,14 +160,14 @@ const eventHandlers = {
  */
 async function waitForNeo4j(timeout = 5000) {
   const startTime = Date.now();
-  while (typeof neo4j === 'undefined') {
+  while (typeof neo4j === "undefined") {
     if (Date.now() - startTime > timeout) {
-      console.error('Neo4j driver failed to load within timeout.');
-      throw new Error('Neo4j driver failed to load within timeout.');
+      console.error("Neo4j driver failed to load within timeout.");
+      throw new Error("Neo4j driver failed to load within timeout.");
     }
-    await new Promise(resolve => setTimeout(resolve, 100)); // Wait 100ms
+    await new Promise((resolve) => setTimeout(resolve, 100)); // Wait 100ms
   }
-  console.log('Neo4j driver detected.');
+  console.log("Neo4j driver detected.");
 }
 
 /**
@@ -205,7 +208,10 @@ async function initApp() {
   } catch (error) {
     console.error("Initialization error:", error);
     // Ensure uiHelpers is available and dom.errorMessageDiv is checked within showError
-    uiHelpers.showError(`App Initialization Error: ${error.message}. Check console.`, true);
+    uiHelpers.showError(
+      `App Initialization Error: ${error.message}. Check console.`,
+      true,
+    );
   }
 }
 

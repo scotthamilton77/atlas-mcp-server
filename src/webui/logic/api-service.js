@@ -3,11 +3,11 @@
  * @module src/webui/logic/api-service
  */
 
-import { config } from './config.js';
-import { dom } from './dom-elements.js'; // Though not directly used, good for consistency if needed later
-import { state, utils } from './app-state.js';
-import { uiHelpers } from './ui-service.js';
-import { renderHelpers } from './ui-service.js'; // For rendering after fetching
+import { config } from "./config.js";
+import { dom } from "./dom-elements.js"; // Though not directly used, good for consistency if needed later
+import { state, utils } from "./app-state.js";
+import { uiHelpers } from "./ui-service.js";
+import { renderHelpers } from "./ui-service.js"; // For rendering after fetching
 
 /**
  * Neo4j API interaction service.
@@ -113,7 +113,8 @@ export const api = {
    * Fetches all projects and populates the project selection dropdown.
    */
   fetchProjects: async () => {
-    if (dom.projectSelect) uiHelpers.showLoading(dom.projectSelect, "Loading projects...");
+    if (dom.projectSelect)
+      uiHelpers.showLoading(dom.projectSelect, "Loading projects...");
     uiHelpers.setDisplay(dom.projectDetailsContainer, false);
     uiHelpers.setDisplay(dom.tasksContainer, false);
     uiHelpers.setDisplay(dom.knowledgeContainer, false);
@@ -140,10 +141,15 @@ export const api = {
             dom.projectSelect.appendChild(option);
           });
 
-          const lastSelectedProjectId = localStorage.getItem('lastSelectedProjectId');
-          const projectIds = projectsData.map(p => p.id);
+          const lastSelectedProjectId = localStorage.getItem(
+            "lastSelectedProjectId",
+          );
+          const projectIds = projectsData.map((p) => p.id);
 
-          if (lastSelectedProjectId && projectIds.includes(lastSelectedProjectId)) {
+          if (
+            lastSelectedProjectId &&
+            projectIds.includes(lastSelectedProjectId)
+          ) {
             dom.projectSelect.value = lastSelectedProjectId;
             autoSelectedProjectId = lastSelectedProjectId;
           } else if (projectIds.length > 0) {
@@ -154,7 +160,7 @@ export const api = {
           dom.projectSelect.innerHTML =
             '<option value="">No projects found</option>';
         }
-        
+
         if (autoSelectedProjectId) {
           // Automatically fetch details for the selected project
           api.fetchProjectDetails(autoSelectedProjectId);
@@ -184,9 +190,12 @@ export const api = {
       return;
     }
 
-    if (dom.detailsContent) uiHelpers.showLoading(dom.detailsContent, "Loading project details...");
-    if (dom.tasksContent) uiHelpers.showLoading(dom.tasksContent, "Loading tasks...");
-    if (dom.knowledgeContent) uiHelpers.showLoading(dom.knowledgeContent, "Loading knowledge items...");
+    if (dom.detailsContent)
+      uiHelpers.showLoading(dom.detailsContent, "Loading project details...");
+    if (dom.tasksContent)
+      uiHelpers.showLoading(dom.tasksContent, "Loading tasks...");
+    if (dom.knowledgeContent)
+      uiHelpers.showLoading(dom.knowledgeContent, "Loading knowledge items...");
     uiHelpers.setDisplay(dom.projectDetailsContainer, true);
     uiHelpers.setDisplay(dom.tasksContainer, true);
     uiHelpers.setDisplay(dom.knowledgeContainer, true);
@@ -208,7 +217,8 @@ export const api = {
       );
       state.currentProject =
         projectResult.length > 0 ? projectResult[0].p : null;
-      if (dom.detailsContent) renderHelpers.projectDetails(state.currentProject, dom.detailsContent);
+      if (dom.detailsContent)
+        renderHelpers.projectDetails(state.currentProject, dom.detailsContent);
 
       const tasksQuery = `
                   MATCH (proj:Project {id: $projectId})-[:CONTAINS_TASK]->(task:Task)
@@ -223,31 +233,33 @@ export const api = {
         ...r.task,
         dependencyIds: r.dependencyIds || [],
       }));
-      if (dom.tasksContent) renderHelpers.tasks(
-        state.currentTasks,
-        dom.tasksContent,
-        state.tasksViewMode,
-      );
+      if (dom.tasksContent)
+        renderHelpers.tasks(
+          state.currentTasks,
+          dom.tasksContent,
+          state.tasksViewMode,
+        );
 
       const knowledgeResult = await api.runQuery(
         "MATCH (p:Project {id: $projectId})-[:CONTAINS_KNOWLEDGE]->(k:Knowledge) RETURN k ORDER BY k.createdAt DESC",
         { projectId },
       );
       state.currentKnowledgeItems = knowledgeResult.map((r) => r.k);
-      if (dom.knowledgeContent) renderHelpers.knowledgeItems(
-        state.currentKnowledgeItems,
-        dom.knowledgeContent,
-        state.knowledgeViewMode,
-      );
+      if (dom.knowledgeContent)
+        renderHelpers.knowledgeItems(
+          state.currentKnowledgeItems,
+          dom.knowledgeContent,
+          state.knowledgeViewMode,
+        );
     } catch (error) {
-      console.error(
-        `Failed to fetch details for project ${projectId}:`,
-        error,
-      );
+      console.error(`Failed to fetch details for project ${projectId}:`, error);
       uiHelpers.showError(`Error loading project data: ${error.message}`);
-      if (dom.detailsContent) dom.detailsContent.innerHTML = `<p class="error">Error loading project details.</p>`;
-      if (dom.tasksContent) dom.tasksContent.innerHTML = `<p class="error">Error loading tasks.</p>`;
-      if (dom.knowledgeContent) dom.knowledgeContent.innerHTML = `<p class="error">Error loading knowledge items.</p>`;
+      if (dom.detailsContent)
+        dom.detailsContent.innerHTML = `<p class="error">Error loading project details.</p>`;
+      if (dom.tasksContent)
+        dom.tasksContent.innerHTML = `<p class="error">Error loading tasks.</p>`;
+      if (dom.knowledgeContent)
+        dom.knowledgeContent.innerHTML = `<p class="error">Error loading knowledge items.</p>`;
     }
   },
 };

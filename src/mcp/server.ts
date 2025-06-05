@@ -14,6 +14,7 @@
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import http from "http";
 // Import validated configuration and environment details.
 import { config, environment } from "../config/index.js";
 // Import core utilities: ErrorHandler, logger, requestContextService.
@@ -151,7 +152,7 @@ async function createMcpServerInstance(): Promise<McpServer> {
 /**
  * Selects, sets up, and starts the appropriate MCP transport layer based on configuration.
  */
-async function startTransport(): Promise<McpServer | void> {
+async function startTransport(): Promise<McpServer | http.Server | void> {
   const transportType = config.mcpTransportType;
   const parentContext = requestContextService.createRequestContext({
     operation: "startTransport",
@@ -167,8 +168,8 @@ async function startTransport(): Promise<McpServer | void> {
       "Delegating to startHttpTransport for ATLAS MCP Server...",
       parentContext,
     );
-    await startHttpTransport(createMcpServerInstance, parentContext);
-    return;
+    const httpServerInstance = await startHttpTransport(createMcpServerInstance, parentContext);
+    return httpServerInstance;
   }
 
   if (transportType === "stdio") {
@@ -197,7 +198,7 @@ async function startTransport(): Promise<McpServer | void> {
 /**
  * Main application entry point. Initializes and starts the MCP server.
  */
-export async function initializeAndStartServer(): Promise<void | McpServer> {
+export async function initializeAndStartServer(): Promise<void | McpServer | http.Server> {
   const context = requestContextService.createRequestContext({
     operation: "initializeAndStartServer",
   });

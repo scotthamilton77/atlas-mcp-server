@@ -3,9 +3,9 @@
  * @module src/webui/logic/ui-service
  */
 
-import { config } from './config.js';
-import { dom } from './dom-elements.js';
-import { utils, state } from './app-state.js';
+import { config } from "./config.js";
+import { dom } from "./dom-elements.js";
+import { utils, state } from "./app-state.js";
 
 /**
  * Manages UI interactions and visual states.
@@ -18,8 +18,9 @@ export const uiHelpers = {
    */
   applyTheme: (theme) => {
     document.documentElement.classList.toggle("dark-mode", theme === "dark");
-    if (dom.themeCheckbox) { // Ensure element exists
-        dom.themeCheckbox.checked = theme === "dark";
+    if (dom.themeCheckbox) {
+      // Ensure element exists
+      dom.themeCheckbox.checked = theme === "dark";
     }
     if (typeof mermaid !== "undefined") {
       try {
@@ -50,7 +51,8 @@ export const uiHelpers = {
     const newTheme = currentThemeIsDark ? "light" : "dark";
     uiHelpers.applyTheme(newTheme);
     localStorage.setItem("atlasTheme", newTheme);
-    if (state.showingTaskFlow && dom.taskFlowContainer) { // Check if taskFlowContainer exists
+    if (state.showingTaskFlow && dom.taskFlowContainer) {
+      // Check if taskFlowContainer exists
       renderHelpers.taskFlow(state.currentTasks, dom.taskFlowContainer);
     }
   },
@@ -90,9 +92,10 @@ export const uiHelpers = {
    * @param {boolean} [isCritical=false] - If true, updates Neo4j status to error.
    */
   showError: (message, isCritical = false) => {
-    if (dom.errorMessageDiv) { // Ensure element exists
-        dom.errorMessageDiv.textContent = message;
-        uiHelpers.setDisplay(dom.errorMessageDiv, true);
+    if (dom.errorMessageDiv) {
+      // Ensure element exists
+      dom.errorMessageDiv.textContent = message;
+      uiHelpers.setDisplay(dom.errorMessageDiv, true);
     }
     if (isCritical) {
       uiHelpers.updateNeo4jStatus("Error", "var(--error-color)");
@@ -103,9 +106,10 @@ export const uiHelpers = {
    * Clears any displayed error message.
    */
   clearError: () => {
-    if (dom.errorMessageDiv) { // Ensure element exists
-        dom.errorMessageDiv.textContent = "";
-        uiHelpers.setDisplay(dom.errorMessageDiv, false);
+    if (dom.errorMessageDiv) {
+      // Ensure element exists
+      dom.errorMessageDiv.textContent = "";
+      uiHelpers.setDisplay(dom.errorMessageDiv, false);
     }
   },
 
@@ -115,9 +119,10 @@ export const uiHelpers = {
    * @param {string} color - The CSS color for the status text.
    */
   updateNeo4jStatus: (text, color) => {
-    if (dom.neo4jStatusSpan) { // Ensure element exists
-        dom.neo4jStatusSpan.textContent = text;
-        dom.neo4jStatusSpan.style.color = color;
+    if (dom.neo4jStatusSpan) {
+      // Ensure element exists
+      dom.neo4jStatusSpan.textContent = text;
+      dom.neo4jStatusSpan.style.color = color;
     }
   },
 
@@ -322,8 +327,7 @@ export const renderHelpers = {
       return;
     }
     if (typeof mermaid === "undefined") {
-      element.innerHTML =
-        '<p class="error">Mermaid JS library not loaded.</p>';
+      element.innerHTML = '<p class="error">Mermaid JS library not loaded.</p>';
       return;
     }
     uiHelpers.showLoading(element, "Generating task flow...");

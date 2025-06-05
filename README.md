@@ -2,30 +2,30 @@
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8.3-blue.svg)](https://www.typescriptlang.org/)
 [![Model Context Protocol](https://img.shields.io/badge/MCP-1.12.0-green.svg)](https://modelcontextprotocol.io/)
-[![Version](https://img.shields.io/badge/Version-2.8.13-blue.svg)](https://github.com/cyanheads/atlas-mcp-server/releases)
+[![Version](https://img.shields.io/badge/Version-2.8.14-blue.svg)](https://github.com/cyanheads/atlas-mcp-server/releases)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Status](https://img.shields.io/badge/Status-Stable-green.svg)]()
 [![GitHub](https://img.shields.io/github/stars/cyanheads/atlas-mcp-server?style=social)](https://github.com/cyanheads/atlas-mcp-server)
 
 ATLAS (Adaptive Task & Logic Automation System) is a project, knowledge, and task management system for LLM Agents.
 
-Built on a three-tier architecture:
+Built on a 3-node architecture:
 
 ```
-                  +------------------------------------------+
-                  |                PROJECT                   |
-                  |------------------------------------------|
-                  | id: string                               |
-                  | name: string                             |
-                  | description: string                      |
-                  | status: string                           |
+                  +-------------------------------------------+
+                  |                PROJECT                    |
+                  |-------------------------------------------|
+                  | id: string                                |
+                  | name: string                              |
+                  | description: string                       |
+                  | status: string                            |
                   | urls?: Array<{title: string, url: string}>|
-                  | completionRequirements: string           |
-                  | outputFormat: string                     |
-                  | taskType: string                         |
-                  | createdAt: string                        |
-                  | updatedAt: string                        |
-                  +----------------+-------------------------+
+                  | completionRequirements: string            |
+                  | outputFormat: string                      |
+                  | taskType: string                          |
+                  | createdAt: string                         |
+                  | updatedAt: string                         |
+                  +----------------+--------------------------+
                             |                    |
                             |                    |
                             v                    v
@@ -216,10 +216,6 @@ MCP_RATE_LIMIT_MAX_REQUESTS=100 # Max requests per window per IP for HTTP transp
 # Database Backup Configuration
 BACKUP_MAX_COUNT=10 # Maximum number of backup sets to keep. Default: 10.
 BACKUP_FILE_DIR=./atlas-backups # Directory where backup files will be stored (relative to project root). Default: "./atlas-backups".
-
-# OpenRouter LLM Configuration (Optional - additional parameters present in `src/config/index.ts`)
-# OPENROUTER_API_KEY=your_openrouter_api_key # API key for OpenRouter services.
-LLM_DEFAULT_MODEL="google/gemini-2.5-flash-preview:thinking" # Default LLM model.
 ```
 
 Refer to `src/config/index.ts` for all available environment variables, their descriptions, and default values.
@@ -288,7 +284,6 @@ src/
 │   ├── resources/   # MCP resource handlers (index.ts, types.ts, knowledge/, projects/, tasks/)
 │   └── tools/       # MCP tool handlers (individual tool directories)
 ├── services/        # Core application services
-│   ├── llm-providers/ # LLM provider integrations (e.g., OpenRouter)
 │   └── neo4j/       # Neo4j database services (index.ts, driver.ts, backupRestoreService.ts, etc.)
 ├── types/           # Shared TypeScript type definitions (errors.ts, mcp.ts, tool.ts)
 └── utils/           # Utility functions and internal services (e.g., logger, errorHandler, sanitization)

@@ -4,7 +4,6 @@
  * It handles different log levels compliant with RFC 5424 and MCP specifications.
  * @module src/utils/internal/logger
  */
-import fs from "fs";
 import path from "path";
 import winston from "winston";
 import TransportStream from "winston-transport";
@@ -102,7 +101,7 @@ export type McpNotificationSender = (
   loggerName?: string,
 ) => void;
 
-// The logsPath from config is already resolved and validated.
+// The logsPath from config is already resolved and validated by src/config/index.ts
 const resolvedLogsDir = config.logsPath;
 const isLogsDirSafe = !!resolvedLogsDir; // If logsPath is set, it's considered safe by config logic.
 
@@ -130,7 +129,9 @@ function createWinstonConsoleFormat(): winston.Logform.Format {
       }
       if (Object.keys(metaCopy).length > 0) {
         try {
-          const remainingMetaJson = JSON.stringify(metaCopy, null, 2);
+          const replacer = (key: string, value: unknown) =>
+            typeof value === "bigint" ? value.toString() : value;
+          const remainingMetaJson = JSON.stringify(metaCopy, replacer, 2);
           if (remainingMetaJson !== "{}")
             metaString += `\n  Meta: ${remainingMetaJson}`;
         } catch (stringifyError: unknown) {
@@ -179,28 +180,17 @@ export class Logger {
       });
       return;
     }
+
+    // Set initialized to true at the beginning of the initialization process.
+    this.initialized = true;
+
     this.currentMcpLevel = level;
     this.currentWinstonLevel = mcpToWinstonLevel[level];
 
-    let logsDirCreatedMessage: string | null = null;
-
-    if (isLogsDirSafe) {
-      try {
-        if (!fs.existsSync(resolvedLogsDir)) {
-          await fs.promises.mkdir(resolvedLogsDir, { recursive: true });
-          logsDirCreatedMessage = `Created logs directory: ${resolvedLogsDir}`;
-        }
-      } catch (err: unknown) {
-        if (process.stdout.isTTY) {
-          const errorMessage = err instanceof Error ? err.message : String(err);
-          console.error(
-            `Error creating logs directory at ${resolvedLogsDir}: ${errorMessage}. File logging disabled.`,
-          );
-        }
-        // Rethrow the error to ensure startup fails if logs directory cannot be created
-        throw err;
-      }
-    }
+    // The logs directory (config.logsPath / resolvedLogsDir) is expected to be created and validated
+    // by the configuration module (src/config/index.ts) before logger initialization.
+    // If isLogsDirSafe is true, we assume resolvedLogsDir exists and is usable.
+    // No redundant directory creation logic here.
 
     const fileFormat = winston.format.combine(
       winston.format.timestamp(),
@@ -246,7 +236,7 @@ export class Logger {
     } else {
       if (process.stdout.isTTY) {
         console.warn(
-          "File logging disabled due to unsafe logs directory path.",
+          "File logging disabled as logsPath is not configured or invalid.",
         );
       }
     }
@@ -265,20 +255,19 @@ export class Logger {
       requestId: "logger-init-deferred",
       timestamp: new Date().toISOString(),
     };
-    if (logsDirCreatedMessage) {
-      this.info(logsDirCreatedMessage, initialContext);
-    }
+    // Removed logging of logsDirCreatedMessage as it's no longer set
     if (consoleStatus.message) {
       this.info(consoleStatus.message, initialContext);
     }
 
-    this.initialized = true;
+    this.initialized = true; // Ensure this is set after successful setup
     this.info(
       `Logger initialized. File logging level: ${this.currentWinstonLevel}. MCP logging level: ${this.currentMcpLevel}. Console logging: ${consoleStatus.enabled ? "enabled" : "disabled"}`,
       {
         loggerSetup: true,
         requestId: "logger-post-init",
         timestamp: new Date().toISOString(),
+        logsPathUsed: resolvedLogsDir,
       },
     );
   }

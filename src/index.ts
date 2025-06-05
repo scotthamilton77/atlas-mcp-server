@@ -2,16 +2,18 @@
 
 // Imports MUST be at the top level
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import http from "http";
 import { config, environment } from "./config/index.js"; // This loads .env via dotenv.config()
 import { initializeAndStartServer } from "./mcp/server.js";
-import { logger, McpLogLevel, requestContextService } from "./utils/index.js";
 import { closeNeo4jConnection } from "./services/neo4j/index.js";
+import { logger, McpLogLevel, requestContextService } from "./utils/index.js";
 
 /**
  * The main MCP server instance, stored if transport is stdio for shutdown.
- * @type {McpServer | undefined}
+ * Or the HTTP server instance if transport is http.
+ * @type {McpServer | http.Server | undefined}
  */
-let serverInstance: McpServer | undefined;
+let serverInstance: McpServer | http.Server | undefined;
 
 /**
  * Gracefully shuts down the main MCP server and related services.
@@ -34,12 +36,27 @@ const shutdown = async (signal: string) => {
 
   try {
     if (serverInstance) {
-      logger.info("Closing main MCP server instance...", shutdownContext);
-      await serverInstance.close();
-      logger.info(
-        "Main MCP server instance closed successfully.",
-        shutdownContext,
-      );
+      if (serverInstance instanceof McpServer) {
+        logger.info("Closing main MCP server (stdio) instance...", shutdownContext);
+        await serverInstance.close();
+        logger.info(
+          "Main MCP server (stdio) instance closed successfully.",
+          shutdownContext,
+        );
+      } else if (serverInstance instanceof http.Server) {
+        logger.info("Closing HTTP server instance...", shutdownContext);
+        const currentHttpServer = serverInstance;
+        await new Promise<void>((resolve, reject) => {
+          currentHttpServer.close((err?: Error) => {
+            if (err) {
+              logger.error("Error closing HTTP server", err, shutdownContext);
+              return reject(err);
+            }
+            logger.info("HTTP server instance closed successfully.", shutdownContext);
+            resolve();
+          });
+        });
+      }
     } else {
       logger.info(
         "No global MCP server instance to close (expected for HTTP transport or if not yet initialized).",
@@ -139,12 +156,19 @@ const start = async () => {
         "Stored McpServer instance for stdio transport.",
         startupContext,
       );
-    } else if (transportType === "http") {
+    } else if (transportType === "http" && potentialServer instanceof http.Server) {
+      serverInstance = potentialServer;
       logger.debug(
-        "HTTP transport started. Server instances are session-specific.",
+        "Stored HTTP server instance. MCP sessions are per-request.",
         startupContext,
       );
+    } else if (transportType === "http" && !potentialServer) {
+        logger.debug(
+            "HTTP transport started. Server instance not returned by initializeAndStartServer. MCP sessions are per-request.",
+            startupContext,
+        );
     }
+
 
     logger.info(
       `${config.mcpServerName} is running with ${transportType} transport.`,

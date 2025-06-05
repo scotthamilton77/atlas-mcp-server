@@ -99,7 +99,12 @@
           aria-labelledby="project-task-board-heading"
         >
           <h2 id="project-task-board-heading">Project Task Board</h2>
-          <div id="project-task-board-content" class="task-board-grid" role="region" aria-live="polite">
+          <div
+            id="project-task-board-content"
+            class="task-board-grid"
+            role="region"
+            aria-live="polite"
+          >
             <!-- Task board columns will be rendered here -->
           </div>
         </section>
@@ -126,23 +131,33 @@
           <div id="knowledge-content" role="region" aria-live="polite"></div>
         </section>
 
-        <section 
-          id="data-explorer-container" 
-          class="data-section hidden" 
+        <section
+          id="data-explorer-container"
+          class="data-section hidden"
           aria-labelledby="data-explorer-heading"
         >
           <h2 id="data-explorer-heading">Data Explorer</h2>
           <div class="controls-container">
             <label for="node-label-select">Select Node Type:</label>
-            <select id="node-label-select" aria-label="Select a node type to explore">
+            <select
+              id="node-label-select"
+              aria-label="Select a node type to explore"
+            >
               <option value="">Loading node types...</option>
             </select>
-            <button id="refresh-node-types-button" type="button">Refresh Types</button>
+            <button id="refresh-node-types-button" type="button">
+              Refresh Types
+            </button>
           </div>
           <div id="data-explorer-content" role="region" aria-live="polite">
             <!-- Nodes of selected type will be rendered here -->
           </div>
-          <div id="data-explorer-details" class="details-grid" role="region" aria-live="polite">
+          <div
+            id="data-explorer-details"
+            class="details-grid"
+            role="region"
+            aria-live="polite"
+          >
             <!-- Details of a selected node will be rendered here -->
           </div>
         </section>

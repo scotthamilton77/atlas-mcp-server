@@ -1,12 +1,13 @@
 # atlas-mcp-server - Directory Structure
 
-Generated on: 2025-05-29 07:44:17
+Generated on: 2025-06-05 18:11:37
 
 ```
 atlas-mcp-server
 ├── .github
 │   └── workflows
 │       └── publish.yml
+├── atlas-backups
 ├── automated-tests
 │   └── AGENT_TEST_05282025.md
 ├── docs
@@ -22,6 +23,7 @@ atlas-mcp-server
 │   │   └── full-export.json
 │   ├── README.md
 │   └── webui-example.png
+├── ideas
 ├── scripts
 │   ├── clean.ts
 │   ├── fetch-openapi-spec.ts
@@ -118,12 +120,6 @@ atlas-mcp-server
 │   │   │   └── stdioTransport.ts
 │   │   └── server.ts
 │   ├── services
-│   │   ├── llm-providers
-│   │   │   ├── openRouter
-│   │   │   │   ├── index.ts
-│   │   │   │   └── openRouterProvider.ts
-│   │   │   ├── index.ts
-│   │   │   └── llmFactory.ts
 │   │   └── neo4j
 │   │       ├── backupRestoreService
 │   │       │   ├── scripts

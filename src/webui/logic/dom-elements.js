@@ -28,9 +28,7 @@ export const dom = {
   app: document.getElementById("app"),
   projectSelect: document.getElementById("project-select"),
   refreshButton: document.getElementById("refresh-button"),
-  projectDetailsContainer: document.getElementById(
-    "project-details-container",
-  ),
+  projectDetailsContainer: document.getElementById("project-details-container"),
   detailsContent: document.getElementById("details-content"),
   tasksContainer: document.getElementById("tasks-container"),
   tasksContent: document.getElementById("tasks-content"),

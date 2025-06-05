@@ -2,15 +2,51 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.8.14] - 2025-06-05
+
+### Changed
+
+- **Dependencies**:
+  - Updated `@modelcontextprotocol/sdk` to `^1.12.1`.
+  - Updated `@types/node` to `^22.15.29`.
+  - Updated `ignore` to `^7.0.5`.
+  - Updated `node-cron` to `^4.1.0`.
+  - Updated `openai` to `^5.1.1`.
+  - Updated `zod` to `^3.25.51`.
+- **Refactoring**:
+  - Updated `scripts/tree.ts` to use the `ignore` library for pattern matching and to compare existing tree content before overwriting `docs/tree.md`.
+  - Refined server instance handling and startup logic in `src/index.ts`, `src/mcp/server.ts`, `src/mcp/transports/httpTransport.ts`, and `src/mcp/transports/stdioTransport.ts`.
+  - Improved comments, logging, and JWT scope claim handling in `src/mcp/transports/authentication/authMiddleware.ts`.
+  - Enhanced `src/mcp/transports/httpTransport.ts` with rate limiting middleware and improved origin checking logic.
+  - Minor logging improvements in `src/utils/internal/logger.ts` regarding log directory handling and JSON stringification of BigInts.
+- **Configuration**:
+  - Minor formatting update to `.ncurc.json`.
+- **Web UI**:
+  - Minor HTML structural and class name adjustments in `src/webui/index.html` and related JavaScript files.
+- **Documentation**:
+  - Updated `README.md` to reflect removal of LLM provider configurations and project structure entries. Version bumped to 2.8.14.
+  - Regenerated `docs/tree.md` to reflect file changes and new generation timestamp.
+- **Version**: Bumped project version to 2.8.14 in `package.json` and `package-lock.json`.
+
+### Removed
+
+- **LLM Provider Framework**:
+  - Removed the LLM provider integration, including `llmFactory.ts`, `openRouterProvider.ts`, and the `src/services/llm-providers/` directory.
+  - Removed related LLM configuration options from `src/config/index.ts` (e.g., `OPENROUTER_API_KEY`, `GEMINI_API_KEY`, `LLM_DEFAULT_MODEL`).
+  - Removed `@google/genai` dependency.
+
+
 ## [2.8.13] - 2025-05-29
 
 ### Added
+
 - **LLM Provider Framework**:
   - Introduced `llmFactory.ts` in `src/services/llm-providers/` to manage and instantiate different LLM provider clients.
   - Added support for Google Gemini models via the `@google/genai` SDK. This includes a new `GEMINI_API_KEY` in the configuration (`src/config/index.ts`).
 - **Configuration**: Added `.ncurc.json` for `npm-check-updates` configuration.
 
 ### Changed
+
 - **LLM Provider Refactoring**:
   - Relocated the OpenRouter provider logic from `src/services/llm-providers/openRouterProvider.ts` to a dedicated subdirectory `src/services/llm-providers/openRouter/` (containing `openRouterProvider.ts` and `index.ts`).
   - Updated the main LLM provider barrel file (`src/services/llm-providers/index.ts`) to export from the new `openRouter/` directory.
@@ -24,6 +60,7 @@ All notable changes to this project will be documented in this file.
 - **Version**: Bumped project version to 2.8.13 in `package.json` and `package-lock.json`.
 
 ### Removed
+
 - Deleted the old `src/services/llm-providers/openRouterProvider.ts` as its contents were refactored into the `src/services/llm-providers/openRouter/` directory.
 
 ## [2.8.12] - 2025-05-28
