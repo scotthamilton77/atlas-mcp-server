@@ -3,7 +3,6 @@ import { z } from "zod";
 import {
   ProjectStatus,
   ResponseFormat,
-  createProjectStatusEnum, // Import the enum helper
   createResponseFormatEnum,
   createToolResponse,
 } from "../../../types/mcp.js";
@@ -76,12 +75,21 @@ export function registerAtlasProjectListTool(server: McpServer): void {
         .optional()
         .describe("Filter results by project classification or category type"),
       status: z
-        .union([
-          createProjectStatusEnum(), // Use the enum helper
-          z.array(createProjectStatusEnum()), // Use the enum helper for arrays too
-        ])
+        .any()
         .optional()
-        .describe("Filter results by project status or multiple statuses"),
+        .describe("Filter results by project status (string) or multiple statuses (array). Valid values: 'active', 'pending', 'in-progress', 'completed', 'archived'")
+        .refine((value) => {
+          if (value === undefined) return true;
+          if (typeof value === 'string') {
+            return ['active', 'pending', 'in-progress', 'completed', 'archived'].includes(value);
+          }
+          if (Array.isArray(value)) {
+            return value.every(v => typeof v === 'string' && ['active', 'pending', 'in-progress', 'completed', 'archived'].includes(v));
+          }
+          return false;
+        }, {
+          message: "Status must be a valid project status string or array of status strings. Valid values: 'active', 'pending', 'in-progress', 'completed', 'archived'"
+        }),
       responseFormat: createResponseFormatEnum()
         .optional()
         .default(ResponseFormat.FORMATTED)
