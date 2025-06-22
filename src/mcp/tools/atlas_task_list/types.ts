@@ -12,44 +12,38 @@ export const TaskListRequestSchema = z.object({
     .string()
     .describe("ID of the project to list tasks for (required)"),
   status: z
-    .union([
-      z.enum([
-        TaskStatus.BACKLOG,
-        TaskStatus.TODO,
-        TaskStatus.IN_PROGRESS,
-        TaskStatus.COMPLETED,
-      ]),
-      z.array(
-        z.enum([
-          TaskStatus.BACKLOG,
-          TaskStatus.TODO,
-          TaskStatus.IN_PROGRESS,
-          TaskStatus.COMPLETED,
-        ]),
-      ),
-    ])
+    .any()
     .optional()
-    .describe("Filter by task status or array of statuses"),
+    .describe("Filter by task status (string) or array of statuses")
+    .refine((value) => {
+      if (value === undefined) return true;
+      if (typeof value === 'string') {
+        return ['backlog', 'todo', 'in-progress', 'completed'].includes(value);
+      }
+      if (Array.isArray(value)) {
+        return value.every(v => typeof v === 'string' && ['backlog', 'todo', 'in-progress', 'completed'].includes(v));
+      }
+      return false;
+    }, {
+      message: "Status must be a valid task status string or array of status strings. Valid values: 'backlog', 'todo', 'in-progress', 'completed'"
+    }),
   assignedTo: z.string().optional().describe("Filter by assignment ID"),
   priority: z
-    .union([
-      z.enum([
-        PriorityLevel.LOW,
-        PriorityLevel.MEDIUM,
-        PriorityLevel.HIGH,
-        PriorityLevel.CRITICAL,
-      ]),
-      z.array(
-        z.enum([
-          PriorityLevel.LOW,
-          PriorityLevel.MEDIUM,
-          PriorityLevel.HIGH,
-          PriorityLevel.CRITICAL,
-        ]),
-      ),
-    ])
+    .any()
     .optional()
-    .describe("Filter by priority level or array of priorities"),
+    .describe("Filter by priority level (string) or array of priorities")
+    .refine((value) => {
+      if (value === undefined) return true;
+      if (typeof value === 'string') {
+        return ['low', 'medium', 'high', 'critical'].includes(value);
+      }
+      if (Array.isArray(value)) {
+        return value.every(v => typeof v === 'string' && ['low', 'medium', 'high', 'critical'].includes(v));
+      }
+      return false;
+    }, {
+      message: "Priority must be a valid priority level string or array of priority strings. Valid values: 'low', 'medium', 'high', 'critical'"
+    }),
   tags: z
     .array(z.string())
     .optional()

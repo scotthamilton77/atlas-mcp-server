@@ -83,9 +83,21 @@ export const registerTool = (
       //   console.warn(`Permission check for '${metadata.requiredPermission}' skipped due to missing checkPermission function.`);
       // }
 
+      // Pre-process input to handle JSON strings for array parameters
+      const processedArgs = { ...args };
+      for (const [key, value] of Object.entries(processedArgs)) {
+        if (typeof value === 'string' && (value.startsWith('[') || value.startsWith('{'))) {
+          try {
+            processedArgs[key] = JSON.parse(value);
+          } catch {
+            // If parsing fails, keep original value and let Zod validation handle it
+          }
+        }
+      }
+
       // Validate input
       const zodSchema = z.object(schema);
-      const validatedInput = zodSchema.parse(args);
+      const validatedInput = zodSchema.parse(processedArgs);
 
       // Create middleware with custom rate limit if specified
       // const middleware = createToolMiddleware(name); // Placeholder for missing createToolMiddleware

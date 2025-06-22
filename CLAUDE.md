@@ -10,24 +10,28 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run dev` - Watch mode for TypeScript compilation
 - `npm run rebuild` - Clean and rebuild project completely
 - `npm run format` - Format code with Prettier
+- `npm run docs:generate` - Generate TypeDoc documentation
 
 ### Database Operations
 
 - `npm run db:backup` - Create database backup with timestamped directory
 - `npm run db:import <backup_path>` - Restore database from backup (destructive)
-- `docker-compose up -d` - Start Neo4j database
-- `docker-compose down` - Stop Neo4j database
+- `docker-compose up -d` - Start Neo4j database (alias: `npm run docker:up`)
+- `docker-compose down` - Stop Neo4j database (alias: `npm run docker:down`)
+- `npm run docker:logs` - View Neo4j container logs with follow mode
 
 ### Running the Server
 
 - `npm run start:stdio` - Run with stdio transport (default for MCP clients)
 - `npm run start:http` - Run with HTTP transport on localhost:3010
+- `npm run start` - Run built server (production mode)
 - `npm run inspector` - Run MCP inspector for debugging
 
 ### Testing and Quality
 
-- `npm run webui` - Open basic web UI for viewing data
+- `npm run webui` - Open basic web UI for viewing data (serves on localhost:8000)
 - `npm run tree` - Generate project structure documentation
+- `npm run fetch-spec` - Fetch OpenAPI specification (development utility)
 
 ## Core Architecture
 

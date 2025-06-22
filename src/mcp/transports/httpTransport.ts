@@ -657,6 +657,32 @@ export async function startHttpTransport(
 
   logger.debug("Creating HTTP server instance...", transportContext);
   const serverInstance = http.createServer(app);
+
+  // Log connection events for debugging
+  serverInstance.on('connection', (socket) => {
+    logger.debug('New HTTP connection established', { 
+      ...transportContext,
+      remoteAddress: socket.remoteAddress,
+      remotePort: socket.remotePort 
+    });
+    
+    socket.on('close', () => {
+      logger.debug('HTTP connection closed', { 
+        ...transportContext,
+        remoteAddress: socket.remoteAddress,
+        remotePort: socket.remotePort 
+      });
+    });
+    
+    socket.on('error', (error) => {
+      logger.error('HTTP connection error', { 
+        ...transportContext,
+        error: error.message,
+        remoteAddress: socket.remoteAddress,
+        remotePort: socket.remotePort 
+      });
+    });
+  });
   try {
     logger.debug(
       "Attempting to start HTTP server with retry logic...",
